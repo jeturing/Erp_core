@@ -5,182 +5,503 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>sajet.us Multitenant - Plataforma SaaS</title>
     <link rel="stylesheet" href="/static/css/tailwind.css">
-    <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:opsz,wght,FILL,GRAD@20..48,100..700,0..1,-50..200" />
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Space+Mono:wght@400;700&family=Syne:wght@400;600;700;800&display=swap" rel="stylesheet">
+    <style>
+        :root {
+            --color-electric: #00fff5;
+            --color-magenta: #ff006e;
+            --color-void: #0a0a0f;
+            --color-mist: #1a1a2e;
+            --font-display: 'Syne', sans-serif;
+            --font-mono: 'Space Mono', monospace;
+        }
+        
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+        
+        body {
+            font-family: var(--font-mono);
+            background: var(--color-void);
+            color: #ffffff;
+            overflow-x: hidden;
+        }
+        
+        /* Animated Grid Background */
+        .grid-bg {
+            position: fixed;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            background-image: 
+                linear-gradient(rgba(0, 255, 245, 0.05) 1px, transparent 1px),
+                linear-gradient(90deg, rgba(0, 255, 245, 0.05) 1px, transparent 1px);
+            background-size: 50px 50px;
+            animation: gridMove 20s linear infinite;
+            pointer-events: none;
+            z-index: 0;
+        }
+        
+        @keyframes gridMove {
+            0% { transform: translate(0, 0); }
+            100% { transform: translate(50px, 50px); }
+        }
+        
+        /* Glowing Orbs */
+        .orb {
+            position: fixed;
+            border-radius: 50%;
+            filter: blur(80px);
+            opacity: 0.3;
+            pointer-events: none;
+            z-index: 0;
+        }
+        
+        .orb-1 {
+            width: 500px;
+            height: 500px;
+            background: var(--color-electric);
+            top: -250px;
+            right: -250px;
+            animation: float 15s ease-in-out infinite;
+        }
+        
+        .orb-2 {
+            width: 400px;
+            height: 400px;
+            background: var(--color-magenta);
+            bottom: -200px;
+            left: -200px;
+            animation: float 12s ease-in-out infinite reverse;
+        }
+        
+        @keyframes float {
+            0%, 100% { transform: translate(0, 0) scale(1); }
+            50% { transform: translate(50px, -50px) scale(1.1); }
+        }
+        
+        /* Content Layer */
+        .content {
+            position: relative;
+            z-index: 1;
+        }
+        
+        /* Navbar */
+        nav {
+            backdrop-filter: blur(20px);
+            background: rgba(10, 10, 15, 0.8);
+            border-bottom: 1px solid rgba(0, 255, 245, 0.1);
+        }
+        
+        .logo {
+            font-family: var(--font-display);
+            font-weight: 800;
+            font-size: 1.5rem;
+            letter-spacing: -0.02em;
+            background: linear-gradient(135deg, var(--color-electric), var(--color-magenta));
+            -webkit-background-clip: text;
+            -webkit-text-fill-color: transparent;
+            background-clip: text;
+        }
+        
+        /* Buttons */
+        .btn {
+            font-family: var(--font-display);
+            font-weight: 700;
+            padding: 0.75rem 2rem;
+            border-radius: 0;
+            text-transform: uppercase;
+            letter-spacing: 0.05em;
+            transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+            position: relative;
+            overflow: hidden;
+        }
+        
+        .btn-primary {
+            background: var(--color-electric);
+            color: var(--color-void);
+            border: 2px solid var(--color-electric);
+            clip-path: polygon(0 0, calc(100% - 12px) 0, 100% 12px, 100% 100%, 12px 100%, 0 calc(100% - 12px));
+        }
+        
+        .btn-primary:hover {
+            background: transparent;
+            color: var(--color-electric);
+            transform: translateY(-2px);
+            box-shadow: 0 10px 30px rgba(0, 255, 245, 0.3);
+        }
+        
+        .btn-secondary {
+            background: transparent;
+            color: #ffffff;
+            border: 2px solid rgba(255, 255, 255, 0.3);
+            clip-path: polygon(0 0, calc(100% - 12px) 0, 100% 12px, 100% 100%, 12px 100%, 0 calc(100% - 12px));
+        }
+        
+        .btn-secondary:hover {
+            border-color: var(--color-magenta);
+            color: var(--color-magenta);
+            box-shadow: 0 10px 30px rgba(255, 0, 110, 0.3);
+        }
+        
+        /* Hero */
+        .hero-title {
+            font-family: var(--font-display);
+            font-weight: 800;
+            font-size: clamp(3rem, 8vw, 7rem);
+            line-height: 0.95;
+            letter-spacing: -0.03em;
+            margin-bottom: 2rem;
+        }
+        
+        .gradient-text {
+            background: linear-gradient(135deg, var(--color-electric), var(--color-magenta), #ffffff);
+            -webkit-background-clip: text;
+            -webkit-text-fill-color: transparent;
+            background-clip: text;
+            animation: gradientShift 8s ease infinite;
+            background-size: 200% 200%;
+        }
+        
+        @keyframes gradientShift {
+            0%, 100% { background-position: 0% 50%; }
+            50% { background-position: 100% 50%; }
+        }
+        
+        .hero-subtitle {
+            font-size: 1.25rem;
+            color: rgba(255, 255, 255, 0.7);
+            max-width: 600px;
+            margin: 0 auto 3rem;
+            line-height: 1.6;
+        }
+        
+        /* Feature Cards */
+        .feature-card {
+            background: rgba(26, 26, 46, 0.5);
+            border: 1px solid rgba(0, 255, 245, 0.1);
+            padding: 3rem;
+            transition: all 0.4s cubic-bezier(0.4, 0, 0.2, 1);
+            position: relative;
+            clip-path: polygon(0 0, calc(100% - 20px) 0, 100% 20px, 100% 100%, 20px 100%, 0 calc(100% - 20px));
+        }
+        
+        .feature-card::before {
+            content: '';
+            position: absolute;
+            inset: 0;
+            background: linear-gradient(135deg, var(--color-electric), var(--color-magenta));
+            opacity: 0;
+            transition: opacity 0.4s;
+            clip-path: polygon(0 0, calc(100% - 20px) 0, 100% 20px, 100% 100%, 20px 100%, 0 calc(100% - 20px));
+        }
+        
+        .feature-card:hover {
+            transform: translateY(-8px);
+            border-color: var(--color-electric);
+            box-shadow: 0 20px 60px rgba(0, 255, 245, 0.2);
+        }
+        
+        .feature-card:hover::before {
+            opacity: 0.1;
+        }
+        
+        .feature-icon {
+            width: 80px;
+            height: 80px;
+            background: linear-gradient(135deg, var(--color-electric), var(--color-magenta));
+            clip-path: polygon(0 0, calc(100% - 15px) 0, 100% 15px, 100% 100%, 15px 100%, 0 calc(100% - 15px));
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-size: 2.5rem;
+            font-weight: 700;
+            margin-bottom: 2rem;
+            animation: iconPulse 3s ease-in-out infinite;
+        }
+        
+        @keyframes iconPulse {
+            0%, 100% { transform: scale(1); }
+            50% { transform: scale(1.05); }
+        }
+        
+        .feature-title {
+            font-family: var(--font-display);
+            font-weight: 700;
+            font-size: 1.75rem;
+            margin-bottom: 1rem;
+            color: var(--color-electric);
+        }
+        
+        /* Pricing Cards */
+        .pricing-card {
+            background: rgba(26, 26, 46, 0.5);
+            border: 1px solid rgba(255, 255, 255, 0.1);
+            padding: 3rem;
+            position: relative;
+            transition: all 0.4s;
+            clip-path: polygon(0 0, calc(100% - 20px) 0, 100% 20px, 100% 100%, 20px 100%, 0 calc(100% - 20px));
+        }
+        
+        .pricing-card.featured {
+            border: 2px solid var(--color-magenta);
+            background: rgba(255, 0, 110, 0.05);
+            transform: scale(1.05);
+        }
+        
+        .pricing-card:hover {
+            transform: translateY(-10px) scale(1.02);
+            border-color: var(--color-electric);
+            box-shadow: 0 30px 80px rgba(0, 255, 245, 0.2);
+        }
+        
+        .pricing-card.featured:hover {
+            transform: translateY(-10px) scale(1.07);
+        }
+        
+        .price {
+            font-family: var(--font-display);
+            font-weight: 800;
+            font-size: 4rem;
+            color: var(--color-electric);
+            line-height: 1;
+            margin: 1rem 0 2rem;
+        }
+        
+        .badge {
+            font-family: var(--font-display);
+            font-weight: 700;
+            font-size: 0.75rem;
+            background: var(--color-magenta);
+            color: var(--color-void);
+            padding: 0.5rem 1rem;
+            display: inline-block;
+            letter-spacing: 0.1em;
+            clip-path: polygon(0 0, calc(100% - 8px) 0, 100% 8px, 100% 100%, 8px 100%, 0 calc(100% - 8px));
+        }
+        
+        /* Animations */
+        .fade-in {
+            animation: fadeIn 1s ease-out forwards;
+            opacity: 0;
+        }
+        
+        @keyframes fadeIn {
+            to { opacity: 1; }
+        }
+        
+        .slide-up {
+            animation: slideUp 0.8s ease-out forwards;
+            opacity: 0;
+            transform: translateY(30px);
+        }
+        
+        @keyframes slideUp {
+            to {
+                opacity: 1;
+                transform: translateY(0);
+            }
+        }
+        
+        /* Stagger delays */
+        .delay-1 { animation-delay: 0.1s; }
+        .delay-2 { animation-delay: 0.2s; }
+        .delay-3 { animation-delay: 0.3s; }
+        .delay-4 { animation-delay: 0.4s; }
+        .delay-5 { animation-delay: 0.5s; }
+        .delay-6 { animation-delay: 0.6s; }
+        
+        /* Utility */
+        .section-title {
+            font-family: var(--font-display);
+            font-weight: 800;
+            font-size: clamp(2.5rem, 5vw, 4rem);
+            text-align: center;
+            margin-bottom: 4rem;
+            letter-spacing: -0.02em;
+        }
+        
+        .container {
+            max-width: 1400px;
+            margin: 0 auto;
+            padding: 0 2rem;
+        }
+        
+        footer {
+            backdrop-filter: blur(20px);
+            background: rgba(10, 10, 15, 0.8);
+            border-top: 1px solid rgba(0, 255, 245, 0.1);
+            margin-top: 8rem;
+            padding: 3rem 0;
+            text-align: center;
+            color: rgba(255, 255, 255, 0.5);
+        }
+    </style>
 </head>
-<body class="bg-gradient-to-br from-indigo-900 via-purple-900 to-pink-900 min-h-screen">
-    <!-- Navbar -->
-    <nav class="bg-white/10 backdrop-blur-lg border-b border-white/20">
-        <div class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
-            <div class="flex justify-between items-center h-16">
-                <div class="flex items-center gap-2">
-                    <span class="material-symbols-outlined text-white text-3xl">rocket_launch</span>
-                    <span class="text-white font-bold text-xl">sajet.us Multitenant</span>
-                </div>
-                <div class="flex gap-4">
-                    <a href="/login/tenant" class="text-white hover:bg-white/20 px-4 py-2 rounded-lg transition">
-                        <span class="material-symbols-outlined align-middle">person</span>
-                        Portal Cliente
-                    </a>
-                    <a href="/login/admin" class="bg-white text-purple-900 hover:bg-gray-100 px-4 py-2 rounded-lg transition font-semibold">
-                        <span class="material-symbols-outlined align-middle">admin_panel_settings</span>
-                        Admin
-                    </a>
+<body>
+    <!-- Background Effects -->
+    <div class="grid-bg"></div>
+    <div class="orb orb-1"></div>
+    <div class="orb orb-2"></div>
+    
+    <!-- Content -->
+    <div class="content">
+        <!-- Navbar -->
+        <nav>
+            <div class="container" style="padding: 1.5rem 2rem;">
+                <div style="display: flex; justify-content: space-between; align-items: center;">
+                    <div class="logo fade-in">SAJET.US</div>
+                    <div style="display: flex; gap: 1rem;">
+                        <a href="/login/tenant" class="btn btn-secondary fade-in delay-1">Portal Cliente</a>
+                        <a href="/login/admin" class="btn btn-primary fade-in delay-2">Admin</a>
+                    </div>
                 </div>
             </div>
-        </div>
-    </nav>
+        </nav>
 
-    <!-- Hero Section -->
-    <div class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-20">
-        <div class="text-center">
-            <h1 class="text-5xl md:text-6xl font-bold text-white mb-6">
-                Tu Instancia sajet.us en Minutos
-            </h1>
-            <p class="text-xl text-gray-200 mb-8 max-w-2xl mx-auto">
-                Plataforma SaaS multitenant con sajet.us. Provisioning automático, gestión simplificada y escalabilidad ilimitada.
-            </p>
-            <div class="flex gap-4 justify-center">
-                <a href="/signup" class="bg-white text-purple-900 hover:bg-gray-100 px-8 py-4 rounded-lg text-lg font-semibold transition shadow-xl">
-                    Comenzar Ahora
-                </a>
-                <a href="#features" class="bg-white/20 text-white hover:bg-white/30 px-8 py-4 rounded-lg text-lg font-semibold transition backdrop-blur">
-                    Ver Características
-                </a>
-            </div>
-        </div>
-
-        <!-- Features Grid -->
-        <div id="features" class="grid md:grid-cols-3 gap-8 mt-20">
-            <!-- Feature 1 -->
-            <div class="bg-white/10 backdrop-blur-lg rounded-2xl p-8 border border-white/20">
-                <div class="bg-gradient-to-br from-blue-500 to-cyan-500 w-16 h-16 rounded-xl flex items-center justify-center mb-4">
-                    <span class="material-symbols-outlined text-white text-3xl">speed</span>
+        <!-- Hero Section -->
+        <section style="padding: 8rem 0;">
+            <div class="container">
+                <div style="text-align: center;">
+                    <h1 class="hero-title slide-up">
+                        Tu Instancia<br/>
+                        <span class="gradient-text">sajet.us</span><br/>
+                        en Minutos
+                    </h1>
+                    <p class="hero-subtitle slide-up delay-2">
+                        Plataforma SaaS multitenant con sajet.us. Provisioning automático, 
+                        gestión simplificada y escalabilidad ilimitada.
+                    </p>
+                    <div style="display: flex; gap: 1.5rem; justify-content: center; flex-wrap: wrap;" class="slide-up delay-3">
+                        <a href="/signup" class="btn btn-primary">Comenzar Ahora</a>
+                        <a href="#features" class="btn btn-secondary">Ver Características</a>
+                    </div>
                 </div>
-                <h3 class="text-2xl font-bold text-white mb-2">Provisioning Instantáneo</h3>
-                <p class="text-gray-300">
-                    Tu instancia sajet.us lista en menos de 5 minutos. Automatización completa desde el pago hasta el deployment.
-                </p>
             </div>
+        </section>
 
-            <!-- Feature 2 -->
-            <div class="bg-white/10 backdrop-blur-lg rounded-2xl p-8 border border-white/20">
-                <div class="bg-gradient-to-br from-purple-500 to-pink-500 w-16 h-16 rounded-xl flex items-center justify-center mb-4">
-                    <span class="material-symbols-outlined text-white text-3xl">lock</span>
-                </div>
-                <h3 class="text-2xl font-bold text-white mb-2">Seguro y Aislado</h3>
-                <p class="text-gray-300">
-                    Cada tenant en su propio contenedor LXC. Aislamiento completo, seguridad garantizada y datos protegidos.
-                </p>
-            </div>
+        <!-- Features Section -->
+        <section id="features" style="padding: 4rem 0;">
+            <div class="container">
+                <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(350px, 1fr)); gap: 2rem;">
+                    <!-- Feature 1 -->
+                    <div class="feature-card slide-up delay-1">
+                        <div class="feature-icon">⚡</div>
+                        <h3 class="feature-title">Provisioning Instantáneo</h3>
+                        <p style="color: rgba(255, 255, 255, 0.7); line-height: 1.7;">
+                            Tu instancia sajet.us lista en menos de 5 minutos. Automatización 
+                            completa desde el pago hasta el deployment.
+                        </p>
+                    </div>
 
-            <!-- Feature 3 -->
-            <div class="bg-white/10 backdrop-blur-lg rounded-2xl p-8 border border-white/20">
-                <div class="bg-gradient-to-br from-green-500 to-emerald-500 w-16 h-16 rounded-xl flex items-center justify-center mb-4">
-                    <span class="material-symbols-outlined text-white text-3xl">trending_up</span>
+                    <!-- Feature 2 -->
+                    <div class="feature-card slide-up delay-2">
+                        <div class="feature-icon">🔒</div>
+                        <h3 class="feature-title">Seguro y Aislado</h3>
+                        <p style="color: rgba(255, 255, 255, 0.7); line-height: 1.7;">
+                            Cada tenant en su propio contenedor LXC. Aislamiento completo, 
+                            seguridad garantizada y datos protegidos.
+                        </p>
+                    </div>
+
+                    <!-- Feature 3 -->
+                    <div class="feature-card slide-up delay-3">
+                        <div class="feature-icon">📈</div>
+                        <h3 class="feature-title">Escalable</h3>
+                        <p style="color: rgba(255, 255, 255, 0.7); line-height: 1.7;">
+                            Crece sin límites. Recursos ajustables, planes flexibles y 
+                            arquitectura preparada para miles de tenants.
+                        </p>
+                    </div>
                 </div>
-                <h3 class="text-2xl font-bold text-white mb-2">Escalable</h3>
-                <p class="text-gray-300">
-                    Crece sin límites. Recursos ajustables, planes flexibles y arquitectura preparada para miles de tenants.
-                </p>
             </div>
-        </div>
+        </section>
 
         <!-- Pricing Section -->
-        <div class="mt-20">
-            <h2 class="text-4xl font-bold text-white text-center mb-12">Planes Simples y Claros</h2>
-            <div class="grid md:grid-cols-3 gap-8">
-                <!-- Basic Plan -->
-                <div class="bg-white/10 backdrop-blur-lg rounded-2xl p-8 border border-white/20">
-                    <h3 class="text-2xl font-bold text-white mb-2">Basic</h3>
-                    <div class="text-5xl font-bold text-white mb-4">$29<span class="text-xl text-gray-300">/mes</span></div>
-                    <ul class="space-y-3 mb-8">
-                        <li class="text-gray-200 flex items-start gap-2">
-                            <span class="material-symbols-outlined text-green-400">check_circle</span>
-                            1 usuario
-                        </li>
-                        <li class="text-gray-200 flex items-start gap-2">
-                            <span class="material-symbols-outlined text-green-400">check_circle</span>
-                            10GB almacenamiento
-                        </li>
-                        <li class="text-gray-200 flex items-start gap-2">
-                            <span class="material-symbols-outlined text-green-400">check_circle</span>
-                            Módulos básicos
-                        </li>
-                    </ul>
-                    <a href="/signup?plan=basic" class="block bg-white/20 text-white hover:bg-white/30 text-center px-6 py-3 rounded-lg transition">
-                        Seleccionar
-                    </a>
-                </div>
+        <section style="padding: 6rem 0;">
+            <div class="container">
+                <h2 class="section-title slide-up">Planes Simples y Claros</h2>
+                <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(320px, 1fr)); gap: 2rem; align-items: start;">
+                    <!-- Basic Plan -->
+                    <div class="pricing-card slide-up delay-1">
+                        <h3 style="font-family: var(--font-display); font-weight: 700; font-size: 1.5rem; margin-bottom: 1rem;">Basic</h3>
+                        <div class="price">$29<span style="font-size: 1.5rem; color: rgba(255, 255, 255, 0.5);">/mes</span></div>
+                        <ul style="list-style: none; margin-bottom: 2rem;">
+                            <li style="padding: 0.75rem 0; border-bottom: 1px solid rgba(255, 255, 255, 0.1);">
+                                <span style="color: var(--color-electric); margin-right: 0.5rem;">✓</span> 1 usuario
+                            </li>
+                            <li style="padding: 0.75rem 0; border-bottom: 1px solid rgba(255, 255, 255, 0.1);">
+                                <span style="color: var(--color-electric); margin-right: 0.5rem;">✓</span> 10GB almacenamiento
+                            </li>
+                            <li style="padding: 0.75rem 0; border-bottom: 1px solid rgba(255, 255, 255, 0.1);">
+                                <span style="color: var(--color-electric); margin-right: 0.5rem;">✓</span> Módulos básicos
+                            </li>
+                        </ul>
+                        <a href="/signup?plan=basic" class="btn btn-secondary" style="width: 100%; text-align: center; display: block;">Seleccionar</a>
+                    </div>
 
-                <!-- Pro Plan -->
-                <div class="bg-gradient-to-br from-purple-600 to-pink-600 rounded-2xl p-8 border-2 border-white shadow-2xl transform scale-105">
-                    <div class="bg-white text-purple-900 text-xs font-bold px-3 py-1 rounded-full inline-block mb-2">POPULAR</div>
-                    <h3 class="text-2xl font-bold text-white mb-2">Pro</h3>
-                    <div class="text-5xl font-bold text-white mb-4">$49<span class="text-xl text-gray-200">/mes</span></div>
-                    <ul class="space-y-3 mb-8">
-                        <li class="text-white flex items-start gap-2">
-                            <span class="material-symbols-outlined text-green-300">check_circle</span>
-                            5 usuarios
-                        </li>
-                        <li class="text-white flex items-start gap-2">
-                            <span class="material-symbols-outlined text-green-300">check_circle</span>
-                            10GB almacenamiento
-                        </li>
-                        <li class="text-white flex items-start gap-2">
-                            <span class="material-symbols-outlined text-green-300">check_circle</span>
-                            Todos los módulos
-                        </li>
-                        <li class="text-white flex items-start gap-2">
-                            <span class="material-symbols-outlined text-green-300">check_circle</span>
-                            Soporte prioritario
-                        </li>
-                    </ul>
-                    <a href="/signup?plan=pro" class="block bg-white text-purple-900 hover:bg-gray-100 text-center px-6 py-3 rounded-lg transition font-semibold">
-                        Seleccionar
-                    </a>
-                </div>
+                    <!-- Pro Plan -->
+                    <div class="pricing-card featured slide-up delay-2">
+                        <span class="badge">POPULAR</span>
+                        <h3 style="font-family: var(--font-display); font-weight: 700; font-size: 1.5rem; margin: 1rem 0;">Pro</h3>
+                        <div class="price">$49<span style="font-size: 1.5rem; color: rgba(255, 255, 255, 0.5);">/mes</span></div>
+                        <ul style="list-style: none; margin-bottom: 2rem;">
+                            <li style="padding: 0.75rem 0; border-bottom: 1px solid rgba(255, 255, 255, 0.1);">
+                                <span style="color: var(--color-electric); margin-right: 0.5rem;">✓</span> 5 usuarios
+                            </li>
+                            <li style="padding: 0.75rem 0; border-bottom: 1px solid rgba(255, 255, 255, 0.1);">
+                                <span style="color: var(--color-electric); margin-right: 0.5rem;">✓</span> 50GB almacenamiento
+                            </li>
+                            <li style="padding: 0.75rem 0; border-bottom: 1px solid rgba(255, 255, 255, 0.1);">
+                                <span style="color: var(--color-electric); margin-right: 0.5rem;">✓</span> Todos los módulos
+                            </li>
+                            <li style="padding: 0.75rem 0; border-bottom: 1px solid rgba(255, 255, 255, 0.1);">
+                                <span style="color: var(--color-electric); margin-right: 0.5rem;">✓</span> Soporte prioritario
+                            </li>
+                        </ul>
+                        <a href="/signup?plan=pro" class="btn btn-primary" style="width: 100%; text-align: center; display: block;">Seleccionar</a>
+                    </div>
 
-                <!-- Enterprise Plan -->
-                <div class="bg-white/10 backdrop-blur-lg rounded-2xl p-8 border border-white/20">
-                    <h3 class="text-2xl font-bold text-white mb-2">Enterprise</h3>
-                    <div class="text-5xl font-bold text-white mb-4">$99<span class="text-xl text-gray-300">/mes</span></div>
-                    <ul class="space-y-3 mb-8">
-                        <li class="text-gray-200 flex items-start gap-2">
-                            <span class="material-symbols-outlined text-green-400">check_circle</span>
-                            Usuarios ilimitados
-                        </li>
-                        <li class="text-gray-200 flex items-start gap-2">
-                            <span class="material-symbols-outlined text-green-400">check_circle</span>
-                            20GB almacenamiento
-                        </li>
-                        <li class="text-gray-200 flex items-start gap-2">
-                            <span class="material-symbols-outlined text-green-400">check_circle</span>
-                            Todos los módulos
-                        </li>
-                        <li class="text-gray-200 flex items-start gap-2">
-                            <span class="material-symbols-outlined text-green-400">check_circle</span>
-                            Soporte 24/7
-                        </li>
-                        <li class="text-gray-200 flex items-start gap-2">
-                            <span class="material-symbols-outlined text-green-400">check_circle</span>
-                            SLA garantizado
-                        </li>
-                    </ul>
-                    <a href="/signup?plan=enterprise" class="block bg-white/20 text-white hover:bg-white/30 text-center px-6 py-3 rounded-lg transition">
-                        Seleccionar
-                    </a>
+                    <!-- Enterprise Plan -->
+                    <div class="pricing-card slide-up delay-3">
+                        <h3 style="font-family: var(--font-display); font-weight: 700; font-size: 1.5rem; margin-bottom: 1rem;">Enterprise</h3>
+                        <div class="price">$99<span style="font-size: 1.5rem; color: rgba(255, 255, 255, 0.5);">/mes</span></div>
+                        <ul style="list-style: none; margin-bottom: 2rem;">
+                            <li style="padding: 0.75rem 0; border-bottom: 1px solid rgba(255, 255, 255, 0.1);">
+                                <span style="color: var(--color-electric); margin-right: 0.5rem;">✓</span> Usuarios ilimitados
+                            </li>
+                            <li style="padding: 0.75rem 0; border-bottom: 1px solid rgba(255, 255, 255, 0.1);">
+                                <span style="color: var(--color-electric); margin-right: 0.5rem;">✓</span> 200GB almacenamiento
+                            </li>
+                            <li style="padding: 0.75rem 0; border-bottom: 1px solid rgba(255, 255, 255, 0.1);">
+                                <span style="color: var(--color-electric); margin-right: 0.5rem;">✓</span> Todos los módulos
+                            </li>
+                            <li style="padding: 0.75rem 0; border-bottom: 1px solid rgba(255, 255, 255, 0.1);">
+                                <span style="color: var(--color-electric); margin-right: 0.5rem;">✓</span> Soporte 24/7
+                            </li>
+                            <li style="padding: 0.75rem 0; border-bottom: 1px solid rgba(255, 255, 255, 0.1);">
+                                <span style="color: var(--color-electric); margin-right: 0.5rem;">✓</span> SLA garantizado
+                            </li>
+                        </ul>
+                        <a href="/signup?plan=enterprise" class="btn btn-secondary" style="width: 100%; text-align: center; display: block;">Seleccionar</a>
+                    </div>
                 </div>
             </div>
-        </div>
+        </section>
+
+        <!-- Footer -->
+        <footer>
+            <div class="container">
+                <p style="font-family: var(--font-display); font-size: 0.875rem; letter-spacing: 0.05em;">
+                    © 2026 SAJET.US MULTITENANT — Todos los derechos reservados
+                </p>
+            </div>
+        </footer>
     </div>
-
-    <!-- Footer -->
-    <footer class="bg-black/30 backdrop-blur-lg border-t border-white/20 mt-20">
-        <div class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
-            <div class="text-center text-gray-300">
-                <p>© 2026 sajet.us Multitenant. Todos los derechos reservados.</p>
-            </div>
-        </div>
-    </footer>
 </body>
 </html>

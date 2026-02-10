@@ -1,77 +1,399 @@
 <!DOCTYPE html>
-<html class="dark" lang="es">
+<html lang="es">
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Login {{ 'Administrador' if role == 'admin' else 'Cliente' }} - Jeturing</title>
-    <link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:wght,FILL@100..700,0..1&display=swap" rel="stylesheet">
-    <link href="https://fonts.googleapis.com" rel="preconnect">
-    <link crossorigin="" href="https://fonts.gstatic.com" rel="preconnect">
-    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&display=swap" rel="stylesheet">
-    <link rel="stylesheet" href="/static/css/tailwind.css">
-    
+    <title>Login {{ 'Administrador' if role == 'admin' else 'Cliente' }} - sajet.us</title>
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Space+Mono:wght@400;700&family=Syne:wght@400;600;700;800&display=swap" rel="stylesheet">
+    <style>
+        :root {
+            --color-electric: #00fff5;
+            --color-magenta: #ff006e;
+            --color-void: #0a0a0f;
+            --color-mist: #1a1a2e;
+            --font-display: 'Syne', sans-serif;
+            --font-mono: 'Space Mono', monospace;
+        }
+        
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+        
+        body {
+            font-family: var(--font-mono);
+            background: var(--color-void);
+            color: #ffffff;
+            min-height: 100vh;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            padding: 2rem;
+            overflow: hidden;
+        }
+        
+        /* Background Effects */
+        .grid-bg {
+            position: fixed;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            background-image: 
+                linear-gradient(rgba(0, 255, 245, 0.03) 1px, transparent 1px),
+                linear-gradient(90deg, rgba(0, 255, 245, 0.03) 1px, transparent 1px);
+            background-size: 50px 50px;
+            animation: gridMove 20s linear infinite;
+            pointer-events: none;
+        }
+        
+        @keyframes gridMove {
+            0% { transform: translate(0, 0); }
+            100% { transform: translate(50px, 50px); }
+        }
+        
+        .orb {
+            position: fixed;
+            border-radius: 50%;
+            filter: blur(120px);
+            opacity: 0.3;
+            pointer-events: none;
+            animation: float 12s ease-in-out infinite;
+        }
+        
+        .orb-admin {
+            width: 500px;
+            height: 500px;
+            background: var(--color-magenta);
+            top: 50%;
+            left: 50%;
+            transform: translate(-50%, -50%);
+        }
+        
+        .orb-tenant {
+            width: 500px;
+            height: 500px;
+            background: var(--color-electric);
+            top: 50%;
+            left: 50%;
+            transform: translate(-50%, -50%);
+        }
+        
+        @keyframes float {
+            0%, 100% { transform: translate(-50%, -50%) scale(1); }
+            50% { transform: translate(-40%, -40%) scale(1.1); }
+        }
+        
+        /* Login Container */
+        .login-container {
+            position: relative;
+            z-index: 1;
+            width: 100%;
+            max-width: 480px;
+            animation: slideUp 0.8s ease-out;
+        }
+        
+        @keyframes slideUp {
+            from {
+                opacity: 0;
+                transform: translateY(30px);
+            }
+            to {
+                opacity: 1;
+                transform: translateY(0);
+            }
+        }
+        
+        /* Login Card */
+        .login-card {
+            background: rgba(26, 26, 46, 0.6);
+            border: 1px solid rgba(0, 255, 245, 0.2);
+            padding: 3rem;
+            backdrop-filter: blur(20px);
+            clip-path: polygon(0 0, calc(100% - 24px) 0, 100% 24px, 100% 100%, 24px 100%, 0 calc(100% - 24px));
+        }
+        
+        /* Header */
+        .login-header {
+            text-align: center;
+            margin-bottom: 3rem;
+        }
+        
+        .login-icon {
+            width: 80px;
+            height: 80px;
+            margin: 0 auto 1.5rem;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-size: 3rem;
+            clip-path: polygon(0 0, calc(100% - 16px) 0, 100% 16px, 100% 100%, 16px 100%, 0 calc(100% - 16px));
+            animation: iconPulse 3s ease-in-out infinite;
+        }
+        
+        .icon-admin {
+            background: linear-gradient(135deg, var(--color-magenta), #ff3366);
+        }
+        
+        .icon-tenant {
+            background: linear-gradient(135deg, var(--color-electric), #00ccff);
+        }
+        
+        @keyframes iconPulse {
+            0%, 100% { transform: scale(1); }
+            50% { transform: scale(1.05); }
+        }
+        
+        .login-title {
+            font-family: var(--font-display);
+            font-weight: 800;
+            font-size: 2rem;
+            margin-bottom: 0.5rem;
+            letter-spacing: -0.02em;
+        }
+        
+        .login-subtitle {
+            font-size: 0.875rem;
+            color: rgba(255, 255, 255, 0.5);
+            text-transform: uppercase;
+            letter-spacing: 0.05em;
+        }
+        
+        /* Form */
+        .form-group {
+            margin-bottom: 1.5rem;
+        }
+        
+        .form-label {
+            display: block;
+            font-size: 0.8125rem;
+            color: rgba(255, 255, 255, 0.7);
+            margin-bottom: 0.5rem;
+            text-transform: uppercase;
+            letter-spacing: 0.05em;
+            font-weight: 700;
+        }
+        
+        .form-input-wrapper {
+            position: relative;
+        }
+        
+        .form-input {
+            width: 100%;
+            background: rgba(10, 10, 15, 0.8);
+            border: 2px solid rgba(0, 255, 245, 0.2);
+            color: #ffffff;
+            padding: 0.875rem 1rem 0.875rem 3rem;
+            font-family: var(--font-mono);
+            font-size: 0.9rem;
+            transition: all 0.3s;
+            clip-path: polygon(0 0, calc(100% - 8px) 0, 100% 8px, 100% 100%, 8px 100%, 0 calc(100% - 8px));
+        }
+        
+        .form-input:focus {
+            outline: none;
+            border-color: var(--color-electric);
+            box-shadow: 0 0 20px rgba(0, 255, 245, 0.2);
+        }
+        
+        .form-input::placeholder {
+            color: rgba(255, 255, 255, 0.3);
+        }
+        
+        .form-icon {
+            position: absolute;
+            left: 1rem;
+            top: 50%;
+            transform: translateY(-50%);
+            color: rgba(255, 255, 255, 0.4);
+            font-size: 1.25rem;
+            pointer-events: none;
+        }
+        
+        .totp-input {
+            text-align: center;
+            font-size: 1.5rem;
+            letter-spacing: 0.5rem;
+            padding-left: 1rem;
+        }
+        
+        .totp-hint {
+            font-size: 0.75rem;
+            color: rgba(255, 255, 255, 0.4);
+            margin-top: 0.5rem;
+            text-align: center;
+        }
+        
+        /* Button */
+        .btn-submit {
+            width: 100%;
+            font-family: var(--font-display);
+            font-weight: 700;
+            font-size: 1rem;
+            padding: 1rem 2rem;
+            background: var(--color-electric);
+            color: var(--color-void);
+            border: 2px solid var(--color-electric);
+            text-transform: uppercase;
+            letter-spacing: 0.05em;
+            cursor: pointer;
+            transition: all 0.3s;
+            margin-top: 2rem;
+            clip-path: polygon(0 0, calc(100% - 12px) 0, 100% 12px, 100% 100%, 12px 100%, 0 calc(100% - 12px));
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            gap: 0.5rem;
+        }
+        
+        .btn-submit:hover:not(:disabled) {
+            background: transparent;
+            color: var(--color-electric);
+            transform: translateY(-2px);
+            box-shadow: 0 10px 30px rgba(0, 255, 245, 0.3);
+        }
+        
+        .btn-submit:disabled {
+            opacity: 0.5;
+            cursor: not-allowed;
+        }
+        
+        .btn-admin {
+            background: var(--color-magenta);
+            border-color: var(--color-magenta);
+        }
+        
+        .btn-admin:hover:not(:disabled) {
+            background: transparent;
+            color: var(--color-magenta);
+            box-shadow: 0 10px 30px rgba(255, 0, 110, 0.3);
+        }
+        
+        /* Alert */
+        .alert {
+            padding: 1rem;
+            margin-bottom: 1.5rem;
+            font-size: 0.875rem;
+            clip-path: polygon(0 0, calc(100% - 10px) 0, 100% 10px, 100% 100%, 10px 100%, 0 calc(100% - 10px));
+            animation: slideDown 0.3s ease-out;
+        }
+        
+        @keyframes slideDown {
+            from {
+                opacity: 0;
+                transform: translateY(-10px);
+            }
+            to {
+                opacity: 1;
+                transform: translateY(0);
+            }
+        }
+        
+        .alert-error {
+            background: rgba(255, 0, 110, 0.1);
+            border: 1px solid rgba(255, 0, 110, 0.3);
+            color: #ff6b9d;
+        }
+        
+        .alert-info {
+            background: rgba(0, 255, 245, 0.1);
+            border: 1px solid rgba(0, 255, 245, 0.3);
+            color: var(--color-electric);
+        }
+        
+        .hidden {
+            display: none;
+        }
+        
+        /* Back Link */
+        .back-link {
+            text-align: center;
+            margin-top: 2rem;
+        }
+        
+        .back-link a {
+            color: rgba(255, 255, 255, 0.5);
+            text-decoration: none;
+            font-size: 0.875rem;
+            transition: color 0.3s;
+        }
+        
+        .back-link a:hover {
+            color: var(--color-electric);
+        }
+        
+        /* Loading Spinner */
+        @keyframes spin {
+            to { transform: rotate(360deg); }
+        }
+        
+        .spinner {
+            display: inline-block;
+            width: 1rem;
+            height: 1rem;
+            border: 2px solid rgba(255, 255, 255, 0.3);
+            border-top-color: currentColor;
+            border-radius: 50%;
+            animation: spin 0.6s linear infinite;
+        }
+    </style>
 </head>
-<body class="bg-background-dark min-h-screen flex items-center justify-center p-4 font-display">
-    <!-- Background decoration -->
-    <div class="absolute inset-0 overflow-hidden pointer-events-none">
-        <div class="absolute -top-40 -right-40 w-80 h-80 bg-primary/20 rounded-full blur-3xl"></div>
-        <div class="absolute -bottom-40 -left-40 w-80 h-80 bg-accent-cyan/20 rounded-full blur-3xl"></div>
-    </div>
-
-    <div class="w-full max-w-md relative z-10">
-        <!-- Card -->
-        <div class="bg-surface-dark border border-slate-800 rounded-2xl shadow-2xl p-8">
-            <!-- Logo/Header -->
-            <div class="flex flex-col items-center mb-8">
-                <div class="bg-gradient-to-br {% if role == 'admin' %}from-accent-rose to-orange-500{% else %}from-primary to-accent-cyan{% endif %} size-16 rounded-2xl flex items-center justify-center shadow-lg mb-4">
-                    <span class="material-symbols-outlined text-white text-[32px]">
-                        {% if role == 'admin' %}admin_panel_settings{% else %}person{% endif %}
-                    </span>
+<body>
+    <!-- Background Effects -->
+    <div class="grid-bg"></div>
+    <div class="orb {% if role == 'admin' %}orb-admin{% else %}orb-tenant{% endif %}"></div>
+    
+    <!-- Login Container -->
+    <div class="login-container">
+        <div class="login-card">
+            <!-- Header -->
+            <div class="login-header">
+                <div class="login-icon {% if role == 'admin' %}icon-admin{% else %}icon-tenant{% endif %}">
+                    {% if role == 'admin' %}👑{% else %}👤{% endif %}
                 </div>
-                <h1 class="text-2xl font-bold text-white">
-                    {% if role == 'admin' %}Panel Administrativo{% else %}Portal Cliente{% endif %}
+                <h1 class="login-title">
+                    {% if role == 'admin' %}Panel Admin{% else %}Portal Cliente{% endif %}
                 </h1>
-                <p class="text-slate-400 text-sm mt-1">Ingresa tus credenciales para continuar</p>
+                <p class="login-subtitle">Ingresa tus credenciales</p>
             </div>
 
             <!-- Login Form -->
-            <form id="loginForm" class="space-y-5">
+            <form id="loginForm">
                 <input type="hidden" id="role" name="role" value="{{ role }}">
                 
-                <div>
-                    <label for="email" class="block text-sm font-medium text-slate-300 mb-2">
+                <!-- Email/Username Field -->
+                <div class="form-group">
+                    <label for="email" class="form-label">
                         {% if role == 'admin' %}Usuario{% else %}Email{% endif %}
                     </label>
-                    <div class="relative">
-                        <div class="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none">
-                            <span class="material-symbols-outlined text-slate-500 text-[20px]">
-                                {% if role == 'admin' %}badge{% else %}mail{% endif %}
-                            </span>
-                        </div>
+                    <div class="form-input-wrapper">
+                        <span class="form-icon">{% if role == 'admin' %}🔑{% else %}📧{% endif %}</span>
                         <input 
                             type="{% if role == 'admin' %}text{% else %}email{% endif %}" 
                             id="email" 
                             name="email" 
                             required 
-                            class="w-full pl-10 pr-4 py-3 bg-surface-highlight border border-slate-700 rounded-xl text-white placeholder-slate-500 focus:outline-none focus:ring-2 focus:ring-primary/50 focus:border-primary transition-all"
+                            class="form-input"
                             placeholder="{% if role == 'admin' %}admin{% else %}tu@email.com{% endif %}"
                             autocomplete="{% if role == 'admin' %}username{% else %}email{% endif %}"
                         >
                     </div>
                 </div>
 
-                <div>
-                    <label for="password" class="block text-sm font-medium text-slate-300 mb-2">Contraseña</label>
-                    <div class="relative">
-                        <div class="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none">
-                            <span class="material-symbols-outlined text-slate-500 text-[20px]">lock</span>
-                        </div>
+                <!-- Password Field -->
+                <div class="form-group">
+                    <label for="password" class="form-label">Contraseña</label>
+                    <div class="form-input-wrapper">
+                        <span class="form-icon">🔒</span>
                         <input 
                             type="password" 
                             id="password" 
                             name="password" 
                             required 
-                            class="w-full pl-10 pr-4 py-3 bg-surface-highlight border border-slate-700 rounded-xl text-white placeholder-slate-500 focus:outline-none focus:ring-2 focus:ring-primary/50 focus:border-primary transition-all"
+                            class="form-input"
                             placeholder="••••••••"
                             autocomplete="current-password"
                         >
@@ -79,164 +401,146 @@
                 </div>
 
                 <!-- 2FA Code (hidden by default) -->
-                <div id="totpSection" class="hidden">
-                    <label for="totp_code" class="block text-sm font-medium text-slate-300 mb-2">Código 2FA</label>
-                    <div class="relative">
-                        <div class="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none">
-                            <span class="material-symbols-outlined text-slate-500 text-[20px]">security</span>
-                        </div>
+                <div id="totpSection" class="form-group hidden">
+                    <label for="totp_code" class="form-label">Código 2FA</label>
+                    <div class="form-input-wrapper">
                         <input 
                             type="text" 
                             id="totp_code" 
                             name="totp_code" 
                             pattern="[0-9]{6}"
                             maxlength="6"
-                            class="w-full pl-10 pr-4 py-3 bg-surface-highlight border border-slate-700 rounded-xl text-white placeholder-slate-500 focus:outline-none focus:ring-2 focus:ring-primary/50 focus:border-primary transition-all text-center text-xl tracking-widest font-mono"
+                            class="form-input totp-input"
                             placeholder="000000"
                         >
                     </div>
-                    <p class="text-xs text-slate-500 mt-2">Ingresa el código de tu app de autenticación</p>
+                    <p class="totp-hint">Ingresa el código de tu app de autenticación</p>
                 </div>
 
                 <!-- Error Message -->
-                <div id="errorMessage" class="hidden bg-accent-rose/10 border border-accent-rose/30 text-accent-rose px-4 py-3 rounded-xl text-sm flex items-center gap-2">
-                    <span class="material-symbols-outlined text-[18px]">error</span>
-                    <span id="errorText"></span>
-                </div>
-
-                <!-- Rate Limit Warning -->
-                <div id="rateLimitMessage" class="hidden bg-accent-amber/10 border border-accent-amber/30 text-accent-amber px-4 py-3 rounded-xl text-sm flex items-center gap-2">
-                    <span class="material-symbols-outlined text-[18px]">schedule</span>
-                    <span id="rateLimitText"></span>
-                </div>
-
-                <!-- Loading Message -->
-                <div id="loadingMessage" class="hidden bg-primary/10 border border-primary/30 text-primary px-4 py-3 rounded-xl text-sm flex items-center gap-2">
-                    <svg class="animate-spin h-4 w-4" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
-                        <circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"></circle>
-                        <path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
-                    </svg>
-                    <span>Validando credenciales...</span>
-                </div>
+                <div id="errorMessage" class="alert alert-error hidden"></div>
+                
+                <!-- Info Message -->
+                <div id="infoMessage" class="alert alert-info hidden"></div>
 
                 <!-- Submit Button -->
-                <button 
-                    type="submit" 
-                    class="w-full bg-gradient-to-r {% if role == 'admin' %}from-accent-rose to-orange-500 hover:from-accent-rose/90 hover:to-orange-500/90{% else %}from-primary to-accent-cyan hover:from-primary/90 hover:to-accent-cyan/90{% endif %} text-white font-semibold py-3 px-4 rounded-xl transition-all duration-200 flex items-center justify-center gap-2 shadow-lg {% if role == 'admin' %}shadow-accent-rose/25{% else %}shadow-primary/25{% endif %} active:scale-[0.98]"
-                    id="submitBtn"
-                >
-                    <span class="material-symbols-outlined text-[20px]">login</span>
-                    Iniciar Sesión
+                <button id="submitBtn" type="submit" class="btn-submit {% if role == 'admin' %}btn-admin{% endif %}">
+                    <span id="btnText">Iniciar Sesión</span>
                 </button>
             </form>
-
-            <!-- Demo credentials for admin -->
-            {% if role == 'admin' %}
-            <div class="mt-6 pt-6 border-t border-slate-800">
-                <p class="text-xs text-slate-500 text-center">
-                    Las credenciales se configuran mediante variables de entorno
-                </p>
+            
+            <!-- Back Link -->
+            <div class="back-link">
+                <a href="/">← Volver al inicio</a>
             </div>
-            {% endif %}
-        </div>
-
-        <!-- Footer -->
-        <div class="text-center mt-6">
-            <a href="/" class="text-slate-400 hover:text-white text-sm transition-colors inline-flex items-center gap-1">
-                <span class="material-symbols-outlined text-[18px]">arrow_back</span>
-                Volver al inicio
-            </a>
         </div>
     </div>
 
     <script>
+        const form = document.getElementById('loginForm');
+        const submitBtn = document.getElementById('submitBtn');
+        const btnText = document.getElementById('btnText');
+        const errorMessage = document.getElementById('errorMessage');
+        const infoMessage = document.getElementById('infoMessage');
+        const totpSection = document.getElementById('totpSection');
+        const totpInput = document.getElementById('totp_code');
+        const emailInput = document.getElementById('email');
+        const passwordInput = document.getElementById('password');
+        const role = document.getElementById('role').value;
+
         let requires2FA = false;
 
-        document.getElementById('loginForm').addEventListener('submit', async (e) => {
+        // Show error message
+        function showError(message) {
+            errorMessage.textContent = message;
+            errorMessage.classList.remove('hidden');
+            infoMessage.classList.add('hidden');
+        }
+
+        // Show info message
+        function showInfo(message) {
+            infoMessage.textContent = message;
+            infoMessage.classList.remove('hidden');
+            errorMessage.classList.add('hidden');
+        }
+
+        // Hide messages
+        function hideMessages() {
+            errorMessage.classList.add('hidden');
+            infoMessage.classList.add('hidden');
+        }
+
+        // Set loading state
+        function setLoading(loading) {
+            submitBtn.disabled = loading;
+            if (loading) {
+                btnText.innerHTML = '<span class="spinner"></span>';
+            } else {
+                btnText.textContent = 'Iniciar Sesión';
+            }
+        }
+
+        // Handle form submission
+        form.addEventListener('submit', async (e) => {
             e.preventDefault();
-            
-            const email = document.getElementById('email').value;
-            const password = document.getElementById('password').value;
-            const role = document.getElementById('role').value;
-            const totpCode = document.getElementById('totp_code')?.value || null;
-            
-            const errorDiv = document.getElementById('errorMessage');
-            const rateLimitDiv = document.getElementById('rateLimitMessage');
-            const loadingDiv = document.getElementById('loadingMessage');
-            const submitBtn = document.getElementById('submitBtn');
-            
-            // Reset messages
-            errorDiv.classList.add('hidden');
-            rateLimitDiv.classList.add('hidden');
-            loadingDiv.classList.remove('hidden');
-            submitBtn.disabled = true;
-            
+            hideMessages();
+            setLoading(true);
+
+            const formData = {
+                email: emailInput.value.trim(),
+                password: passwordInput.value,
+                role: role
+            };
+
+            // Add 2FA code if required
+            if (requires2FA && totpInput.value) {
+                formData.totp_code = totpInput.value.trim();
+            }
+
             try {
-                // Use new secure auth endpoint
-                const response = await fetch('/api/auth/login', {
+                const response = await fetch('/api/login', {
                     method: 'POST',
-                    headers: {
-                        'Content-Type': 'application/json',
-                    },
-                    credentials: 'include',  // Important for httpOnly cookies
-                    body: JSON.stringify({
-                        email: email,
-                        password: password,
-                        role: role,
-                        totp_code: totpCode
-                    })
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify(formData)
                 });
-                
+
                 const data = await response.json();
-                
-                if (response.status === 429) {
-                    // Rate limited
-                    document.getElementById('rateLimitText').textContent = data.detail || 'Demasiados intentos. Intenta más tarde.';
-                    rateLimitDiv.classList.remove('hidden');
-                    loadingDiv.classList.add('hidden');
-                    submitBtn.disabled = false;
-                    return;
-                }
-                
+
                 if (response.ok) {
-                    // Check if 2FA is required
-                    if (data.requires_totp) {
-                        requires2FA = true;
-                        document.getElementById('totpSection').classList.remove('hidden');
-                        document.getElementById('totp_code').focus();
-                        loadingDiv.classList.add('hidden');
-                        submitBtn.disabled = false;
-                        return;
+                    // Success - redirect to dashboard
+                    if (data.redirect_url) {
+                        showInfo('✓ Acceso concedido. Redirigiendo...');
+                        setTimeout(() => {
+                            window.location.href = data.redirect_url;
+                        }, 500);
+                    } else {
+                        window.location.href = role === 'admin' ? '/admin/dashboard' : '/tenant/portal';
                     }
-                    
-                    // Login successful - cookies are set automatically
-                    // Store backup in localStorage for JS API calls
-                    if (data.user_id) {
-                        localStorage.setItem('user_id', data.user_id);
-                    }
-                    localStorage.setItem('user_role', data.role);
-                    
-                    // Redirect
-                    window.location.href = data.redirect_url || (data.role === 'admin' ? '/admin' : '/tenant/portal');
+                } else if (response.status === 403 && data.detail === '2FA required') {
+                    // 2FA required
+                    requires2FA = true;
+                    totpSection.classList.remove('hidden');
+                    totpInput.focus();
+                    showInfo('Por favor ingresa tu código 2FA');
+                    setLoading(false);
                 } else {
-                    document.getElementById('errorText').textContent = data.detail || 'Credenciales inválidas';
-                    errorDiv.classList.remove('hidden');
-                    loadingDiv.classList.add('hidden');
-                    submitBtn.disabled = false;
+                    // Error
+                    showError(data.detail || 'Error de autenticación');
+                    setLoading(false);
                 }
             } catch (error) {
-                document.getElementById('errorText').textContent = 'Error al conectar con el servidor';
-                errorDiv.classList.remove('hidden');
-                loadingDiv.classList.add('hidden');
-                submitBtn.disabled = false;
-                console.error('Login error:', error);
+                showError('Error de conexión. Por favor intenta de nuevo.');
+                setLoading(false);
             }
         });
 
-        // Auto-submit when 6 digits entered in TOTP field
-        document.getElementById('totp_code')?.addEventListener('input', function(e) {
-            if (e.target.value.length === 6 && requires2FA) {
-                document.getElementById('loginForm').dispatchEvent(new Event('submit'));
+        // Auto-focus on email input
+        emailInput.focus();
+
+        // Handle TOTP input - auto submit when 6 digits entered
+        totpInput.addEventListener('input', (e) => {
+            if (e.target.value.length === 6) {
+                form.requestSubmit();
             }
         });
     </script>

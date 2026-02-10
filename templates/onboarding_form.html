@@ -1,129 +1,573 @@
 <!DOCTYPE html>
-<html class="dark" lang="es">
+<html lang="es">
 <head>
 	<meta charset="UTF-8">
 	<meta name="viewport" content="width=device-width, initial-scale=1.0">
 	<title>Registro - sajet.us Multitenant</title>
-	<link rel="preconnect" href="https://fonts.googleapis.com"/>
-	<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin/>
-	<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;900&display=swap" rel="stylesheet"/>
-	<link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:wght,FILL@100..700,0..1&display=swap" rel="stylesheet"/>
-	<link rel="stylesheet" href="/static/css/tailwind.css">
-	
+	<link rel="preconnect" href="https://fonts.googleapis.com">
+	<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+	<link href="https://fonts.googleapis.com/css2?family=Space+Mono:wght@400;700&family=Syne:wght@400;600;700;800&display=swap" rel="stylesheet">
+	<style>
+		:root {
+			--color-electric: #00fff5;
+			--color-magenta: #ff006e;
+			--color-void: #0a0a0f;
+			--color-mist: #1a1a2e;
+			--font-display: 'Syne', sans-serif;
+			--font-mono: 'Space Mono', monospace;
+		}
+		
+		* {
+			margin: 0;
+			padding: 0;
+			box-sizing: border-box;
+		}
+		
+		body {
+			font-family: var(--font-mono);
+			background: var(--color-void);
+			color: #ffffff;
+			overflow-x: hidden;
+			min-height: 100vh;
+		}
+		
+		/* Background Effects */
+		.grid-bg {
+			position: fixed;
+			top: 0;
+			left: 0;
+			width: 100%;
+			height: 100%;
+			background-image: 
+				linear-gradient(rgba(0, 255, 245, 0.03) 1px, transparent 1px),
+				linear-gradient(90deg, rgba(0, 255, 245, 0.03) 1px, transparent 1px);
+			background-size: 40px 40px;
+			pointer-events: none;
+			z-index: 0;
+		}
+		
+		.orb {
+			position: fixed;
+			border-radius: 50%;
+			filter: blur(100px);
+			opacity: 0.2;
+			pointer-events: none;
+			z-index: 0;
+		}
+		
+		.orb-1 {
+			width: 600px;
+			height: 600px;
+			background: var(--color-electric);
+			top: -300px;
+			right: 10%;
+			animation: float 18s ease-in-out infinite;
+		}
+		
+		.orb-2 {
+			width: 500px;
+			height: 500px;
+			background: var(--color-magenta);
+			bottom: -250px;
+			left: 10%;
+			animation: float 15s ease-in-out infinite reverse;
+		}
+		
+		@keyframes float {
+			0%, 100% { transform: translate(0, 0); }
+			50% { transform: translate(30px, -30px); }
+		}
+		
+		/* Content Layer */
+		.content {
+			position: relative;
+			z-index: 1;
+		}
+		
+		/* Header */
+		header {
+			backdrop-filter: blur(20px);
+			background: rgba(10, 10, 15, 0.8);
+			border-bottom: 1px solid rgba(0, 255, 245, 0.1);
+		}
+		
+		.logo {
+			font-family: var(--font-display);
+			font-weight: 800;
+			font-size: 1.25rem;
+			letter-spacing: -0.02em;
+			background: linear-gradient(135deg, var(--color-electric), var(--color-magenta));
+			-webkit-background-clip: text;
+			-webkit-text-fill-color: transparent;
+			background-clip: text;
+		}
+		
+		.container {
+			max-width: 1400px;
+			margin: 0 auto;
+			padding: 0 2rem;
+		}
+		
+		/* Form Container */
+		.form-wrapper {
+			display: grid;
+			grid-template-columns: 1fr;
+			gap: 4rem;
+			padding: 4rem 0;
+		}
+		
+		@media (min-width: 1024px) {
+			.form-wrapper {
+				grid-template-columns: 5fr 7fr;
+				align-items: start;
+			}
+		}
+		
+		/* Info Section */
+		.info-section {
+			animation: slideUp 0.8s ease-out;
+		}
+		
+		@keyframes slideUp {
+			from {
+				opacity: 0;
+				transform: translateY(20px);
+			}
+			to {
+				opacity: 1;
+				transform: translateY(0);
+			}
+		}
+		
+		.badge {
+			font-family: var(--font-display);
+			font-weight: 700;
+			font-size: 0.75rem;
+			background: linear-gradient(135deg, var(--color-electric), var(--color-magenta));
+			color: var(--color-void);
+			padding: 0.5rem 1rem;
+			display: inline-block;
+			letter-spacing: 0.1em;
+			margin-bottom: 2rem;
+			clip-path: polygon(0 0, calc(100% - 8px) 0, 100% 8px, 100% 100%, 8px 100%, 0 calc(100% - 8px));
+		}
+		
+		.info-title {
+			font-family: var(--font-display);
+			font-weight: 800;
+			font-size: clamp(2rem, 5vw, 3.5rem);
+			line-height: 1.1;
+			letter-spacing: -0.02em;
+			margin-bottom: 1.5rem;
+		}
+		
+		.gradient-text {
+			background: linear-gradient(135deg, var(--color-electric), var(--color-magenta));
+			-webkit-background-clip: text;
+			-webkit-text-fill-color: transparent;
+			background-clip: text;
+		}
+		
+		.info-desc {
+			font-size: 1rem;
+			color: rgba(255, 255, 255, 0.7);
+			line-height: 1.7;
+			margin-bottom: 2rem;
+		}
+		
+		.stats-grid {
+			display: grid;
+			grid-template-columns: repeat(2, 1fr);
+			gap: 1rem;
+			margin-top: 2rem;
+		}
+		
+		.stat-card {
+			background: rgba(26, 26, 46, 0.5);
+			border: 1px solid rgba(0, 255, 245, 0.1);
+			padding: 1.5rem;
+			clip-path: polygon(0 0, calc(100% - 12px) 0, 100% 12px, 100% 100%, 12px 100%, 0 calc(100% - 12px));
+		}
+		
+		.stat-value {
+			font-family: var(--font-display);
+			font-weight: 800;
+			font-size: 2rem;
+			color: var(--color-electric);
+			margin-bottom: 0.5rem;
+		}
+		
+		.stat-label {
+			font-size: 0.875rem;
+			color: rgba(255, 255, 255, 0.6);
+		}
+		
+		/* Form Card */
+		.form-card {
+			background: rgba(26, 26, 46, 0.5);
+			border: 1px solid rgba(0, 255, 245, 0.2);
+			padding: 3rem;
+			backdrop-filter: blur(20px);
+			animation: slideUp 0.8s ease-out 0.2s backwards;
+			clip-path: polygon(0 0, calc(100% - 20px) 0, 100% 20px, 100% 100%, 20px 100%, 0 calc(100% - 20px));
+		}
+		
+		.form-header {
+			display: flex;
+			justify-content: space-between;
+			align-items: start;
+			margin-bottom: 2rem;
+		}
+		
+		.form-title {
+			font-family: var(--font-display);
+			font-weight: 700;
+			font-size: 1.75rem;
+			margin-bottom: 0.25rem;
+		}
+		
+		.form-step {
+			font-size: 0.875rem;
+			color: rgba(255, 255, 255, 0.5);
+			text-transform: uppercase;
+			letter-spacing: 0.05em;
+		}
+		
+		.form-icon {
+			font-size: 3rem;
+			line-height: 1;
+		}
+		
+		/* Form Elements */
+		.form-group {
+			margin-bottom: 1.5rem;
+		}
+		
+		.form-label {
+			display: block;
+			font-size: 0.875rem;
+			color: rgba(255, 255, 255, 0.7);
+			margin-bottom: 0.5rem;
+			text-transform: uppercase;
+			letter-spacing: 0.05em;
+			font-weight: 700;
+		}
+		
+		.form-input {
+			width: 100%;
+			background: rgba(10, 10, 15, 0.8);
+			border: 2px solid rgba(0, 255, 245, 0.2);
+			color: #ffffff;
+			padding: 0.875rem 1rem;
+			font-family: var(--font-mono);
+			font-size: 0.9rem;
+			transition: all 0.3s;
+			clip-path: polygon(0 0, calc(100% - 8px) 0, 100% 8px, 100% 100%, 8px 100%, 0 calc(100% - 8px));
+		}
+		
+		.form-input:focus {
+			outline: none;
+			border-color: var(--color-electric);
+			box-shadow: 0 0 20px rgba(0, 255, 245, 0.2);
+		}
+		
+		.form-input::placeholder {
+			color: rgba(255, 255, 255, 0.3);
+		}
+		
+		.input-group {
+			display: flex;
+		}
+		
+		.input-addon {
+			background: rgba(26, 26, 46, 0.8);
+			border: 2px solid rgba(0, 255, 245, 0.2);
+			border-left: none;
+			color: rgba(255, 255, 255, 0.5);
+			padding: 0.875rem 1rem;
+			font-family: var(--font-mono);
+			font-size: 0.9rem;
+			white-space: nowrap;
+			clip-path: polygon(0 0, calc(100% - 8px) 0, 100% 8px, 100% 100%, 0 100%, 0 0);
+		}
+		
+		.input-hint {
+			font-size: 0.75rem;
+			color: rgba(255, 255, 255, 0.4);
+			margin-top: 0.5rem;
+		}
+		
+		/* Grid Layout */
+		.form-grid {
+			display: grid;
+			grid-template-columns: 1fr;
+			gap: 1.5rem;
+		}
+		
+		@media (min-width: 768px) {
+			.form-grid-2 {
+				grid-template-columns: repeat(2, 1fr);
+			}
+		}
+		
+		/* Plan Selector */
+		.plan-grid {
+			display: grid;
+			grid-template-columns: 1fr;
+			gap: 1rem;
+			margin-top: 0.5rem;
+		}
+		
+		@media (min-width: 640px) {
+			.plan-grid {
+				grid-template-columns: repeat(3, 1fr);
+			}
+		}
+		
+		.plan-card {
+			background: rgba(10, 10, 15, 0.8);
+			border: 2px solid rgba(255, 255, 255, 0.1);
+			padding: 1.25rem;
+			cursor: pointer;
+			transition: all 0.3s;
+			clip-path: polygon(0 0, calc(100% - 10px) 0, 100% 10px, 100% 100%, 10px 100%, 0 calc(100% - 10px));
+		}
+		
+		.plan-card:hover {
+			border-color: var(--color-electric);
+			transform: translateY(-2px);
+		}
+		
+		.plan-card.selected {
+			border-color: var(--color-magenta);
+			background: rgba(255, 0, 110, 0.1);
+		}
+		
+		.plan-header {
+			display: flex;
+			justify-content: space-between;
+			align-items: center;
+			margin-bottom: 0.75rem;
+		}
+		
+		.plan-name {
+			font-family: var(--font-display);
+			font-weight: 700;
+			font-size: 1.125rem;
+		}
+		
+		.plan-price {
+			font-size: 0.75rem;
+			background: rgba(0, 255, 245, 0.1);
+			color: var(--color-electric);
+			padding: 0.25rem 0.75rem;
+			border-radius: 20px;
+			font-weight: 700;
+		}
+		
+		.plan-desc {
+			font-size: 0.8125rem;
+			color: rgba(255, 255, 255, 0.6);
+		}
+		
+		/* Button */
+		.btn-submit {
+			width: 100%;
+			font-family: var(--font-display);
+			font-weight: 700;
+			font-size: 1rem;
+			padding: 1rem 2rem;
+			background: var(--color-electric);
+			color: var(--color-void);
+			border: 2px solid var(--color-electric);
+			text-transform: uppercase;
+			letter-spacing: 0.05em;
+			cursor: pointer;
+			transition: all 0.3s;
+			margin-top: 1.5rem;
+			clip-path: polygon(0 0, calc(100% - 12px) 0, 100% 12px, 100% 100%, 12px 100%, 0 calc(100% - 12px));
+			display: flex;
+			align-items: center;
+			justify-content: center;
+			gap: 0.5rem;
+		}
+		
+		.btn-submit:hover {
+			background: transparent;
+			color: var(--color-electric);
+			transform: translateY(-2px);
+			box-shadow: 0 10px 30px rgba(0, 255, 245, 0.3);
+		}
+		
+		.btn-submit:disabled {
+			opacity: 0.5;
+			cursor: not-allowed;
+			transform: none;
+		}
+		
+		/* Error Box */
+		.error-box {
+			background: rgba(255, 0, 110, 0.1);
+			border: 1px solid rgba(255, 0, 110, 0.3);
+			color: #ff6b9d;
+			padding: 1rem;
+			margin-top: 1rem;
+			font-size: 0.875rem;
+			clip-path: polygon(0 0, calc(100% - 10px) 0, 100% 10px, 100% 100%, 10px 100%, 0 calc(100% - 10px));
+		}
+		
+		.hidden {
+			display: none;
+		}
+		
+		/* Nav Links */
+		.nav-links {
+			display: flex;
+			gap: 2rem;
+			align-items: center;
+		}
+		
+		.nav-link {
+			color: rgba(255, 255, 255, 0.7);
+			text-decoration: none;
+			font-size: 0.875rem;
+			transition: color 0.3s;
+		}
+		
+		.nav-link:hover {
+			color: var(--color-electric);
+		}
+	</style>
 </head>
-<body class="bg-slate-950 text-white font-display min-h-screen">
-	<header class="border-b border-white/5 bg-slate-950/80 backdrop-blur">
-		<div class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 h-16 flex items-center justify-between">
-			<a href="/" class="flex items-center gap-2">
-				<span class="material-symbols-outlined text-3xl text-primary">deployed_code</span>
-				<span class="text-lg font-bold tracking-tight">Jeturing sajet.us</span>
-			</a>
-			<div class="flex items-center gap-3 text-sm">
-				<a href="/login/tenant" class="text-muted hover:text-white transition">Portal Cliente</a>
-				<a href="/login/admin" class="text-muted hover:text-white transition">Admin</a>
-			</div>
-		</div>
-	</header>
-
-	<main class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-10">
-		<div class="grid lg:grid-cols-2 gap-10 items-start">
-			<div class="space-y-6">
-				<div class="inline-flex items-center gap-2 bg-primary/10 border border-primary/20 text-primary px-3 py-1 rounded-full text-xs font-semibold">
-					<span class="material-symbols-outlined text-base">bolt</span>
-					Alta en menos de 5 minutos
-				</div>
-				<h1 class="text-4xl md:text-5xl font-black leading-tight">Crea tu instancia sajet.us en segundos</h1>
-				<p class="text-lg text-muted max-w-2xl">
-					Automatizamos el pago, el aprovisionamiento en contenedores LXC y la configuración inicial. Elige tu plan, ingresa tus datos y te llevamos directo al checkout seguro.
-				</p>
-				<div class="grid sm:grid-cols-2 gap-4">
-					<div class="bg-white/5 border border-white/10 rounded-2xl p-4">
-						<div class="text-2xl font-bold">5 min</div>
-						<p class="text-muted text-sm">Tiempo promedio de provisionamiento</p>
-					</div>
-					<div class="bg-white/5 border border-white/10 rounded-2xl p-4">
-						<div class="text-2xl font-bold">99.9%</div>
-						<p class="text-muted text-sm">Disponibilidad objetivo</p>
-					</div>
+<body>
+	<!-- Background Effects -->
+	<div class="grid-bg"></div>
+	<div class="orb orb-1"></div>
+	<div class="orb orb-2"></div>
+	
+	<!-- Content -->
+	<div class="content">
+		<!-- Header -->
+		<header>
+			<div class="container" style="padding: 1.5rem 0;">
+				<div style="display: flex; justify-content: space-between; align-items: center;">
+					<a href="/" class="logo">SAJET.US</a>
+					<nav class="nav-links">
+						<a href="/login/tenant" class="nav-link">Portal Cliente</a>
+						<a href="/login/admin" class="nav-link">Admin</a>
+					</nav>
 				</div>
 			</div>
+		</header>
 
-			<div class="bg-panel border border-white/10 rounded-2xl shadow-glow p-8">
-				<div class="flex items-center justify-between mb-6">
-					<div>
-						<p class="text-sm text-muted">Paso 1 de 2</p>
-						<h2 class="text-2xl font-bold">Datos del titular</h2>
+		<!-- Main Content -->
+		<main class="container">
+			<div class="form-wrapper">
+				<!-- Info Section -->
+				<div class="info-section">
+					<div class="badge">⚡ ALTA EN 5 MINUTOS</div>
+					<h1 class="info-title">
+						Crea tu instancia<br/>
+						<span class="gradient-text">sajet.us</span><br/>
+						en segundos
+					</h1>
+					<p class="info-desc">
+						Automatizamos el pago, el aprovisionamiento en contenedores LXC y la 
+						configuración inicial. Elige tu plan, ingresa tus datos y te llevamos 
+						directo al checkout seguro.
+					</p>
+					
+					<div class="stats-grid">
+						<div class="stat-card">
+							<div class="stat-value">5min</div>
+							<div class="stat-label">Provisioning promedio</div>
+						</div>
+						<div class="stat-card">
+							<div class="stat-value">99.9%</div>
+							<div class="stat-label">Disponibilidad</div>
+						</div>
 					</div>
-					<span class="material-symbols-outlined text-primary text-3xl">rocket_launch</span>
 				</div>
 
-				<form id="signupForm" class="space-y-4">
-					<div class="grid md:grid-cols-2 gap-4">
+				<!-- Form Section -->
+				<div class="form-card">
+					<div class="form-header">
 						<div>
-							<label class="block text-sm text-muted mb-1">Nombre Completo</label>
-							<input type="text" name="full_name" required class="w-full bg-slate-900 border border-white/10 rounded-xl px-4 py-3 focus:border-primary focus:ring-2 focus:ring-primary/40 transition" placeholder="Andrea López" />
+							<div class="form-step">Paso 1 de 2</div>
+							<h2 class="form-title">Datos del titular</h2>
 						</div>
-						<div>
-							<label class="block text-sm text-muted mb-1">Email</label>
-							<input type="email" name="email" required class="w-full bg-slate-900 border border-white/10 rounded-xl px-4 py-3 focus:border-primary focus:ring-2 focus:ring-primary/40 transition" placeholder="tu@email.com" />
-						</div>
+						<div class="form-icon">🚀</div>
 					</div>
 
-					<div>
-						<label class="block text-sm text-muted mb-1">Empresa</label>
-						<input type="text" name="company_name" required class="w-full bg-slate-900 border border-white/10 rounded-xl px-4 py-3 focus:border-primary focus:ring-2 focus:ring-primary/40 transition" placeholder="Acme Corp" />
-					</div>
-
-					<div>
-						<label class="block text-sm text-muted mb-1">Subdominio</label>
-						<div class="flex rounded-xl border border-white/10 overflow-hidden">
-							<input type="text" name="subdomain" pattern="[a-z0-9]+" required class="flex-1 bg-slate-900 px-4 py-3 focus:outline-none" placeholder="miempresa" />
-							<span class="bg-slate-800 px-4 py-3 text-muted border-l border-white/10">.sajet.us</span>
+					<form id="signupForm">
+						<div class="form-grid form-grid-2">
+							<div class="form-group">
+								<label class="form-label">Nombre Completo</label>
+								<input type="text" name="full_name" required class="form-input" placeholder="Andrea López" />
+							</div>
+							<div class="form-group">
+								<label class="form-label">Email</label>
+								<input type="email" name="email" required class="form-input" placeholder="tu@email.com" />
+							</div>
 						</div>
-						<p class="text-xs text-muted mt-1">Solo minúsculas y números</p>
-					</div>
 
-					<div>
-						<label class="block text-sm text-muted mb-2">Plan</label>
-						<input type="hidden" id="selectedPlan" name="plan" value="{{ plan if plan else 'pro' }}" />
-						<div class="grid sm:grid-cols-3 gap-3" id="plansGrid">
-							<button type="button" data-plan="basic" class="w-full text-left bg-slate-900 border border-white/10 rounded-xl p-4 hover:border-primary/60 transition">
-								<div class="flex items-center justify-between mb-2">
-									<span class="font-semibold">Basic</span>
-									<span class="text-xs bg-white/10 px-2 py-0.5 rounded-full">$29/mes</span>
+						<div class="form-group">
+							<label class="form-label">Empresa</label>
+							<input type="text" name="company_name" required class="form-input" placeholder="Acme Corp" />
+						</div>
+
+						<div class="form-group">
+							<label class="form-label">Subdominio</label>
+							<div class="input-group">
+								<input type="text" name="subdomain" pattern="[a-z0-9]+" required class="form-input" placeholder="miempresa" style="border-right: none;" />
+								<div class="input-addon">.sajet.us</div>
+							</div>
+							<div class="input-hint">Solo minúsculas y números</div>
+						</div>
+
+						<div class="form-group">
+							<label class="form-label">Plan</label>
+							<input type="hidden" id="selectedPlan" name="plan" value="{{ plan if plan else 'pro' }}" />
+							<div class="plan-grid">
+								<div class="plan-card" data-plan="basic">
+									<div class="plan-header">
+										<span class="plan-name">Basic</span>
+										<span class="plan-price">$29/mes</span>
+									</div>
+									<div class="plan-desc">1 usuario, módulos esenciales</div>
 								</div>
-								<p class="text-xs text-muted">1 usuario, módulos esenciales</p>
-							</button>
-							<button type="button" data-plan="pro" class="w-full text-left bg-slate-900 border border-white/10 rounded-xl p-4 hover:border-primary/60 transition">
-								<div class="flex items-center justify-between mb-2">
-									<span class="font-semibold">Pro</span>
-									<span class="text-xs bg-primary/20 text-primary px-2 py-0.5 rounded-full">$49/mes</span>
+								<div class="plan-card" data-plan="pro">
+									<div class="plan-header">
+										<span class="plan-name">Pro</span>
+										<span class="plan-price">$49/mes</span>
+									</div>
+									<div class="plan-desc">5 usuarios, soporte prioritario</div>
 								</div>
-								<p class="text-xs text-muted">5 usuarios, soporte prioritario</p>
-							</button>
-							<button type="button" data-plan="enterprise" class="w-full text-left bg-slate-900 border border-white/10 rounded-xl p-4 hover:border-primary/60 transition">
-								<div class="flex items-center justify-between mb-2">
-									<span class="font-semibold">Enterprise</span>
-									<span class="text-xs bg-white/10 px-2 py-0.5 rounded-full">$99/mes</span>
+								<div class="plan-card" data-plan="enterprise">
+									<div class="plan-header">
+										<span class="plan-name">Enterprise</span>
+										<span class="plan-price">$99/mes</span>
+									</div>
+									<div class="plan-desc">Usuarios ilimitados, SLA 24/7</div>
 								</div>
-								<p class="text-xs text-muted">Usuarios ilimitados, SLA 24/7</p>
-							</button>
+							</div>
 						</div>
-					</div>
 
-					<div id="errorBox" class="hidden border border-red-500/40 bg-red-500/10 text-red-200 px-4 py-3 rounded-xl text-sm"></div>
+						<div id="errorBox" class="error-box hidden"></div>
 
-					<button id="submitBtn" type="submit" class="w-full flex items-center justify-center gap-2 bg-primary hover:bg-primary-dark text-white font-semibold py-3 rounded-xl transition shadow-glow">
-						<span class="material-symbols-outlined">lock</span>
-						Ir al pago seguro
-					</button>
-				</form>
+						<button id="submitBtn" type="submit" class="btn-submit">
+							<span>🔒</span>
+							<span>Ir al pago seguro</span>
+						</button>
+					</form>
+				</div>
 			</div>
-		</div>
-	</main>
+		</main>
+	</div>
 
 	<script>
-		const planButtons = document.querySelectorAll('[data-plan]');
+	<script>
+		const planCards = document.querySelectorAll('.plan-card');
 		const selectedPlanInput = document.getElementById('selectedPlan');
 		const errorBox = document.getElementById('errorBox');
 		const submitBtn = document.getElementById('submitBtn');
@@ -134,38 +578,48 @@
 		function setSelectedPlan(planId) {
 			const resolvedPlan = knownPlans.includes(planId) ? planId : 'pro';
 			selectedPlanInput.value = resolvedPlan;
-			planButtons.forEach(btn => {
-				if (btn.dataset.plan === resolvedPlan) {
-					btn.classList.add('ring-2', 'ring-primary', 'bg-white/5');
+			
+			planCards.forEach(card => {
+				if (card.dataset.plan === resolvedPlan) {
+					card.classList.add('selected');
 				} else {
-					btn.classList.remove('ring-2', 'ring-primary', 'bg-white/5');
+					card.classList.remove('selected');
 				}
 			});
 		}
 
+		// Initialize from URL or default
 		const params = new URLSearchParams(window.location.search);
 		const planFromQuery = params.get('plan');
 		setSelectedPlan(planFromQuery || selectedPlanInput.value || 'pro');
 
+		// Prefill form from URL params
 		const prefill = {
 			full_name: params.get('full_name') || '',
 			email: params.get('email') || '',
 			company_name: params.get('company_name') || '',
 			subdomain: params.get('subdomain') || ''
 		};
+		
 		Object.entries(prefill).forEach(([key, value]) => {
 			if (!value) return;
 			const input = form.querySelector(`[name="${key}"]`);
 			if (input) input.value = value;
 		});
 
-		planButtons.forEach(btn => btn.addEventListener('click', () => setSelectedPlan(btn.dataset.plan)));
+		// Plan selection
+		planCards.forEach(card => {
+			card.addEventListener('click', () => {
+				setSelectedPlan(card.dataset.plan);
+			});
+		});
 
+		// Form submission
 		form.addEventListener('submit', async (event) => {
 			event.preventDefault();
 			errorBox.classList.add('hidden');
 			submitBtn.disabled = true;
-			submitBtn.textContent = 'Redirigiendo...';
+			submitBtn.innerHTML = '<span>⏳</span><span>Redirigiendo...</span>';
 
 			const payload = {
 				full_name: form.full_name.value.trim(),
@@ -196,9 +650,8 @@
 			} catch (error) {
 				errorBox.textContent = error.message || 'Ocurrió un error';
 				errorBox.classList.remove('hidden');
-			} finally {
 				submitBtn.disabled = false;
-				submitBtn.textContent = 'Ir al pago seguro';
+				submitBtn.innerHTML = '<span>🔒</span><span>Ir al pago seguro</span>';
 			}
 		});
 	</script>
