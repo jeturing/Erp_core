@@ -60,6 +60,17 @@ class TenantDeleteRequest(BaseModel):
     delete_dns: bool = True
 
 
+class TenantPasswordRequest(BaseModel):
+    subdomain: str
+    new_password: str = Field(..., min_length=6)
+
+
+class TenantSuspendRequest(BaseModel):
+    subdomain: str
+    suspend: bool = True
+    reason: Optional[str] = Field(None)
+
+
 def get_pg_user():
     """Detecta automáticamente el usuario PostgreSQL"""
     global PG_USER
@@ -296,6 +307,80 @@ async def delete_tenant(request: TenantDeleteRequest, x_api_key: str = Header(No
 async def list_domains():
     """Lista dominios configurados"""
     return {"domains": list(CF_ZONES.keys())}
+
+
+@app.put("/api/tenant/password")
+async def change_password(request: TenantPasswordRequest, x_api_key: str = Header(None)):
+    """Cambia la contraseña del admin de un tenant"""
+    if x_api_key != API_KEY:
+        raise HTTPException(status_code=401, detail="Invalid API key")
+    
+    subdomain = request.subdomain.lower()
+    new_password = request.new_password
+    
+    logger.info(f"Cambiando contraseña para tenant: {subdomain}")
+    
+    # Actualizar contraseña en la BD
+    sql = f"""
+    UPDATE res_users 
+    SET password = '{new_password}', write_date = NOW() 
+    WHERE login = 'admin';
+    """
+    
+    if run_sql(subdomain, sql):
+        logger.info(f"Contraseña actualizada para {subdomain}")
+        return {
+            "success": True,
+            "subdomain": subdomain,
+            "message": "Contraseña actualizada exitosamente"
+        }
+    else:
+        raise HTTPException(status_code=500, detail="Error updating password")
+
+
+@app.put("/api/tenant/suspend")
+async def suspend_tenant(request: TenantSuspendRequest, x_api_key: str = Header(None)):
+    """Suspende o reactiva un tenant"""
+    if x_api_key != API_KEY:
+        raise HTTPException(status_code=401, detail="Invalid API key")
+    
+    subdomain = request.subdomain.lower()
+    reason = request.reason or "Suspension por falta de pago"
+    
+    action = "Suspendiendo" if request.suspend else "Reactivando"
+    logger.info(f"{action} tenant: {subdomain}")
+    
+    if request.suspend:
+        # Deshabilitar usuarios
+        sql = f"""
+        UPDATE res_users SET active = false WHERE id != 1;
+        INSERT INTO ir_config_parameter (key, value, create_date, write_date, create_uid, write_uid)
+        VALUES ('tenant.suspended', 'true', NOW(), NOW(), 1, 1)
+        ON CONFLICT (key) DO UPDATE SET value = EXCLUDED.value;
+        INSERT INTO ir_config_parameter (key, value, create_date, write_date, create_uid, write_uid)
+        VALUES ('tenant.suspend_reason', '{reason}', NOW(), NOW(), 1, 1)
+        ON CONFLICT (key) DO UPDATE SET value = EXCLUDED.value;
+        """
+        message = "Tenant suspendido exitosamente"
+    else:
+        # Reactivar usuarios
+        sql = f"""
+        UPDATE res_users SET active = true WHERE id != 1;
+        UPDATE ir_config_parameter SET value = 'false' WHERE key = 'tenant.suspended';
+        """
+        message = "Tenant reactivado exitosamente"
+    
+    if run_sql(subdomain, sql):
+        logger.info(f"Tenant {subdomain} {('suspendido' if request.suspend else 'reactivado')}")
+        return {
+            "success": True,
+            "subdomain": subdomain,
+            "suspended": request.suspend,
+            "reason": reason if request.suspend else None,
+            "message": message
+        }
+    else:
+        raise HTTPException(status_code=500, detail=f"Error changing tenant status")
 
 
 if __name__ == "__main__":

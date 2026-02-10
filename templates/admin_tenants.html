@@ -198,6 +198,51 @@
     </div>
 </div>
 
+<!-- Tenant Actions Modal -->
+<div id="tenantActionsModal" class="fixed inset-0 z-50 hidden items-center justify-center bg-black/50 backdrop-blur-sm">
+    <div class="bg-white dark:bg-surface-dark rounded-2xl border border-slate-200 dark:border-slate-700 w-full max-w-lg mx-4 shadow-2xl">
+        <div class="p-6 border-b border-slate-200 dark:border-slate-700">
+            <h3 class="text-xl font-bold text-slate-900 dark:text-white">Gestionar Tenant</h3>
+            <p class="text-sm text-slate-500 dark:text-slate-400 mt-1">
+                <span id="actionTenantName"></span> - <span id="actionTenantSubdomain" class="font-mono"></span>
+            </p>
+        </div>
+        <form id="tenantActionsForm" class="p-6 space-y-4">
+            <div>
+                <label class="block text-sm font-medium text-slate-700 dark:text-slate-300 mb-2">Nueva Contraseña Admin</label>
+                <input type="password" id="newAdminPassword" placeholder="Mínimo 6 caracteres" 
+                       class="w-full px-4 py-2 bg-slate-50 dark:bg-surface-highlight border border-slate-300 dark:border-slate-600 rounded-lg text-slate-900 dark:text-white focus:ring-2 focus:ring-blue-500 dark:focus:ring-primary">
+                <p class="text-xs text-slate-500 dark:text-slate-400 mt-1">Dejar en blanco para no cambiar</p>
+            </div>
+        </form>
+        <div class="p-6 border-t border-slate-200 dark:border-slate-700 flex justify-between gap-3">
+            <div class="flex gap-2">
+                <button id="tenantSuspendBtn" onclick="suspendTenant()" 
+                        class="px-4 py-2 bg-rose-600 dark:bg-rose-600 text-white rounded-lg hover:bg-rose-700 dark:hover:bg-rose-700 transition font-medium flex items-center gap-2">
+                    <span class="material-symbols-outlined text-[18px]">pause_circle</span>
+                    Suspender
+                </button>
+                <button id="tenantReactivateBtn" onclick="reactivateTenant()" style="display:none;"
+                        class="px-4 py-2 bg-emerald-600 dark:bg-emerald-600 text-white rounded-lg hover:bg-emerald-700 dark:hover:bg-emerald-700 transition font-medium flex items-center gap-2">
+                    <span class="material-symbols-outlined text-[18px]">play_circle</span>
+                    Reactivar
+                </button>
+            </div>
+            <div class="flex gap-2">
+                <button onclick="closeActionsModal()" 
+                        class="px-4 py-2 bg-slate-200 dark:bg-slate-700 text-slate-700 dark:text-slate-300 rounded-lg hover:bg-slate-300 dark:hover:bg-slate-600 transition font-medium">
+                    Cerrar
+                </button>
+                <button onclick="changeAdminPassword()" id="changePasswordBtn"
+                        class="px-4 py-2 bg-blue-600 dark:bg-primary text-white rounded-lg hover:bg-blue-700 dark:hover:bg-primary/90 transition font-medium flex items-center gap-2">
+                    <span class="material-symbols-outlined text-[18px]">vpn_key</span>
+                    Cambiar
+                </button>
+            </div>
+        </div>
+    </div>
+</div>
+
 <style>
     .filter-btn {
         background: transparent;
@@ -257,6 +302,16 @@
     function renderTenants() {
         const tbody = document.getElementById('tenantsTableBody');
         let filtered = [...tenantsData];
+
+        // Apply search
+        const query = document.getElementById('searchInput').value.toLowerCase();
+        if (query) {
+            filtered = filtered.filter(t => 
+                t.company_name?.toLowerCase().includes(query) ||
+                t.subdomain?.toLowerCase().includes(query) ||
+                t.email?.toLowerCase().includes(query)
+            );
+        }
 
         // Apply filter
         if (currentFilter !== 'all') {
@@ -415,9 +470,154 @@
     }
 
     function openTenantMenu(tenantId) {
-        // TODO: Implementar menú contextual
-        alert('Menú de acciones para tenant #' + tenantId);
+        // Mostrar menú contextual con acciones
+        const modal = document.getElementById('tenantActionsModal');
+        const form = document.getElementById('tenantActionsForm');
+        
+        // Guardar ID del tenant
+        form.dataset.tenantId = tenantId;
+        const tenant = tenantsData.find(t => t.id === tenantId);
+        
+        if (!tenant) return;
+        
+        // Mostrar información del tenant
+        document.getElementById('actionTenantName').textContent = tenant.company_name;
+        document.getElementById('actionTenantSubdomain').textContent = tenant.subdomain;
+        
+        // Mostrar/ocultar botones según estado
+        const suspendBtn = document.getElementById('tenantSuspendBtn');
+        const reactivateBtn = document.getElementById('tenantReactivateBtn');
+        
+        if (tenant.status === 'suspended') {
+            suspendBtn.style.display = 'none';
+            reactivateBtn.style.display = 'block';
+        } else {
+            suspendBtn.style.display = 'block';
+            reactivateBtn.style.display = 'none';
+        }
+        
+        modal.classList.remove('hidden');
+        modal.classList.add('flex');
     }
+
+    function closeActionsModal() {
+        document.getElementById('tenantActionsModal').classList.add('hidden');
+        document.getElementById('tenantActionsModal').classList.remove('flex');
+    }
+
+    async function changeAdminPassword() {
+        const newPassword = document.getElementById('newAdminPassword').value;
+        const tenantId = document.getElementById('tenantActionsForm').dataset.tenantId;
+        const tenant = tenantsData.find(t => t.id === parseInt(tenantId));
+        
+        if (!newPassword || newPassword.length < 6) {
+            alert('La contraseña debe tener al menos 6 caracteres');
+            return;
+        }
+        
+        if (!confirm(`¿Cambiar contraseña del admin de "${tenant.company_name}"?`)) {
+            return;
+        }
+        
+        try {
+            const response = await fetch('/api/provisioning/tenant/password', {
+                method: 'PUT',
+                headers: {
+                    'Content-Type': 'application/json',
+                    'X-API-KEY': 'prov-key-2026-secure'
+                },
+                body: JSON.stringify({
+                    subdomain: tenant.subdomain,
+                    new_password: newPassword,
+                    server: tenant.node_id || 'primary'
+                })
+            });
+            
+            if (response.ok) {
+                alert('Contraseña actualizada exitosamente');
+                document.getElementById('newAdminPassword').value = '';
+                closeActionsModal();
+            } else {
+                const error = await response.json();
+                alert('Error: ' + (error.detail || 'No se pudo cambiar la contraseña'));
+            }
+        } catch (error) {
+            console.error('Error:', error);
+            alert('Error de conexión');
+        }
+    }
+
+    async function suspendTenant() {
+        const tenantId = document.getElementById('tenantActionsForm').dataset.tenantId;
+        const tenant = tenantsData.find(t => t.id === parseInt(tenantId));
+        
+        if (!confirm(`¿Suspender el servicio de "${tenant.company_name}"? Los usuarios no podrán acceder.`)) {
+            return;
+        }
+        
+        try {
+            const response = await fetch('/api/provisioning/tenant/suspend', {
+                method: 'PUT',
+                headers: {
+                    'Content-Type': 'application/json',
+                    'X-API-KEY': 'prov-key-2026-secure'
+                },
+                body: JSON.stringify({
+                    subdomain: tenant.subdomain,
+                    suspend: true,
+                    reason: 'Suspensión por falta de pago',
+                    server: tenant.node_id || 'primary'
+                })
+            });
+            
+            if (response.ok) {
+                alert('Tenant suspendido exitosamente');
+                closeActionsModal();
+                loadTenants();
+            } else {
+                const error = await response.json();
+                alert('Error: ' + (error.detail || 'No se pudo suspender el tenant'));
+            }
+        } catch (error) {
+            console.error('Error:', error);
+            alert('Error de conexión');
+        }
+    }
+
+    async function reactivateTenant() {
+        const tenantId = document.getElementById('tenantActionsForm').dataset.tenantId;
+        const tenant = tenantsData.find(t => t.id === parseInt(tenantId));
+        
+        if (!confirm(`¿Reactivar el servicio de "${tenant.company_name}"? Los usuarios podrán acceder nuevamente.`)) {
+            return;
+        }
+        
+        try {
+            const response = await fetch('/api/provisioning/tenant/suspend', {
+                method: 'PUT',
+                headers: {
+                    'Content-Type': 'application/json',
+                    'X-API-KEY': 'prov-key-2026-secure'
+                },
+                body: JSON.stringify({
+                    subdomain: tenant.subdomain,
+                    suspend: false,
+                    server: tenant.node_id || 'primary'
+                })
+            });
+            
+            if (response.ok) {
+                alert('Tenant reactivado exitosamente');
+                closeActionsModal();
+                loadTenants();
+            } else {
+                const error = await response.json();
+                alert('Error: ' + (error.detail || 'No se pudo reactivar el tenant'));
+            }
+        } catch (error) {
+            console.error('Error:', error);
+            alert('Error de conexión');
+        }
 
     // Filter buttons
     document.querySelectorAll('.filter-btn').forEach(btn => {
@@ -433,16 +633,20 @@
     // Search
     document.getElementById('searchInput').addEventListener('input', (e) => {
         const query = e.target.value.toLowerCase();
-        if (query) {
-            tenantsData = tenantsData.filter(t => 
-                t.company_name?.toLowerCase().includes(query) ||
-                t.subdomain?.toLowerCase().includes(query) ||
-                t.email?.toLowerCase().includes(query)
-            );
-        }
+        currentPage = 1;
         renderTenants();
-        if (!query) loadTenants(); // Reload if search cleared
     });
+
+    function filterTenants() {
+        const query = document.getElementById('searchInput').value.toLowerCase();
+        if (!query) return tenantsData;
+        
+        return tenantsData.filter(t => 
+            t.company_name?.toLowerCase().includes(query) ||
+            t.subdomain?.toLowerCase().includes(query) ||
+            t.email?.toLowerCase().includes(query)
+        );
+    }
 
     // Load on page load
     loadTenants();

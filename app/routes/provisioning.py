@@ -49,6 +49,21 @@ class TenantProvisionRequest(BaseModel):
     server: str = Field(default="primary")
     template_db: str = Field(default="tcs")
     language: str = Field(default="es_DO")
+
+
+class TenantPasswordChangeRequest(BaseModel):
+    """Request para cambiar contraseña de admin de un tenant"""
+    subdomain: str = Field(..., min_length=3, max_length=30)
+    new_password: str = Field(..., min_length=6)
+    server: str = Field(default="primary")
+
+
+class TenantSuspensionRequest(BaseModel):
+    """Request para suspender/reactivar un tenant"""
+    subdomain: str = Field(..., min_length=3, max_length=30)
+    suspend: bool = Field(default=True)
+    reason: Optional[str] = Field(default="Suspension por falta de pago")
+    server: str = Field(default="primary")
     install_modules: Optional[List[str]] = None
     with_demo: bool = False
 
@@ -349,3 +364,80 @@ async def list_available_domains():
         "domains": list(CF_ZONES.keys()),
         "default": "sajet.us"
     }
+
+@router.put("/tenant/password")
+async def change_tenant_password(
+    request: TenantPasswordChangeRequest,
+    x_api_key: str = Header(None)
+):
+    """Cambia la contraseña del admin de un tenant"""
+    if x_api_key != PROVISIONING_API_KEY:
+        raise HTTPException(status_code=401, detail="API key inválida")
+    
+    server_config = ODOO_SERVERS.get(request.server)
+    if not server_config:
+        raise HTTPException(status_code=400, detail=f"Servidor {request.server} no existe")
+    
+    try:
+        url = f"http://{server_config['ip']}:{server_config['api_port']}/api/tenant/password"
+        headers = {"X-API-KEY": PROVISIONING_API_KEY}
+        payload = {
+            "subdomain": request.subdomain,
+            "new_password": request.new_password
+        }
+        
+        async with httpx.AsyncClient(timeout=30.0) as client:
+            response = await client.put(url, headers=headers, json=payload)
+            
+            if response.status_code == 200:
+                result = response.json()
+                logger.info(f"Contraseña actualizada para tenant {request.subdomain}")
+                return result
+            else:
+                error = response.json().get("detail", "Error desconocido")
+                raise HTTPException(status_code=response.status_code, detail=error)
+    except httpx.TimeoutException:
+        raise HTTPException(status_code=500, detail="Timeout contactando servidor")
+    except Exception as e:
+        logger.error(f"Error cambiando contraseña: {e}")
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+@router.put("/tenant/suspend")
+async def suspend_tenant(
+    request: TenantSuspensionRequest,
+    x_api_key: str = Header(None)
+):
+    """Suspende o reactiva un tenant (cierra acceso por falta de pago)"""
+    if x_api_key != PROVISIONING_API_KEY:
+        raise HTTPException(status_code=401, detail="API key inválida")
+    
+    server_config = ODOO_SERVERS.get(request.server)
+    if not server_config:
+        raise HTTPException(status_code=400, detail=f"Servidor {request.server} no existe")
+    
+    try:
+        url = f"http://{server_config['ip']}:{server_config['api_port']}/api/tenant/suspend"
+        headers = {"X-API-KEY": PROVISIONING_API_KEY}
+        payload = {
+            "subdomain": request.subdomain,
+            "suspend": request.suspend,
+            "reason": request.reason
+        }
+        
+        async with httpx.AsyncClient(timeout=30.0) as client:
+            response = await client.put(url, headers=headers, json=payload)
+            
+            if response.status_code == 200:
+                result = response.json()
+                action = "suspendido" if request.suspend else "reactivado"
+                logger.info(f"Tenant {request.subdomain} {action}")
+                return result
+            else:
+                error = response.json().get("detail", "Error desconocido")
+                raise HTTPException(status_code=response.status_code, detail=error)
+    except httpx.TimeoutException:
+        raise HTTPException(status_code=500, detail="Timeout contactando servidor")
+    except Exception as e:
+        logger.error(f"Error suspendiendo tenant: {e}")
+        raise HTTPException(status_code=500, detail=str(e))

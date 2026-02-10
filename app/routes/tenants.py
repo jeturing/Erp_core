@@ -5,8 +5,29 @@ from fastapi import APIRouter, HTTPException
 from pydantic import BaseModel
 from ..models.database import Customer, Subscription, SubscriptionStatus, SessionLocal
 from .auth import verify_token
+import httpx
+import logging
 
 router = APIRouter(prefix="/api/tenants", tags=["Tenants"])
+logger = logging.getLogger(__name__)
+
+# Configuración de nodos Odoo
+ODOO_NODES = {
+    "node-1": {
+        "ip": "10.10.10.100",
+        "api_port": 8070,
+        "name": "Node 1 (LXC 105)",
+        "enabled": True
+    },
+    "node-2": {
+        "ip": "10.10.10.200",
+        "api_port": 8070,
+        "name": "Node 2 (LXC 106)",
+        "enabled": False  # Cambiar a True cuando esté disponible
+    }
+}
+
+PROVISIONING_API_KEY = "prov-key-2026-secure"
 
 
 # DTOs
@@ -17,9 +38,88 @@ class TenantCreateRequest(BaseModel):
     plan: str
 
 
+async def get_all_tenants_from_nodes():
+    """Obtiene tenants de todos los nodos disponibles"""
+    all_tenants = []
+    
+    for node_id, node_config in ODOO_NODES.items():
+        if not node_config["enabled"]:
+            continue
+        
+        try:
+            url = f"http://{node_config['ip']}:{node_config['api_port']}/api/tenants"
+            headers = {"X-API-KEY": PROVISIONING_API_KEY}
+            
+            async with httpx.AsyncClient(timeout=10.0) as client:
+                response = await client.get(url, headers=headers)
+                
+                if response.status_code == 200:
+                    data = response.json()
+                    tenants = data.get("tenants", [])
+                    
+                    # Enriquecer con información del nodo
+                    for tenant in tenants:
+                        # Obtener datos del tenant de la BD local si existen
+                        db = SessionLocal()
+                        try:
+                            sub = db.query(Subscription).join(Customer).filter(
+                                Customer.subdomain == tenant.get("database")
+                            ).first()
+                            
+                            if sub:
+                                status_map = {
+                                    SubscriptionStatus.active: "active",
+                                    SubscriptionStatus.pending: "provisioning",
+                                    SubscriptionStatus.past_due: "payment_failed",
+                                    SubscriptionStatus.cancelled: "suspended",
+                                }
+                                
+                                customer = sub.customer
+                                all_tenants.append({
+                                    "id": sub.id,
+                                    "company_name": customer.company_name,
+                                    "email": customer.email,
+                                    "subdomain": customer.subdomain,
+                                    "plan": sub.plan_name,
+                                    "status": status_map.get(sub.status, "active"),
+                                    "tunnel_active": sub.status == SubscriptionStatus.active,
+                                    "node": node_config["name"],
+                                    "node_id": node_id,
+                                    "created_at": sub.created_at.isoformat() + "Z" if sub.created_at else None,
+                                    "url": tenant.get("url"),
+                                    "cpu_usage": 30,  # Placeholder - podría obtenerse del nodo
+                                })
+                            else:
+                                # Si no existe en BD local, crear entrada mínima
+                                all_tenants.append({
+                                    "id": hash(tenant.get("database")) % 10000,
+                                    "company_name": tenant.get("database", "Unknown").title(),
+                                    "email": "unknown@sajet.us",
+                                    "subdomain": tenant.get("database", "unknown"),
+                                    "plan": "basic",
+                                    "status": "active",
+                                    "tunnel_active": True,
+                                    "node": node_config["name"],
+                                    "node_id": node_id,
+                                    "created_at": None,
+                                    "url": tenant.get("url"),
+                                    "cpu_usage": 30,
+                                })
+                        finally:
+                            db.close()
+                else:
+                    logger.warning(f"Error consultando {node_id}: HTTP {response.status_code}")
+        except httpx.TimeoutException:
+            logger.warning(f"Timeout consultando {node_id}")
+        except Exception as e:
+            logger.error(f"Error consultando nodo {node_id}: {e}")
+    
+    return all_tenants
+
+
 @router.get("")
 async def list_tenants(authorization: str = None):
-    """Listado de tenants desde BD (orders by created_at desc) - requiere JWT."""
+    """Listado de tenants desde todos los nodos - requiere JWT."""
     # Validar token
     try:
         if authorization is not None and authorization.startswith("Bearer "):
@@ -28,71 +128,14 @@ async def list_tenants(authorization: str = None):
     except HTTPException:
         raise
     
-    db = SessionLocal()
     try:
-        # Obtener suscripciones ordenadas por fecha
-        subs = db.query(Subscription).order_by(Subscription.created_at.desc()).all()
-        items = []
-        for sub in subs:
-            cust = db.query(Customer).filter_by(id=sub.customer_id).first()
-            if cust:
-                # Mapear status de suscripción a label para UI
-                status_map = {
-                    SubscriptionStatus.active: "active",
-                    SubscriptionStatus.pending: "provisioning",
-                    SubscriptionStatus.past_due: "payment_failed",
-                    SubscriptionStatus.cancelled: "suspended",
-                }
-                items.append({
-                    "id": sub.id,
-                    "company_name": cust.company_name,
-                    "email": cust.email,
-                    "subdomain": cust.subdomain,
-                    "plan": sub.plan_name,
-                    "status": status_map.get(sub.status, "unknown"),
-                    "tunnel_active": sub.status == SubscriptionStatus.active,
-                    "created_at": sub.created_at.isoformat() + "Z" if sub.created_at else None,
-                })
+        # Obtener tenants de todos los nodos
+        items = await get_all_tenants_from_nodes()
         return {"items": items, "total": len(items)}
     except Exception as e:
-        # Si la BD no está disponible, retornar datos mockeados
-        return {
-            "items": [
-                {
-                    "id": 1,
-                    "company_name": "Acme Corp",
-                    "email": "admin@acme.com",
-                    "subdomain": "acme",
-                    "plan": "pro",
-                    "status": "active",
-                    "tunnel_active": True,
-                    "created_at": "2026-01-28T10:00:00Z",
-                },
-                {
-                    "id": 2,
-                    "company_name": "Tech Startup",
-                    "email": "hello@techstartup.com",
-                    "subdomain": "techstartup",
-                    "plan": "enterprise",
-                    "status": "active",
-                    "tunnel_active": True,
-                    "created_at": "2026-01-27T14:30:00Z",
-                },
-                {
-                    "id": 3,
-                    "company_name": "Small Business",
-                    "email": "contact@smallbiz.com",
-                    "subdomain": "smallbiz",
-                    "plan": "basic",
-                    "status": "provisioning",
-                    "tunnel_active": False,
-                    "created_at": "2026-01-28T16:00:00Z",
-                }
-            ],
-            "total": 3
-        }
-    finally:
-        db.close()
+        logger.error(f"Error listando tenants: {e}")
+        # Retornar lista vacía en lugar de error
+        return {"items": [], "total": 0}
 
 
 @router.post("")
