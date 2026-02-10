@@ -1,0 +1,450 @@
+{% extends "base_admin.html" %}
+
+{% block title %}Tenants - Admin{% endblock %}
+
+{% block page_title %}Gestión de Tenants{% endblock %}
+{% block page_subtitle %}Administra todos los tenants del sistema{% endblock %}
+
+{% block header_actions %}
+{{ super() }}
+<!-- Search Bar -->
+<div class="relative">
+    <span class="material-symbols-outlined absolute left-3 top-1/2 -translate-y-1/2 text-slate-400 text-[20px]">search</span>
+    <input type="text" id="searchInput" placeholder="Buscar tenants, subdominios..." 
+        class="pl-10 pr-4 py-2 w-64 bg-slate-100 dark:bg-surface-highlight border border-slate-200 dark:border-slate-700 rounded-xl text-slate-900 dark:text-white placeholder-slate-400 focus:outline-none focus:ring-2 focus:ring-blue-500 dark:focus:ring-primary/50 transition-all">
+</div>
+<!-- New Tenant Button -->
+<button onclick="openNewTenantModal()" class="flex items-center gap-2 bg-blue-600 dark:bg-primary hover:bg-blue-700 dark:hover:bg-primary/90 text-white font-semibold px-4 py-2 rounded-xl transition-all shadow-lg shadow-blue-600/20 dark:shadow-primary/20">
+    <span class="material-symbols-outlined text-[20px]">add</span>
+    Nuevo Tenant
+</button>
+{% endblock %}
+
+{% block content %}
+<!-- Stats Cards -->
+<div class="grid grid-cols-1 md:grid-cols-4 gap-4 mb-6">
+    <div class="bg-white dark:bg-surface-dark rounded-xl border border-slate-200 dark:border-slate-700 p-4">
+        <div class="flex items-center justify-between">
+            <div>
+                <p class="text-slate-500 dark:text-slate-400 text-sm">Total Tenants</p>
+                <p class="text-2xl font-bold text-slate-900 dark:text-white" id="totalTenants">-</p>
+            </div>
+            <div class="size-10 rounded-xl bg-blue-100 dark:bg-primary/20 flex items-center justify-center">
+                <span class="material-symbols-outlined text-blue-600 dark:text-primary">group</span>
+            </div>
+        </div>
+    </div>
+    
+    <div class="bg-white dark:bg-surface-dark rounded-xl border border-slate-200 dark:border-slate-700 p-4">
+        <div class="flex items-center justify-between">
+            <div>
+                <p class="text-slate-500 dark:text-slate-400 text-sm">Activos</p>
+                <p class="text-2xl font-bold text-emerald-600 dark:text-emerald-400" id="activeTenants">-</p>
+            </div>
+            <div class="size-10 rounded-xl bg-emerald-100 dark:bg-emerald-500/20 flex items-center justify-center">
+                <span class="material-symbols-outlined text-emerald-600 dark:text-emerald-400">check_circle</span>
+            </div>
+        </div>
+    </div>
+    
+    <div class="bg-white dark:bg-surface-dark rounded-xl border border-slate-200 dark:border-slate-700 p-4">
+        <div class="flex items-center justify-between">
+            <div>
+                <p class="text-slate-500 dark:text-slate-400 text-sm">Provisionando</p>
+                <p class="text-2xl font-bold text-amber-600 dark:text-amber-400" id="pendingTenants">-</p>
+            </div>
+            <div class="size-10 rounded-xl bg-amber-100 dark:bg-amber-500/20 flex items-center justify-center">
+                <span class="material-symbols-outlined text-amber-600 dark:text-amber-400">hourglass_top</span>
+            </div>
+        </div>
+    </div>
+    
+    <div class="bg-white dark:bg-surface-dark rounded-xl border border-slate-200 dark:border-slate-700 p-4">
+        <div class="flex items-center justify-between">
+            <div>
+                <p class="text-slate-500 dark:text-slate-400 text-sm">Suspendidos</p>
+                <p class="text-2xl font-bold text-rose-600 dark:text-rose-400" id="suspendedTenants">-</p>
+            </div>
+            <div class="size-10 rounded-xl bg-rose-100 dark:bg-rose-500/20 flex items-center justify-center">
+                <span class="material-symbols-outlined text-rose-600 dark:text-rose-400">pause_circle</span>
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- Filters -->
+<div class="flex flex-wrap items-center gap-3 mb-6">
+    <button class="filter-btn active px-4 py-2 rounded-lg text-sm font-medium transition-all" data-filter="all">
+        Todos
+    </button>
+    <button class="filter-btn px-4 py-2 rounded-lg text-sm font-medium transition-all" data-filter="active">
+        Activos
+    </button>
+    <button class="filter-btn px-4 py-2 rounded-lg text-sm font-medium transition-all" data-filter="pending">
+        Pendientes
+    </button>
+    <button class="filter-btn px-4 py-2 rounded-lg text-sm font-medium transition-all" data-filter="suspended">
+        Suspendidos
+    </button>
+    
+    <div class="ml-auto flex items-center gap-2">
+        <select id="planFilter" class="px-3 py-2 bg-white dark:bg-surface-highlight border border-slate-200 dark:border-slate-700 rounded-lg text-sm text-slate-700 dark:text-slate-300">
+            <option value="">Todos los planes</option>
+            <option value="basic">Basic</option>
+            <option value="pro">Pro</option>
+            <option value="enterprise">Enterprise</option>
+        </select>
+        
+        <select id="nodeFilter" class="px-3 py-2 bg-white dark:bg-surface-highlight border border-slate-200 dark:border-slate-700 rounded-lg text-sm text-slate-700 dark:text-slate-300">
+            <option value="">Todos los nodos</option>
+            <option value="node-1">Node 1 (LXC 105)</option>
+            <option value="node-2">Node 2 (LXC 106)</option>
+        </select>
+    </div>
+</div>
+
+<!-- Tenants Table -->
+<div class="bg-white dark:bg-surface-dark rounded-xl border border-slate-200 dark:border-slate-700 overflow-hidden">
+    <div class="overflow-x-auto">
+        <table class="w-full">
+            <thead class="bg-slate-50 dark:bg-slate-800/50">
+                <tr>
+                    <th class="px-6 py-4 text-left text-xs font-semibold text-slate-600 dark:text-slate-400 uppercase tracking-wider">Tenant</th>
+                    <th class="px-6 py-4 text-left text-xs font-semibold text-slate-600 dark:text-slate-400 uppercase tracking-wider">Subdominio</th>
+                    <th class="px-6 py-4 text-left text-xs font-semibold text-slate-600 dark:text-slate-400 uppercase tracking-wider">Plan</th>
+                    <th class="px-6 py-4 text-left text-xs font-semibold text-slate-600 dark:text-slate-400 uppercase tracking-wider">Nodo</th>
+                    <th class="px-6 py-4 text-left text-xs font-semibold text-slate-600 dark:text-slate-400 uppercase tracking-wider">Estado</th>
+                    <th class="px-6 py-4 text-left text-xs font-semibold text-slate-600 dark:text-slate-400 uppercase tracking-wider">Recursos</th>
+                    <th class="px-6 py-4 text-left text-xs font-semibold text-slate-600 dark:text-slate-400 uppercase tracking-wider">Creado</th>
+                    <th class="px-6 py-4 text-right text-xs font-semibold text-slate-600 dark:text-slate-400 uppercase tracking-wider">Acciones</th>
+                </tr>
+            </thead>
+            <tbody id="tenantsTableBody" class="divide-y divide-slate-200 dark:divide-slate-700">
+                <!-- Populated by JS -->
+            </tbody>
+        </table>
+    </div>
+    
+    <!-- Pagination -->
+    <div class="px-6 py-4 border-t border-slate-200 dark:border-slate-700 flex items-center justify-between">
+        <p class="text-sm text-slate-500 dark:text-slate-400">
+            Mostrando <span id="showingCount">0</span> de <span id="totalCount">0</span> tenants
+        </p>
+        <div class="flex items-center gap-2">
+            <button class="px-3 py-1 rounded-lg bg-slate-100 dark:bg-slate-800 text-slate-600 dark:text-slate-400 hover:bg-slate-200 dark:hover:bg-slate-700 transition disabled:opacity-50" id="prevPage" disabled>
+                <span class="material-symbols-outlined text-[18px]">chevron_left</span>
+            </button>
+            <span class="px-3 py-1 text-sm text-slate-600 dark:text-slate-400" id="pageInfo">1 / 1</span>
+            <button class="px-3 py-1 rounded-lg bg-slate-100 dark:bg-slate-800 text-slate-600 dark:text-slate-400 hover:bg-slate-200 dark:hover:bg-slate-700 transition disabled:opacity-50" id="nextPage" disabled>
+                <span class="material-symbols-outlined text-[18px]">chevron_right</span>
+            </button>
+        </div>
+    </div>
+</div>
+
+<!-- New Tenant Modal -->
+<div id="newTenantModal" class="fixed inset-0 z-50 hidden items-center justify-center bg-black/50 backdrop-blur-sm">
+    <div class="bg-white dark:bg-surface-dark rounded-2xl border border-slate-200 dark:border-slate-700 w-full max-w-lg mx-4 shadow-2xl">
+        <div class="p-6 border-b border-slate-200 dark:border-slate-700">
+            <h3 class="text-xl font-bold text-slate-900 dark:text-white">Crear Nuevo Tenant</h3>
+            <p class="text-sm text-slate-500 dark:text-slate-400 mt-1">Provisionar una nueva instancia de Odoo</p>
+        </div>
+        <form id="newTenantForm" class="p-6 space-y-4">
+            <div class="grid md:grid-cols-2 gap-4">
+                <div>
+                    <label class="block text-sm font-medium text-slate-700 dark:text-slate-300 mb-2">Empresa</label>
+                    <input type="text" name="company_name" required class="w-full px-4 py-2 bg-slate-50 dark:bg-surface-highlight border border-slate-300 dark:border-slate-600 rounded-lg text-slate-900 dark:text-white focus:ring-2 focus:ring-blue-500 dark:focus:ring-primary">
+                </div>
+                <div>
+                    <label class="block text-sm font-medium text-slate-700 dark:text-slate-300 mb-2">Email</label>
+                    <input type="email" name="email" required class="w-full px-4 py-2 bg-slate-50 dark:bg-surface-highlight border border-slate-300 dark:border-slate-600 rounded-lg text-slate-900 dark:text-white focus:ring-2 focus:ring-blue-500 dark:focus:ring-primary">
+                </div>
+            </div>
+            <div>
+                <label class="block text-sm font-medium text-slate-700 dark:text-slate-300 mb-2">Subdominio</label>
+                <div class="flex items-center">
+                    <input type="text" name="subdomain" required pattern="[a-z0-9-]+" class="flex-1 px-4 py-2 bg-slate-50 dark:bg-surface-highlight border border-slate-300 dark:border-slate-600 rounded-l-lg text-slate-900 dark:text-white focus:ring-2 focus:ring-blue-500 dark:focus:ring-primary">
+                    <span class="px-4 py-2 bg-slate-200 dark:bg-slate-700 border border-l-0 border-slate-300 dark:border-slate-600 rounded-r-lg text-slate-600 dark:text-slate-400 text-sm">.sajet.us</span>
+                </div>
+            </div>
+            <div class="grid md:grid-cols-2 gap-4">
+                <div>
+                    <label class="block text-sm font-medium text-slate-700 dark:text-slate-300 mb-2">Plan</label>
+                    <select name="plan" required class="w-full px-4 py-2 bg-slate-50 dark:bg-surface-highlight border border-slate-300 dark:border-slate-600 rounded-lg text-slate-900 dark:text-white">
+                        <option value="basic">Basic ($29/mes)</option>
+                        <option value="pro">Pro ($49/mes)</option>
+                        <option value="enterprise">Enterprise ($99/mes)</option>
+                    </select>
+                </div>
+                <div>
+                    <label class="block text-sm font-medium text-slate-700 dark:text-slate-300 mb-2">Nodo de Despliegue</label>
+                    <select name="node" required class="w-full px-4 py-2 bg-slate-50 dark:bg-surface-highlight border border-slate-300 dark:border-slate-600 rounded-lg text-slate-900 dark:text-white">
+                        <option value="auto">Automático (menos carga)</option>
+                        <option value="node-1">Node 1 - LXC 105</option>
+                        <option value="node-2">Node 2 - LXC 106</option>
+                    </select>
+                </div>
+            </div>
+        </form>
+        <div class="p-6 border-t border-slate-200 dark:border-slate-700 flex justify-end gap-3">
+            <button onclick="closeNewTenantModal()" class="px-4 py-2 bg-slate-200 dark:bg-slate-700 text-slate-700 dark:text-slate-300 rounded-lg hover:bg-slate-300 dark:hover:bg-slate-600 transition font-medium">
+                Cancelar
+            </button>
+            <button onclick="createTenant()" class="px-4 py-2 bg-blue-600 dark:bg-primary text-white rounded-lg hover:bg-blue-700 dark:hover:bg-primary/90 transition font-medium flex items-center gap-2">
+                <span class="material-symbols-outlined text-[18px]">rocket_launch</span>
+                Crear Tenant
+            </button>
+        </div>
+    </div>
+</div>
+
+<style>
+    .filter-btn {
+        background: transparent;
+        color: #64748b;
+        border: 1px solid transparent;
+    }
+    .filter-btn:hover {
+        background: #f1f5f9;
+    }
+    .dark .filter-btn:hover {
+        background: rgba(51, 65, 85, 0.5);
+    }
+    .filter-btn.active {
+        background: #3b82f6;
+        color: white;
+        border-color: #3b82f6;
+    }
+    .dark .filter-btn.active {
+        background: var(--primary, #3b82f6);
+        border-color: var(--primary, #3b82f6);
+    }
+</style>
+
+{% endblock %}
+
+{% block extra_scripts %}
+<script>
+    let tenantsData = [];
+    let currentFilter = 'all';
+    let currentPage = 1;
+    const perPage = 10;
+
+    async function loadTenants() {
+        try {
+            const response = await fetch('/api/tenants', { credentials: 'same-origin' });
+            const data = await response.json();
+            tenantsData = data.items || [];
+            updateStats();
+            renderTenants();
+        } catch (error) {
+            console.error('Error loading tenants:', error);
+        }
+    }
+
+    function updateStats() {
+        const total = tenantsData.length;
+        const active = tenantsData.filter(t => t.status === 'active').length;
+        const pending = tenantsData.filter(t => t.status === 'pending' || t.status === 'provisioning').length;
+        const suspended = tenantsData.filter(t => t.status === 'suspended' || t.status === 'cancelled').length;
+
+        document.getElementById('totalTenants').textContent = total;
+        document.getElementById('activeTenants').textContent = active;
+        document.getElementById('pendingTenants').textContent = pending;
+        document.getElementById('suspendedTenants').textContent = suspended;
+    }
+
+    function renderTenants() {
+        const tbody = document.getElementById('tenantsTableBody');
+        let filtered = [...tenantsData];
+
+        // Apply filter
+        if (currentFilter !== 'all') {
+            filtered = filtered.filter(t => {
+                if (currentFilter === 'active') return t.status === 'active';
+                if (currentFilter === 'pending') return t.status === 'pending' || t.status === 'provisioning';
+                if (currentFilter === 'suspended') return t.status === 'suspended' || t.status === 'cancelled';
+                return true;
+            });
+        }
+
+        // Pagination
+        const totalPages = Math.ceil(filtered.length / perPage);
+        const start = (currentPage - 1) * perPage;
+        const paginated = filtered.slice(start, start + perPage);
+
+        document.getElementById('showingCount').textContent = paginated.length;
+        document.getElementById('totalCount').textContent = filtered.length;
+        document.getElementById('pageInfo').textContent = `${currentPage} / ${totalPages || 1}`;
+
+        if (paginated.length === 0) {
+            tbody.innerHTML = `
+                <tr>
+                    <td colspan="8" class="px-6 py-12 text-center text-slate-500 dark:text-slate-400">
+                        <span class="material-symbols-outlined text-4xl mb-2 block">search_off</span>
+                        No se encontraron tenants
+                    </td>
+                </tr>
+            `;
+            return;
+        }
+
+        tbody.innerHTML = paginated.map(tenant => renderTenantRow(tenant)).join('');
+    }
+
+    function renderTenantRow(tenant) {
+        const statusColors = {
+            'active': 'bg-emerald-100 text-emerald-700 dark:bg-emerald-500/20 dark:text-emerald-400',
+            'pending': 'bg-amber-100 text-amber-700 dark:bg-amber-500/20 dark:text-amber-400',
+            'provisioning': 'bg-blue-100 text-blue-700 dark:bg-blue-500/20 dark:text-blue-400',
+            'suspended': 'bg-rose-100 text-rose-700 dark:bg-rose-500/20 dark:text-rose-400',
+            'cancelled': 'bg-slate-100 text-slate-700 dark:bg-slate-500/20 dark:text-slate-400'
+        };
+        
+        const planColors = {
+            'basic': 'bg-slate-100 text-slate-700 dark:bg-slate-700 dark:text-slate-300',
+            'pro': 'bg-blue-100 text-blue-700 dark:bg-blue-500/20 dark:text-blue-400',
+            'enterprise': 'bg-purple-100 text-purple-700 dark:bg-purple-500/20 dark:text-purple-400'
+        };
+
+        const initial = tenant.company_name?.charAt(0)?.toUpperCase() || 'T';
+        const statusClass = statusColors[tenant.status] || statusColors['pending'];
+        const planClass = planColors[tenant.plan] || planColors['basic'];
+        const statusText = tenant.status === 'provisioning' ? 'Provisionando' : 
+                          tenant.status === 'active' ? 'Activo' : 
+                          tenant.status === 'pending' ? 'Pendiente' :
+                          tenant.status === 'suspended' ? 'Suspendido' : 'Cancelado';
+
+        return `
+            <tr class="hover:bg-slate-50 dark:hover:bg-slate-800/30 transition-colors">
+                <td class="px-6 py-4">
+                    <div class="flex items-center gap-3">
+                        <div class="size-10 rounded-xl bg-gradient-to-br from-purple-500 to-pink-500 flex items-center justify-center text-white font-bold text-sm">
+                            ${initial}
+                        </div>
+                        <div>
+                            <p class="font-medium text-slate-900 dark:text-white">${tenant.company_name}</p>
+                            <p class="text-sm text-slate-500 dark:text-slate-400">${tenant.email}</p>
+                        </div>
+                    </div>
+                </td>
+                <td class="px-6 py-4">
+                    <div class="flex items-center gap-2">
+                        <span class="font-mono text-slate-700 dark:text-slate-300">${tenant.subdomain}</span>
+                        ${tenant.tunnel_active ? 
+                            '<span class="material-symbols-outlined text-emerald-500 text-[16px]" title="Tunnel activo">link</span>' : 
+                            '<span class="material-symbols-outlined text-slate-400 text-[16px]" title="Sin tunnel">link_off</span>'}
+                    </div>
+                </td>
+                <td class="px-6 py-4">
+                    <span class="px-2 py-1 rounded-full text-xs font-medium capitalize ${planClass}">${tenant.plan}</span>
+                </td>
+                <td class="px-6 py-4">
+                    <span class="text-sm text-slate-600 dark:text-slate-400">${tenant.node || 'Node 1'}</span>
+                </td>
+                <td class="px-6 py-4">
+                    <span class="inline-flex items-center gap-1 px-2 py-1 rounded-full text-xs font-medium ${statusClass}">
+                        ${tenant.status === 'provisioning' ? '<span class="animate-spin">⏳</span>' : '●'}
+                        ${statusText}
+                    </span>
+                </td>
+                <td class="px-6 py-4">
+                    <div class="flex items-center gap-2">
+                        <div class="w-16 h-2 bg-slate-200 dark:bg-slate-700 rounded-full overflow-hidden">
+                            <div class="h-full bg-blue-500" style="width: ${tenant.cpu_usage || 30}%"></div>
+                        </div>
+                        <span class="text-xs text-slate-500 dark:text-slate-400">${tenant.cpu_usage || 30}%</span>
+                    </div>
+                </td>
+                <td class="px-6 py-4">
+                    <span class="text-sm text-slate-600 dark:text-slate-400">${new Date(tenant.created_at).toLocaleDateString('es-ES')}</span>
+                </td>
+                <td class="px-6 py-4 text-right">
+                    <div class="flex items-center justify-end gap-1">
+                        ${tenant.status === 'active' ? `
+                            <a href="https://${tenant.subdomain}.sajet.us" target="_blank" 
+                               class="p-2 rounded-lg hover:bg-slate-100 dark:hover:bg-slate-800 text-slate-600 dark:text-slate-400 transition" title="Abrir Odoo">
+                                <span class="material-symbols-outlined text-[18px]">open_in_new</span>
+                            </a>
+                        ` : ''}
+                        <button onclick="openTenantMenu(${tenant.id})" 
+                                class="p-2 rounded-lg hover:bg-slate-100 dark:hover:bg-slate-800 text-slate-600 dark:text-slate-400 transition">
+                            <span class="material-symbols-outlined text-[18px]">more_vert</span>
+                        </button>
+                    </div>
+                </td>
+            </tr>
+        `;
+    }
+
+    function openNewTenantModal() {
+        document.getElementById('newTenantModal').classList.remove('hidden');
+        document.getElementById('newTenantModal').classList.add('flex');
+    }
+
+    function closeNewTenantModal() {
+        document.getElementById('newTenantModal').classList.add('hidden');
+        document.getElementById('newTenantModal').classList.remove('flex');
+    }
+
+    async function createTenant() {
+        const form = document.getElementById('newTenantForm');
+        const formData = new FormData(form);
+        const data = Object.fromEntries(formData.entries());
+        
+        try {
+            const response = await fetch('/api/tenants', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                credentials: 'same-origin',
+                body: JSON.stringify(data)
+            });
+            
+            if (response.ok) {
+                closeNewTenantModal();
+                loadTenants();
+                alert('Tenant creado exitosamente. El provisioning comenzará en breve.');
+            } else {
+                const error = await response.json();
+                alert('Error: ' + (error.detail || 'No se pudo crear el tenant'));
+            }
+        } catch (error) {
+            console.error('Error creating tenant:', error);
+            alert('Error de conexión');
+        }
+    }
+
+    function openTenantMenu(tenantId) {
+        // TODO: Implementar menú contextual
+        alert('Menú de acciones para tenant #' + tenantId);
+    }
+
+    // Filter buttons
+    document.querySelectorAll('.filter-btn').forEach(btn => {
+        btn.addEventListener('click', () => {
+            document.querySelectorAll('.filter-btn').forEach(b => b.classList.remove('active'));
+            btn.classList.add('active');
+            currentFilter = btn.dataset.filter;
+            currentPage = 1;
+            renderTenants();
+        });
+    });
+
+    // Search
+    document.getElementById('searchInput').addEventListener('input', (e) => {
+        const query = e.target.value.toLowerCase();
+        if (query) {
+            tenantsData = tenantsData.filter(t => 
+                t.company_name?.toLowerCase().includes(query) ||
+                t.subdomain?.toLowerCase().includes(query) ||
+                t.email?.toLowerCase().includes(query)
+            );
+        }
+        renderTenants();
+        if (!query) loadTenants(); // Reload if search cleared
+    });
+
+    // Load on page load
+    loadTenants();
+</script>
+{% endblock %}

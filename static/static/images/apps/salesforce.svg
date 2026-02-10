@@ -1,0 +1,30 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<svg xmlns="http://www.w3.org/2000/svg" xmlns:xlink="http://www.w3.org/1999/xlink" xmlns:rdf="http://www.w3.org/1999/02/22-rdf-syntax-ns#" xmlns:dc="http://purl.org/dc/elements/1.1/" xmlns:cc="http://creativecommons.org/ns#" version="1.1" viewBox="0 0 50 50">
+  <defs>
+    <style>
+      .st0 {
+        mask: url(#mask);
+      }
+
+      .st1 {
+        fill: #fff;
+      }
+
+      .st1, .st2 {
+        fill-rule: evenodd;
+      }
+
+      .st2 {
+        fill: #00a1e0;
+      }
+    </style>
+    <mask id="mask" x="0" y="7.5" width="50" height="35" maskUnits="userSpaceOnUse">
+      <g id="b">
+        <path id="a" class="st1" d="M0,7.5h50v34.9H0V7.5Z"/>
+      </g>
+    </mask>
+  </defs>
+  <g class="st0">
+    <path class="st2" d="M20.8,11.3c1.6-1.7,3.9-2.7,6.3-2.7s6.2,1.8,7.7,4.6c1.4-.6,2.9-.9,4.4-.9,6,0,10.8,4.9,10.8,10.9s-4.8,10.9-10.8,10.9-1.4,0-2.1-.2c-1.4,2.4-3.9,4-6.9,4-1.2,0-2.4-.3-3.5-.8-1.4,3.2-4.6,5.5-8.3,5.5s-7.2-2.4-8.4-5.9c-.6.1-1.1.2-1.7.2-4.6,0-8.3-3.8-8.3-8.4s1.7-5.8,4.2-7.3c-.5-1.2-.8-2.5-.8-3.9,0-5.4,4.4-9.7,9.7-9.7s6,1.5,7.7,3.8"/>
+  </g>
+</svg>

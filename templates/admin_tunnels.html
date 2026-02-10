@@ -1,0 +1,424 @@
+{% extends "base_admin.html" %}
+
+{% block title %}Gestión de Tunnels - Admin{% endblock %}
+
+{% block content %}
+<div class="space-y-6">
+    <!-- Header -->
+    <div class="flex justify-between items-center">
+        <div>
+            <h1 class="text-3xl font-bold text-white">Cloudflare Tunnels</h1>
+            <p class="text-gray-400 mt-1">Gestiona proxies y acceso remoto de tenants</p>
+        </div>
+        <button id="refresh-btn" class="px-4 py-2 bg-cyan-600 hover:bg-cyan-700 text-white rounded-lg flex items-center gap-2">
+            <span>🔄</span> Actualizar
+        </button>
+    </div>
+
+    <!-- Stats Cards -->
+    <div class="grid grid-cols-4 gap-4">
+        <div class="bg-gradient-to-br from-blue-900 to-blue-800 p-4 rounded-lg border border-blue-700">
+            <div class="text-gray-300 text-sm font-medium">Total Tunnels</div>
+            <div id="total-tunnels" class="text-3xl font-bold text-cyan-400 mt-2">0</div>
+        </div>
+        <div class="bg-gradient-to-br from-emerald-900 to-emerald-800 p-4 rounded-lg border border-emerald-700">
+            <div class="text-gray-300 text-sm font-medium">Activos</div>
+            <div id="active-tunnels" class="text-3xl font-bold text-emerald-400 mt-2">0</div>
+        </div>
+        <div class="bg-gradient-to-br from-amber-900 to-amber-800 p-4 rounded-lg border border-amber-700">
+            <div class="text-gray-300 text-sm font-medium">En Provisioning</div>
+            <div id="provisioning-tunnels" class="text-3xl font-bold text-amber-400 mt-2">0</div>
+        </div>
+        <div class="bg-gradient-to-br from-red-900 to-red-800 p-4 rounded-lg border border-red-700">
+            <div class="text-gray-300 text-sm font-medium">Errores</div>
+            <div id="error-tunnels" class="text-3xl font-bold text-red-400 mt-2">0</div>
+        </div>
+    </div>
+
+    <!-- Search and Filter -->
+    <div class="bg-slate-800 p-4 rounded-lg border border-slate-700 flex gap-4">
+        <input 
+            type="text" 
+            id="search-input" 
+            placeholder="Buscar por subdomain, tunnel ID..."
+            class="flex-1 px-4 py-2 bg-slate-700 text-white rounded placeholder-gray-400 focus:outline-none focus:ring-2 focus:ring-cyan-500"
+        >
+        <select id="status-filter" class="px-4 py-2 bg-slate-700 text-white rounded focus:outline-none focus:ring-2 focus:ring-cyan-500">
+            <option value="">Todos los estados</option>
+            <option value="active">Activos</option>
+            <option value="inactive">Inactivos</option>
+            <option value="error">Con error</option>
+        </select>
+    </div>
+
+    <!-- Tunnels Table -->
+    <div class="bg-slate-800 rounded-lg border border-slate-700 overflow-hidden">
+        <div class="overflow-x-auto">
+            <table class="w-full">
+                <thead>
+                    <tr class="border-b border-slate-700 bg-slate-900">
+                        <th class="px-6 py-3 text-left text-sm font-semibold text-gray-300">Subdomain</th>
+                        <th class="px-6 py-3 text-left text-sm font-semibold text-gray-300">Tunnel ID</th>
+                        <th class="px-6 py-3 text-left text-sm font-semibold text-gray-300">Estado</th>
+                        <th class="px-6 py-3 text-left text-sm font-semibold text-gray-300">URL</th>
+                        <th class="px-6 py-3 text-left text-sm font-semibold text-gray-300">Plan</th>
+                        <th class="px-6 py-3 text-left text-sm font-semibold text-gray-300">Creado</th>
+                        <th class="px-6 py-3 text-left text-sm font-semibold text-gray-300">Acciones</th>
+                    </tr>
+                </thead>
+                <tbody id="tunnels-tbody" class="divide-y divide-slate-700">
+                    <tr class="text-center text-gray-400 hover:bg-slate-700">
+                        <td colspan="7" class="px-6 py-8">Cargando tunnels...</td>
+                    </tr>
+                </tbody>
+            </table>
+        </div>
+    </div>
+
+    <!-- Tunnel Details Modal -->
+    <div id="tunnel-modal" class="hidden fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
+        <div class="bg-slate-800 rounded-lg p-6 w-96 border border-slate-700">
+            <h2 class="text-xl font-bold text-white mb-4">Detalles del Tunnel</h2>
+            
+            <div class="space-y-4">
+                <div>
+                    <label class="text-gray-400 text-sm">Subdomain</label>
+                    <div id="modal-subdomain" class="text-white font-mono">-</div>
+                </div>
+                <div>
+                    <label class="text-gray-400 text-sm">Tunnel ID</label>
+                    <div id="modal-tunnel-id" class="text-white font-mono text-sm">-</div>
+                </div>
+                <div>
+                    <label class="text-gray-400 text-sm">URL de Acceso</label>
+                    <div id="modal-url" class="text-cyan-400 font-mono text-sm">-</div>
+                </div>
+                <div>
+                    <label class="text-gray-400 text-sm">Estado</label>
+                    <div id="modal-status" class="text-white">-</div>
+                </div>
+                <div>
+                    <label class="text-gray-400 text-sm">Plan</label>
+                    <div id="modal-plan" class="text-white">-</div>
+                </div>
+                <div>
+                    <label class="text-gray-400 text-sm">Subscription ID</label>
+                    <div id="modal-sub-id" class="text-gray-300 font-mono">-</div>
+                </div>
+            </div>
+
+            <div class="mt-6 border-t border-slate-700 pt-4">
+                <h3 class="text-white font-semibold mb-3">Logs Recientes</h3>
+                <div id="modal-logs" class="bg-slate-900 p-3 rounded text-xs text-gray-300 font-mono max-h-40 overflow-y-auto">
+                    <p>Cargando logs...</p>
+                </div>
+            </div>
+
+            <div class="mt-6 flex gap-3">
+                <button onclick="restartTunnel()" class="flex-1 px-4 py-2 bg-cyan-600 hover:bg-cyan-700 text-white rounded">
+                    🔄 Reiniciar
+                </button>
+                <button onclick="deleteTunnel()" class="flex-1 px-4 py-2 bg-red-600 hover:bg-red-700 text-white rounded">
+                    🗑️ Eliminar
+                </button>
+                <button onclick="closeModal()" class="flex-1 px-4 py-2 bg-gray-600 hover:bg-gray-700 text-white rounded">
+                    Cerrar
+                </button>
+            </div>
+        </div>
+    </div>
+</div>
+
+<style>
+    .status-active {
+        @apply px-2 py-1 bg-emerald-900 text-emerald-300 rounded text-xs font-semibold;
+    }
+    .status-inactive {
+        @apply px-2 py-1 bg-gray-900 text-gray-300 rounded text-xs font-semibold;
+    }
+    .status-error {
+        @apply px-2 py-1 bg-red-900 text-red-300 rounded text-xs font-semibold;
+    }
+    .status-provisioning {
+        @apply px-2 py-1 bg-amber-900 text-amber-300 rounded text-xs font-semibold;
+    }
+    
+    @keyframes fadeIn {
+        from { opacity: 0; transform: translateY(-20px); }
+        to { opacity: 1; transform: translateY(0); }
+    }
+    
+    @keyframes fadeOut {
+        from { opacity: 1; transform: translateY(0); }
+        to { opacity: 0; transform: translateY(-20px); }
+    }
+    
+    .animate-fade-in {
+        animation: fadeIn 0.3s ease-out;
+    }
+    
+    .animate-fade-out {
+        animation: fadeOut 0.3s ease-out;
+    }
+</style>
+
+<script>
+let currentTunnel = null;
+
+// Utilidades
+function getCookie(name) {
+    const value = `; ${document.cookie}`;
+    const parts = value.split(`; ${name}=`);
+    if (parts.length === 2) return parts.pop().split(';').shift();
+    return null;
+}
+
+function showAlert(message, type = 'info') {
+    const alertDiv = document.createElement('div');
+    const bgColor = type === 'error' ? 'bg-red-600' : type === 'success' ? 'bg-emerald-600' : 'bg-blue-600';
+    
+    alertDiv.className = `fixed top-4 right-4 ${bgColor} text-white px-6 py-3 rounded-lg shadow-lg z-50 animate-fade-in`;
+    alertDiv.textContent = message;
+    
+    document.body.appendChild(alertDiv);
+    
+    setTimeout(() => {
+        alertDiv.classList.add('animate-fade-out');
+        setTimeout(() => alertDiv.remove(), 300);
+    }, 3000);
+}
+
+// Funciones principales
+async function loadTunnels() {
+    try {
+        const response = await fetch('/api/tunnels', {
+            headers: {
+                'Authorization': 'Bearer ' + getCookie('access_token')
+            }
+        });
+
+        if (!response.ok) throw new Error(`HTTP ${response.status}`);
+
+        const data = await response.json();
+        if (!data.success) throw new Error(data.detail || 'Error cargando tunnels');
+
+        // Mostrar advertencia si cloudflare no está configurado
+        if (data.warning) {
+            showAlert(data.warning, 'info');
+            document.getElementById('tunnels-tbody').innerHTML = `
+                <tr>
+                    <td colspan="7" class="px-6 py-8 text-center">
+                        <div class="text-amber-400 mb-2">
+                            <svg class="w-12 h-12 mx-auto mb-3" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z"></path>
+                            </svg>
+                            <p class="text-lg font-semibold">Cloudflare Tunnels no configurado</p>
+                        </div>
+                        <p class="text-gray-400 mb-4">${data.warning}</p>
+                        <div class="text-sm text-gray-500">
+                            <p>Para configurar Cloudflare Tunnels:</p>
+                            <ol class="text-left max-w-2xl mx-auto mt-2 space-y-1">
+                                <li>1. Instalar cloudflared: <code class="bg-gray-800 px-2 py-1 rounded">apt install cloudflared</code></li>
+                                <li>2. Crear archivo de credenciales en /root/.cf_credentials</li>
+                                <li>3. Reiniciar el servicio</li>
+                            </ol>
+                        </div>
+                    </td>
+                </tr>
+            `;
+            updateStats([]);
+            return;
+        }
+
+        renderTunnels(data.tunnels);
+        updateStats(data.tunnels);
+
+    } catch (error) {
+        console.error('Error:', error);
+        showAlert('Error al cargar tunnels: ' + error.message, 'error');
+        document.getElementById('tunnels-tbody').innerHTML = `
+            <tr class="text-red-400">
+                <td colspan="7" class="px-6 py-8">Error: ${error.message}</td>
+            </tr>
+        `;
+    }
+}
+
+function renderTunnels(tunnels) {
+    const tbody = document.getElementById('tunnels-tbody');
+    
+    if (!tunnels || tunnels.length === 0) {
+        tbody.innerHTML = '<tr class="text-center text-gray-400"><td colspan="7" class="px-6 py-8">No hay tunnels configurados</td></tr>';
+        return;
+    }
+
+    tbody.innerHTML = tunnels.map(tunnel => `
+        <tr class="hover:bg-slate-700 transition cursor-pointer" onclick="showTunnelDetails('${tunnel.id}')">
+            <td class="px-6 py-4">
+                <div class="font-semibold text-white">${tunnel.deployment?.subdomain || tunnel.name}</div>
+                <div class="text-xs text-gray-400">${tunnel.deployment?.subscription_id ? `Sub #${tunnel.deployment.subscription_id}` : '-'}</div>
+            </td>
+            <td class="px-6 py-4">
+                <code class="text-xs text-gray-300">${tunnel.id || tunnel.name}</code>
+            </td>
+            <td class="px-6 py-4">
+                <span class="${getStatusClass(tunnel.status)}">${tunnel.status.toUpperCase()}</span>
+            </td>
+            <td class="px-6 py-4">
+                <a href="${tunnel.deployment?.url || '#'}" target="_blank" class="text-cyan-400 hover:text-cyan-300 text-sm">
+                    ${tunnel.deployment?.domain || tunnel.deployment?.url || 'N/A'}
+                </a>
+            </td>
+            <td class="px-6 py-4 text-sm text-gray-300">
+                ${tunnel.deployment?.plan || '-'}
+            </td>
+            <td class="px-6 py-4 text-sm text-gray-300">
+                ${formatDate(tunnel.deployment?.created_at || new Date())}
+            </td>
+            <td class="px-6 py-4">
+                <button onclick="event.stopPropagation(); quickAction('${tunnel.id}', 'restart')" 
+                        class="px-2 py-1 text-xs bg-cyan-600 hover:bg-cyan-700 text-white rounded mr-2">
+                    ↻
+                </button>
+                <button onclick="event.stopPropagation(); quickAction('${tunnel.id}', 'delete')" 
+                        class="px-2 py-1 text-xs bg-red-600 hover:bg-red-700 text-white rounded">
+                    ✕
+                </button>
+            </td>
+        </tr>
+    `).join('');
+}
+
+function updateStats(tunnels) {
+    const total = tunnels.length;
+    const active = tunnels.filter(t => t.status === 'active').length;
+    const error = tunnels.filter(t => t.status === 'error').length;
+    const provisioning = tunnels.filter(t => t.status === 'provisioning').length;
+
+    document.getElementById('total-tunnels').textContent = total;
+    document.getElementById('active-tunnels').textContent = active;
+    document.getElementById('error-tunnels').textContent = error;
+    document.getElementById('provisioning-tunnels').textContent = provisioning;
+}
+
+function getStatusClass(status) {
+    const classes = {
+        'active': 'status-active',
+        'inactive': 'status-inactive',
+        'error': 'status-error',
+        'provisioning': 'status-provisioning'
+    };
+    return classes[status] || 'status-inactive';
+}
+
+function formatDate(date) {
+    return new Date(date).toLocaleDateString('es-ES', {
+        year: '2-digit',
+        month: '2-digit',
+        day: '2-digit'
+    });
+}
+
+async function showTunnelDetails(tunnelId) {
+    try {
+        currentTunnel = tunnelId;
+        
+        // Obtener status
+        const statusRes = await fetch(`/api/tunnels/${tunnelId}/status`, {
+            headers: { 'Authorization': 'Bearer ' + getCookie('access_token') }
+        });
+        const status = await statusRes.json();
+
+        // Obtener logs
+        const logsRes = await fetch(`/api/tunnels/${tunnelId}/logs?lines=20`, {
+            headers: { 'Authorization': 'Bearer ' + getCookie('access_token') }
+        });
+        const logsData = await logsRes.json();
+
+        // Llenar modal
+        document.getElementById('modal-status').textContent = status.status || 'unknown';
+        document.getElementById('modal-logs').innerHTML = logsData.logs
+            .map(log => `<div>${log}</div>`)
+            .join('') || '<p class="text-gray-500">Sin logs</p>';
+
+        // Mostrar modal
+        document.getElementById('tunnel-modal').classList.remove('hidden');
+
+    } catch (error) {
+        showAlert('Error cargando detalles: ' + error.message, 'error');
+    }
+}
+
+function closeModal() {
+    document.getElementById('tunnel-modal').classList.add('hidden');
+}
+
+async function quickAction(tunnelId, action) {
+    if (action === 'restart') {
+        if (!confirm('¿Reiniciar tunnel?')) return;
+        try {
+            const res = await fetch(`/api/tunnels/${tunnelId}/restart`, {
+                method: 'POST',
+                headers: { 'Authorization': 'Bearer ' + getCookie('access_token') }
+            });
+            const data = await res.json();
+            if (data.success) {
+                showAlert('Tunnel reiniciado', 'success');
+                loadTunnels();
+            }
+        } catch (error) {
+            showAlert('Error: ' + error.message, 'error');
+        }
+    }
+}
+
+async function deleteTunnel() {
+    if (!confirm('¿Eliminar este tunnel? Se eliminará el tenant.')) return;
+    
+    try {
+        const res = await fetch(`/api/tunnels/${currentTunnel}`, {
+            method: 'DELETE',
+            headers: { 'Authorization': 'Bearer ' + getCookie('access_token') }
+        });
+        const data = await res.json();
+        
+        if (data.success) {
+            showAlert('Tunnel eliminado', 'success');
+            closeModal();
+            loadTunnels();
+        } else {
+            showAlert('Error: ' + data.detail, 'error');
+        }
+    } catch (error) {
+        showAlert('Error: ' + error.message, 'error');
+    }
+}
+
+async function restartTunnel() {
+    try {
+        const res = await fetch(`/api/tunnels/${currentTunnel}/restart`, {
+            method: 'POST',
+            headers: { 'Authorization': 'Bearer ' + getCookie('access_token') }
+        });
+        const data = await res.json();
+        
+        if (data.success) {
+            showAlert('Tunnel reiniciado', 'success');
+            await new Promise(r => setTimeout(r, 1500)); // Esperar a que reinicie
+            await showTunnelDetails(currentTunnel);
+        }
+    } catch (error) {
+        showAlert('Error: ' + error.message, 'error');
+    }
+}
+
+// Event listeners
+document.getElementById('refresh-btn').addEventListener('click', loadTunnels);
+
+// Auto-load on page load
+document.addEventListener('DOMContentLoaded', loadTunnels);
+
+// Auto-refresh cada 30 segundos
+setInterval(loadTunnels, 30000);
+</script>
+{% endblock %}

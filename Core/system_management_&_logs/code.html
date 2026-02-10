@@ -1,0 +1,287 @@
+<!DOCTYPE html>
+<html class="dark" lang="en"><head>
+<meta charset="utf-8"/>
+<meta content="width=device-width, initial-scale=1.0" name="viewport"/>
+<title>Infrastructure &amp; Logs Monitor</title>
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;700;900&amp;family=Noto+Sans:wght@400;500;700;900&amp;family=JetBrains+Mono:wght@400;500&amp;display=swap" rel="stylesheet"/>
+<link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:wght,FILL@100..700,0..1&amp;display=swap" rel="stylesheet"/>
+<script src="https://cdn.tailwindcss.com?plugins=forms,container-queries"></script>
+<script>
+        tailwind.config = {
+            darkMode: "class",
+            theme: {
+                extend: {
+                    colors: {
+                        "primary": "#13a4ec",
+                        "background-light": "#f6f7f8",
+                        "background-dark": "#101c22",
+                    },
+                    fontFamily: {
+                        "display": ["Inter", "sans-serif"],
+                        "mono": ["JetBrains Mono", "monospace"],
+                    },
+                    borderRadius: {"DEFAULT": "0.5rem", "lg": "1rem", "xl": "1.5rem", "full": "9999px"},
+                },
+            },
+        }
+    </script>
+</head>
+<body class="bg-background-light dark:bg-background-dark text-[#111418] dark:text-white font-display overflow-x-hidden min-h-screen flex flex-col">
+<header class="flex items-center justify-between whitespace-nowrap border-b border-solid border-b-[#233c48] px-10 py-3 bg-[#111c22]">
+<div class="flex items-center gap-4 text-white">
+<div class="size-8 flex items-center justify-center text-primary">
+<span class="material-symbols-outlined text-3xl">cloud_queue</span>
+</div>
+<h2 class="text-white text-lg font-bold leading-tight tracking-[-0.015em]">Infrastructure Monitor</h2>
+</div>
+<div class="flex flex-1 justify-end gap-8">
+<div class="flex items-center gap-9 hidden md:flex">
+<a class="text-[#92b7c9] hover:text-white text-sm font-medium leading-normal transition-colors" href="#">Dashboard</a>
+<a class="text-[#92b7c9] hover:text-white text-sm font-medium leading-normal transition-colors" href="#">Tenants</a>
+<a class="text-white text-sm font-medium leading-normal" href="#">System Admin</a>
+<a class="text-[#92b7c9] hover:text-white text-sm font-medium leading-normal transition-colors" href="#">Settings</a>
+</div>
+<div class="flex items-center gap-4">
+<button class="flex min-w-[84px] cursor-pointer items-center justify-center overflow-hidden rounded-xl h-10 px-4 bg-[#233c48] hover:bg-[#2c4b5a] text-white text-sm font-bold leading-normal tracking-[0.015em] transition-colors">
+<span class="truncate">Logout</span>
+</button>
+<div class="bg-center bg-no-repeat aspect-square bg-cover rounded-full size-10 border border-[#233c48]" data-alt="User profile avatar gradient" style='background-image: url("https://lh3.googleusercontent.com/aida-public/AB6AXuCIpkhm_f6FL6hOuL1lY7s_p4JCYc7wRNwjvDpO0v9_qsR3zxIIRCKItemrGryEnFeaseU7vEqkuMmBLFcDPq2d6gJOO0azY2ERQZRrLVR08emzNTM-72D3AVCRvxWUXyBExd69RRJAOvzDuOxKQY5_6WNHuU_E1ZRx2IsfRWxBHoitinBn-r3Sd8hcSSgTTyWqOQjwtDdlsaJ__a1jMS1QawJdjED3LNCPHZgL6GQI0H6gpr-rkRtXGhJ62A0437mutclxcZn34UM");'></div>
+</div>
+</div>
+</header>
+<div class="flex flex-1 justify-center py-5 px-4 md:px-10 lg:px-40">
+<div class="layout-content-container flex flex-col max-w-[1200px] flex-1 gap-6">
+<div class="flex flex-wrap gap-2 px-4">
+<a class="text-[#92b7c9] text-base font-medium leading-normal hover:text-primary transition-colors" href="#">Home</a>
+<span class="text-[#92b7c9] text-base font-medium leading-normal">/</span>
+<a class="text-[#92b7c9] text-base font-medium leading-normal hover:text-primary transition-colors" href="#">System Admin</a>
+<span class="text-[#92b7c9] text-base font-medium leading-normal">/</span>
+<span class="text-white text-base font-medium leading-normal">Logs &amp; Config</span>
+</div>
+<div class="flex flex-wrap justify-between items-end gap-3 px-4">
+<div class="flex min-w-72 flex-col gap-2">
+<h1 class="text-white text-4xl font-black leading-tight tracking-[-0.033em]">System Management</h1>
+<p class="text-[#92b7c9] text-base font-normal leading-normal max-w-xl">Real-time monitoring and configuration for multi-tenant application infrastructure. View live provisioning logs and manage API gateways.</p>
+</div>
+<div class="flex gap-3">
+<button class="flex items-center gap-2 h-10 px-4 bg-[#233c48] hover:bg-[#2c4b5a] text-white text-sm font-bold rounded-xl transition-colors">
+<span class="material-symbols-outlined text-[20px]">refresh</span>
+<span>Refresh</span>
+</button>
+<button class="flex items-center gap-2 h-10 px-4 bg-primary hover:bg-sky-500 text-white text-sm font-bold rounded-xl transition-colors shadow-[0_0_15px_rgba(19,164,236,0.3)]">
+<span class="material-symbols-outlined text-[20px]">download</span>
+<span>Export Report</span>
+</button>
+</div>
+</div>
+<div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4 px-4">
+<div class="flex flex-col gap-2 rounded-xl p-6 border border-[#325567] bg-[#111c22] relative overflow-hidden group">
+<div class="absolute top-0 right-0 p-4 opacity-10 group-hover:opacity-20 transition-opacity">
+<span class="material-symbols-outlined text-6xl text-white">database</span>
+</div>
+<div class="flex items-center gap-2">
+<div class="size-2 rounded-full bg-green-500 animate-pulse"></div>
+<p class="text-[#92b7c9] text-sm font-medium uppercase tracking-wider">PostgreSQL</p>
+</div>
+<p class="text-white tracking-light text-2xl font-bold leading-tight">Healthy</p>
+<p class="text-[#92b7c9] text-sm font-medium leading-normal font-mono">5ms latency • 142 conns</p>
+</div>
+<div class="flex flex-col gap-2 rounded-xl p-6 border border-[#325567] bg-[#111c22] relative overflow-hidden group">
+<div class="absolute top-0 right-0 p-4 opacity-10 group-hover:opacity-20 transition-opacity">
+<span class="material-symbols-outlined text-6xl text-white">dns</span>
+</div>
+<div class="flex items-center gap-2">
+<div class="size-2 rounded-full bg-green-500"></div>
+<p class="text-[#92b7c9] text-sm font-medium uppercase tracking-wider">Application Service</p>
+</div>
+<p class="text-white tracking-light text-2xl font-bold leading-tight">6/8 Active</p>
+<p class="text-[#92b7c9] text-sm font-medium leading-normal font-mono">Memory Usage: 64%</p>
+</div>
+<div class="flex flex-col gap-2 rounded-xl p-6 border border-[#325567] bg-[#111c22] relative overflow-hidden group">
+<div class="absolute top-0 right-0 p-4 opacity-10 group-hover:opacity-20 transition-opacity">
+<span class="material-symbols-outlined text-6xl text-white">vpn_lock</span>
+</div>
+<div class="flex items-center gap-2">
+<div class="size-2 rounded-full bg-green-500"></div>
+<p class="text-[#92b7c9] text-sm font-medium uppercase tracking-wider">Cloudflare Tunnel</p>
+</div>
+<p class="text-white tracking-light text-2xl font-bold leading-tight">Connected</p>
+<p class="text-[#92b7c9] text-sm font-medium leading-normal font-mono">ID: cf-8821-ax</p>
+</div>
+<div class="flex flex-col gap-2 rounded-xl p-6 border border-[#325567] bg-[#111c22] relative overflow-hidden group">
+<div class="absolute top-0 right-0 p-4 opacity-10 group-hover:opacity-20 transition-opacity">
+<span class="material-symbols-outlined text-6xl text-white">hard_drive</span>
+</div>
+<div class="flex items-center gap-2">
+<div class="size-2 rounded-full bg-amber-500"></div>
+<p class="text-[#92b7c9] text-sm font-medium uppercase tracking-wider">Disk Usage</p>
+</div>
+<p class="text-white tracking-light text-2xl font-bold leading-tight">45%</p>
+<div class="w-full bg-[#233c48] rounded-full h-1.5 mt-1">
+<div class="bg-primary h-1.5 rounded-full" style="width: 45%"></div>
+</div>
+</div>
+</div>
+<div class="grid grid-cols-1 xl:grid-cols-3 gap-6 px-4 pb-10">
+<div class="flex flex-col gap-6 xl:col-span-1">
+<div class="rounded-xl border border-[#233c48] bg-[#111c22] p-6 flex flex-col gap-5">
+<h3 class="text-white text-lg font-bold flex items-center gap-2">
+<span class="material-symbols-outlined text-primary">tune</span>
+                            System Controls
+                        </h3>
+<div class="flex items-center justify-between py-2 border-b border-[#233c48]/50">
+<div class="flex flex-col">
+<span class="text-white font-medium text-sm">Maintenance Mode</span>
+<span class="text-[#92b7c9] text-xs">Block new tenant signups</span>
+</div>
+<label class="relative inline-flex items-center cursor-pointer">
+<input class="sr-only peer" type="checkbox" value=""/>
+<div class="w-11 h-6 bg-[#233c48] peer-focus:outline-none peer-focus:ring-2 peer-focus:ring-primary rounded-full peer peer-checked:after:translate-x-full rtl:peer-checked:after:-translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:start-[2px] after:bg-white after:border-gray-300 after:border after:rounded-full after:h-5 after:w-5 after:transition-all peer-checked:bg-primary"></div>
+</label>
+</div>
+<div class="flex items-center justify-between py-2 border-b border-[#233c48]/50">
+<div class="flex flex-col">
+<span class="text-white font-medium text-sm">Auto-DNS Registration</span>
+<span class="text-[#92b7c9] text-xs">Route53 / Cloudflare API</span>
+</div>
+<label class="relative inline-flex items-center cursor-pointer">
+<input checked="" class="sr-only peer" type="checkbox" value=""/>
+<div class="w-11 h-6 bg-[#233c48] peer-focus:outline-none peer-focus:ring-2 peer-focus:ring-primary rounded-full peer peer-checked:after:translate-x-full rtl:peer-checked:after:-translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:start-[2px] after:bg-white after:border-gray-300 after:border after:rounded-full after:h-5 after:w-5 after:transition-all peer-checked:bg-primary"></div>
+</label>
+</div>
+<div class="flex items-center justify-between py-2 border-b border-[#233c48]/50">
+<div class="flex flex-col">
+<span class="text-white font-medium text-sm">Stripe Webhooks</span>
+<span class="text-[#92b7c9] text-xs">Listen for payment events</span>
+</div>
+<label class="relative inline-flex items-center cursor-pointer">
+<input checked="" class="sr-only peer" type="checkbox" value=""/>
+<div class="w-11 h-6 bg-[#233c48] peer-focus:outline-none peer-focus:ring-2 peer-focus:ring-primary rounded-full peer peer-checked:after:translate-x-full rtl:peer-checked:after:-translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:start-[2px] after:bg-white after:border-gray-300 after:border after:rounded-full after:h-5 after:w-5 after:transition-all peer-checked:bg-primary"></div>
+</label>
+</div>
+<div class="flex items-center justify-between py-2">
+<div class="flex flex-col">
+<span class="text-white font-medium text-sm">Debug Logging</span>
+<span class="text-[#92b7c9] text-xs">Verbose output in console</span>
+</div>
+<label class="relative inline-flex items-center cursor-pointer">
+<input class="sr-only peer" type="checkbox" value=""/>
+<div class="w-11 h-6 bg-[#233c48] peer-focus:outline-none peer-focus:ring-2 peer-focus:ring-primary rounded-full peer peer-checked:after:translate-x-full rtl:peer-checked:after:-translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:start-[2px] after:bg-white after:border-gray-300 after:border after:rounded-full after:h-5 after:w-5 after:transition-all peer-checked:bg-primary"></div>
+</label>
+</div>
+</div>
+<div class="rounded-xl border border-red-900/50 bg-[#1a1212] p-6 flex flex-col gap-4">
+<h3 class="text-red-400 text-lg font-bold flex items-center gap-2">
+<span class="material-symbols-outlined">warning</span>
+                            Danger Zone
+                        </h3>
+<div class="flex flex-col gap-3">
+<button class="w-full h-10 px-4 bg-transparent border border-[#3c2323] hover:border-red-500/50 hover:bg-red-950/30 text-red-400 text-sm font-bold rounded-lg transition-all flex items-center justify-center gap-2">
+<span class="material-symbols-outlined text-sm">restart_alt</span>
+                                Restart All Services
+                            </button>
+<button class="w-full h-10 px-4 bg-transparent border border-[#3c2323] hover:border-red-500/50 hover:bg-red-950/30 text-red-400 text-sm font-bold rounded-lg transition-all flex items-center justify-center gap-2">
+<span class="material-symbols-outlined text-sm">cleaning_services</span>
+                                Prune Docker Volumes
+                            </button>
+</div>
+</div>
+</div>
+<div class="flex flex-col gap-6 xl:col-span-2">
+<div class="flex flex-col rounded-xl border border-[#233c48] bg-[#090c10] overflow-hidden shadow-2xl">
+<div class="flex items-center justify-between px-4 py-2 bg-[#161b22] border-b border-[#233c48]">
+<div class="flex items-center gap-3">
+<div class="flex gap-1.5">
+<div class="size-3 rounded-full bg-[#fa5f38]"></div>
+<div class="size-3 rounded-full bg-amber-400"></div>
+<div class="size-3 rounded-full bg-[#0bda57]"></div>
+</div>
+<span class="text-xs font-mono text-[#8b949e] font-medium ml-2">provisioning_stream.sh</span>
+<span class="text-[10px] bg-primary/20 text-primary px-1.5 py-0.5 rounded border border-primary/20 font-mono">RUNNING</span>
+</div>
+<div class="flex gap-3">
+<button class="text-[#8b949e] hover:text-white transition-colors">
+<span class="material-symbols-outlined text-[18px]">content_copy</span>
+</button>
+<button class="text-[#8b949e] hover:text-white transition-colors">
+<span class="material-symbols-outlined text-[18px]">open_in_full</span>
+</button>
+</div>
+</div>
+<div class="p-4 font-mono text-xs md:text-sm overflow-y-auto h-[320px] scrollbar-thin scrollbar-thumb-[#233c48] scrollbar-track-transparent">
+<div class="flex flex-col gap-1">
+<p class="text-[#8b949e]">[10:02:10] <span class="text-primary">INFO</span> Initializing provisioning sequence for tenant_id: 1094...</p>
+<p class="text-[#8b949e]">[10:02:11] <span class="text-primary">INFO</span> Validating subscription status with Stripe API...</p>
+<p class="text-[#8b949e]">[10:02:12] <span class="text-[#0bda57]">SUCCESS</span> Payment verification confirmed.</p>
+<p class="text-[#8b949e]">[10:02:14] <span class="text-amber-400">WARN</span> Subdomain 'acme-corp' already exists. Appending suffix.</p>
+<p class="text-[#8b949e]">[10:02:14] <span class="text-white">EXECUTING:</span> <span class="text-[#a5d6ff]">docker-compose -f tenant-1094.yml up -d</span></p>
+<p class="text-[#8b949e]">[10:02:15] <span class="text-gray-500">Creating network "tenant_1094_net" with the default driver</span></p>
+<p class="text-[#8b949e]">[10:02:16] <span class="text-gray-500">Creating volume "tenant_1094_pg_data" with local driver</span></p>
+<p class="text-[#8b949e]">[10:02:18] <span class="text-gray-500">Creating container "app_1094" ... done</span></p>
+<p class="text-[#8b949e]">[10:02:19] <span class="text-white">EXECUTING:</span> <span class="text-[#a5d6ff]">/scripts/init_db.sh --db=app_1094 --demo=False</span></p>
+<p class="text-[#8b949e]">[10:02:25] <span class="text-[#0bda57]">SUCCESS</span> Database initialized.</p>
+<p class="text-[#8b949e]">[10:02:26] <span class="text-white">EXECUTING:</span> <span class="text-[#a5d6ff]">domain_register.sh --zone=acme-corp-01</span></p>
+<p class="text-[#8b949e]">[10:02:28] <span class="text-primary">INFO</span> DNS propagation check initiated...</p>
+<div class="flex items-center gap-2 mt-2">
+<span class="text-[#0bda57]">➜</span>
+<div class="w-2 h-4 bg-[#8b949e] animate-pulse"></div>
+</div>
+</div>
+</div>
+</div>
+<div class="flex flex-col rounded-xl border border-[#233c48] bg-[#090c10] overflow-hidden">
+<div class="flex items-center justify-between px-4 py-2 bg-[#161b22] border-b border-[#233c48]">
+<div class="flex gap-6">
+<button class="text-sm font-bold text-white border-b-2 border-primary pb-2 -mb-2.5">FastAPI Access Logs</button>
+<button class="text-sm font-medium text-[#8b949e] hover:text-white pb-2 transition-colors">Error Logs <span class="bg-[#233c48] text-[10px] px-1.5 py-0.5 rounded-full ml-1">0</span></button>
+<button class="text-sm font-medium text-[#8b949e] hover:text-white pb-2 transition-colors">Worker Logs</button>
+</div>
+<div class="flex items-center gap-2">
+<span class="text-[10px] text-[#8b949e] font-mono">Auto-scroll</span>
+<label class="relative inline-flex items-center cursor-pointer">
+<input checked="" class="sr-only peer" type="checkbox" value=""/>
+<div class="w-7 h-4 bg-[#233c48] peer-focus:outline-none rounded-full peer peer-checked:after:translate-x-full rtl:peer-checked:after:-translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:start-[2px] after:bg-white after:border-gray-300 after:border after:rounded-full after:h-3 after:w-3 after:transition-all peer-checked:bg-primary"></div>
+</label>
+</div>
+</div>
+<div class="p-4 font-mono text-xs text-[#d1d5db] h-[240px] overflow-y-auto scrollbar-thin scrollbar-thumb-[#233c48] scrollbar-track-transparent opacity-90">
+<div class="table w-full">
+<div class="table-row">
+<div class="table-cell whitespace-nowrap pr-4 text-gray-500">2023-10-24 10:02:15</div>
+<div class="table-cell whitespace-nowrap pr-4 text-primary">INFO</div>
+<div class="table-cell">127.0.0.1:54322 - "POST /api/v1/register HTTP/1.1" 200 OK</div>
+</div>
+<div class="table-row">
+<div class="table-cell whitespace-nowrap pr-4 text-gray-500">2023-10-24 10:02:18</div>
+<div class="table-cell whitespace-nowrap pr-4 text-primary">INFO</div>
+<div class="table-cell">127.0.0.1:54322 - "GET /api/v1/health HTTP/1.1" 200 OK</div>
+</div>
+<div class="table-row">
+<div class="table-cell whitespace-nowrap pr-4 text-gray-500">2023-10-24 10:02:22</div>
+<div class="table-cell whitespace-nowrap pr-4 text-primary">INFO</div>
+<div class="table-cell">192.168.1.45 - "POST /webhook/stripe HTTP/1.1" 200 OK</div>
+</div>
+<div class="table-row">
+<div class="table-cell whitespace-nowrap pr-4 text-gray-500">2023-10-24 10:03:01</div>
+<div class="table-cell whitespace-nowrap pr-4 text-amber-400">WARN</div>
+<div class="table-cell">Rate limit approaching for IP 45.22.12.99</div>
+</div>
+<div class="table-row">
+<div class="table-cell whitespace-nowrap pr-4 text-gray-500">2023-10-24 10:03:05</div>
+<div class="table-cell whitespace-nowrap pr-4 text-primary">INFO</div>
+<div class="table-cell">127.0.0.1:54322 - "GET /api/v1/tenants?status=active HTTP/1.1" 200 OK</div>
+</div>
+<div class="table-row">
+<div class="table-cell whitespace-nowrap pr-4 text-gray-500">2023-10-24 10:03:12</div>
+<div class="table-cell whitespace-nowrap pr-4 text-primary">INFO</div>
+<div class="table-cell">Background Task: Syncing Stripe Customers... Completed (0.4s)</div>
+</div>
+</div>
+</div>
+</div>
+</div>
+</div>
+</div>
+</div>
+
+</body></html>

@@ -1,0 +1,41 @@
+{
+  "mcpServers": {
+    "onboarding-api": {
+      "command": "node",
+      "args": ["/opt/onboarding-system/mcp/api-server.js"],
+      "env": {
+        "API_URL": "http://localhost:4443",
+        "API_TOKEN_FILE": "/opt/onboarding-system/.mcp_token"
+      }
+    },
+    "chrome-devtools": {
+      "command": "npx",
+      "args": ["-y", "chrome-devtools-mcp@latest"]
+    },
+    "postgres": {
+      "command": "npx",
+      "args": [
+        "-y",
+        "@modelcontextprotocol/server-postgres",
+        "postgresql://jeturing:321Abcd@172.16.16.160/onboarding_db"
+      ]
+    },
+    "filesystem-logs": {
+      "command": "npx",
+      "args": [
+        "-y",
+        "@modelcontextprotocol/server-filesystem",
+        "/opt/onboarding-system/logs"
+      ]
+    },
+    "filesystem-docs": {
+      "command": "npx",
+      "args": [
+        "-y",
+        "@modelcontextprotocol/server-filesystem",
+        "/opt/onboarding-system/docs",
+        "/opt/onboarding-system/.github"
+      ]
+    }
+  }
+}

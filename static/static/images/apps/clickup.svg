@@ -1,0 +1,28 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<svg xmlns="http://www.w3.org/2000/svg" xmlns:xlink="http://www.w3.org/1999/xlink" version="1.1" viewBox="0 0 50 50">
+  <defs>
+    <style>
+      .st0 {
+        fill: url(#linear-gradient);
+      }
+
+      .st0, .st1 {
+        fill-rule: evenodd;
+      }
+
+      .st1 {
+        fill: url(#linear-gradient1);
+      }
+    </style>
+    <linearGradient id="linear-gradient" x1="4.2" y1="-109.6" x2="45.8" y2="-109.6" gradientTransform="translate(0 -68) scale(1 -1)" gradientUnits="userSpaceOnUse">
+      <stop offset="0" stop-color="#8930fd"/>
+      <stop offset="1" stop-color="#49ccf9"/>
+    </linearGradient>
+    <linearGradient id="linear-gradient1" x1="5" y1="-80.6" x2="45" y2="-80.6" gradientTransform="translate(0 -68) scale(1 -1)" gradientUnits="userSpaceOnUse">
+      <stop offset="0" stop-color="#ff02f0"/>
+      <stop offset="1" stop-color="#ffc800"/>
+    </linearGradient>
+  </defs>
+  <path class="st0" d="M4.2,38.7l7.7-5.9c4.1,5.3,8.4,7.8,13.3,7.8s9-2.4,12.9-7.7l7.8,5.7c-5.6,7.6-12.6,11.7-20.7,11.7s-15.1-4-20.9-11.6Z"/>
+  <path class="st1" d="M25.1,13.1l-13.7,11.8-6.3-7.3L25.1.3l19.9,17.3-6.4,7.3-13.6-11.8Z"/>
+</svg>

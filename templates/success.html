@@ -1,0 +1,27 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+    <meta charset="UTF-8">
+    <title>Éxito - Onboarding</title>
+    <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css" rel="stylesheet">
+    <style>
+        body { background: linear-gradient(135deg, #667eea 0%, #764ba2 100%); min-height: 100vh; display: flex; align-items: center; }
+        .success-card { max-width: 600px; margin: auto; background: white; border-radius: 15px; padding: 50px; text-align: center; }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <div class="success-card">
+            <div style="font-size:80px;color:#28a745;">✓</div>
+            <h1 class="mt-4">¡Pago Exitoso!</h1>
+            <p class="lead mt-3">Su instancia de sajet.us está siendo aprovisionada</p>
+            <div class="alert alert-info mt-4">
+                <h5>Su URL:</h5>
+                <a href="{{ url }}" class="h4">{{ url }}</a>
+            </div>
+            <p class="text-muted mt-3">El proceso tarda 3-5 minutos</p>
+            <a href="{{ url }}" class="btn btn-primary btn-lg mt-4">Ir a mi sajet.us</a>
+        </div>
+    </div>
+</body>
+</html>

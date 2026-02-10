@@ -1,0 +1,151 @@
+{% extends "base_admin.html" %}
+
+{% block title %}Configuración - Admin{% endblock %}
+
+{% block page_title %}Configuración{% endblock %}
+{% block page_subtitle %}Gestiona la configuración del sistema{% endblock %}
+
+{% block content %}
+<div class="space-y-6">
+    <!-- General Settings -->
+    <div class="bg-white dark:bg-surface-dark rounded-xl border border-slate-200 dark:border-slate-700 p-6">
+        <h3 class="text-lg font-bold text-slate-900 dark:text-white mb-4 flex items-center gap-2">
+            <span class="material-symbols-outlined text-blue-600 dark:text-primary">tune</span>
+            Configuración General
+        </h3>
+        
+        <div class="grid gap-4">
+            <div class="flex items-center justify-between p-4 bg-slate-50 dark:bg-surface-highlight rounded-lg">
+                <div>
+                    <p class="font-medium text-slate-900 dark:text-white">Modo de mantenimiento</p>
+                    <p class="text-sm text-slate-500 dark:text-slate-400">Deshabilita el acceso público al sistema</p>
+                </div>
+                <label class="relative inline-flex items-center cursor-pointer">
+                    <input type="checkbox" class="sr-only peer" id="maintenanceMode">
+                    <div class="w-11 h-6 bg-slate-300 peer-focus:ring-4 peer-focus:ring-blue-300 dark:peer-focus:ring-primary/20 rounded-full peer dark:bg-slate-600 peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-slate-300 after:border after:rounded-full after:h-5 after:w-5 after:transition-all peer-checked:bg-blue-600 dark:peer-checked:bg-primary"></div>
+                </label>
+            </div>
+            
+            <div class="flex items-center justify-between p-4 bg-slate-50 dark:bg-surface-highlight rounded-lg">
+                <div>
+                    <p class="font-medium text-slate-900 dark:text-white">Permitir registro público</p>
+                    <p class="text-sm text-slate-500 dark:text-slate-400">Permite a nuevos usuarios crear cuentas</p>
+                </div>
+                <label class="relative inline-flex items-center cursor-pointer">
+                    <input type="checkbox" class="sr-only peer" id="publicRegistration" checked>
+                    <div class="w-11 h-6 bg-slate-300 peer-focus:ring-4 peer-focus:ring-blue-300 dark:peer-focus:ring-primary/20 rounded-full peer dark:bg-slate-600 peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-slate-300 after:border after:rounded-full after:h-5 after:w-5 after:transition-all peer-checked:bg-blue-600 dark:peer-checked:bg-primary"></div>
+                </label>
+            </div>
+        </div>
+    </div>
+    
+    <!-- Stripe Configuration -->
+    <div class="bg-white dark:bg-surface-dark rounded-xl border border-slate-200 dark:border-slate-700 p-6">
+        <h3 class="text-lg font-bold text-slate-900 dark:text-white mb-4 flex items-center gap-2">
+            <span class="material-symbols-outlined text-purple-600 dark:text-purple-400">payments</span>
+            Stripe (Pagos)
+        </h3>
+        
+        <div class="grid gap-4">
+            <div>
+                <label class="block text-sm font-medium text-slate-700 dark:text-slate-300 mb-2">Estado de conexión</label>
+                <div class="flex items-center gap-2 p-3 bg-emerald-50 dark:bg-emerald-900/20 border border-emerald-200 dark:border-emerald-700 rounded-lg">
+                    <span class="size-3 bg-emerald-500 rounded-full animate-pulse"></span>
+                    <span class="text-emerald-700 dark:text-emerald-400 font-medium">Conectado (Modo Test)</span>
+                </div>
+            </div>
+            
+            <div>
+                <label class="block text-sm font-medium text-slate-700 dark:text-slate-300 mb-2">Webhook URL</label>
+                <div class="flex items-center gap-2">
+                    <input type="text" value="https://tu-dominio.com/webhook/stripe" readonly class="flex-1 px-4 py-2 bg-slate-100 dark:bg-surface-highlight border border-slate-300 dark:border-slate-600 rounded-lg text-slate-700 dark:text-slate-300 font-mono text-sm">
+                    <button class="px-4 py-2 bg-slate-200 dark:bg-slate-700 text-slate-700 dark:text-slate-300 rounded-lg hover:bg-slate-300 dark:hover:bg-slate-600 transition">
+                        <span class="material-symbols-outlined text-[18px]">content_copy</span>
+                    </button>
+                </div>
+            </div>
+        </div>
+    </div>
+    
+    <!-- Tenant Provisioning -->
+    <div class="bg-white dark:bg-surface-dark rounded-xl border border-slate-200 dark:border-slate-700 p-6">
+        <h3 class="text-lg font-bold text-slate-900 dark:text-white mb-4 flex items-center gap-2">
+            <span class="material-symbols-outlined text-cyan-600 dark:text-cyan-400">dns</span>
+            Provisioning de Tenants
+        </h3>
+        
+        <div class="grid md:grid-cols-2 gap-4">
+            <div>
+                <label class="block text-sm font-medium text-slate-700 dark:text-slate-300 mb-2">Contenedor LXC</label>
+                <input type="text" value="105" class="w-full px-4 py-2 bg-slate-50 dark:bg-surface-highlight border border-slate-300 dark:border-slate-600 rounded-lg text-slate-900 dark:text-white">
+            </div>
+            
+            <div>
+                <label class="block text-sm font-medium text-slate-700 dark:text-slate-300 mb-2">Dominio Base</label>
+                <input type="text" value="sajet.us" class="w-full px-4 py-2 bg-slate-50 dark:bg-surface-highlight border border-slate-300 dark:border-slate-600 rounded-lg text-slate-900 dark:text-white">
+            </div>
+            
+            <div>
+                <label class="block text-sm font-medium text-slate-700 dark:text-slate-300 mb-2">Timeout (segundos)</label>
+                <input type="number" value="300" class="w-full px-4 py-2 bg-slate-50 dark:bg-surface-highlight border border-slate-300 dark:border-slate-600 rounded-lg text-slate-900 dark:text-white">
+            </div>
+            
+            <div>
+                <label class="block text-sm font-medium text-slate-700 dark:text-slate-300 mb-2">Estado del cluster</label>
+                <div class="flex items-center gap-2 p-3 bg-emerald-50 dark:bg-emerald-900/20 border border-emerald-200 dark:border-emerald-700 rounded-lg h-[42px]">
+                    <span class="size-3 bg-emerald-500 rounded-full"></span>
+                    <span class="text-emerald-700 dark:text-emerald-400 font-medium text-sm">Online</span>
+                </div>
+            </div>
+        </div>
+    </div>
+    
+    <!-- Security Settings -->
+    <div class="bg-white dark:bg-surface-dark rounded-xl border border-slate-200 dark:border-slate-700 p-6">
+        <h3 class="text-lg font-bold text-slate-900 dark:text-white mb-4 flex items-center gap-2">
+            <span class="material-symbols-outlined text-rose-600 dark:text-rose-400">shield</span>
+            Seguridad
+        </h3>
+        
+        <div class="grid gap-4">
+            <div class="flex items-center justify-between p-4 bg-slate-50 dark:bg-surface-highlight rounded-lg">
+                <div>
+                    <p class="font-medium text-slate-900 dark:text-white">Forzar HTTPS</p>
+                    <p class="text-sm text-slate-500 dark:text-slate-400">Redirige todo el tráfico a HTTPS</p>
+                </div>
+                <label class="relative inline-flex items-center cursor-pointer">
+                    <input type="checkbox" class="sr-only peer" id="forceHttps">
+                    <div class="w-11 h-6 bg-slate-300 peer-focus:ring-4 peer-focus:ring-blue-300 dark:peer-focus:ring-primary/20 rounded-full peer dark:bg-slate-600 peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-slate-300 after:border after:rounded-full after:h-5 after:w-5 after:transition-all peer-checked:bg-blue-600 dark:peer-checked:bg-primary"></div>
+                </label>
+            </div>
+            
+            <div class="flex items-center justify-between p-4 bg-slate-50 dark:bg-surface-highlight rounded-lg">
+                <div>
+                    <p class="font-medium text-slate-900 dark:text-white">WAF (Web Application Firewall)</p>
+                    <p class="text-sm text-slate-500 dark:text-slate-400">Protección contra ataques comunes</p>
+                </div>
+                <label class="relative inline-flex items-center cursor-pointer">
+                    <input type="checkbox" class="sr-only peer" id="enableWaf" checked>
+                    <div class="w-11 h-6 bg-slate-300 peer-focus:ring-4 peer-focus:ring-blue-300 dark:peer-focus:ring-primary/20 rounded-full peer dark:bg-slate-600 peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-slate-300 after:border after:rounded-full after:h-5 after:w-5 after:transition-all peer-checked:bg-blue-600 dark:peer-checked:bg-primary"></div>
+                </label>
+            </div>
+            
+            <div>
+                <label class="block text-sm font-medium text-slate-700 dark:text-slate-300 mb-2">Expiración de tokens (minutos)</label>
+                <input type="number" value="15" class="w-full max-w-xs px-4 py-2 bg-slate-50 dark:bg-surface-highlight border border-slate-300 dark:border-slate-600 rounded-lg text-slate-900 dark:text-white">
+            </div>
+        </div>
+    </div>
+    
+    <!-- Save Button -->
+    <div class="flex justify-end gap-3">
+        <button class="px-6 py-2 bg-slate-200 dark:bg-slate-700 text-slate-700 dark:text-slate-300 rounded-lg hover:bg-slate-300 dark:hover:bg-slate-600 transition font-medium">
+            Cancelar
+        </button>
+        <button class="px-6 py-2 bg-blue-600 dark:bg-primary text-white rounded-lg hover:bg-blue-700 dark:hover:bg-primary/90 transition font-medium flex items-center gap-2">
+            <span class="material-symbols-outlined text-[18px]">save</span>
+            Guardar Cambios
+        </button>
+    </div>
+</div>
+{% endblock %}

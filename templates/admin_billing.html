@@ -1,0 +1,220 @@
+{% extends "base_admin.html" %}
+
+{% block title %}Facturación - Jeturing Admin{% endblock %}
+{% block page_title %}Facturación y Pagos{% endblock %}
+{% block page_subtitle %}Gestión de ingresos, facturas y métodos de pago{% endblock %}
+
+{% block header_actions %}
+<button class="flex items-center gap-2 bg-surface-dark hover:bg-surface-highlight text-white px-4 py-2 rounded-xl font-medium text-sm transition-all">
+    <span class="material-symbols-outlined text-[20px]">calendar_today</span>
+    <span>Últimos 30 días</span>
+</button>
+<button class="flex items-center gap-2 bg-primary hover:bg-primary-dark text-white px-4 py-2 rounded-xl font-medium text-sm transition-all shadow-lg shadow-primary/25">
+    <span class="material-symbols-outlined text-[20px]">download</span>
+    <span>Exportar</span>
+</button>
+{% endblock %}
+
+{% block content %}
+<!-- Revenue Cards -->
+<div class="grid grid-cols-1 md:grid-cols-4 gap-4">
+    <div class="p-6 rounded-xl bg-white dark:bg-surface-dark border border-slate-200 dark:border-slate-800 relative overflow-hidden group">
+        <div class="absolute top-0 right-0 p-4 opacity-10 group-hover:opacity-20 transition-opacity">
+            <span class="material-symbols-outlined text-6xl text-primary">payments</span>
+        </div>
+        <p class="text-slate-500 dark:text-slate-400 text-sm font-medium mb-1">MRR Total</p>
+        <p class="text-3xl font-bold text-slate-900 dark:text-white" id="totalMRR">$0</p>
+        <p class="text-emerald-500 text-xs mt-2">+12% vs mes anterior</p>
+    </div>
+    <div class="p-6 rounded-xl bg-white dark:bg-surface-dark border border-slate-200 dark:border-slate-800 relative overflow-hidden group">
+        <div class="absolute top-0 right-0 p-4 opacity-10 group-hover:opacity-20 transition-opacity">
+            <span class="material-symbols-outlined text-6xl text-emerald-500">trending_up</span>
+        </div>
+        <p class="text-slate-500 dark:text-slate-400 text-sm font-medium mb-1">Ingresos del Mes</p>
+        <p class="text-3xl font-bold text-slate-900 dark:text-white" id="monthRevenue">$0</p>
+        <p class="text-slate-400 text-xs mt-2" id="invoiceCount">0 facturas</p>
+    </div>
+    <div class="p-6 rounded-xl bg-white dark:bg-surface-dark border border-slate-200 dark:border-slate-800 relative overflow-hidden group">
+        <div class="absolute top-0 right-0 p-4 opacity-10 group-hover:opacity-20 transition-opacity">
+            <span class="material-symbols-outlined text-6xl text-amber-500">pending</span>
+        </div>
+        <p class="text-slate-500 dark:text-slate-400 text-sm font-medium mb-1">Pendiente de Cobro</p>
+        <p class="text-3xl font-bold text-slate-900 dark:text-white" id="pendingAmount">$0</p>
+        <p class="text-amber-500 text-xs mt-2" id="pendingCount">0 pagos pendientes</p>
+    </div>
+    <div class="p-6 rounded-xl bg-white dark:bg-surface-dark border border-slate-200 dark:border-slate-800 relative overflow-hidden group">
+        <div class="absolute top-0 right-0 p-4 opacity-10 group-hover:opacity-20 transition-opacity">
+            <span class="material-symbols-outlined text-6xl text-accent-rose">cancel</span>
+        </div>
+        <p class="text-slate-500 dark:text-slate-400 text-sm font-medium mb-1">Churn Rate</p>
+        <p class="text-3xl font-bold text-slate-900 dark:text-white">2.1%</p>
+        <p class="text-emerald-500 text-xs mt-2">-0.5% vs mes anterior</p>
+    </div>
+</div>
+
+<!-- Revenue by Plan -->
+<div class="grid grid-cols-1 lg:grid-cols-3 gap-6">
+    <div class="lg:col-span-2 bg-white dark:bg-surface-dark border border-slate-200 dark:border-slate-800 rounded-2xl p-6">
+        <h3 class="font-bold text-slate-900 dark:text-white mb-4">Distribución por Plan</h3>
+        <div class="space-y-4" id="planDistribution">
+            <div class="flex items-center justify-between">
+                <div class="flex items-center gap-3">
+                    <div class="size-3 rounded-full bg-emerald-500"></div>
+                    <span class="text-slate-600 dark:text-slate-300">Enterprise ($99/mes)</span>
+                </div>
+                <div class="flex items-center gap-4">
+                    <span class="text-slate-900 dark:text-white font-semibold" id="enterpriseCount">0 tenants</span>
+                    <span class="text-slate-400 font-mono text-sm" id="enterpriseRevenue">$0</span>
+                </div>
+            </div>
+            <div class="flex items-center justify-between">
+                <div class="flex items-center gap-3">
+                    <div class="size-3 rounded-full bg-primary"></div>
+                    <span class="text-slate-600 dark:text-slate-300">Pro ($49/mes)</span>
+                </div>
+                <div class="flex items-center gap-4">
+                    <span class="text-slate-900 dark:text-white font-semibold" id="proCount">0 tenants</span>
+                    <span class="text-slate-400 font-mono text-sm" id="proRevenue">$0</span>
+                </div>
+            </div>
+            <div class="flex items-center justify-between">
+                <div class="flex items-center gap-3">
+                    <div class="size-3 rounded-full bg-slate-400"></div>
+                    <span class="text-slate-600 dark:text-slate-300">Basic ($29/mes)</span>
+                </div>
+                <div class="flex items-center gap-4">
+                    <span class="text-slate-900 dark:text-white font-semibold" id="basicCount">0 tenants</span>
+                    <span class="text-slate-400 font-mono text-sm" id="basicRevenue">$0</span>
+                </div>
+            </div>
+        </div>
+    </div>
+    <div class="bg-white dark:bg-surface-dark border border-slate-200 dark:border-slate-800 rounded-2xl p-6">
+        <h3 class="font-bold text-slate-900 dark:text-white mb-4">Acciones Rápidas</h3>
+        <div class="space-y-3">
+            <a href="https://dashboard.stripe.com" target="_blank" class="flex items-center gap-3 p-3 rounded-xl bg-slate-50 dark:bg-surface-highlight hover:bg-slate-100 dark:hover:bg-slate-700 transition-colors">
+                <span class="material-symbols-outlined text-primary">open_in_new</span>
+                <span class="text-sm font-medium">Abrir Stripe Dashboard</span>
+            </a>
+            <button class="w-full flex items-center gap-3 p-3 rounded-xl bg-slate-50 dark:bg-surface-highlight hover:bg-slate-100 dark:hover:bg-slate-700 transition-colors">
+                <span class="material-symbols-outlined text-primary">receipt</span>
+                <span class="text-sm font-medium">Generar Reporte Fiscal</span>
+            </button>
+            <button class="w-full flex items-center gap-3 p-3 rounded-xl bg-slate-50 dark:bg-surface-highlight hover:bg-slate-100 dark:hover:bg-slate-700 transition-colors">
+                <span class="material-symbols-outlined text-primary">mail</span>
+                <span class="text-sm font-medium">Enviar Recordatorios</span>
+            </button>
+        </div>
+    </div>
+</div>
+
+<!-- Recent Invoices -->
+<div class="bg-white dark:bg-surface-dark border border-slate-200 dark:border-slate-800 rounded-2xl overflow-hidden">
+    <div class="flex items-center justify-between px-6 py-4 border-b border-slate-200 dark:border-slate-800">
+        <h3 class="font-bold text-slate-900 dark:text-white flex items-center gap-2">
+            <span class="material-symbols-outlined text-primary">receipt_long</span>
+            Facturas Recientes
+        </h3>
+    </div>
+    <div class="overflow-x-auto">
+        <table class="w-full text-left">
+            <thead>
+                <tr class="border-b border-slate-100 dark:border-slate-800/50 bg-slate-50/50 dark:bg-surface-highlight/30 text-xs uppercase tracking-wide text-slate-500 font-semibold">
+                    <th class="px-6 py-3">Cliente</th>
+                    <th class="px-6 py-3">Plan</th>
+                    <th class="px-6 py-3">Monto</th>
+                    <th class="px-6 py-3">Estado</th>
+                    <th class="px-6 py-3">Fecha</th>
+                    <th class="px-6 py-3 text-center">Acciones</th>
+                </tr>
+            </thead>
+            <tbody id="invoicesBody" class="divide-y divide-slate-100 dark:divide-slate-800/50">
+                <tr>
+                    <td colspan="6" class="px-6 py-4 text-center text-slate-500">Cargando facturas...</td>
+                </tr>
+            </tbody>
+        </table>
+    </div>
+</div>
+{% endblock %}
+
+{% block extra_scripts %}
+<script>
+document.addEventListener('DOMContentLoaded', () => {
+    loadBillingMetrics();
+    loadInvoices();
+});
+
+async function loadBillingMetrics() {
+    try {
+        const res = await fetch('/api/dashboard/metrics', {credentials: 'same-origin'});
+        if (!res.ok) return;
+        const data = await res.json();
+        document.getElementById('totalMRR').textContent = `$${data.total_revenue || 0}`;
+        document.getElementById('monthRevenue').textContent = `$${data.total_revenue || 0}`;
+    } catch (err) {
+        console.error('Error loading billing metrics', err);
+    }
+}
+
+async function loadInvoices() {
+    const body = document.getElementById('invoicesBody');
+    try {
+        const res = await fetch('/api/tenants', {credentials: 'same-origin'});
+        if (!res.ok) {
+            body.innerHTML = '<tr><td colspan="6" class="px-6 py-4 text-center text-slate-500">No hay facturas</td></tr>';
+            return;
+        }
+        const data = await res.json();
+        const items = data.items || [];
+        
+        if (items.length === 0) {
+            body.innerHTML = '<tr><td colspan="6" class="px-6 py-4 text-center text-slate-500">No hay facturas</td></tr>';
+            return;
+        }
+        
+        const priceMap = {basic: 29, pro: 49, enterprise: 99};
+        body.innerHTML = items.map(t => {
+            const amount = priceMap[t.plan] || 0;
+            const statusClass = t.status === 'active' ? 'bg-emerald-500/10 text-emerald-400' : 'bg-amber-500/10 text-amber-400';
+            const statusText = t.status === 'active' ? 'Pagado' : 'Pendiente';
+            return `
+                <tr class="hover:bg-surface-highlight/50 transition-colors">
+                    <td class="px-6 py-3">
+                        <div class="flex items-center gap-3">
+                            <div class="size-8 rounded-lg bg-primary/10 flex items-center justify-center text-primary font-bold text-xs">${initials(t.company_name)}</div>
+                            <div>
+                                <p class="text-sm font-medium text-slate-900 dark:text-white">${t.company_name}</p>
+                                <p class="text-xs text-slate-500">${t.email || ''}</p>
+                            </div>
+                        </div>
+                    </td>
+                    <td class="px-6 py-3 capitalize text-sm">${t.plan || '-'}</td>
+                    <td class="px-6 py-3 font-mono text-sm">$${amount}</td>
+                    <td class="px-6 py-3">
+                        <span class="inline-flex items-center px-2 py-0.5 rounded-full text-xs font-medium ${statusClass}">${statusText}</span>
+                    </td>
+                    <td class="px-6 py-3 text-sm text-slate-400">${formatDate(t.created_at)}</td>
+                    <td class="px-6 py-3 text-center">
+                        <button class="size-8 rounded-lg flex items-center justify-center text-slate-400 hover:text-white hover:bg-slate-700 transition-colors mx-auto">
+                            <span class="material-symbols-outlined text-[20px]">more_vert</span>
+                        </button>
+                    </td>
+                </tr>
+            `;
+        }).join('');
+    } catch (err) {
+        body.innerHTML = '<tr><td colspan="6" class="px-6 py-4 text-center text-slate-500">Error al cargar facturas</td></tr>';
+    }
+}
+
+function initials(name) {
+    return (name || '').split(' ').map(w => w[0]).slice(0, 2).join('').toUpperCase() || '?';
+}
+
+function formatDate(iso) {
+    if (!iso) return '-';
+    return new Date(iso).toLocaleDateString('es-ES', {day: '2-digit', month: 'short', year: 'numeric'});
+}
+</script>
+{% endblock %}

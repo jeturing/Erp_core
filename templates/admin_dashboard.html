@@ -1,0 +1,375 @@
+{% extends "base_admin.html" %}
+
+{% block title %}Dashboard - Jeturing Admin{% endblock %}
+
+{% block page_title %}Dashboard Overview{% endblock %}
+{% block page_subtitle %}Gestion de la plataforma multitenant{% endblock %}
+
+{% block header_actions %}
+<div class="hidden md:flex relative group">
+    <div class="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none">
+        <span class="material-symbols-outlined text-slate-400 group-focus-within:text-primary transition-colors text-[20px]">search</span>
+    </div>
+    <input class="block w-64 lg:w-80 pl-10 pr-4 py-2 bg-slate-100 dark:bg-surface-dark border border-transparent focus:border-primary/50 focus:bg-white dark:focus:bg-surface-highlight rounded-xl text-sm text-slate-900 dark:text-white placeholder-slate-500 dark:placeholder-slate-400 focus:outline-none focus:ring-4 focus:ring-primary/10 transition-all" placeholder="Buscar tenants, subdominios..." type="text" id="searchInput"/>
+</div>
+<button class="flex items-center justify-center size-10 rounded-xl text-slate-500 dark:text-slate-400 hover:bg-slate-100 dark:hover:bg-surface-highlight transition-colors relative">
+    <span class="material-symbols-outlined text-[24px]">notifications</span>
+    <span class="absolute top-2.5 right-2.5 size-2 bg-accent-rose rounded-full border border-white dark:border-background-dark"></span>
+</button>
+<button class="hidden sm:flex items-center gap-2 bg-primary hover:bg-primary-dark text-white px-4 py-2 rounded-xl font-medium text-sm transition-all shadow-lg shadow-primary/25 hover:shadow-primary/40 active:scale-95" onclick="window.location.href='/signup'">
+    <span class="material-symbols-outlined text-[20px]">add</span>
+    <span>Nuevo Tenant</span>
+</button>
+{% endblock %}
+
+{% block content %}
+<!-- Metrics Cards -->
+<div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6">
+    <!-- Revenue Card -->
+    <div class="metric-card card-revenue p-6 rounded-2xl bg-surface-dark border border-blue-500/30 shadow-lg relative overflow-hidden group cursor-pointer">
+        <div class="absolute top-0 right-0 p-4 opacity-20 group-hover:opacity-40 transition-opacity floating-icon">
+            <span class="material-symbols-outlined text-[64px] text-blue-400">payments</span>
+        </div>
+        <div class="flex flex-col gap-1 relative z-10">
+            <p class="text-sm font-medium text-slate-300">Ingresos Totales</p>
+            <div class="flex items-baseline gap-2">
+                <h3 id="metric-revenue" class="metric-value text-3xl font-bold text-white">$0</h3>
+                <span class="text-xs font-medium text-blue-300">/mes</span>
+            </div>
+            <div class="flex items-center gap-1 mt-3">
+                <span class="flex items-center justify-center size-6 rounded-full bg-emerald-500/20 text-emerald-400">
+                    <span class="material-symbols-outlined text-[16px]">trending_up</span>
+                </span>
+                <span class="text-sm font-semibold text-emerald-400">+5.2%</span>
+                <span class="text-xs text-slate-400 ml-1">vs mes anterior</span>
+            </div>
+        </div>
+    </div>
+    
+    <!-- Active Tenants Card -->
+    <div class="metric-card card-tenants p-6 rounded-2xl bg-surface-dark border border-cyan-500/30 shadow-lg relative overflow-hidden group cursor-pointer">
+        <div class="absolute top-0 right-0 p-4 opacity-20 group-hover:opacity-40 transition-opacity floating-icon">
+            <span class="material-symbols-outlined text-[64px] text-cyan-400">domain</span>
+        </div>
+        <div class="flex flex-col gap-1 relative z-10">
+            <p class="text-sm font-medium text-slate-300">Tenants Activos</p>
+            <h3 id="metric-active" class="metric-value text-3xl font-bold text-white">0</h3>
+            <div class="flex items-center gap-1 mt-3">
+                <span class="flex items-center justify-center size-6 rounded-full bg-cyan-500/20 text-cyan-400">
+                    <span class="material-symbols-outlined text-[16px]">trending_up</span>
+                </span>
+                <span class="text-sm font-semibold text-cyan-400">+12</span>
+                <span class="text-xs text-slate-400 ml-1">nuevos este mes</span>
+            </div>
+        </div>
+    </div>
+    
+    <!-- Pending Setup Card -->
+    <div class="metric-card card-pending p-6 rounded-2xl bg-surface-dark border border-amber-500/30 shadow-lg relative overflow-hidden group cursor-pointer">
+        <div class="absolute top-0 right-0 p-4 opacity-20 group-hover:opacity-40 transition-opacity floating-icon">
+            <span class="material-symbols-outlined text-[64px] text-amber-400">person_add</span>
+        </div>
+        <div class="flex flex-col gap-1 relative z-10">
+            <p class="text-sm font-medium text-slate-300">Pendientes de Setup</p>
+            <h3 id="metric-pending" class="metric-value text-3xl font-bold text-white">0</h3>
+            <div class="flex items-center gap-1 mt-3">
+                <span class="flex items-center justify-center size-6 rounded-full bg-amber-500/20 text-amber-400 animate-pulse">
+                    <span class="material-symbols-outlined text-[16px]">schedule</span>
+                </span>
+                <span class="text-sm font-semibold text-amber-400">Procesando</span>
+                <span class="text-xs text-slate-400 ml-1">requiere atención</span>
+            </div>
+        </div>
+    </div>
+    
+    <!-- Cluster Load Card -->
+    <div class="metric-card card-cluster p-6 rounded-2xl bg-surface-dark border border-purple-500/30 shadow-lg relative overflow-hidden group cursor-pointer">
+        <div class="absolute top-0 right-0 p-4 opacity-20 group-hover:opacity-40 transition-opacity floating-icon">
+            <span class="material-symbols-outlined text-[64px] text-purple-400">memory</span>
+        </div>
+        <div class="flex flex-col gap-1 relative z-10">
+            <p class="text-sm font-medium text-slate-300">Carga del Cluster</p>
+            <div class="flex items-baseline gap-2">
+                <h3 id="metric-cpu" class="metric-value text-3xl font-bold text-white">0%</h3>
+                <span class="text-xs font-medium text-purple-300">CPU</span>
+            </div>
+            <div class="w-full bg-slate-700/50 h-2 rounded-full mt-3 overflow-hidden">
+                <div id="metric-cpu-bar" class="progress-bar-animated bg-gradient-to-r from-purple-500 via-pink-500 to-rose-500 h-full rounded-full transition-all duration-1000" style="width: 0%"></div>
+            </div>
+            <div class="flex justify-between mt-2">
+                <span id="metric-ram" class="text-sm text-slate-300">RAM: 0%</span>
+                <span id="health-status" class="text-sm text-emerald-400 font-medium flex items-center gap-1">
+                    <span class="size-2 rounded-full bg-emerald-400 animate-pulse"></span>
+                    Healthy
+                </span>
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- Recent Tenants Table -->
+<div class="flex flex-col gap-4">
+    <div class="flex flex-wrap items-center justify-between gap-4">
+        <h3 class="text-xl font-bold text-white flex items-center gap-3">
+            <span class="material-symbols-outlined text-cyan-400">groups</span>
+            Onboarding Reciente
+            <span id="tenant-count" class="px-3 py-1 rounded-full bg-cyan-500/20 text-sm font-medium text-cyan-400 border border-cyan-500/30">0</span>
+        </h3>
+        <div class="flex gap-2">
+            <button class="flex items-center gap-2 px-4 py-2 rounded-xl bg-slate-800 border border-slate-700 text-slate-300 text-sm font-medium hover:bg-slate-700 hover:border-slate-600 transition-all">
+                <span class="material-symbols-outlined text-[18px]">filter_list</span>
+                Filtrar
+            </button>
+            <button class="flex items-center gap-2 px-4 py-2 rounded-xl bg-slate-800 border border-slate-700 text-slate-300 text-sm font-medium hover:bg-slate-700 hover:border-slate-600 transition-all">
+                <span class="material-symbols-outlined text-[18px]">download</span>
+                Exportar
+            </button>
+        </div>
+    </div>
+    
+    <div class="bg-surface-dark border border-slate-700/50 rounded-2xl overflow-hidden shadow-xl">
+        <div class="overflow-x-auto">
+            <table class="w-full text-left border-collapse">
+                <thead>
+                    <tr class="border-b border-slate-700/50 bg-slate-800/50 text-xs uppercase tracking-wider text-slate-400 font-semibold">
+                        <th class="px-6 py-4">Cliente</th>
+                        <th class="px-6 py-4">Subdominio</th>
+                        <th class="px-6 py-4">Plan</th>
+                        <th class="px-6 py-4">Estado</th>
+                        <th class="px-6 py-4 text-right">Fecha Creación</th>
+                        <th class="px-6 py-4 text-center">Acciones</th>
+                    </tr>
+                </thead>
+                <tbody id="tenant-body" class="divide-y divide-slate-700/30">
+                    <!-- Dynamic content loaded via JS -->
+                </tbody>
+            </table>
+        </div>
+    </div>
+</div>
+{% endblock %}
+
+{% block extra_scripts %}
+<script>
+document.addEventListener("DOMContentLoaded", () => {
+    // Add entrance animation to cards
+    const cards = document.querySelectorAll('.metric-card');
+    cards.forEach((card, index) => {
+        card.style.opacity = '0';
+        card.style.transform = 'translateY(20px)';
+        setTimeout(() => {
+            card.style.transition = 'all 0.5s ease-out';
+            card.style.opacity = '1';
+            card.style.transform = 'translateY(0)';
+        }, 100 * index);
+    });
+
+    loadMetrics();
+    loadTenants();
+    
+    // Auto-refresh metrics every 30 seconds
+    setInterval(loadMetrics, 30000);
+});
+
+async function loadMetrics() {
+    try {
+        const res = await fetch("/api/dashboard/metrics", {credentials: 'include'});
+        if (!res.ok) {
+            if (res.status === 401) {
+                window.location.href = '/login/admin';
+                return;
+            }
+            throw new Error("metrics failed");
+        }
+        const data = await res.json();
+        
+        // Animate number changes
+        animateValue("metric-revenue", `$${numberFmt(data.total_revenue)}`);
+        animateValue("metric-active", data.active_tenants ?? 0);
+        animateValue("metric-pending", data.pending_setup ?? 0);
+        
+        const cpu = data.cluster_load?.cpu ?? 0;
+        const ram = data.cluster_load?.ram ?? 0;
+        animateValue("metric-cpu", `${cpu}%`);
+        setText("metric-ram", `RAM: ${ram}%`);
+        
+        // Animate progress bar
+        const bar = document.getElementById("metric-cpu-bar");
+        if (bar) {
+            bar.style.width = `${cpu}%`;
+        }
+        
+        // Update health status with color
+        const healthEl = document.getElementById("health-status");
+        if (healthEl) {
+            if (cpu > 80 || ram > 85) {
+                healthEl.innerHTML = '<span class="size-2 rounded-full bg-rose-400 animate-pulse"></span><span class="text-rose-400">Critical</span>';
+            } else if (cpu > 60 || ram > 70) {
+                healthEl.innerHTML = '<span class="size-2 rounded-full bg-amber-400 animate-pulse"></span><span class="text-amber-400">Warning</span>';
+            } else {
+                healthEl.innerHTML = '<span class="size-2 rounded-full bg-emerald-400 animate-pulse"></span><span class="text-emerald-400">Healthy</span>';
+            }
+        }
+    } catch (err) {
+        console.error("metrics error", err);
+    }
+}
+
+function animateValue(id, newValue) {
+    const el = document.getElementById(id);
+    if (!el) return;
+    el.style.opacity = '0';
+    el.style.transform = 'translateY(-10px)';
+    setTimeout(() => {
+        el.textContent = newValue;
+        el.style.transition = 'all 0.3s ease-out';
+        el.style.opacity = '1';
+        el.style.transform = 'translateY(0)';
+    }, 150);
+}
+
+async function loadTenants() {
+    const body = document.getElementById("tenant-body");
+    if (!body) return;
+    body.innerHTML = "";
+    try {
+        const res = await fetch("/api/tenants", {credentials: 'include'});
+        if (!res.ok) {
+            if (res.status === 401) {
+                window.location.href = '/login/admin';
+                return;
+            }
+            throw new Error("tenants failed");
+        }
+        const data = await res.json();
+        const items = data.items || [];
+        setText("tenant-count", items.length);
+        items.forEach((t) => body.appendChild(renderTenantRow(t)));
+        if (items.length === 0) {
+            const tr = document.createElement("tr");
+            const td = document.createElement("td");
+            td.colSpan = 6;
+            td.className = "px-6 py-12 text-center";
+            td.innerHTML = `
+                <div class="flex flex-col items-center gap-4">
+                    <div class="size-20 rounded-2xl bg-slate-800 flex items-center justify-center">
+                        <span class="material-symbols-outlined text-[48px] text-slate-600">inbox</span>
+                    </div>
+                    <div>
+                        <p class="text-lg font-medium text-slate-300">No hay tenants todavía</p>
+                        <p class="text-sm text-slate-500 mt-1">Crea tu primer tenant para comenzar</p>
+                    </div>
+                    <a href="/signup" class="mt-2 inline-flex items-center gap-2 bg-primary hover:bg-primary-dark text-white px-6 py-3 rounded-xl font-medium transition-all shadow-lg shadow-primary/25 hover:shadow-primary/40">
+                        <span class="material-symbols-outlined text-[20px]">add</span>
+                        Crear primer tenant
+                    </a>
+                </div>
+            `;
+            tr.appendChild(td);
+            body.appendChild(tr);
+        }
+    } catch (err) {
+        console.error("tenants error", err);
+    }
+}
+
+function renderTenantRow(t) {
+    const tr = document.createElement("tr");
+    tr.className = "group hover:bg-slate-800/60 transition-all duration-200 cursor-pointer";
+
+    const badge = buildStatusBadge(t.status);
+    const tunnelIcon = t.tunnel_active
+        ? '<span class="material-symbols-outlined text-[16px] text-emerald-400 animate-pulse" title="Tunnel Activo">link</span>'
+        : '<span class="material-symbols-outlined text-[16px] text-slate-500" title="Tunnel Inactivo">link_off</span>';
+
+    // Color del avatar basado en el plan
+    const planColors = {
+        'basic': 'bg-slate-500/20 text-slate-400',
+        'pro': 'bg-blue-500/20 text-blue-400',
+        'enterprise': 'bg-purple-500/20 text-purple-400'
+    };
+    const avatarClass = planColors[t.plan] || planColors.basic;
+
+    // Color del plan
+    const planBadgeColors = {
+        'basic': 'bg-slate-500/20 text-slate-300 border-slate-500/30',
+        'pro': 'bg-blue-500/20 text-blue-400 border-blue-500/30',
+        'enterprise': 'bg-purple-500/20 text-purple-400 border-purple-500/30'
+    };
+    const planBadgeClass = planBadgeColors[t.plan] || planBadgeColors.basic;
+
+    tr.innerHTML = `
+        <td class="px-6 py-4">
+            <div class="flex items-center gap-3">
+                <div class="size-10 rounded-xl ${avatarClass} flex items-center justify-center font-bold text-sm border border-current/20">${initials(t.company_name)}</div>
+                <div>
+                    <p class="text-sm font-semibold text-white">${escapeHtml(t.company_name)}</p>
+                    <p class="text-xs text-slate-400">${escapeHtml(t.email || "")}</p>
+                </div>
+            </div>
+        </td>
+        <td class="px-6 py-4">
+            <div class="flex items-center gap-2">
+                <span class="text-sm text-cyan-400 font-mono bg-cyan-500/10 px-2 py-1 rounded-lg">${escapeHtml(t.subdomain)}</span>
+                ${tunnelIcon}
+            </div>
+        </td>
+        <td class="px-6 py-4">
+            <span class="text-xs font-medium px-2.5 py-1 rounded-lg border ${planBadgeClass} capitalize">${escapeHtml(t.plan || "-")}</span>
+        </td>
+        <td class="px-6 py-4">${badge}</td>
+        <td class="px-6 py-4 text-right">
+            <span class="text-sm text-slate-400 font-mono">${formatDate(t.created_at)}</span>
+        </td>
+        <td class="px-6 py-4 text-center">
+            <button class="size-9 rounded-xl flex items-center justify-center text-slate-400 hover:text-white hover:bg-slate-700 transition-all mx-auto group-hover:bg-slate-700/50">
+                <span class="material-symbols-outlined text-[20px]">more_vert</span>
+            </button>
+        </td>`;
+    return tr;
+}
+
+function buildStatusBadge(status) {
+    const map = {
+        active: { cls: "bg-emerald-500/20 text-emerald-400 border border-emerald-500/40 shadow-lg shadow-emerald-500/20", label: "Activo", dot: "" },
+        provisioning: { cls: "bg-amber-500/20 text-amber-400 border border-amber-500/40 shadow-lg shadow-amber-500/20", label: "Provisionando", dot: "animate-spin" },
+        pending: { cls: "bg-yellow-500/20 text-yellow-400 border border-yellow-500/40", label: "Pendiente", dot: "animate-pulse" },
+        payment_failed: { cls: "bg-rose-500/20 text-rose-400 border border-rose-500/40 shadow-lg shadow-rose-500/20", label: "Pago Fallido", dot: "" },
+        cancelled: { cls: "bg-slate-500/20 text-slate-400 border border-slate-500/40", label: "Cancelado", dot: "" },
+        suspended: { cls: "bg-red-500/20 text-red-400 border border-red-500/40", label: "Suspendido", dot: "" },
+    };
+    const cfg = map[status] || map.pending;
+    return `<span class="inline-flex items-center gap-2 px-3 py-1.5 rounded-full text-xs font-semibold ${cfg.cls}"><span class="size-2 rounded-full bg-current ${cfg.dot}"></span>${cfg.label}</span>`;
+}
+
+function initials(name = "?") {
+    return (name.trim()[0] || "?").toUpperCase();
+}
+
+function formatDate(value) {
+    if (!value) return "-";
+    const d = new Date(value);
+    if (Number.isNaN(d.getTime())) return value;
+    return d.toLocaleDateString('es-ES', { day: '2-digit', month: 'short', year: 'numeric' });
+}
+
+function numberFmt(n) {
+    const num = Number(n || 0);
+    return num.toLocaleString("es-ES", { minimumFractionDigits: 0, maximumFractionDigits: 0 });
+}
+
+function escapeHtml(str = "") {
+    return str
+        .replace(/&/g, "&amp;")
+        .replace(/</g, "&lt;")
+        .replace(/>/g, "&gt;")
+        .replace(/"/g, "&quot;")
+        .replace(/'/g, "&#39;");
+}
+
+function setText(id, value) {
+    const el = document.getElementById(id);
+    if (el) el.textContent = value;
+}
+</script>
+{% endblock %}

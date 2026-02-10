@@ -1,0 +1,433 @@
+<!DOCTYPE html>
+
+<html class="dark" lang="en"><head>
+<meta charset="utf-8"/>
+<meta content="width=device-width, initial-scale=1.0" name="viewport"/>
+<title>Billing &amp; Payment History - Jeturing Cloud</title>
+<link href="https://fonts.googleapis.com" rel="preconnect"/>
+<link crossorigin="" href="https://fonts.gstatic.com" rel="preconnect"/>
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;900&amp;display=swap" rel="stylesheet"/>
+<link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:wght,FILL@100..700,0..1&amp;display=swap" rel="stylesheet"/>
+<link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:wght,FILL@100..700,0..1&amp;display=swap" rel="stylesheet"/>
+<script src="https://cdn.tailwindcss.com?plugins=forms,container-queries"></script>
+<script id="tailwind-config">
+        tailwind.config = {
+            darkMode: "class",
+            theme: {
+                extend: {
+                    colors: {
+                        "primary": "#25c0f4",
+                        "background-light": "#f5f8f8",
+                        "background-dark": "#101e22",
+                        "surface-dark": "#16262c",
+                        "border-dark": "#223f49",
+                        "text-secondary": "#90bccb",
+                    },
+                    fontFamily: {
+                        "display": ["Inter", "sans-serif"],
+                        "sans": ["Inter", "sans-serif"]
+                    },
+                    borderRadius: {"DEFAULT": "0.5rem", "lg": "1rem", "xl": "1.5rem", "full": "9999px"},
+                },
+            },
+        }
+    </script>
+<style>
+        /* Custom scrollbar for table */
+        .custom-scrollbar::-webkit-scrollbar {
+            height: 8px;
+            width: 8px;
+        }
+        .custom-scrollbar::-webkit-scrollbar-track {
+            background: #101e22;
+        }
+        .custom-scrollbar::-webkit-scrollbar-thumb {
+            background: #223f49;
+            border-radius: 4px;
+        }
+        .custom-scrollbar::-webkit-scrollbar-thumb:hover {
+            background: #315a68;
+        }
+        
+        .glass-card {
+            background: rgba(255, 255, 255, 0.03);
+            backdrop-filter: blur(10px);
+            -webkit-backdrop-filter: blur(10px);
+            border: 1px solid rgba(255, 255, 255, 0.08);
+            box-shadow: 0 4px 30px rgba(0, 0, 0, 0.1);
+        }
+    </style>
+</head>
+<body class="bg-background-light dark:bg-background-dark text-slate-900 dark:text-white font-display antialiased selection:bg-primary selection:text-black">
+<div class="relative flex h-auto min-h-screen w-full flex-col overflow-x-hidden">
+<!-- Ambient Background Gradients -->
+<div class="fixed top-0 left-0 w-full h-96 bg-primary/5 blur-[100px] rounded-full pointer-events-none -translate-y-1/2"></div>
+<div class="fixed bottom-0 right-0 w-96 h-96 bg-blue-600/10 blur-[120px] rounded-full pointer-events-none translate-y-1/2"></div>
+<!-- Top Navigation -->
+<header class="sticky top-0 z-50 flex items-center justify-between whitespace-nowrap border-b border-solid border-border-dark bg-[#101e23]/90 backdrop-blur-md px-4 md:px-10 py-3">
+<div class="flex items-center gap-4 text-white">
+<div class="size-8 flex items-center justify-center text-primary">
+<span class="material-symbols-outlined text-[32px]">cloud_circle</span>
+</div>
+<h2 class="text-white text-lg font-bold leading-tight tracking-[-0.015em]">Jeturing Cloud</h2>
+</div>
+<div class="hidden md:flex flex-1 justify-end gap-8">
+<nav class="flex items-center gap-9">
+<a class="text-text-secondary hover:text-white transition-colors text-sm font-medium leading-normal" href="#">Dashboard</a>
+<a class="text-text-secondary hover:text-white transition-colors text-sm font-medium leading-normal" href="#">Tenants</a>
+<a class="text-white text-sm font-medium leading-normal" href="#">Billing</a>
+<a class="text-text-secondary hover:text-white transition-colors text-sm font-medium leading-normal" href="#">Settings</a>
+</nav>
+<div class="flex gap-2">
+<button class="flex size-10 cursor-pointer items-center justify-center overflow-hidden rounded-xl bg-surface-dark text-white hover:bg-border-dark transition-colors">
+<span class="material-symbols-outlined text-[20px]">notifications</span>
+</button>
+<button class="flex size-10 cursor-pointer items-center justify-center overflow-hidden rounded-xl bg-surface-dark text-white hover:bg-border-dark transition-colors">
+<span class="material-symbols-outlined text-[20px]">help</span>
+</button>
+<button class="flex h-10 cursor-pointer items-center justify-center overflow-hidden rounded-xl bg-surface-dark text-white gap-2 px-2.5 hover:bg-border-dark transition-colors">
+<div class="size-6 rounded-full bg-gradient-to-tr from-primary to-blue-600" data-alt="User Avatar Abstract Gradient"></div>
+<span class="material-symbols-outlined text-[20px]">expand_more</span>
+</button>
+</div>
+</div>
+<!-- Mobile Menu Toggle -->
+<button class="md:hidden flex size-10 items-center justify-center text-white">
+<span class="material-symbols-outlined">menu</span>
+</button>
+</header>
+<div class="layout-container flex h-full grow flex-col px-4 md:px-10 lg:px-40 py-5 z-10">
+<div class="layout-content-container flex flex-col max-w-[1200px] w-full mx-auto flex-1">
+<!-- Breadcrumbs -->
+<div class="flex flex-wrap gap-2 px-4 py-2 mb-2">
+<a class="text-text-secondary hover:text-primary transition-colors text-sm font-medium leading-normal flex items-center gap-1" href="#">
+<span class="material-symbols-outlined text-[16px]">home</span>
+                    Dashboard
+                </a>
+<span class="text-text-secondary text-sm font-medium leading-normal">/</span>
+<span class="text-white text-sm font-medium leading-normal">Billing &amp; Payment History</span>
+</div>
+<!-- Page Heading -->
+<div class="flex flex-wrap justify-between gap-6 px-4 pb-6">
+<div class="flex min-w-72 flex-col gap-2">
+<h1 class="text-white text-3xl md:text-4xl font-black leading-tight tracking-[-0.033em]">Billing &amp; Payment History</h1>
+<p class="text-text-secondary text-base font-normal leading-normal max-w-2xl">Manage your invoices, track revenue streams, and view detailed transaction history for all tenants.</p>
+</div>
+<div class="flex items-center gap-3">
+<button class="flex items-center justify-center rounded-xl h-10 bg-surface-dark border border-border-dark text-white gap-2 text-sm font-bold px-4 hover:bg-border-dark transition-colors">
+<span class="material-symbols-outlined text-[20px]">calendar_today</span>
+<span>Last 30 Days</span>
+</button>
+<button class="flex items-center justify-center rounded-xl h-10 bg-primary text-[#101e23] gap-2 text-sm font-bold px-4 hover:bg-primary/90 transition-colors shadow-[0_0_15px_rgba(37,192,244,0.3)]">
+<span class="material-symbols-outlined text-[20px] font-bold">add</span>
+<span>Create Invoice</span>
+</button>
+</div>
+</div>
+<!-- Metrics / Stats (Glassmorphism) -->
+<div class="grid grid-cols-1 md:grid-cols-3 gap-4 px-4 mb-8">
+<!-- Card 1 -->
+<div class="glass-card flex flex-col gap-1 rounded-xl p-6 relative overflow-hidden group">
+<div class="absolute top-0 right-0 p-4 opacity-20 group-hover:opacity-40 transition-opacity">
+<span class="material-symbols-outlined text-4xl text-primary">payments</span>
+</div>
+<p class="text-text-secondary text-sm font-medium leading-normal uppercase tracking-wider">Total Lifetime Revenue</p>
+<p class="text-white tracking-tight text-3xl font-bold leading-tight mt-1">$1,240,500.00</p>
+<div class="flex items-center gap-1 mt-2">
+<span class="bg-emerald-500/20 text-emerald-400 text-xs font-bold px-2 py-0.5 rounded-full flex items-center gap-1">
+<span class="material-symbols-outlined text-[14px]">trending_up</span> 12%
+                        </span>
+<p class="text-text-secondary text-xs font-medium leading-normal">vs last month</p>
+</div>
+</div>
+<!-- Card 2 -->
+<div class="glass-card flex flex-col gap-1 rounded-xl p-6 relative overflow-hidden group">
+<div class="absolute top-0 right-0 p-4 opacity-20 group-hover:opacity-40 transition-opacity">
+<span class="material-symbols-outlined text-4xl text-purple-400">autorenew</span>
+</div>
+<p class="text-text-secondary text-sm font-medium leading-normal uppercase tracking-wider">Monthly Recurring (MRR)</p>
+<p class="text-white tracking-tight text-3xl font-bold leading-tight mt-1">$85,200.00</p>
+<div class="flex items-center gap-1 mt-2">
+<span class="bg-emerald-500/20 text-emerald-400 text-xs font-bold px-2 py-0.5 rounded-full flex items-center gap-1">
+<span class="material-symbols-outlined text-[14px]">trending_up</span> 5%
+                        </span>
+<p class="text-text-secondary text-xs font-medium leading-normal">vs last month</p>
+</div>
+</div>
+<!-- Card 3 -->
+<div class="glass-card flex flex-col gap-1 rounded-xl p-6 relative overflow-hidden group">
+<div class="absolute top-0 right-0 p-4 opacity-20 group-hover:opacity-40 transition-opacity">
+<span class="material-symbols-outlined text-4xl text-orange-400">pending_actions</span>
+</div>
+<p class="text-text-secondary text-sm font-medium leading-normal uppercase tracking-wider">Pending Invoices</p>
+<div class="flex items-baseline gap-2 mt-1">
+<p class="text-white tracking-tight text-3xl font-bold leading-tight">5</p>
+<p class="text-white/60 text-lg font-medium">($12,450.00)</p>
+</div>
+<div class="flex items-center gap-1 mt-2">
+<span class="bg-orange-500/20 text-orange-400 text-xs font-bold px-2 py-0.5 rounded-full flex items-center gap-1">
+<span class="material-symbols-outlined text-[14px]">warning</span> 2 Overdue
+                        </span>
+<p class="text-text-secondary text-xs font-medium leading-normal">Action required</p>
+</div>
+</div>
+</div>
+<!-- Toolbar -->
+<div class="flex flex-col md:flex-row justify-between gap-4 px-4 py-3 mb-2 bg-surface-dark/50 border-y border-border-dark md:rounded-lg md:border md:mx-4">
+<div class="flex flex-1 gap-2 relative">
+<span class="absolute left-3 top-1/2 -translate-y-1/2 text-text-secondary">
+<span class="material-symbols-outlined text-[20px]">search</span>
+</span>
+<input class="w-full md:max-w-md h-10 pl-10 pr-4 bg-[#101e23] border border-border-dark rounded-lg text-white text-sm focus:outline-none focus:border-primary placeholder:text-text-secondary/70" placeholder="Search by transaction ID or client..." type="text"/>
+<button class="hidden md:flex items-center justify-center w-10 h-10 rounded-lg border border-border-dark bg-[#101e23] text-text-secondary hover:text-white hover:border-primary/50 transition-colors">
+<span class="material-symbols-outlined text-[20px]">tune</span>
+</button>
+</div>
+<div class="flex gap-2">
+<div class="relative">
+<select class="h-10 pl-3 pr-8 bg-[#101e23] border border-border-dark rounded-lg text-white text-sm focus:outline-none focus:border-primary appearance-none cursor-pointer min-w-[140px]">
+<option>All Statuses</option>
+<option>Paid</option>
+<option>Pending</option>
+<option>Refunded</option>
+</select>
+<span class="absolute right-2 top-1/2 -translate-y-1/2 text-text-secondary pointer-events-none">
+<span class="material-symbols-outlined text-[20px]">arrow_drop_down</span>
+</span>
+</div>
+<button class="flex items-center justify-center h-10 bg-surface-dark border border-border-dark text-text-secondary hover:text-white gap-2 text-sm font-bold px-4 rounded-lg hover:bg-border-dark transition-colors">
+<span class="material-symbols-outlined text-[20px]">download</span>
+<span class="hidden sm:inline">Export</span>
+</button>
+</div>
+</div>
+<!-- Transaction Table -->
+<div class="px-4">
+<div class="overflow-hidden rounded-xl border border-border-dark bg-surface-dark">
+<div class="overflow-x-auto custom-scrollbar">
+<table class="w-full text-left border-collapse">
+<thead>
+<tr class="border-b border-border-dark bg-[#1b2d35]">
+<th class="p-4 text-xs font-semibold tracking-wide text-text-secondary uppercase">Transaction ID</th>
+<th class="p-4 text-xs font-semibold tracking-wide text-text-secondary uppercase">Date</th>
+<th class="p-4 text-xs font-semibold tracking-wide text-text-secondary uppercase">Client / Tenant</th>
+<th class="p-4 text-xs font-semibold tracking-wide text-text-secondary uppercase">Method</th>
+<th class="p-4 text-xs font-semibold tracking-wide text-text-secondary uppercase">Amount</th>
+<th class="p-4 text-xs font-semibold tracking-wide text-text-secondary uppercase">Status</th>
+<th class="p-4 text-xs font-semibold tracking-wide text-text-secondary uppercase text-right">Invoice</th>
+</tr>
+</thead>
+<tbody class="divide-y divide-border-dark">
+<!-- Row 1 -->
+<tr class="hover:bg-[#1b2d35]/50 transition-colors group">
+<td class="p-4">
+<span class="font-mono text-sm text-white">#INV-2023-001</span>
+</td>
+<td class="p-4">
+<span class="text-sm text-text-secondary">Oct 24, 2023</span>
+</td>
+<td class="p-4">
+<div class="flex items-center gap-3">
+<div class="size-8 rounded-full bg-blue-500/20 flex items-center justify-center text-blue-400 font-bold text-xs">AC</div>
+<div class="flex flex-col">
+<span class="text-sm font-medium text-white">Acme Corp</span>
+<span class="text-xs text-text-secondary">Enterprise Plan</span>
+</div>
+</div>
+</td>
+<td class="p-4">
+<div class="flex items-center gap-2 text-sm text-text-secondary">
+<span class="material-symbols-outlined text-[18px]">credit_card</span>
+                                            Stripe
+                                        </div>
+</td>
+<td class="p-4">
+<span class="text-sm font-bold text-white">$499.00</span>
+</td>
+<td class="p-4">
+<span class="inline-flex items-center gap-1 rounded-full bg-emerald-500/10 px-2.5 py-0.5 text-xs font-medium text-emerald-400 border border-emerald-500/20">
+<span class="size-1.5 rounded-full bg-emerald-400"></span>
+                                            Paid
+                                        </span>
+</td>
+<td class="p-4 text-right">
+<button class="inline-flex items-center justify-center rounded-lg p-2 text-text-secondary hover:bg-primary/20 hover:text-primary transition-colors">
+<span class="material-symbols-outlined text-[20px]">picture_as_pdf</span>
+</button>
+</td>
+</tr>
+<!-- Row 2 -->
+<tr class="hover:bg-[#1b2d35]/50 transition-colors group">
+<td class="p-4">
+<span class="font-mono text-sm text-white">#INV-2023-002</span>
+</td>
+<td class="p-4">
+<span class="text-sm text-text-secondary">Oct 23, 2023</span>
+</td>
+<td class="p-4">
+<div class="flex items-center gap-3">
+<div class="size-8 rounded-full bg-purple-500/20 flex items-center justify-center text-purple-400 font-bold text-xs">WE</div>
+<div class="flex flex-col">
+<span class="text-sm font-medium text-white">Wayne Enterprises</span>
+<span class="text-xs text-text-secondary">Pro Plan</span>
+</div>
+</div>
+</td>
+<td class="p-4">
+<div class="flex items-center gap-2 text-sm text-text-secondary">
+<span class="material-symbols-outlined text-[18px]">account_balance</span>
+                                            Wire Transfer
+                                        </div>
+</td>
+<td class="p-4">
+<span class="text-sm font-bold text-white">$2,500.00</span>
+</td>
+<td class="p-4">
+<span class="inline-flex items-center gap-1 rounded-full bg-amber-500/10 px-2.5 py-0.5 text-xs font-medium text-amber-400 border border-amber-500/20">
+<span class="size-1.5 rounded-full bg-amber-400 animate-pulse"></span>
+                                            Pending
+                                        </span>
+</td>
+<td class="p-4 text-right">
+<button class="inline-flex items-center justify-center rounded-lg p-2 text-text-secondary hover:bg-primary/20 hover:text-primary transition-colors">
+<span class="material-symbols-outlined text-[20px]">picture_as_pdf</span>
+</button>
+</td>
+</tr>
+<!-- Row 3 -->
+<tr class="hover:bg-[#1b2d35]/50 transition-colors group">
+<td class="p-4">
+<span class="font-mono text-sm text-white">#INV-2023-003</span>
+</td>
+<td class="p-4">
+<span class="text-sm text-text-secondary">Oct 21, 2023</span>
+</td>
+<td class="p-4">
+<div class="flex items-center gap-3">
+<div class="size-8 rounded-full bg-rose-500/20 flex items-center justify-center text-rose-400 font-bold text-xs">CS</div>
+<div class="flex flex-col">
+<span class="text-sm font-medium text-white">Cyberdyne Systems</span>
+<span class="text-xs text-text-secondary">Starter Plan</span>
+</div>
+</div>
+</td>
+<td class="p-4">
+<div class="flex items-center gap-2 text-sm text-text-secondary">
+<span class="material-symbols-outlined text-[18px]">credit_card</span>
+                                            Mastercard ••4242
+                                        </div>
+</td>
+<td class="p-4">
+<span class="text-sm font-bold text-white line-through decoration-rose-500/50 decoration-2">$120.00</span>
+</td>
+<td class="p-4">
+<span class="inline-flex items-center gap-1 rounded-full bg-rose-500/10 px-2.5 py-0.5 text-xs font-medium text-rose-400 border border-rose-500/20">
+<span class="material-symbols-outlined text-[12px]">undo</span>
+                                            Refunded
+                                        </span>
+</td>
+<td class="p-4 text-right">
+<button class="inline-flex items-center justify-center rounded-lg p-2 text-text-secondary hover:bg-primary/20 hover:text-primary transition-colors">
+<span class="material-symbols-outlined text-[20px]">picture_as_pdf</span>
+</button>
+</td>
+</tr>
+<!-- Row 4 -->
+<tr class="hover:bg-[#1b2d35]/50 transition-colors group">
+<td class="p-4">
+<span class="font-mono text-sm text-white">#INV-2023-004</span>
+</td>
+<td class="p-4">
+<span class="text-sm text-text-secondary">Oct 20, 2023</span>
+</td>
+<td class="p-4">
+<div class="flex items-center gap-3">
+<div class="size-8 rounded-full bg-teal-500/20 flex items-center justify-center text-teal-400 font-bold text-xs">MI</div>
+<div class="flex flex-col">
+<span class="text-sm font-medium text-white">Massive Dynamic</span>
+<span class="text-xs text-text-secondary">Enterprise Plan</span>
+</div>
+</div>
+</td>
+<td class="p-4">
+<div class="flex items-center gap-2 text-sm text-text-secondary">
+<span class="material-symbols-outlined text-[18px]">credit_card</span>
+                                            Visa ••8899
+                                        </div>
+</td>
+<td class="p-4">
+<span class="text-sm font-bold text-white">$1,299.00</span>
+</td>
+<td class="p-4">
+<span class="inline-flex items-center gap-1 rounded-full bg-emerald-500/10 px-2.5 py-0.5 text-xs font-medium text-emerald-400 border border-emerald-500/20">
+<span class="size-1.5 rounded-full bg-emerald-400"></span>
+                                            Paid
+                                        </span>
+</td>
+<td class="p-4 text-right">
+<button class="inline-flex items-center justify-center rounded-lg p-2 text-text-secondary hover:bg-primary/20 hover:text-primary transition-colors">
+<span class="material-symbols-outlined text-[20px]">picture_as_pdf</span>
+</button>
+</td>
+</tr>
+<!-- Row 5 -->
+<tr class="hover:bg-[#1b2d35]/50 transition-colors group">
+<td class="p-4">
+<span class="font-mono text-sm text-white">#INV-2023-005</span>
+</td>
+<td class="p-4">
+<span class="text-sm text-text-secondary">Oct 18, 2023</span>
+</td>
+<td class="p-4">
+<div class="flex items-center gap-3">
+<div class="size-8 rounded-full bg-indigo-500/20 flex items-center justify-center text-indigo-400 font-bold text-xs">GL</div>
+<div class="flex flex-col">
+<span class="text-sm font-medium text-white">Globex Corp</span>
+<span class="text-xs text-text-secondary">Pro Plan</span>
+</div>
+</div>
+</td>
+<td class="p-4">
+<div class="flex items-center gap-2 text-sm text-text-secondary">
+<span class="material-symbols-outlined text-[18px]">credit_card</span>
+                                            PayPal
+                                        </div>
+</td>
+<td class="p-4">
+<span class="text-sm font-bold text-white">$249.00</span>
+</td>
+<td class="p-4">
+<span class="inline-flex items-center gap-1 rounded-full bg-emerald-500/10 px-2.5 py-0.5 text-xs font-medium text-emerald-400 border border-emerald-500/20">
+<span class="size-1.5 rounded-full bg-emerald-400"></span>
+                                            Paid
+                                        </span>
+</td>
+<td class="p-4 text-right">
+<button class="inline-flex items-center justify-center rounded-lg p-2 text-text-secondary hover:bg-primary/20 hover:text-primary transition-colors">
+<span class="material-symbols-outlined text-[20px]">picture_as_pdf</span>
+</button>
+</td>
+</tr>
+</tbody>
+</table>
+</div>
+<!-- Pagination -->
+<div class="flex items-center justify-between border-t border-border-dark px-4 py-3 bg-[#1b2d35]">
+<p class="text-sm text-text-secondary">
+                            Showing <span class="font-medium text-white">1</span> to <span class="font-medium text-white">5</span> of <span class="font-medium text-white">128</span> results
+                        </p>
+<div class="flex gap-2">
+<button class="flex items-center justify-center px-3 py-1.5 rounded-lg border border-border-dark bg-[#101e23] text-sm font-medium text-text-secondary opacity-50 cursor-not-allowed">
+                                Previous
+                            </button>
+<button class="flex items-center justify-center px-3 py-1.5 rounded-lg border border-border-dark bg-[#101e23] text-sm font-medium text-text-secondary hover:text-white hover:border-primary/50 hover:bg-surface-dark transition-colors">
+                                Next
+                            </button>
+</div>
+</div>
+</div>
+</div>
+</div>
+</div>
+</div>
+</body></html>

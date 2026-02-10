@@ -1,0 +1,300 @@
+<!DOCTYPE html>
+
+<html class="dark" lang="en"><head>
+<meta charset="utf-8"/>
+<meta content="width=device-width, initial-scale=1.0" name="viewport"/>
+<title>Customer &amp; Tenant Management - Jeturing Cloud</title>
+<link href="https://fonts.googleapis.com" rel="preconnect"/>
+<link crossorigin="" href="https://fonts.gstatic.com" rel="preconnect"/>
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;700&amp;display=swap" rel="stylesheet"/>
+<link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:wght,FILL@100..700,0..1&amp;display=swap" rel="stylesheet"/>
+<link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:wght,FILL@100..700,0..1&amp;display=swap" rel="stylesheet"/>
+<script src="https://cdn.tailwindcss.com?plugins=forms,container-queries"></script>
+<script id="tailwind-config">
+        tailwind.config = {
+            darkMode: "class",
+            theme: {
+                extend: {
+                    colors: {
+                        "primary": "#25c0f4",
+                        "background-light": "#f5f8f8",
+                        "background-dark": "#101e23", // Matching the component's dark bg
+                        "surface-dark": "#16262c",
+                        "border-dark": "#223f49",
+                        "text-secondary": "#90bccb"
+                    },
+                    fontFamily: {
+                        "display": ["Inter", "sans-serif"]
+                    },
+                    borderRadius: { "DEFAULT": "0.5rem", "lg": "1rem", "xl": "1.5rem", "full": "9999px" },
+                },
+            },
+        }
+    </script>
+<style>
+        body {
+            font-family: 'Inter', sans-serif;
+        }
+        /* Hide scrollbar for cleaner look in demos */
+        ::-webkit-scrollbar {
+            width: 8px;
+            height: 8px;
+        }
+        ::-webkit-scrollbar-track {
+            background: #101e23; 
+        }
+        ::-webkit-scrollbar-thumb {
+            background: #223f49; 
+            border-radius: 4px;
+        }
+        ::-webkit-scrollbar-thumb:hover {
+            background: #25c0f4; 
+        }
+    </style>
+</head>
+<body class="bg-background-light dark:bg-background-dark text-slate-900 dark:text-white min-h-screen flex flex-col font-display">
+<!-- Top Navigation -->
+<header class="flex items-center justify-between whitespace-nowrap border-b border-solid border-border-dark px-10 py-3 bg-background-dark">
+<div class="flex items-center gap-4 text-white">
+<div class="size-6 text-primary">
+<span class="material-symbols-outlined text-[28px]">cloud_circle</span>
+</div>
+<h2 class="text-white text-lg font-bold leading-tight tracking-[-0.015em]">Jeturing Cloud</h2>
+</div>
+<div class="flex flex-1 justify-end gap-8">
+<div class="flex gap-2">
+<button class="flex size-10 cursor-pointer items-center justify-center overflow-hidden rounded-xl bg-border-dark text-white hover:bg-opacity-80 transition-colors">
+<span class="material-symbols-outlined text-[20px]">notifications</span>
+</button>
+<button class="flex size-10 cursor-pointer items-center justify-center overflow-hidden rounded-xl bg-border-dark text-white hover:bg-opacity-80 transition-colors">
+<span class="material-symbols-outlined text-[20px]">settings</span>
+</button>
+</div>
+<div class="bg-center bg-no-repeat bg-cover rounded-full size-10 border border-border-dark" data-alt="User profile avatar showing a smiling person" style='background-image: url("https://lh3.googleusercontent.com/aida-public/AB6AXuDZUawDD8rJ_B_uGXZQ1nGc-SJkFvfHnPQXraMQcay2k3NyQ_fb55BYc0WdY7NGfC55QBK6QKSsgN6VnUQ9lHTdMDQnj5y6U6IsglmcoB0_mtCNboiKlbmlsfV1KxQtMZ1-Gs7kHxQuEFnOv0c7df2OYIxmtio0fBBHAdLjoPPImag_1GsBsAALe5zo72hPBdN_wS7MBKjA2fx51VeO-SuUywgXSFEP4bXcVMSZEBEmhkQfCIyXaLdb1xVJGHrXCJ9O6Ym6XLdFWNw");'></div>
+</div>
+</header>
+<!-- Main Layout Container -->
+<div class="flex flex-1 justify-center py-5 px-4 md:px-10 lg:px-20 overflow-x-hidden">
+<div class="flex flex-col max-w-[1280px] flex-1 w-full gap-6">
+<!-- Breadcrumbs -->
+<div class="flex flex-wrap gap-2 px-4 pt-2">
+<a class="text-text-secondary hover:text-primary transition-colors text-sm font-medium leading-normal flex items-center gap-1" href="#">
+<span class="material-symbols-outlined text-[16px]">home</span>
+                    Home
+                </a>
+<span class="text-text-secondary text-sm font-medium leading-normal">/</span>
+<span class="text-white text-sm font-medium leading-normal">Customers</span>
+</div>
+<!-- Page Heading -->
+<div class="flex flex-wrap justify-between gap-3 px-4">
+<div class="flex flex-col gap-2">
+<h1 class="text-white tracking-tight text-[32px] font-bold leading-tight">Customer Management</h1>
+<p class="text-text-secondary text-base font-normal leading-normal max-w-2xl">Manage tenants, subscriptions, and monitor instance statuses across your SaaS infrastructure.</p>
+</div>
+</div>
+<!-- Action Toolbar (Search, Filters, CTA) -->
+<div class="flex flex-col lg:flex-row gap-4 px-4 items-start lg:items-center justify-between">
+<!-- Search & Filters -->
+<div class="flex flex-col md:flex-row flex-1 gap-3 w-full lg:w-auto">
+<!-- Search Input -->
+<div class="flex w-full md:w-80 items-stretch rounded-xl h-10 bg-border-dark group focus-within:ring-2 focus-within:ring-primary/50 transition-all">
+<div class="text-text-secondary flex items-center justify-center pl-3">
+<span class="material-symbols-outlined text-[20px]">search</span>
+</div>
+<input class="flex w-full min-w-0 flex-1 resize-none bg-transparent border-none text-white focus:ring-0 placeholder:text-text-secondary px-3 text-sm font-normal" placeholder="Search companies or subdomains..."/>
+</div>
+<!-- Filter Chips -->
+<div class="flex gap-2 overflow-x-auto pb-1 md:pb-0 hide-scrollbar">
+<button class="flex h-10 shrink-0 items-center justify-center gap-x-2 rounded-xl bg-border-dark hover:bg-opacity-80 px-4 transition-colors">
+<p class="text-white text-sm font-medium">Status: All</p>
+<span class="material-symbols-outlined text-white text-[20px]">expand_more</span>
+</button>
+<button class="flex h-10 shrink-0 items-center justify-center gap-x-2 rounded-xl bg-border-dark hover:bg-opacity-80 px-4 transition-colors">
+<p class="text-white text-sm font-medium">Plan: All</p>
+<span class="material-symbols-outlined text-white text-[20px]">expand_more</span>
+</button>
+</div>
+</div>
+<!-- Primary Action -->
+<button class="flex h-10 items-center justify-center gap-2 rounded-xl bg-primary hover:bg-primary/90 text-white px-5 shadow-lg shadow-primary/20 transition-all active:scale-95 shrink-0 w-full md:w-auto">
+<span class="material-symbols-outlined text-[20px]">add</span>
+<span class="text-sm font-bold">New Registration</span>
+</button>
+</div>
+<!-- Data Table Card -->
+<div class="px-4 pb-10">
+<div class="w-full overflow-hidden rounded-xl border border-border-dark bg-surface-dark shadow-sm">
+<div class="overflow-x-auto">
+<table class="w-full text-left border-collapse">
+<thead>
+<tr class="border-b border-border-dark bg-[#1a2c32]">
+<th class="px-6 py-4 text-xs font-semibold uppercase tracking-wider text-text-secondary">Company Name</th>
+<th class="px-6 py-4 text-xs font-semibold uppercase tracking-wider text-text-secondary">Subdomain</th>
+<th class="px-6 py-4 text-xs font-semibold uppercase tracking-wider text-text-secondary">Plan</th>
+<th class="px-6 py-4 text-xs font-semibold uppercase tracking-wider text-text-secondary">Status</th>
+<th class="px-6 py-4 text-xs font-semibold uppercase tracking-wider text-text-secondary">Date Joined</th>
+<th class="px-6 py-4 text-xs font-semibold uppercase tracking-wider text-text-secondary text-right">Actions</th>
+</tr>
+</thead>
+<tbody class="divide-y divide-border-dark">
+<!-- Row 1 -->
+<tr class="group hover:bg-border-dark/30 transition-colors">
+<td class="px-6 py-4 whitespace-nowrap">
+<div class="flex items-center gap-3">
+<div class="h-8 w-8 rounded-full bg-gradient-to-br from-blue-500 to-primary flex items-center justify-center text-white font-bold text-xs" data-alt="Avatar with initials AC">AC</div>
+<span class="text-sm font-medium text-white">Acme Corp</span>
+</div>
+</td>
+<td class="px-6 py-4 whitespace-nowrap text-sm text-text-secondary">acme.jeturing.com</td>
+<td class="px-6 py-4 whitespace-nowrap">
+<div class="inline-flex items-center gap-1.5 rounded-full border border-purple-500/30 bg-purple-500/10 px-2.5 py-0.5 text-xs font-medium text-purple-400">
+<span class="material-symbols-outlined text-[14px]">verified</span>
+                                            Enterprise
+                                        </div>
+</td>
+<td class="px-6 py-4 whitespace-nowrap">
+<span class="inline-flex items-center rounded-full bg-green-500/10 px-2.5 py-0.5 text-xs font-medium text-green-400 ring-1 ring-inset ring-green-500/20">Active</span>
+</td>
+<td class="px-6 py-4 whitespace-nowrap text-sm text-text-secondary">Oct 12, 2023</td>
+<td class="px-6 py-4 whitespace-nowrap text-right text-sm font-medium">
+<button class="text-text-secondary hover:text-white transition-colors p-1 rounded-lg hover:bg-border-dark">
+<span class="material-symbols-outlined text-[20px]">more_vert</span>
+</button>
+</td>
+</tr>
+<!-- Row 2 -->
+<tr class="group hover:bg-border-dark/30 transition-colors">
+<td class="px-6 py-4 whitespace-nowrap">
+<div class="flex items-center gap-3">
+<div class="h-8 w-8 rounded-full bg-gradient-to-br from-indigo-500 to-purple-500 flex items-center justify-center text-white font-bold text-xs" data-alt="Avatar with initials BS">BS</div>
+<span class="text-sm font-medium text-white">Beta Solutions</span>
+</div>
+</td>
+<td class="px-6 py-4 whitespace-nowrap text-sm text-text-secondary">beta.jeturing.com</td>
+<td class="px-6 py-4 whitespace-nowrap">
+<div class="inline-flex items-center gap-1.5 rounded-full border border-blue-500/30 bg-blue-500/10 px-2.5 py-0.5 text-xs font-medium text-blue-400">
+                                            Pro
+                                        </div>
+</td>
+<td class="px-6 py-4 whitespace-nowrap">
+<span class="inline-flex items-center rounded-full bg-yellow-500/10 px-2.5 py-0.5 text-xs font-medium text-yellow-400 ring-1 ring-inset ring-yellow-500/20">Pending</span>
+</td>
+<td class="px-6 py-4 whitespace-nowrap text-sm text-text-secondary">Nov 01, 2023</td>
+<td class="px-6 py-4 whitespace-nowrap text-right text-sm font-medium">
+<button class="text-text-secondary hover:text-white transition-colors p-1 rounded-lg hover:bg-border-dark">
+<span class="material-symbols-outlined text-[20px]">more_vert</span>
+</button>
+</td>
+</tr>
+<!-- Row 3 -->
+<tr class="group hover:bg-border-dark/30 transition-colors">
+<td class="px-6 py-4 whitespace-nowrap">
+<div class="flex items-center gap-3">
+<div class="h-8 w-8 rounded-full bg-gradient-to-br from-orange-500 to-red-500 flex items-center justify-center text-white font-bold text-xs" data-alt="Avatar with initials GI">GI</div>
+<span class="text-sm font-medium text-white">Gamma Inc</span>
+</div>
+</td>
+<td class="px-6 py-4 whitespace-nowrap text-sm text-text-secondary">gamma.jeturing.com</td>
+<td class="px-6 py-4 whitespace-nowrap">
+<div class="inline-flex items-center gap-1.5 rounded-full border border-gray-500/30 bg-gray-500/10 px-2.5 py-0.5 text-xs font-medium text-gray-400">
+                                            Basic
+                                        </div>
+</td>
+<td class="px-6 py-4 whitespace-nowrap">
+<span class="inline-flex items-center rounded-full bg-red-500/10 px-2.5 py-0.5 text-xs font-medium text-red-400 ring-1 ring-inset ring-red-500/20">Suspended</span>
+</td>
+<td class="px-6 py-4 whitespace-nowrap text-sm text-text-secondary">Aug 15, 2023</td>
+<td class="px-6 py-4 whitespace-nowrap text-right text-sm font-medium">
+<button class="text-text-secondary hover:text-white transition-colors p-1 rounded-lg hover:bg-border-dark">
+<span class="material-symbols-outlined text-[20px]">more_vert</span>
+</button>
+</td>
+</tr>
+<!-- Row 4 -->
+<tr class="group hover:bg-border-dark/30 transition-colors">
+<td class="px-6 py-4 whitespace-nowrap">
+<div class="flex items-center gap-3">
+<div class="h-8 w-8 rounded-full bg-gradient-to-br from-teal-500 to-green-500 flex items-center justify-center text-white font-bold text-xs" data-alt="Avatar with initials DT">DT</div>
+<span class="text-sm font-medium text-white">Delta Tech</span>
+</div>
+</td>
+<td class="px-6 py-4 whitespace-nowrap text-sm text-text-secondary">delta.jeturing.com</td>
+<td class="px-6 py-4 whitespace-nowrap">
+<div class="inline-flex items-center gap-1.5 rounded-full border border-blue-500/30 bg-blue-500/10 px-2.5 py-0.5 text-xs font-medium text-blue-400">
+                                            Pro
+                                        </div>
+</td>
+<td class="px-6 py-4 whitespace-nowrap">
+<span class="inline-flex items-center rounded-full bg-green-500/10 px-2.5 py-0.5 text-xs font-medium text-green-400 ring-1 ring-inset ring-green-500/20">Active</span>
+</td>
+<td class="px-6 py-4 whitespace-nowrap text-sm text-text-secondary">Sep 22, 2023</td>
+<td class="px-6 py-4 whitespace-nowrap text-right text-sm font-medium">
+<button class="text-text-secondary hover:text-white transition-colors p-1 rounded-lg hover:bg-border-dark">
+<span class="material-symbols-outlined text-[20px]">more_vert</span>
+</button>
+</td>
+</tr>
+<!-- Row 5 -->
+<tr class="group hover:bg-border-dark/30 transition-colors">
+<td class="px-6 py-4 whitespace-nowrap">
+<div class="flex items-center gap-3">
+<div class="h-8 w-8 rounded-full bg-gradient-to-br from-pink-500 to-rose-500 flex items-center justify-center text-white font-bold text-xs" data-alt="Avatar with initials EL">EL</div>
+<span class="text-sm font-medium text-white">Epsilon Labs</span>
+</div>
+</td>
+<td class="px-6 py-4 whitespace-nowrap text-sm text-text-secondary">epsilon.jeturing.com</td>
+<td class="px-6 py-4 whitespace-nowrap">
+<div class="inline-flex items-center gap-1.5 rounded-full border border-purple-500/30 bg-purple-500/10 px-2.5 py-0.5 text-xs font-medium text-purple-400">
+<span class="material-symbols-outlined text-[14px]">verified</span>
+                                            Enterprise
+                                        </div>
+</td>
+<td class="px-6 py-4 whitespace-nowrap">
+<span class="inline-flex items-center rounded-full bg-green-500/10 px-2.5 py-0.5 text-xs font-medium text-green-400 ring-1 ring-inset ring-green-500/20">Active</span>
+</td>
+<td class="px-6 py-4 whitespace-nowrap text-sm text-text-secondary">Jan 10, 2024</td>
+<td class="px-6 py-4 whitespace-nowrap text-right text-sm font-medium">
+<button class="text-text-secondary hover:text-white transition-colors p-1 rounded-lg hover:bg-border-dark">
+<span class="material-symbols-outlined text-[20px]">more_vert</span>
+</button>
+</td>
+</tr>
+</tbody>
+</table>
+</div>
+<!-- Pagination Footer -->
+<div class="flex items-center justify-between border-t border-border-dark bg-[#142329] px-4 py-3 sm:px-6">
+<div class="flex flex-1 justify-between sm:hidden">
+<a class="relative inline-flex items-center rounded-md border border-border-dark bg-surface-dark px-4 py-2 text-sm font-medium text-text-secondary hover:bg-border-dark" href="#">Previous</a>
+<a class="relative ml-3 inline-flex items-center rounded-md border border-border-dark bg-surface-dark px-4 py-2 text-sm font-medium text-text-secondary hover:bg-border-dark" href="#">Next</a>
+</div>
+<div class="hidden sm:flex sm:flex-1 sm:items-center sm:justify-between">
+<div>
+<p class="text-sm text-text-secondary">
+                                    Showing <span class="font-medium text-white">1</span> to <span class="font-medium text-white">5</span> of <span class="font-medium text-white">42</span> results
+                                </p>
+</div>
+<div>
+<nav aria-label="Pagination" class="isolate inline-flex -space-x-px rounded-md shadow-sm">
+<a class="relative inline-flex items-center rounded-l-md px-2 py-2 text-text-secondary ring-1 ring-inset ring-border-dark hover:bg-border-dark focus:z-20 focus:outline-offset-0" href="#">
+<span class="sr-only">Previous</span>
+<span class="material-symbols-outlined text-[20px]">chevron_left</span>
+</a>
+<a aria-current="page" class="relative z-10 inline-flex items-center bg-primary px-4 py-2 text-sm font-semibold text-white focus:z-20 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-primary" href="#">1</a>
+<a class="relative inline-flex items-center px-4 py-2 text-sm font-semibold text-text-secondary ring-1 ring-inset ring-border-dark hover:bg-border-dark focus:z-20 focus:outline-offset-0" href="#">2</a>
+<a class="relative inline-flex items-center px-4 py-2 text-sm font-semibold text-text-secondary ring-1 ring-inset ring-border-dark hover:bg-border-dark focus:z-20 focus:outline-offset-0" href="#">3</a>
+<span class="relative inline-flex items-center px-4 py-2 text-sm font-semibold text-text-secondary ring-1 ring-inset ring-border-dark focus:outline-offset-0">...</span>
+<a class="relative inline-flex items-center px-4 py-2 text-sm font-semibold text-text-secondary ring-1 ring-inset ring-border-dark hover:bg-border-dark focus:z-20 focus:outline-offset-0" href="#">8</a>
+<a class="relative inline-flex items-center rounded-r-md px-2 py-2 text-text-secondary ring-1 ring-inset ring-border-dark hover:bg-border-dark focus:z-20 focus:outline-offset-0" href="#">
+<span class="sr-only">Next</span>
+<span class="material-symbols-outlined text-[20px]">chevron_right</span>
+</a>
+</nav>
+</div>
+</div>
+</div>
+</div>
+</div>
+</div>
+</div>
+</body></html>

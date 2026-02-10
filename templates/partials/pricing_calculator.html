@@ -1,0 +1,369 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Cotizador de Precios - Erp_core</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <link href="https://fonts.googleapis.com/css2?family=Caveat:wght@700&display=swap" rel="stylesheet">
+    <style>
+        :root {
+            --ink: #2e2d3a;
+            --muted: #6f6d7a;
+            --surface: #f3f4f7;
+            --card: #ffffff;
+            --primary: #6a4c7d;
+            --primary-100: #efe8f4;
+            --accent: #fcd34d;
+        }
+
+        /* Fallback styles if Tailwind CDN fails */
+        body {
+            font-family: "Inter", -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, 'Helvetica Neue', Arial, sans-serif;
+            background: radial-gradient(circle at 20% 20%, rgba(106,76,125,0.05), transparent 25%),
+                        radial-gradient(circle at 80% 0%, rgba(252,211,77,0.08), transparent 30%),
+                        #f7f7fb;
+            color: var(--ink);
+            margin: 0;
+            padding: 0;
+        }
+
+        .container {
+            max-width: 1280px;
+            margin: 0 auto;
+        }
+
+        .panel { 
+            background: var(--surface);
+            border-radius: 20px;
+            box-shadow: 0 18px 40px rgba(29, 36, 51, 0.08);
+        }
+
+        .app-card {
+            position: relative;
+            transition: all 0.2s ease-in-out;
+            cursor: pointer;
+            padding: 14px;
+            background: var(--card);
+            border-radius: 12px;
+            border: 2px solid transparent;
+            box-shadow: 0 8px 20px rgba(18, 38, 63, 0.05);
+            min-height: 122px;
+        }
+
+        .app-card:hover {
+            transform: translateY(-3px);
+            box-shadow: 0 16px 32px rgba(18, 38, 63, 0.08);
+        }
+
+        .app-card.selected {
+            border-color: var(--primary);
+            background: var(--primary-100);
+        }
+
+        .app-icon {
+            width: 60px;
+            height: 60px;
+            margin: 0 auto 10px;
+            display: block;
+            object-fit: contain;
+        }
+
+        .check-badge {
+            position: absolute;
+            top: -6px;
+            right: -6px;
+            width: 26px;
+            height: 26px;
+            border-radius: 9999px;
+            background: var(--primary);
+            color: white;
+            display: grid;
+            place-items: center;
+            font-size: 14px;
+            box-shadow: 0 8px 16px rgba(106, 76, 125, 0.25);
+        }
+
+        .counter-btn {
+            width: 52px;
+            height: 52px;
+            border-radius: 12px;
+            border: 2px solid var(--primary);
+            background: var(--card);
+            color: var(--primary);
+            font-size: 24px;
+            font-weight: 700;
+            display: grid;
+            place-items: center;
+            transition: transform 0.15s ease, box-shadow 0.15s ease, background 0.15s ease;
+            box-shadow: 0 8px 18px rgba(106, 76, 125, 0.15);
+        }
+
+        .counter-btn:hover {
+            transform: translateY(-2px);
+            background: var(--primary-100);
+        }
+
+        .counter-input {
+            width: 96px;
+            height: 52px;
+            border: 2px solid var(--primary);
+            border-radius: 12px;
+            font-size: 22px;
+            font-weight: 700;
+            text-align: center;
+            background: var(--card);
+            color: var(--ink);
+            box-shadow: 0 8px 18px rgba(106, 76, 125, 0.12);
+        }
+
+        .summary-card {
+            border-radius: 18px;
+            box-shadow: 0 18px 40px rgba(18, 38, 63, 0.12);
+        }
+
+        .divider-dashed {
+            border-top: 2px dashed #d1d5db;
+        }
+
+        .scribble-highlight {
+            position: relative;
+            display: inline-block;
+            padding: 6px 10px;
+            font-family: 'Caveat', cursive;
+            font-size: 38px;
+            font-weight: 700;
+        }
+
+        .scribble-highlight::before {
+            content: '';
+            position: absolute;
+            inset: 35% -6px -30% -6px;
+            background: linear-gradient(90deg, rgba(252,211,77,0.75), rgba(252,211,77,0.9));
+            filter: blur(2px);
+            border-radius: 12px;
+            z-index: -1;
+        }
+
+        #selectedAppsList {
+            list-style: none;
+            padding: 0;
+            margin: 0;
+        }
+
+        #selectedAppsList li + li {
+            border-top: 1px dashed #e5e7eb;
+        }
+    </style>
+</head>
+<body class="bg-gray-50">
+    <div class="container mx-auto px-4 py-12">
+        <div class="flex flex-wrap -mx-4">
+            <!-- Panel de Selección de Aplicaciones -->
+            <div class="w-full lg:w-7/12 px-4 mb-8">
+                <div class="panel p-8 sm:p-12">
+                    <h4 class="text-2xl font-semibold mb-6 text-gray-900">¿Qué aplicaciones utilizas?</h4>
+                    
+                    <div class="grid grid-cols-3 sm:grid-cols-4 md:grid-cols-6 gap-4 mb-6" id="appsGrid">
+                        <!-- Las aplicaciones se generarán dinámicamente -->
+                    </div>
+
+                    <h4 class="text-2xl font-semibold mb-6 mt-8 text-gray-900">¿Cuántos usuarios?</h4>
+                    <div class="flex items-center gap-3">
+                        <button onclick="changeUsers(-1)" class="counter-btn" aria-label="Restar usuario">−</button>
+                        <input type="number" id="userCount" value="20" min="1" 
+                               class="counter-input"
+                               onchange="updateCalculations()">
+                        <button onclick="changeUsers(1)" class="counter-btn" aria-label="Sumar usuario">+</button>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Panel de Cálculo -->
+            <div class="w-full lg:w-5/12 px-4">
+                <div class="bg-white rounded-2xl p-8 sm:p-12 shadow-lg summary-card">
+                    <h4 class="text-2xl font-semibold mb-4 text-gray-900">Aplicaciones a sustituir</h4>
+                    
+                    <div class="flex justify-between text-sm text-gray-600 mb-4">
+                        <span>para <b id="displayUsers">20</b> usuarios</span>
+                        <span>al mes</span>
+                    </div>
+
+                    <hr class="border-t-2 border-gray-200 mb-4">
+
+                    <ul class="text-lg mb-6" id="selectedAppsList">
+                        <!-- Lista de aplicaciones seleccionadas -->
+                    </ul>
+
+                    <hr class="divider-dashed mb-4">
+
+                    <div class="flex justify-between items-center text-xl font-semibold mb-8">
+                        <span>TOTAL</span>
+                        <div>
+                            <span id="totalCost" class="text-3xl sm:text-4xl font-black text-gray-900">0,00 US$</span>
+                            <span class="text-base font-normal"> al año</span>
+                        </div>
+                    </div>
+
+                    <h4 class="text-2xl font-semibold mb-2">Todas las aplicaciones de Erp_core</h4>
+                    <div class="text-base mb-2">
+                        para <b id="displayUsers2">20</b> usuarios
+                    </div>
+
+                    <hr class="divider-dashed mb-4">
+
+                    <div class="flex justify-between items-center text-xl font-semibold mb-8">
+                        <span>TOTAL</span>
+                        <div>
+                            <span id="odooCost" class="text-3xl sm:text-4xl font-black text-gray-900">5.975,99 US$</span>
+                            <span class="text-base font-normal"> al año</span>
+                        </div>
+                    </div>
+
+                    <div class="text-center">
+                        <h3 class="font-bold text-4xl mb-2" style="font-family: 'Caveat', cursive;">Te ahorras</h3>
+                        <div class="scribble-highlight mb-2">
+                            <span id="savings">93.048,00 US$</span> al año
+                        </div>
+                        <p class="text-lg text-gray-700">gracias a un software totalmente integrado.</p>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        // Definición de aplicaciones con sus costos
+        const apps = [
+            { id: 'asana', name: 'Proyecto', icon: '/static/images/apps/asana.svg', costPerUser: 20, costType: 'user' },
+            { id: 'quickbooks', name: 'Contabilidad', icon: '/static/images/apps/quickbooks.svg', costPerUser: 0, costType: 'fixed', fixedCost: 76 },
+            { id: 'shopify', name: 'Comercio electrónico', icon: '/static/images/apps/shopify.svg', costPerUser: 0, costType: 'percentage', fixedCost: 79, note: '1% Ingresos + $ 79' },
+            { id: 'salesforce', name: 'CRM', icon: '/static/images/apps/salesforce.svg', costPerUser: 165, costType: 'user' },
+            { id: 'slack', name: 'Conversaciones', icon: '/static/images/apps/slack.svg', costPerUser: 14.10, costType: 'user' },
+            { id: 'notion', name: 'Información', icon: '/static/images/apps/notion.svg', costPerUser: 14, costType: 'user' },
+            { id: 'bamboohr', name: 'RR. HH.', icon: '/static/images/apps/bamboohr.svg', costPerUser: 0, costType: 'fixed', fixedCost: 0 },
+            { id: 'docusign', name: 'Firma electrónica', icon: '/static/images/apps/docusign.svg', costPerUser: 38, costType: 'user' },
+            { id: 'inflow', name: 'Inventario', icon: '/static/images/apps/inflow.svg', costPerUser: 0, costType: 'fixed', fixedCost: 0 },
+            { id: 'wordpress', name: 'Sitio web', icon: '/static/images/apps/wordpress.svg', costPerUser: 0, costType: 'fixed', fixedCost: 25 },
+            { id: 'sharepoint', name: 'Documentos', icon: '/static/images/apps/sharepoint.svg', costPerUser: 12.5, costType: 'user' },
+            { id: 'lightspeed', name: 'PdV', icon: '/static/images/apps/lightspeed.svg', costPerUser: 0, costType: 'fixed', fixedCost: 0 },
+            { id: 'expensify', name: 'Gastos', icon: '/static/images/apps/expensify.svg', costPerUser: 0, costType: 'fixed', fixedCost: 0 },
+            { id: 'calendly', name: 'Cita', icon: '/static/images/apps/calendly.svg', costPerUser: 0, costType: 'fixed', fixedCost: 0 },
+            { id: 'coupa', name: 'Compra', icon: '/static/images/apps/coupa.svg', costPerUser: 0, costType: 'fixed', fixedCost: 0 },
+            { id: 'hootsuite', name: 'Social', icon: '/static/images/apps/hootsuite.svg', costPerUser: 0, costType: 'fixed', fixedCost: 0 },
+            { id: 'clickup', name: 'Planificación', icon: '/static/images/apps/clickup.svg', costPerUser: 0, costType: 'fixed', fixedCost: 0 },
+            { id: 'hubspot', name: 'Correos electrónicos', icon: '/static/images/apps/hubspot.svg', costPerUser: 90, costType: 'user' },
+            { id: 'harvest', name: 'Partes de horas', icon: '/static/images/apps/harvest.svg', costPerUser: 0, costType: 'fixed', fixedCost: 0 },
+            { id: 'zendesk', name: 'Servicio de asistencia', icon: '/static/images/apps/zendesk.svg', costPerUser: 0, costType: 'fixed', fixedCost: 0 },
+            { id: 'eventbrite', name: 'Eventos', icon: '/static/images/apps/eventbrite.svg', costPerUser: 0, costType: 'fixed', fixedCost: 0 },
+            { id: 'katanamrp', name: 'MRP', icon: '/static/images/apps/katanamrp.svg', costPerUser: 0, costType: 'fixed', fixedCost: 0 },
+            { id: 'booqable', name: 'Alquiler', icon: '/static/images/apps/booqable.svg', costPerUser: 0, costType: 'fixed', fixedCost: 0 }
+        ];
+
+        // Apps preseleccionadas por defecto
+        const defaultSelected = ['asana', 'quickbooks', 'shopify', 'salesforce', 'slack', 'notion', 'docusign', 'wordpress', 'sharepoint', 'hubspot'];
+
+        // Estado
+        let selectedApps = new Set(defaultSelected);
+
+        // Renderizar grid de aplicaciones
+        function renderAppsGrid() {
+            const grid = document.getElementById('appsGrid');
+            grid.innerHTML = apps.map(app => `
+                <div class="app-card ${selectedApps.has(app.id) ? 'selected' : ''}" onclick="toggleApp('${app.id}')" role="button" aria-pressed="${selectedApps.has(app.id)}">
+                    ${selectedApps.has(app.id) ? '<span class="check-badge">✓</span>' : ''}
+                    <img src="${app.icon}" alt="${app.name}" class="app-icon">
+                    <div class="text-xs sm:text-sm font-semibold text-center text-gray-700">${app.name}</div>
+                </div>
+            `).join('');
+        }
+
+        // Toggle selección de app
+        function toggleApp(appId) {
+            if (selectedApps.has(appId)) {
+                selectedApps.delete(appId);
+            } else {
+                selectedApps.add(appId);
+            }
+            renderAppsGrid();
+            updateCalculations();
+        }
+
+        // Cambiar número de usuarios
+        function changeUsers(delta) {
+            const input = document.getElementById('userCount');
+            let value = parseInt(input.value) || 20;
+            value = Math.max(1, value + delta);
+            input.value = value;
+            updateCalculations();
+        }
+
+        // Calcular costos
+        function updateCalculations() {
+            const users = parseInt(document.getElementById('userCount').value) || 20;
+            
+            // Actualizar displays de usuarios
+            document.getElementById('displayUsers').textContent = users;
+            document.getElementById('displayUsers2').textContent = users;
+
+            // Calcular costo total de apps seleccionadas
+            let totalMonthly = 0;
+            const selectedAppsList = document.getElementById('selectedAppsList');
+            selectedAppsList.innerHTML = '';
+
+            Array.from(selectedApps).forEach(appId => {
+                const app = apps.find(a => a.id === appId);
+                if (app) {
+                    let monthlyCost = 0;
+                    let displayCost = '';
+
+                    if (app.costType === 'user') {
+                        monthlyCost = app.costPerUser * users;
+                        displayCost = `$ ${app.costPerUser.toFixed(2)} / usuario`;
+                    } else if (app.costType === 'fixed') {
+                        monthlyCost = app.fixedCost;
+                        displayCost = `$ ${app.fixedCost.toFixed(2)}`;
+                    } else if (app.costType === 'percentage') {
+                        monthlyCost = app.fixedCost; // Base cost
+                        displayCost = app.note;
+                    }
+
+                    totalMonthly += monthlyCost;
+
+                    selectedAppsList.innerHTML += `
+                        <li class="flex justify-between items-center py-2 text-base sm:text-lg">
+                            <span class="text-gray-800">${app.name}</span>
+                            <span class="text-gray-600">${displayCost}</span>
+                        </li>
+                    `;
+                }
+            });
+
+            const totalYearly = totalMonthly * 12;
+            document.getElementById('totalCost').textContent = formatCurrency(totalYearly);
+
+            // Costo de Erp_core (basado en plan estándar: $24.90 por usuario al mes)
+            const erpCoreMonthly = 24.90 * users;
+            const erpCoreYearly = erpCoreMonthly * 12;
+            document.getElementById('odooCost').textContent = formatCurrency(erpCoreYearly);
+
+            // Calcular ahorros
+            const savings = totalYearly - erpCoreYearly;
+            document.getElementById('savings').textContent = formatCurrency(Math.max(0, savings));
+        }
+
+        // Formatear moneda
+        function formatCurrency(amount) {
+            return new Intl.NumberFormat('es-ES', {
+                style: 'currency',
+                currency: 'USD',
+                minimumFractionDigits: 2
+            }).format(amount).replace('US$', '').trim() + ' US$';
+        }
+
+        // Inicializar
+        renderAppsGrid();
+        updateCalculations();
+    </script>
+</body>
+</html>

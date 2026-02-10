@@ -1,0 +1,206 @@
+<!DOCTYPE html>
+<html class="dark" lang="es">
+<head>
+	<meta charset="UTF-8">
+	<meta name="viewport" content="width=device-width, initial-scale=1.0">
+	<title>Registro - sajet.us Multitenant</title>
+	<link rel="preconnect" href="https://fonts.googleapis.com"/>
+	<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin/>
+	<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;900&display=swap" rel="stylesheet"/>
+	<link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:wght,FILL@100..700,0..1&display=swap" rel="stylesheet"/>
+	<link rel="stylesheet" href="/static/css/tailwind.css">
+	
+</head>
+<body class="bg-slate-950 text-white font-display min-h-screen">
+	<header class="border-b border-white/5 bg-slate-950/80 backdrop-blur">
+		<div class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 h-16 flex items-center justify-between">
+			<a href="/" class="flex items-center gap-2">
+				<span class="material-symbols-outlined text-3xl text-primary">deployed_code</span>
+				<span class="text-lg font-bold tracking-tight">Jeturing sajet.us</span>
+			</a>
+			<div class="flex items-center gap-3 text-sm">
+				<a href="/login/tenant" class="text-muted hover:text-white transition">Portal Cliente</a>
+				<a href="/login/admin" class="text-muted hover:text-white transition">Admin</a>
+			</div>
+		</div>
+	</header>
+
+	<main class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-10">
+		<div class="grid lg:grid-cols-2 gap-10 items-start">
+			<div class="space-y-6">
+				<div class="inline-flex items-center gap-2 bg-primary/10 border border-primary/20 text-primary px-3 py-1 rounded-full text-xs font-semibold">
+					<span class="material-symbols-outlined text-base">bolt</span>
+					Alta en menos de 5 minutos
+				</div>
+				<h1 class="text-4xl md:text-5xl font-black leading-tight">Crea tu instancia sajet.us en segundos</h1>
+				<p class="text-lg text-muted max-w-2xl">
+					Automatizamos el pago, el aprovisionamiento en contenedores LXC y la configuración inicial. Elige tu plan, ingresa tus datos y te llevamos directo al checkout seguro.
+				</p>
+				<div class="grid sm:grid-cols-2 gap-4">
+					<div class="bg-white/5 border border-white/10 rounded-2xl p-4">
+						<div class="text-2xl font-bold">5 min</div>
+						<p class="text-muted text-sm">Tiempo promedio de provisionamiento</p>
+					</div>
+					<div class="bg-white/5 border border-white/10 rounded-2xl p-4">
+						<div class="text-2xl font-bold">99.9%</div>
+						<p class="text-muted text-sm">Disponibilidad objetivo</p>
+					</div>
+				</div>
+			</div>
+
+			<div class="bg-panel border border-white/10 rounded-2xl shadow-glow p-8">
+				<div class="flex items-center justify-between mb-6">
+					<div>
+						<p class="text-sm text-muted">Paso 1 de 2</p>
+						<h2 class="text-2xl font-bold">Datos del titular</h2>
+					</div>
+					<span class="material-symbols-outlined text-primary text-3xl">rocket_launch</span>
+				</div>
+
+				<form id="signupForm" class="space-y-4">
+					<div class="grid md:grid-cols-2 gap-4">
+						<div>
+							<label class="block text-sm text-muted mb-1">Nombre Completo</label>
+							<input type="text" name="full_name" required class="w-full bg-slate-900 border border-white/10 rounded-xl px-4 py-3 focus:border-primary focus:ring-2 focus:ring-primary/40 transition" placeholder="Andrea López" />
+						</div>
+						<div>
+							<label class="block text-sm text-muted mb-1">Email</label>
+							<input type="email" name="email" required class="w-full bg-slate-900 border border-white/10 rounded-xl px-4 py-3 focus:border-primary focus:ring-2 focus:ring-primary/40 transition" placeholder="tu@email.com" />
+						</div>
+					</div>
+
+					<div>
+						<label class="block text-sm text-muted mb-1">Empresa</label>
+						<input type="text" name="company_name" required class="w-full bg-slate-900 border border-white/10 rounded-xl px-4 py-3 focus:border-primary focus:ring-2 focus:ring-primary/40 transition" placeholder="Acme Corp" />
+					</div>
+
+					<div>
+						<label class="block text-sm text-muted mb-1">Subdominio</label>
+						<div class="flex rounded-xl border border-white/10 overflow-hidden">
+							<input type="text" name="subdomain" pattern="[a-z0-9]+" required class="flex-1 bg-slate-900 px-4 py-3 focus:outline-none" placeholder="miempresa" />
+							<span class="bg-slate-800 px-4 py-3 text-muted border-l border-white/10">.sajet.us</span>
+						</div>
+						<p class="text-xs text-muted mt-1">Solo minúsculas y números</p>
+					</div>
+
+					<div>
+						<label class="block text-sm text-muted mb-2">Plan</label>
+						<input type="hidden" id="selectedPlan" name="plan" value="{{ plan if plan else 'pro' }}" />
+						<div class="grid sm:grid-cols-3 gap-3" id="plansGrid">
+							<button type="button" data-plan="basic" class="w-full text-left bg-slate-900 border border-white/10 rounded-xl p-4 hover:border-primary/60 transition">
+								<div class="flex items-center justify-between mb-2">
+									<span class="font-semibold">Basic</span>
+									<span class="text-xs bg-white/10 px-2 py-0.5 rounded-full">$29/mes</span>
+								</div>
+								<p class="text-xs text-muted">1 usuario, módulos esenciales</p>
+							</button>
+							<button type="button" data-plan="pro" class="w-full text-left bg-slate-900 border border-white/10 rounded-xl p-4 hover:border-primary/60 transition">
+								<div class="flex items-center justify-between mb-2">
+									<span class="font-semibold">Pro</span>
+									<span class="text-xs bg-primary/20 text-primary px-2 py-0.5 rounded-full">$49/mes</span>
+								</div>
+								<p class="text-xs text-muted">5 usuarios, soporte prioritario</p>
+							</button>
+							<button type="button" data-plan="enterprise" class="w-full text-left bg-slate-900 border border-white/10 rounded-xl p-4 hover:border-primary/60 transition">
+								<div class="flex items-center justify-between mb-2">
+									<span class="font-semibold">Enterprise</span>
+									<span class="text-xs bg-white/10 px-2 py-0.5 rounded-full">$99/mes</span>
+								</div>
+								<p class="text-xs text-muted">Usuarios ilimitados, SLA 24/7</p>
+							</button>
+						</div>
+					</div>
+
+					<div id="errorBox" class="hidden border border-red-500/40 bg-red-500/10 text-red-200 px-4 py-3 rounded-xl text-sm"></div>
+
+					<button id="submitBtn" type="submit" class="w-full flex items-center justify-center gap-2 bg-primary hover:bg-primary-dark text-white font-semibold py-3 rounded-xl transition shadow-glow">
+						<span class="material-symbols-outlined">lock</span>
+						Ir al pago seguro
+					</button>
+				</form>
+			</div>
+		</div>
+	</main>
+
+	<script>
+		const planButtons = document.querySelectorAll('[data-plan]');
+		const selectedPlanInput = document.getElementById('selectedPlan');
+		const errorBox = document.getElementById('errorBox');
+		const submitBtn = document.getElementById('submitBtn');
+		const form = document.getElementById('signupForm');
+
+		const knownPlans = ['basic', 'pro', 'enterprise'];
+
+		function setSelectedPlan(planId) {
+			const resolvedPlan = knownPlans.includes(planId) ? planId : 'pro';
+			selectedPlanInput.value = resolvedPlan;
+			planButtons.forEach(btn => {
+				if (btn.dataset.plan === resolvedPlan) {
+					btn.classList.add('ring-2', 'ring-primary', 'bg-white/5');
+				} else {
+					btn.classList.remove('ring-2', 'ring-primary', 'bg-white/5');
+				}
+			});
+		}
+
+		const params = new URLSearchParams(window.location.search);
+		const planFromQuery = params.get('plan');
+		setSelectedPlan(planFromQuery || selectedPlanInput.value || 'pro');
+
+		const prefill = {
+			full_name: params.get('full_name') || '',
+			email: params.get('email') || '',
+			company_name: params.get('company_name') || '',
+			subdomain: params.get('subdomain') || ''
+		};
+		Object.entries(prefill).forEach(([key, value]) => {
+			if (!value) return;
+			const input = form.querySelector(`[name="${key}"]`);
+			if (input) input.value = value;
+		});
+
+		planButtons.forEach(btn => btn.addEventListener('click', () => setSelectedPlan(btn.dataset.plan)));
+
+		form.addEventListener('submit', async (event) => {
+			event.preventDefault();
+			errorBox.classList.add('hidden');
+			submitBtn.disabled = true;
+			submitBtn.textContent = 'Redirigiendo...';
+
+			const payload = {
+				full_name: form.full_name.value.trim(),
+				email: form.email.value.trim(),
+				company_name: form.company_name.value.trim(),
+				subdomain: form.subdomain.value.trim(),
+				plan: selectedPlanInput.value || 'pro',
+			};
+
+			try {
+				const response = await fetch('/api/checkout', {
+					method: 'POST',
+					headers: { 'Content-Type': 'application/json' },
+					body: JSON.stringify(payload),
+				});
+
+				if (!response.ok) {
+					const data = await response.json().catch(() => ({}));
+					throw new Error(data.detail || 'No se pudo iniciar el checkout');
+				}
+
+				const data = await response.json();
+				if (data.checkout_url) {
+					window.location.href = data.checkout_url;
+				} else {
+					throw new Error('Respuesta inesperada del servidor');
+				}
+			} catch (error) {
+				errorBox.textContent = error.message || 'Ocurrió un error';
+				errorBox.classList.remove('hidden');
+			} finally {
+				submitBtn.disabled = false;
+				submitBtn.textContent = 'Ir al pago seguro';
+			}
+		});
+	</script>
+</body>
+</html>

@@ -1,0 +1,145 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+    <meta charset="utf-8"/>
+    <meta content="width=device-width, initial-scale=1.0" name="viewport"/>
+    <title>{% block title %}Jeturing Admin{% endblock %}</title>
+    <link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:wght,FILL@100..700,0..1&display=swap" rel="stylesheet"/>
+    <link href="https://fonts.googleapis.com" rel="preconnect"/>
+    <link crossorigin="" href="https://fonts.gstatic.com" rel="preconnect"/>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&display=swap" rel="stylesheet"/>
+    <link rel="stylesheet" href="/static/css/tailwind.css">
+    
+    <style>
+        ::-webkit-scrollbar {
+            width: 8px;
+            height: 8px;
+        }
+        ::-webkit-scrollbar-track {
+            background: #f5f5f5;
+        }
+        ::-webkit-scrollbar-track.dark {
+            background: #0b1220; 
+        }
+        ::-webkit-scrollbar-thumb {
+            background: #d0d0d0;
+            border-radius: 4px;
+        }
+        ::-webkit-scrollbar-thumb.dark {
+            background: #2a3b55; 
+            border-radius: 4px;
+        }
+        ::-webkit-scrollbar-thumb:hover {
+            background: #a0a0a0;
+        }
+        ::-webkit-scrollbar-thumb.dark:hover {
+            background: #374b69; 
+        }
+        .glass-panel {
+            background: rgba(255, 255, 255, 0.7);
+            backdrop-filter: blur(10px);
+            border: 1px solid rgba(0, 0, 0, 0.05);
+        }
+        html.dark .glass-panel {
+            background: rgba(22, 32, 50, 0.7);
+            border: 1px solid rgba(255, 255, 255, 0.05);
+        }
+    </style>
+    <script>
+        // Cargar preferencia de tema al iniciar
+        (function() {
+            const darkMode = localStorage.getItem('darkMode');
+            if (darkMode === 'true') {
+                document.documentElement.classList.add('dark');
+            } else {
+                document.documentElement.classList.remove('dark');
+            }
+        })();
+    </script>
+    {% block extra_head %}{% endblock %}
+</head>
+<body class="bg-white dark:bg-background-dark text-slate-900 dark:text-slate-100 font-display transition-colors duration-200 antialiased overflow-hidden">
+    <div class="flex h-screen w-full overflow-hidden">
+        <!-- Sidebar -->
+        {% include 'partials/admin_sidebar.html' %}
+        
+        <!-- Main Content -->
+        <main class="flex-1 flex flex-col h-full overflow-hidden relative">
+            <!-- Header -->
+            <header class="h-20 flex-shrink-0 border-b border-slate-300 dark:border-slate-800 bg-white dark:bg-background-dark/80 backdrop-blur-md z-10">
+                <div class="h-full px-8 flex items-center justify-between gap-4">
+                    <div class="flex flex-col">
+                        <h2 class="text-xl font-bold text-slate-900 dark:text-white tracking-tight">{% block page_title %}Dashboard{% endblock %}</h2>
+                        <p class="text-sm text-slate-600 dark:text-slate-400">{% block page_subtitle %}Gestiona tu plataforma multitenant{% endblock %}</p>
+                    </div>
+                    <div class="flex items-center gap-4">
+                        {% block header_actions %}
+                        <!-- Theme Toggle Button -->
+                        <button id="themeToggle" class="flex items-center justify-center size-10 rounded-xl text-slate-600 dark:text-slate-400 hover:bg-slate-200 dark:hover:bg-surface-highlight transition-colors" title="Cambiar tema">
+                            <span class="material-symbols-outlined text-[24px]" id="themeIcon">light_mode</span>
+                        </button>
+                        <button class="flex items-center justify-center size-10 rounded-xl text-slate-600 dark:text-slate-400 hover:bg-slate-200 dark:hover:bg-surface-highlight transition-colors relative">
+                            <span class="material-symbols-outlined text-[24px]">notifications</span>
+                            <span class="absolute top-2.5 right-2.5 size-2 bg-accent-rose rounded-full border border-white dark:border-background-dark"></span>
+                        </button>
+                        {% endblock %}
+                    </div>
+                </div>
+            </header>
+            
+            <!-- Page Content -->
+            <div class="flex-1 overflow-y-auto p-8 scroll-smooth">
+                <div class="max-w-7xl mx-auto space-y-8 pb-10">
+                    {% block content %}{% endblock %}
+                </div>
+            </div>
+        </main>
+    </div>
+
+    <script>
+        // Theme Toggle
+        const themeToggle = document.getElementById('themeToggle');
+        const themeIcon = document.getElementById('themeIcon');
+        
+        function updateThemeIcon() {
+            if (document.documentElement.classList.contains('dark')) {
+                themeIcon.textContent = 'light_mode';
+            } else {
+                themeIcon.textContent = 'dark_mode';
+            }
+        }
+        
+        themeToggle.addEventListener('click', () => {
+            document.documentElement.classList.toggle('dark');
+            const isDark = document.documentElement.classList.contains('dark');
+            localStorage.setItem('darkMode', isDark);
+            updateThemeIcon();
+        });
+        
+        updateThemeIcon();
+
+        // Logout function
+        async function logout() {
+            if (confirm('¿Estás seguro de que deseas cerrar sesión?')) {
+                await fetch('/api/logout', { method: 'POST', credentials: 'same-origin' });
+                localStorage.removeItem('admin_token');
+                localStorage.removeItem('access_token');
+                localStorage.removeItem('user_role');
+                window.location.href = '/login/admin';
+            }
+        }
+
+        // Interceptar fetch para agregar credentials
+        const originalFetch = window.fetch;
+        window.fetch = function(...args) {
+            const [resource, config] = args;
+            if (typeof resource === 'string' && resource.startsWith('/api/')) {
+                if (!config) args[1] = {};
+                args[1].credentials = 'same-origin';
+            }
+            return originalFetch.apply(this, args);
+        };
+    </script>
+    {% block extra_scripts %}{% endblock %}
+</body>
+</html>

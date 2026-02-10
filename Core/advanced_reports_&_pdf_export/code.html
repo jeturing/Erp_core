@@ -1,0 +1,405 @@
+<!DOCTYPE html>
+
+<html class="dark" lang="en"><head>
+<meta charset="utf-8"/>
+<meta content="width=device-width, initial-scale=1.0" name="viewport"/>
+<title>Advanced Reports &amp; PDF Export</title>
+<!-- Google Fonts -->
+<link href="https://fonts.googleapis.com" rel="preconnect"/>
+<link crossorigin="" href="https://fonts.gstatic.com" rel="preconnect"/>
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&amp;display=swap" rel="stylesheet"/>
+<link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:wght,FILL@100..700,0..1&amp;display=swap" rel="stylesheet"/>
+<link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:wght,FILL@100..700,0..1&amp;display=swap" rel="stylesheet"/>
+<!-- Tailwind CSS -->
+<script src="https://cdn.tailwindcss.com?plugins=forms,container-queries"></script>
+<script id="tailwind-config">
+      tailwind.config = {
+        darkMode: "class",
+        theme: {
+          extend: {
+            colors: {
+              "primary": "#25c0f4",
+              "background-light": "#f5f8f8",
+              "background-dark": "#101e22",
+              "surface-dark": "#182d34",
+              "border-dark": "#223f49",
+              "text-secondary": "#90bccb",
+            },
+            fontFamily: {
+              "display": ["Inter", "sans-serif"]
+            },
+            borderRadius: {"DEFAULT": "0.5rem", "lg": "1rem", "xl": "1.5rem", "full": "9999px"},
+          },
+        },
+      }
+    </script>
+<style>
+        /* Custom scrollbar for webkit browsers */
+        ::-webkit-scrollbar {
+            width: 8px;
+            height: 8px;
+        }
+        ::-webkit-scrollbar-track {
+            background: #101e22; 
+        }
+        ::-webkit-scrollbar-thumb {
+            background: #223f49; 
+            border-radius: 4px;
+        }
+        ::-webkit-scrollbar-thumb:hover {
+            background: #315a68; 
+        }
+        
+        .paper-shadow {
+            box-shadow: 0 20px 25px -5px rgba(0, 0, 0, 0.5), 0 10px 10px -5px rgba(0, 0, 0, 0.4);
+        }
+    </style>
+</head>
+<body class="bg-background-light dark:bg-background-dark font-display text-white overflow-hidden">
+<div class="flex h-screen w-full overflow-hidden">
+<!-- Side Navigation -->
+<aside class="hidden w-72 flex-col border-r border-border-dark bg-background-dark lg:flex">
+<div class="flex h-full flex-col justify-between p-4">
+<div class="flex flex-col gap-6">
+<!-- Brand -->
+<div class="flex items-center gap-3 px-2">
+<div class="bg-center bg-no-repeat bg-cover rounded-full h-10 w-10 bg-primary/20 flex items-center justify-center" data-alt="Jeturing Cloud Logo Abstract">
+<span class="material-symbols-outlined text-primary">cloud_circle</span>
+</div>
+<div class="flex flex-col">
+<h1 class="text-white text-base font-medium leading-normal">Jeturing Cloud</h1>
+<p class="text-text-secondary text-sm font-normal leading-normal">Admin Console</p>
+</div>
+</div>
+<!-- Navigation Items -->
+<nav class="flex flex-col gap-2">
+<a class="flex items-center gap-3 px-3 py-2 rounded-lg hover:bg-surface-dark transition-colors group" href="#">
+<span class="material-symbols-outlined text-text-secondary group-hover:text-white">dashboard</span>
+<span class="text-text-secondary text-sm font-medium group-hover:text-white">Dashboard</span>
+</a>
+<a class="flex items-center gap-3 px-3 py-2 rounded-lg hover:bg-surface-dark transition-colors group" href="#">
+<span class="material-symbols-outlined text-text-secondary group-hover:text-white">group</span>
+<span class="text-text-secondary text-sm font-medium group-hover:text-white">Tenants</span>
+</a>
+<!-- Active Item -->
+<a class="flex items-center gap-3 px-3 py-2 rounded-lg bg-surface-dark border border-border-dark shadow-sm" href="#">
+<span class="material-symbols-outlined text-primary fill-1">description</span>
+<span class="text-white text-sm font-bold">Reports &amp; Analytics</span>
+</a>
+<a class="flex items-center gap-3 px-3 py-2 rounded-lg hover:bg-surface-dark transition-colors group" href="#">
+<span class="material-symbols-outlined text-text-secondary group-hover:text-white">settings</span>
+<span class="text-text-secondary text-sm font-medium group-hover:text-white">Settings</span>
+</a>
+<a class="flex items-center gap-3 px-3 py-2 rounded-lg hover:bg-surface-dark transition-colors group" href="#">
+<span class="material-symbols-outlined text-text-secondary group-hover:text-white">support_agent</span>
+<span class="text-text-secondary text-sm font-medium group-hover:text-white">Support</span>
+</a>
+</nav>
+</div>
+<!-- User Profile -->
+<div class="flex items-center gap-3 px-3 py-3 rounded-lg bg-surface-dark/50 border border-border-dark/50">
+<div class="h-8 w-8 rounded-full bg-gradient-to-tr from-primary to-purple-500" data-alt="User Avatar Gradient"></div>
+<div class="flex flex-col">
+<p class="text-white text-sm font-medium">Alex Morgan</p>
+<p class="text-text-secondary text-xs">Super Admin</p>
+</div>
+</div>
+</div>
+</aside>
+<!-- Main Content -->
+<main class="flex flex-1 flex-col h-full overflow-hidden bg-background-dark relative">
+<!-- Top Header -->
+<header class="flex flex-col gap-4 border-b border-border-dark bg-background-dark px-6 py-4 z-10 shrink-0">
+<!-- Breadcrumbs -->
+<div class="flex flex-wrap gap-2 text-sm">
+<a class="text-text-secondary hover:text-white transition-colors" href="#">Dashboard</a>
+<span class="text-text-secondary">/</span>
+<a class="text-text-secondary hover:text-white transition-colors" href="#">Reports</a>
+<span class="text-text-secondary">/</span>
+<span class="text-white font-medium">Generator</span>
+</div>
+<!-- Page Title & Actions -->
+<div class="flex flex-wrap items-end justify-between gap-4">
+<div class="flex flex-col gap-1">
+<h1 class="text-white text-3xl font-black leading-tight tracking-tight">Reports &amp; Analytics</h1>
+<p class="text-text-secondary text-base font-normal max-w-2xl">
+                            Generate and export detailed PDF reports for automated billing and growth metrics.
+                        </p>
+</div>
+<div class="flex gap-3">
+<button class="flex items-center gap-2 h-10 px-4 rounded-xl bg-surface-dark border border-border-dark hover:bg-border-dark text-white text-sm font-semibold transition-colors">
+<span class="material-symbols-outlined text-[20px]">print</span>
+<span>Print</span>
+</button>
+<button class="flex items-center gap-2 h-10 px-6 rounded-xl bg-primary hover:bg-primary/90 text-background-dark text-sm font-bold shadow-lg shadow-primary/20 transition-all">
+<span class="material-symbols-outlined text-[20px]">download</span>
+<span>Export PDF</span>
+</button>
+</div>
+</div>
+</header>
+<!-- Workspace: Config + Preview -->
+<div class="flex flex-1 overflow-hidden">
+<!-- Left Sidebar: Configuration -->
+<div class="w-full max-w-[360px] flex flex-col gap-6 overflow-y-auto border-r border-border-dark bg-background-dark p-6 pb-20">
+<div class="flex items-center gap-2 pb-2 border-b border-border-dark">
+<span class="material-symbols-outlined text-primary">tune</span>
+<h2 class="text-white text-lg font-bold">Configuration</h2>
+</div>
+<!-- Report Type -->
+<div class="flex flex-col gap-2">
+<label class="text-white text-sm font-medium">Report Type</label>
+<div class="relative">
+<select class="w-full h-12 rounded-xl bg-surface-dark border border-border-dark text-white px-4 pr-10 appearance-none focus:ring-1 focus:ring-primary focus:border-primary outline-none text-sm transition-all cursor-pointer">
+<option>Financial Overview</option>
+<option>Growth &amp; Churn</option>
+<option>Infrastructure Usage</option>
+<option>Audit Logs</option>
+</select>
+<span class="material-symbols-outlined absolute right-3 top-1/2 -translate-y-1/2 text-text-secondary pointer-events-none">expand_more</span>
+</div>
+<p class="text-xs text-text-secondary">Select the primary dataset for this report.</p>
+</div>
+<!-- Date Range -->
+<div class="flex flex-col gap-2">
+<label class="text-white text-sm font-medium">Date Range</label>
+<div class="grid grid-cols-2 gap-3">
+<div class="relative">
+<input class="w-full h-10 rounded-lg bg-surface-dark border border-border-dark text-white px-3 text-sm focus:border-primary outline-none" type="text" value="Oct 1, 2023"/>
+</div>
+<div class="relative">
+<input class="w-full h-10 rounded-lg bg-surface-dark border border-border-dark text-white px-3 text-sm focus:border-primary outline-none" type="text" value="Oct 31, 2023"/>
+</div>
+</div>
+<div class="flex flex-wrap gap-2 mt-1">
+<button class="px-2 py-1 rounded bg-surface-dark border border-border-dark text-xs text-white hover:bg-border-dark">Last 7d</button>
+<button class="px-2 py-1 rounded bg-primary/20 border border-primary/50 text-xs text-primary font-medium">Last 30d</button>
+<button class="px-2 py-1 rounded bg-surface-dark border border-border-dark text-xs text-white hover:bg-border-dark">Q3 2023</button>
+</div>
+</div>
+<!-- Toggle Sections -->
+<div class="flex flex-col gap-3 pt-2">
+<label class="text-white text-sm font-medium">Included Sections</label>
+<label class="flex items-center gap-3 p-3 rounded-lg bg-surface-dark/50 border border-border-dark cursor-pointer hover:bg-surface-dark transition-colors">
+<input checked="" class="w-4 h-4 rounded border-gray-500 text-primary bg-transparent focus:ring-offset-background-dark focus:ring-primary" type="checkbox"/>
+<div class="flex items-center gap-2">
+<span class="material-symbols-outlined text-text-secondary text-lg">analytics</span>
+<span class="text-sm text-white">Charts &amp; Graphs</span>
+</div>
+</label>
+<label class="flex items-center gap-3 p-3 rounded-lg bg-surface-dark/50 border border-border-dark cursor-pointer hover:bg-surface-dark transition-colors">
+<input checked="" class="w-4 h-4 rounded border-gray-500 text-primary bg-transparent focus:ring-offset-background-dark focus:ring-primary" type="checkbox"/>
+<div class="flex items-center gap-2">
+<span class="material-symbols-outlined text-text-secondary text-lg">table_chart</span>
+<span class="text-sm text-white">Detailed Data Tables</span>
+</div>
+</label>
+<label class="flex items-center gap-3 p-3 rounded-lg bg-surface-dark/50 border border-border-dark cursor-pointer hover:bg-surface-dark transition-colors">
+<input class="w-4 h-4 rounded border-gray-500 text-primary bg-transparent focus:ring-offset-background-dark focus:ring-primary" type="checkbox"/>
+<div class="flex items-center gap-2">
+<span class="material-symbols-outlined text-text-secondary text-lg">admin_panel_settings</span>
+<span class="text-sm text-white">Admin Logs</span>
+</div>
+</label>
+</div>
+<!-- Output Format -->
+<div class="flex flex-col gap-2 pt-2">
+<label class="text-white text-sm font-medium">Format</label>
+<div class="flex p-1 bg-surface-dark rounded-lg border border-border-dark">
+<button class="flex-1 py-1.5 text-xs font-medium rounded text-background-dark bg-primary shadow-sm">PDF</button>
+<button class="flex-1 py-1.5 text-xs font-medium rounded text-text-secondary hover:text-white">HTML</button>
+<button class="flex-1 py-1.5 text-xs font-medium rounded text-text-secondary hover:text-white">CSV</button>
+</div>
+</div>
+<!-- Generate Action -->
+<button class="mt-4 w-full h-12 flex items-center justify-center gap-2 bg-surface-dark border border-primary/30 text-primary rounded-xl font-bold hover:bg-primary/10 transition-colors">
+<span class="material-symbols-outlined">refresh</span>
+                        Refresh Preview
+                    </button>
+<!-- Quick Stat Widget -->
+<div class="p-4 rounded-xl bg-gradient-to-br from-surface-dark to-background-dark border border-border-dark">
+<div class="flex items-center justify-between mb-2">
+<span class="text-xs text-text-secondary uppercase tracking-wider">Preview Stats</span>
+<span class="material-symbols-outlined text-text-secondary text-sm">info</span>
+</div>
+<div class="text-2xl font-black text-white">1,204</div>
+<div class="text-xs text-text-secondary">Records processed in 0.4s</div>
+</div>
+</div>
+<!-- Right Area: Live Preview -->
+<div class="flex-1 bg-[#0f1519] overflow-hidden relative flex flex-col items-center">
+<!-- Preview Toolbar -->
+<div class="w-full flex items-center justify-between px-6 py-2 bg-surface-dark/80 backdrop-blur-sm border-b border-border-dark z-10">
+<div class="text-xs text-text-secondary">Page 1 of 4</div>
+<div class="flex items-center gap-2">
+<button class="p-1 rounded hover:bg-white/10 text-text-secondary hover:text-white">
+<span class="material-symbols-outlined text-lg">remove</span>
+</button>
+<span class="text-xs text-white font-mono">100%</span>
+<button class="p-1 rounded hover:bg-white/10 text-text-secondary hover:text-white">
+<span class="material-symbols-outlined text-lg">add</span>
+</button>
+</div>
+<div class="flex items-center gap-2">
+<button class="p-1 rounded hover:bg-white/10 text-text-secondary hover:text-white" title="Rotate">
+<span class="material-symbols-outlined text-lg">rotate_right</span>
+</button>
+</div>
+</div>
+<!-- Document Canvas -->
+<div class="flex-1 w-full overflow-y-auto p-8 flex justify-center">
+<!-- A4 Paper Simulation -->
+<div class="w-[800px] min-h-[1132px] bg-white text-slate-800 rounded-sm paper-shadow relative p-12 flex flex-col gap-8 origin-top scale-95 lg:scale-100 transition-transform">
+<!-- Report Header -->
+<div class="flex justify-between items-start border-b border-slate-200 pb-6">
+<div class="flex items-center gap-3">
+<div class="h-10 w-10 bg-black rounded-lg flex items-center justify-center text-white">
+<span class="material-symbols-outlined">cloud</span>
+</div>
+<div class="flex flex-col">
+<span class="font-bold text-xl tracking-tight text-slate-900">Jeturing Cloud</span>
+<span class="text-xs text-slate-500 uppercase tracking-widest">Enterprise Edition</span>
+</div>
+</div>
+<div class="text-right">
+<h2 class="text-2xl font-bold text-slate-900">Financial Overview</h2>
+<p class="text-slate-500 text-sm mt-1">October 1, 2023 - October 31, 2023</p>
+<p class="text-slate-400 text-xs mt-1">Generated on Nov 02, 2023</p>
+</div>
+</div>
+<!-- Summary Cards -->
+<div class="grid grid-cols-3 gap-6">
+<div class="p-4 rounded border border-slate-100 bg-slate-50">
+<p class="text-xs font-semibold text-slate-500 uppercase">Total Revenue</p>
+<p class="text-2xl font-bold text-slate-900 mt-1">$124,500.00</p>
+<div class="flex items-center gap-1 mt-2 text-emerald-600 text-xs font-medium">
+<span class="material-symbols-outlined text-sm">trending_up</span>
+<span>+12.5% vs last month</span>
+</div>
+</div>
+<div class="p-4 rounded border border-slate-100 bg-slate-50">
+<p class="text-xs font-semibold text-slate-500 uppercase">Active Tenants</p>
+<p class="text-2xl font-bold text-slate-900 mt-1">1,452</p>
+<div class="flex items-center gap-1 mt-2 text-emerald-600 text-xs font-medium">
+<span class="material-symbols-outlined text-sm">trending_up</span>
+<span>+3.2% net growth</span>
+</div>
+</div>
+<div class="p-4 rounded border border-slate-100 bg-slate-50">
+<p class="text-xs font-semibold text-slate-500 uppercase">Avg Revenue Per User</p>
+<p class="text-2xl font-bold text-slate-900 mt-1">$85.40</p>
+<div class="flex items-center gap-1 mt-2 text-slate-400 text-xs font-medium">
+<span class="material-symbols-outlined text-sm">remove</span>
+<span>0.0% stable</span>
+</div>
+</div>
+</div>
+<!-- Revenue Chart Visualization (CSS Only) -->
+<div class="flex flex-col gap-4">
+<h3 class="text-lg font-bold text-slate-800">Revenue Growth Trend</h3>
+<div class="h-64 w-full border-l border-b border-slate-200 flex items-end justify-between px-4 pb-0 relative">
+<!-- Grid Lines -->
+<div class="absolute inset-0 flex flex-col justify-between pointer-events-none pb-8 pr-4">
+<div class="w-full h-px bg-slate-100"></div>
+<div class="w-full h-px bg-slate-100"></div>
+<div class="w-full h-px bg-slate-100"></div>
+<div class="w-full h-px bg-slate-100"></div>
+</div>
+<!-- Bars -->
+<div class="w-12 bg-sky-100 hover:bg-sky-200 transition-colors rounded-t-sm h-[40%] relative group">
+<div class="absolute -top-8 left-1/2 -translate-x-1/2 bg-slate-800 text-white text-xs px-2 py-1 rounded opacity-0 group-hover:opacity-100 transition-opacity">$40k</div>
+</div>
+<div class="w-12 bg-sky-200 hover:bg-sky-300 transition-colors rounded-t-sm h-[55%] relative group">
+<div class="absolute -top-8 left-1/2 -translate-x-1/2 bg-slate-800 text-white text-xs px-2 py-1 rounded opacity-0 group-hover:opacity-100 transition-opacity">$55k</div>
+</div>
+<div class="w-12 bg-sky-300 hover:bg-sky-400 transition-colors rounded-t-sm h-[45%] relative group">
+<div class="absolute -top-8 left-1/2 -translate-x-1/2 bg-slate-800 text-white text-xs px-2 py-1 rounded opacity-0 group-hover:opacity-100 transition-opacity">$45k</div>
+</div>
+<div class="w-12 bg-sky-400 hover:bg-sky-500 transition-colors rounded-t-sm h-[70%] relative group">
+<div class="absolute -top-8 left-1/2 -translate-x-1/2 bg-slate-800 text-white text-xs px-2 py-1 rounded opacity-0 group-hover:opacity-100 transition-opacity">$70k</div>
+</div>
+<div class="w-12 bg-sky-500 hover:bg-sky-600 transition-colors rounded-t-sm h-[85%] relative group">
+<div class="absolute -top-8 left-1/2 -translate-x-1/2 bg-slate-800 text-white text-xs px-2 py-1 rounded opacity-0 group-hover:opacity-100 transition-opacity">$85k</div>
+</div>
+<div class="w-12 bg-indigo-600 hover:bg-indigo-700 transition-colors rounded-t-sm h-[95%] relative group">
+<div class="absolute -top-8 left-1/2 -translate-x-1/2 bg-slate-800 text-white text-xs px-2 py-1 rounded opacity-0 group-hover:opacity-100 transition-opacity">$124k</div>
+</div>
+</div>
+<div class="flex justify-between px-4 text-xs text-slate-500 font-medium">
+<span class="w-12 text-center">May</span>
+<span class="w-12 text-center">Jun</span>
+<span class="w-12 text-center">Jul</span>
+<span class="w-12 text-center">Aug</span>
+<span class="w-12 text-center">Sep</span>
+<span class="w-12 text-center">Oct</span>
+</div>
+</div>
+<!-- Data Table -->
+<div class="flex flex-col gap-4 mt-4">
+<h3 class="text-lg font-bold text-slate-800">Top Performing Tenants</h3>
+<div class="w-full border border-slate-200 rounded-lg overflow-hidden">
+<table class="w-full text-left text-sm">
+<thead class="bg-slate-50 border-b border-slate-200 text-slate-500 font-semibold">
+<tr>
+<th class="px-4 py-3">Tenant Name</th>
+<th class="px-4 py-3">Plan</th>
+<th class="px-4 py-3">Users</th>
+<th class="px-4 py-3 text-right">Revenue</th>
+</tr>
+</thead>
+<tbody class="divide-y divide-slate-100">
+<tr>
+<td class="px-4 py-3 font-medium text-slate-900">Acme Corp</td>
+<td class="px-4 py-3 text-slate-600"><span class="px-2 py-0.5 rounded-full bg-purple-100 text-purple-700 text-xs font-bold">Enterprise</span></td>
+<td class="px-4 py-3 text-slate-600">240</td>
+<td class="px-4 py-3 text-right font-mono text-slate-900">$12,400.00</td>
+</tr>
+<tr>
+<td class="px-4 py-3 font-medium text-slate-900">Globex Inc</td>
+<td class="px-4 py-3 text-slate-600"><span class="px-2 py-0.5 rounded-full bg-blue-100 text-blue-700 text-xs font-bold">Pro</span></td>
+<td class="px-4 py-3 text-slate-600">85</td>
+<td class="px-4 py-3 text-right font-mono text-slate-900">$4,250.00</td>
+</tr>
+<tr>
+<td class="px-4 py-3 font-medium text-slate-900">Soylent Corp</td>
+<td class="px-4 py-3 text-slate-600"><span class="px-2 py-0.5 rounded-full bg-purple-100 text-purple-700 text-xs font-bold">Enterprise</span></td>
+<td class="px-4 py-3 text-slate-600">112</td>
+<td class="px-4 py-3 text-right font-mono text-slate-900">$8,900.00</td>
+</tr>
+<tr>
+<td class="px-4 py-3 font-medium text-slate-900">Initech</td>
+<td class="px-4 py-3 text-slate-600"><span class="px-2 py-0.5 rounded-full bg-slate-100 text-slate-700 text-xs font-bold">Basic</span></td>
+<td class="px-4 py-3 text-slate-600">45</td>
+<td class="px-4 py-3 text-right font-mono text-slate-900">$900.00</td>
+</tr>
+<tr>
+<td class="px-4 py-3 font-medium text-slate-900">Umbrella Corp</td>
+<td class="px-4 py-3 text-slate-600"><span class="px-2 py-0.5 rounded-full bg-purple-100 text-purple-700 text-xs font-bold">Enterprise</span></td>
+<td class="px-4 py-3 text-slate-600">1,200</td>
+<td class="px-4 py-3 text-right font-mono text-slate-900">$45,000.00</td>
+</tr>
+</tbody>
+</table>
+</div>
+</div>
+<!-- Footer -->
+<div class="mt-auto pt-8 border-t border-slate-100 flex justify-between text-xs text-slate-400">
+<p>Jeturing Cloud Inc. • 123 Tech Plaza, San Francisco, CA</p>
+<p>Page 1 of 1</p>
+</div>
+</div>
+</div>
+<!-- Loading Overlay (Hidden by default, structure for future use) -->
+<!-- 
+                    <div class="absolute inset-0 bg-background-dark/50 backdrop-blur-sm flex items-center justify-center z-20">
+                        <div class="flex flex-col items-center gap-4">
+                            <span class="material-symbols-outlined text-primary text-4xl animate-spin">progress_activity</span>
+                            <span class="text-white font-medium">Generating Preview...</span>
+                        </div>
+                    </div> 
+                    -->
+</div>
+</div>
+</main>
+</div>
+</body></html>

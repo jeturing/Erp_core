@@ -1,0 +1,282 @@
+<!DOCTYPE html>
+<html class="dark" lang="es">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Portal del Cliente - sajet.us Multitenant</title>
+    <link rel="preconnect" href="https://fonts.googleapis.com"/>
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin/>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;900&display=swap" rel="stylesheet"/>
+    <link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:wght,FILL@100..700,0..1&display=swap" rel="stylesheet"/>
+    <link rel="stylesheet" href="/static/css/tailwind.css">
+    
+    <style>
+        .glass-card {
+            background: rgba(255, 255, 255, 0.03);
+            backdrop-filter: blur(10px);
+            border: 1px solid rgba(255, 255, 255, 0.08);
+        }
+    </style>
+</head>
+<body class="bg-background-dark text-white font-display antialiased">
+    <!-- Top Navigation -->
+    <header class="sticky top-0 z-50 flex items-center justify-between border-b border-border-dark bg-[#101e23]/90 backdrop-blur-md px-4 md:px-10 py-3">
+        <div class="flex items-center gap-4">
+            <div class="size-8 flex items-center justify-center text-primary">
+                <span class="material-symbols-outlined text-[32px]">cloud_circle</span>
+            </div>
+            <h2 class="text-lg font-bold">Mi Portal</h2>
+        </div>
+        <div class="flex gap-2">
+            <button id="logoutBtn" class="flex h-10 items-center justify-center gap-2 px-4 rounded-xl bg-surface-dark text-white hover:bg-border-dark transition">
+                <span class="material-symbols-outlined text-[20px]">logout</span>
+                <span class="hidden md:inline">Cerrar Sesión</span>
+            </button>
+        </div>
+    </header>
+
+    <div class="max-w-7xl mx-auto px-4 md:px-10 py-8">
+        <!-- Breadcrumbs -->
+        <div class="flex gap-2 mb-4">
+            <a href="/" class="text-text-secondary hover:text-primary text-sm flex items-center gap-1">
+                <span class="material-symbols-outlined text-[16px]">home</span>
+                Inicio
+            </a>
+            <span class="text-text-secondary text-sm">/</span>
+            <span class="text-white text-sm">Portal Cliente</span>
+        </div>
+
+        <!-- Page Title -->
+        <h1 class="text-4xl font-black mb-2">Mi Cuenta</h1>
+        <p class="text-text-secondary mb-8">Gestiona tu suscripción, facturación y accede a tu instancia sajet.us</p>
+
+        <!-- Loading State -->
+        <div id="loadingState" class="flex items-center justify-center py-20">
+            <svg class="animate-spin h-12 w-12 text-primary" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
+                <circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"></circle>
+                <path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
+            </svg>
+        </div>
+
+        <!-- Content (Hidden until loaded) -->
+        <div id="contentContainer" class="hidden">
+            <!-- Tenant Info Card -->
+            <div class="glass-card rounded-xl p-6 mb-6">
+                <div class="flex flex-col md:flex-row md:items-center justify-between gap-4">
+                    <div>
+                        <h2 class="text-2xl font-bold mb-1" id="companyName">-</h2>
+                        <p class="text-text-secondary" id="emailDisplay">-</p>
+                    </div>
+                    <div class="flex items-center gap-3">
+                        <span id="statusBadge" class="inline-flex items-center gap-1 rounded-full px-3 py-1 text-sm font-medium"></span>
+                    </div>
+                </div>
+                
+                <div class="grid md:grid-cols-2 gap-4 mt-6 pt-6 border-t border-border-dark">
+                    <div>
+                        <p class="text-text-secondary text-sm mb-1">Subdominio</p>
+                        <p class="text-white font-mono text-lg" id="subdomainDisplay">-</p>
+                    </div>
+                    <div>
+                        <p class="text-text-secondary text-sm mb-1">Plan Actual</p>
+                        <p class="text-white font-semibold text-lg capitalize" id="planDisplay">-</p>
+                    </div>
+                </div>
+
+                <!-- Access sajet.us Button -->
+                <div id="sajet.usAccessContainer" class="hidden mt-6">
+                    <a id="sajet.usAccessBtn" href="#" target="_blank" class="flex items-center justify-center gap-2 bg-primary text-black font-bold px-6 py-3 rounded-lg hover:bg-primary/90 transition shadow-lg">
+                        <span class="material-symbols-outlined">rocket_launch</span>
+                        Acceder a mi sajet.us
+                    </a>
+                </div>
+            </div>
+
+            <!-- Billing Section -->
+            <div class="grid md:grid-cols-2 gap-6 mb-6">
+                <!-- Invoices -->
+                <div class="glass-card rounded-xl p-6">
+                    <h3 class="text-xl font-bold mb-4 flex items-center gap-2">
+                        <span class="material-symbols-outlined text-primary">receipt_long</span>
+                        Mis Facturas
+                    </h3>
+                    <div id="invoicesList" class="space-y-3">
+                        <p class="text-text-secondary text-sm">Cargando facturas...</p>
+                    </div>
+                </div>
+
+                <!-- Payment Method -->
+                <div class="glass-card rounded-xl p-6">
+                    <h3 class="text-xl font-bold mb-4 flex items-center gap-2">
+                        <span class="material-symbols-outlined text-primary">credit_card</span>
+                        Método de Pago
+                    </h3>
+                    <div id="paymentMethodContainer">
+                        <p class="text-text-secondary text-sm">Cargando información...</p>
+                    </div>
+                    <button id="updatePaymentBtn" class="hidden mt-4 flex items-center gap-2 bg-surface-dark border border-border-dark px-4 py-2 rounded-lg hover:bg-border-dark transition text-sm">
+                        <span class="material-symbols-outlined text-[18px]">edit</span>
+                        Actualizar Método de Pago
+                    </button>
+                </div>
+            </div>
+
+            <!-- Danger Zone -->
+            <div class="glass-card rounded-xl p-6 border-2 border-red-500/20">
+                <h3 class="text-xl font-bold mb-2 text-red-400">Zona de Peligro</h3>
+                <p class="text-text-secondary text-sm mb-4">Estas acciones son irreversibles</p>
+                <button id="cancelSubBtn" class="flex items-center gap-2 bg-red-500/20 border border-red-500/50 text-red-400 px-4 py-2 rounded-lg hover:bg-red-500/30 transition text-sm font-semibold">
+                    <span class="material-symbols-outlined text-[18px]">cancel</span>
+                    Cancelar Suscripción
+                </button>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        // Token se maneja por cookie httpOnly, localStorage es backup
+        const token = localStorage.getItem('access_token');
+
+        async function fetchWithAuth(url, options = {}) {
+            const response = await fetch(url, {
+                ...options,
+                credentials: 'same-origin',  // Incluir cookies
+                headers: {
+                    ...options.headers,
+                    ...(token ? {'Authorization': `Bearer ${token}`} : {})
+                }
+            });
+            if (response.status === 401) {
+                localStorage.clear();
+                window.location.href = '/login/tenant';
+                return null;
+            }
+            return response.json();
+        }
+
+        async function loadTenantInfo() {
+            try {
+                const data = await fetchWithAuth('/tenant/api/info');
+                if (!data) return;
+
+                document.getElementById('companyName').textContent = data.company_name;
+                document.getElementById('emailDisplay').textContent = data.email;
+                document.getElementById('subdomainDisplay').textContent = `${data.subdomain}.sajet.us`;
+                document.getElementById('planDisplay').textContent = data.plan;
+
+                // Status badge
+                const statusBadge = document.getElementById('statusBadge');
+                const statusMap = {
+                    'active': {class: 'bg-emerald-500/10 text-emerald-400 border border-emerald-500/20', text: 'Activa', icon: '✓'},
+                    'pending': {class: 'bg-amber-500/10 text-amber-400 border border-amber-500/20', text: 'Pendiente', icon: '⏱'},
+                    'cancelled': {class: 'bg-red-500/10 text-red-400 border border-red-500/20', text: 'Cancelada', icon: '✕'},
+                    'past_due': {class: 'bg-orange-500/10 text-orange-400 border border-orange-500/20', text: 'Pago Vencido', icon: '⚠'}
+                };
+                const status = statusMap[data.status] || statusMap['pending'];
+                statusBadge.className = `inline-flex items-center gap-1 rounded-full px-3 py-1 text-sm font-medium ${status.class}`;
+                statusBadge.textContent = `${status.icon} ${status.text}`;
+
+                // Odoo access
+                if (data.odoo_url && data.status === 'active') {
+                    document.getElementById('sajet.usAccessContainer').classList.remove('hidden');
+                    document.getElementById('sajet.usAccessBtn').href = data.odoo_url;
+                }
+            } catch (error) {
+                console.error('Error loading tenant info:', error);
+            }
+        }
+
+        async function loadBilling() {
+            try {
+                const data = await fetchWithAuth('/tenant/api/billing');
+                if (!data) return;
+
+                // Invoices
+                const invoicesList = document.getElementById('invoicesList');
+                if (data.invoices && data.invoices.length > 0) {
+                    invoicesList.innerHTML = data.invoices.slice(0, 5).map(inv => `
+                        <div class="flex items-center justify-between p-3 bg-surface-dark rounded-lg">
+                            <div>
+                                <p class="text-white font-medium">$${inv.amount.toFixed(2)} ${inv.currency.toUpperCase()}</p>
+                                <p class="text-text-secondary text-xs">${new Date(inv.date).toLocaleDateString('es-ES')}</p>
+                            </div>
+                            <a href="${inv.pdf_url}" target="_blank" class="text-primary hover:text-primary/80">
+                                <span class="material-symbols-outlined">picture_as_pdf</span>
+                            </a>
+                        </div>
+                    `).join('');
+                } else {
+                    invoicesList.innerHTML = '<p class="text-text-secondary text-sm">No hay facturas disponibles</p>';
+                }
+
+                // Payment method
+                const pmContainer = document.getElementById('paymentMethodContainer');
+                if (data.payment_method) {
+                    const pm = data.payment_method;
+                    pmContainer.innerHTML = `
+                        <div class="flex items-center gap-3 p-3 bg-surface-dark rounded-lg">
+                            <span class="material-symbols-outlined text-2xl">${pm.brand === 'visa' ? 'credit_card' : 'payment'}</span>
+                            <div>
+                                <p class="text-white font-medium capitalize">${pm.brand} •••• ${pm.last4}</p>
+                                <p class="text-text-secondary text-xs">Expira ${pm.exp_month}/${pm.exp_year}</p>
+                            </div>
+                        </div>
+                    `;
+                    document.getElementById('updatePaymentBtn').classList.remove('hidden');
+                } else {
+                    pmContainer.innerHTML = '<p class="text-text-secondary text-sm">No hay método de pago registrado</p>';
+                }
+            } catch (error) {
+                console.error('Error loading billing:', error);
+            }
+        }
+
+        async function initialize() {
+            await Promise.all([loadTenantInfo(), loadBilling()]);
+            document.getElementById('loadingState').classList.add('hidden');
+            document.getElementById('contentContainer').classList.remove('hidden');
+        }
+
+        // Event handlers
+        document.getElementById('updatePaymentBtn').addEventListener('click', async () => {
+            try {
+                const response = await fetch('/tenant/api/update-payment', {
+                    method: 'POST',
+                    credentials: 'same-origin',
+                    headers: token ? {'Authorization': `Bearer ${token}`} : {}
+                });
+                const data = await response.json();
+                if (data.checkout_url) {
+                    window.location.href = data.checkout_url;
+                }
+            } catch (error) {
+                alert('Error al actualizar método de pago');
+            }
+        });
+
+        document.getElementById('cancelSubBtn').addEventListener('click', async () => {
+            if (!confirm('¿Estás seguro de que quieres cancelar tu suscripción?')) return;
+            try {
+                await fetch('/tenant/api/cancel-subscription', {
+                    method: 'POST',
+                    credentials: 'same-origin',
+                    headers: token ? {'Authorization': `Bearer ${token}`} : {}
+                });
+                alert('Suscripción cancelada');
+                location.reload();
+            } catch (error) {
+                alert('Error al cancelar suscripción');
+            }
+        });
+
+        document.getElementById('logoutBtn').addEventListener('click', async () => {
+            // Llamar al endpoint de logout para invalidar cookie en servidor
+            await fetch('/api/logout', { method: 'POST', credentials: 'same-origin' });
+            localStorage.clear();
+            window.location.href = '/';
+        });
+
+        initialize();
+    </script>
+</body>
+</html>
