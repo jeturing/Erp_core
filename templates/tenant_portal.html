@@ -6,32 +6,43 @@
     <title>Portal del Cliente - sajet.us Multitenant</title>
     <link rel="preconnect" href="https://fonts.googleapis.com"/>
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin/>
-    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;900&display=swap" rel="stylesheet"/>
+    <link href="https://fonts.googleapis.com/css2?family=Bricolage+Grotesque:wght@500;600;700;800&family=Sora:wght@400;500;600;700&display=swap" rel="stylesheet"/>
     <link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:wght,FILL@100..700,0..1&display=swap" rel="stylesheet"/>
     <link rel="stylesheet" href="/static/css/tailwind.css">
+    <link rel="stylesheet" href="/static/css/brand.css">
     
     <style>
         .glass-card {
-            background: rgba(255, 255, 255, 0.03);
-            backdrop-filter: blur(10px);
+            background: linear-gradient(145deg, rgba(19, 42, 54, 0.9), rgba(10, 22, 30, 0.9));
             border: 1px solid rgba(255, 255, 255, 0.08);
+            box-shadow: var(--brand-shadow);
         }
     </style>
 </head>
-<body class="bg-background-dark text-white font-display antialiased">
+<body class="brand-shell text-white font-display antialiased relative">
+    <div class="grain"></div>
     <!-- Top Navigation -->
-    <header class="sticky top-0 z-50 flex items-center justify-between border-b border-border-dark bg-[#101e23]/90 backdrop-blur-md px-4 md:px-10 py-3">
-        <div class="flex items-center gap-4">
-            <div class="size-8 flex items-center justify-center text-primary">
-                <span class="material-symbols-outlined text-[32px]">cloud_circle</span>
+    <header class="sticky top-0 z-50 px-4 md:px-10 py-4">
+        <div class="slim-nav flex items-center justify-between gap-3 px-5 py-2.5">
+            <div class="flex items-center gap-3">
+                <div class="size-9 rounded-full bg-gradient-to-br from-[#27f1c7] via-[#8fffe3] to-[#ffb347] flex items-center justify-center text-[#0b151c] shadow-lg shadow-primary/25">
+                    <span class="material-symbols-outlined text-[26px]">cloud_circle</span>
+                </div>
+                <div>
+                    <p class="text-xs uppercase tracking-[0.25em] text-slate-400">Cliente</p>
+                    <h2 class="text-lg font-bold leading-tight">Mi Portal</h2>
+                </div>
             </div>
-            <h2 class="text-lg font-bold">Mi Portal</h2>
-        </div>
-        <div class="flex gap-2">
-            <button id="logoutBtn" class="flex h-10 items-center justify-center gap-2 px-4 rounded-xl bg-surface-dark text-white hover:bg-border-dark transition">
-                <span class="material-symbols-outlined text-[20px]">logout</span>
-                <span class="hidden md:inline">Cerrar Sesión</span>
-            </button>
+            <div class="flex items-center gap-2">
+                <span class="chip hidden sm:inline-flex">
+                    <span class="material-symbols-outlined text-[16px] text-emerald-300">verified</span>
+                    Sesión activa
+                </span>
+                <button id="logoutBtn" class="btn-ghost h-10 px-4">
+                    <span class="material-symbols-outlined text-[20px]">logout</span>
+                    <span class="hidden md:inline">Cerrar sesión</span>
+                </button>
+            </div>
         </div>
     </header>
 
@@ -47,8 +58,12 @@
         </div>
 
         <!-- Page Title -->
-        <h1 class="text-4xl font-black mb-2">Mi Cuenta</h1>
-        <p class="text-text-secondary mb-8">Gestiona tu suscripción, facturación y accede a tu instancia sajet.us</p>
+        <div class="flex items-center gap-3 mb-3">
+            <span class="tag">sajet.us</span>
+            <span class="chip">tu stack, listo</span>
+        </div>
+        <h1 class="heading-hero mb-2">Mi Cuenta</h1>
+        <p class="subhead mb-8">Gestiona tu suscripción, facturación y accede a tu instancia sajet.us sin perder de vista el estado de tu tenant.</p>
 
         <!-- Loading State -->
         <div id="loadingState" class="flex items-center justify-center py-20">
@@ -85,7 +100,7 @@
 
                 <!-- Access sajet.us Button -->
                 <div id="sajet.usAccessContainer" class="hidden mt-6">
-                    <a id="sajet.usAccessBtn" href="#" target="_blank" class="flex items-center justify-center gap-2 bg-primary text-black font-bold px-6 py-3 rounded-lg hover:bg-primary/90 transition shadow-lg">
+                    <a id="sajet.usAccessBtn" href="#" target="_blank" class="btn-aurora w-full justify-center">
                         <span class="material-symbols-outlined">rocket_launch</span>
                         Acceder a mi sajet.us
                     </a>
@@ -114,7 +129,7 @@
                     <div id="paymentMethodContainer">
                         <p class="text-text-secondary text-sm">Cargando información...</p>
                     </div>
-                    <button id="updatePaymentBtn" class="hidden mt-4 flex items-center gap-2 bg-surface-dark border border-border-dark px-4 py-2 rounded-lg hover:bg-border-dark transition text-sm">
+                    <button id="updatePaymentBtn" class="hidden mt-4 btn-ghost text-sm">
                         <span class="material-symbols-outlined text-[18px]">edit</span>
                         Actualizar Método de Pago
                     </button>
@@ -123,9 +138,9 @@
 
             <!-- Danger Zone -->
             <div class="glass-card rounded-xl p-6 border-2 border-red-500/20">
-                <h3 class="text-xl font-bold mb-2 text-red-400">Zona de Peligro</h3>
+                <h3 class="text-xl font-bold mb-2 text-red-300">Zona de Peligro</h3>
                 <p class="text-text-secondary text-sm mb-4">Estas acciones son irreversibles</p>
-                <button id="cancelSubBtn" class="flex items-center gap-2 bg-red-500/20 border border-red-500/50 text-red-400 px-4 py-2 rounded-lg hover:bg-red-500/30 transition text-sm font-semibold">
+                <button id="cancelSubBtn" class="flex items-center gap-2 px-4 py-2 rounded-lg border border-red-400/40 bg-red-500/15 text-red-200 hover:bg-red-500/25 transition text-sm font-semibold">
                     <span class="material-symbols-outlined text-[18px]">cancel</span>
                     Cancelar Suscripción
                 </button>

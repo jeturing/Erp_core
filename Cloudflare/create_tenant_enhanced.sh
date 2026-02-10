@@ -8,12 +8,12 @@ set -e
 
 SUBDOMAIN="$1"
 WITH_DEMO_FLAG="${2:---without-demo}"
-CONTAINER_IP="${3:-172.16.16.105}"
+CONTAINER_IP="${3:-10.10.10.100}"
 LOCAL_PORT="${4:-8069}"
 
 if [[ -z "$SUBDOMAIN" ]]; then
   echo "❌ Usage: $0 <subdomain> [--with-demo] [--container-ip IP] [--local-port PORT]"
-  echo "   Example: $0 acme --without-demo 172.16.16.105 8069"
+  echo "   Example: $0 acme --without-demo 10.10.10.100 8069"
   exit 1
 fi
 

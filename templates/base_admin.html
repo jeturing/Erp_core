@@ -4,11 +4,12 @@
     <meta charset="utf-8"/>
     <meta content="width=device-width, initial-scale=1.0" name="viewport"/>
     <title>{% block title %}Jeturing Admin{% endblock %}</title>
+    <link rel="preconnect" href="https://fonts.googleapis.com"/>
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin/>
+    <link href="https://fonts.googleapis.com/css2?family=Bricolage+Grotesque:wght@500;600;700;800&family=Sora:wght@400;500;600;700&display=swap" rel="stylesheet"/>
     <link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:wght,FILL@100..700,0..1&display=swap" rel="stylesheet"/>
-    <link href="https://fonts.googleapis.com" rel="preconnect"/>
-    <link crossorigin="" href="https://fonts.gstatic.com" rel="preconnect"/>
-    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&display=swap" rel="stylesheet"/>
     <link rel="stylesheet" href="/static/css/tailwind.css">
+    <link rel="stylesheet" href="/static/css/brand.css">
     
     <style>
         ::-webkit-scrollbar {
@@ -48,39 +49,51 @@
     <script>
         // Cargar preferencia de tema al iniciar
         (function() {
-            const darkMode = localStorage.getItem('darkMode');
-            if (darkMode === 'true') {
+            const stored = localStorage.getItem('darkMode');
+            const darkMode = stored === null ? true : stored === 'true';
+            if (darkMode) {
                 document.documentElement.classList.add('dark');
             } else {
                 document.documentElement.classList.remove('dark');
+            }
+            if (stored === null) {
+                localStorage.setItem('darkMode', 'true');
             }
         })();
     </script>
     {% block extra_head %}{% endblock %}
 </head>
-<body class="bg-white dark:bg-background-dark text-slate-900 dark:text-slate-100 font-display transition-colors duration-200 antialiased overflow-hidden">
-    <div class="flex h-screen w-full overflow-hidden">
+<body class="brand-shell text-slate-100 font-display transition-colors duration-200 antialiased overflow-hidden">
+    <div class="grain"></div>
+    <div class="flex h-screen w-full overflow-hidden relative">
         <!-- Sidebar -->
         {% include 'partials/admin_sidebar.html' %}
         
         <!-- Main Content -->
         <main class="flex-1 flex flex-col h-full overflow-hidden relative">
             <!-- Header -->
-            <header class="h-20 flex-shrink-0 border-b border-slate-300 dark:border-slate-800 bg-white dark:bg-background-dark/80 backdrop-blur-md z-10">
-                <div class="h-full px-8 flex items-center justify-between gap-4">
-                    <div class="flex flex-col">
-                        <h2 class="text-xl font-bold text-slate-900 dark:text-white tracking-tight">{% block page_title %}Dashboard{% endblock %}</h2>
-                        <p class="text-sm text-slate-600 dark:text-slate-400">{% block page_subtitle %}Gestiona tu plataforma multitenant{% endblock %}</p>
+            <header class="flex-shrink-0 z-20 px-8 pt-6">
+                <div class="slim-nav flex items-center justify-between gap-4 px-6 py-3">
+                    <div class="flex items-center gap-3">
+                        <span class="status-dot"></span>
+                        <div class="flex flex-col">
+                            <h2 class="text-xl font-bold tracking-tight text-white">{% block page_title %}Dashboard{% endblock %}</h2>
+                            <p class="text-sm text-slate-300">{% block page_subtitle %}Gestiona tu plataforma multitenant{% endblock %}</p>
+                        </div>
                     </div>
-                    <div class="flex items-center gap-4">
+                    <div class="flex items-center gap-3">
+                        <span class="chip hidden md:inline-flex">
+                            <span class="material-symbols-outlined text-[16px] text-amber-300">bolt</span>
+                            Control en vivo
+                        </span>
                         {% block header_actions %}
                         <!-- Theme Toggle Button -->
-                        <button id="themeToggle" class="flex items-center justify-center size-10 rounded-xl text-slate-600 dark:text-slate-400 hover:bg-slate-200 dark:hover:bg-surface-highlight transition-colors" title="Cambiar tema">
-                            <span class="material-symbols-outlined text-[24px]" id="themeIcon">light_mode</span>
+                        <button id="themeToggle" class="btn-ghost size-10 rounded-2xl text-slate-200" title="Cambiar tema">
+                            <span class="material-symbols-outlined text-[22px]" id="themeIcon">light_mode</span>
                         </button>
-                        <button class="flex items-center justify-center size-10 rounded-xl text-slate-600 dark:text-slate-400 hover:bg-slate-200 dark:hover:bg-surface-highlight transition-colors relative">
-                            <span class="material-symbols-outlined text-[24px]">notifications</span>
-                            <span class="absolute top-2.5 right-2.5 size-2 bg-accent-rose rounded-full border border-white dark:border-background-dark"></span>
+                        <button class="btn-ghost size-10 rounded-2xl text-slate-200 relative">
+                            <span class="material-symbols-outlined text-[22px]">notifications</span>
+                            <span class="absolute top-2 right-2 size-2 bg-accent-rose rounded-full border border-white/40"></span>
                         </button>
                         {% endblock %}
                     </div>
@@ -88,8 +101,8 @@
             </header>
             
             <!-- Page Content -->
-            <div class="flex-1 overflow-y-auto p-8 scroll-smooth">
-                <div class="max-w-7xl mx-auto space-y-8 pb-10">
+            <div class="flex-1 overflow-y-auto p-8 scroll-smooth relative">
+                <div class="max-w-7xl mx-auto space-y-8 pb-10 hero-grid">
                     {% block content %}{% endblock %}
                 </div>
             </div>

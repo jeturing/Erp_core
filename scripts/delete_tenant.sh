@@ -12,9 +12,14 @@ YELLOW='\033[1;33m'
 BLUE='\033[0;34m'
 NC='\033[0m'
 
-# Configuración
-CF_API_TOKEN="${CF_API_TOKEN:-}"
-CF_ZONE_ID="${CF_ZONE_ID:-}"
+# Cargar credenciales de Cloudflare
+CF_CRED_FILE="/opt/odoo/scripts/.cf_credentials"
+if [[ -f "$CF_CRED_FILE" ]]; then
+    source "$CF_CRED_FILE"
+fi
+CF_API_TOKEN="${cloudflare_api_token:-$CF_API_TOKEN}"
+CF_ZONE_ID="${CF_ZONE_ID:-4a83b88793ac3688486ace69b6ae80f9}"
+
 DOMAIN="sajet.us"
 ODOO_MASTER_PASSWORD="${ODOO_MASTER_PASSWORD:-admin}"
 ODOO_URL="http://localhost:8069"

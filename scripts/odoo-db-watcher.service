@@ -1,0 +1,27 @@
+[Unit]
+Description=Odoo Database Watcher - Auto-provisioning de subdominios Cloudflare
+Documentation=https://github.com/jeturing/Erp_core
+After=postgresql.service odoo.service network.target
+Wants=postgresql.service
+
+[Service]
+Type=simple
+User=root
+Group=root
+WorkingDirectory=/opt/odoo/scripts
+ExecStart=/usr/bin/python3 /opt/odoo/scripts/odoo_db_watcher.py
+Restart=always
+RestartSec=10
+StandardOutput=append:/var/log/odoo/db_watcher.log
+StandardError=append:/var/log/odoo/db_watcher.log
+
+# Seguridad
+NoNewPrivileges=false
+ProtectSystem=false
+ProtectHome=false
+
+# Variables de entorno
+Environment="PYTHONUNBUFFERED=1"
+
+[Install]
+WantedBy=multi-user.target

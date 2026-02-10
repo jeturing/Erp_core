@@ -6,14 +6,15 @@
     <title>Login {{ 'Administrador' if role == 'admin' else 'Cliente' }} - sajet.us</title>
     <link rel="preconnect" href="https://fonts.googleapis.com">
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-    <link href="https://fonts.googleapis.com/css2?family=Space+Mono:wght@400;700&family=Syne:wght@400;600;700;800&display=swap" rel="stylesheet">
+    <link href="https://fonts.googleapis.com/css2?family=Bricolage+Grotesque:wght@500;600;700;800&family=Sora:wght@400;500;600;700&family=Space+Mono:wght@400;700&display=swap" rel="stylesheet">
     <style>
         :root {
-            --color-electric: #00fff5;
-            --color-magenta: #ff006e;
-            --color-void: #0a0a0f;
-            --color-mist: #1a1a2e;
-            --font-display: 'Syne', sans-serif;
+            --color-electric: #27f1c7;
+            --color-magenta: #ffb347;
+            --color-void: #050c14;
+            --color-mist: #0f1f2a;
+            --font-display: 'Bricolage Grotesque', sans-serif;
+            --font-body: 'Sora', sans-serif;
             --font-mono: 'Space Mono', monospace;
         }
         
@@ -24,7 +25,7 @@
         }
         
         body {
-            font-family: var(--font-mono);
+            font-family: var(--font-body);
             background: var(--color-void);
             color: #ffffff;
             min-height: 100vh;
@@ -43,8 +44,8 @@
             width: 100%;
             height: 100%;
             background-image: 
-                linear-gradient(rgba(0, 255, 245, 0.03) 1px, transparent 1px),
-                linear-gradient(90deg, rgba(0, 255, 245, 0.03) 1px, transparent 1px);
+                linear-gradient(rgba(39, 241, 199, 0.03) 1px, transparent 1px),
+                linear-gradient(90deg, rgba(39, 241, 199, 0.03) 1px, transparent 1px);
             background-size: 50px 50px;
             animation: gridMove 20s linear infinite;
             pointer-events: none;
@@ -109,8 +110,8 @@
         
         /* Login Card */
         .login-card {
-            background: rgba(26, 26, 46, 0.6);
-            border: 1px solid rgba(0, 255, 245, 0.2);
+            background: linear-gradient(145deg, rgba(19, 42, 54, 0.9), rgba(10, 22, 30, 0.9));
+            border: 1px solid rgba(39, 241, 199, 0.18);
             padding: 3rem;
             backdrop-filter: blur(20px);
             clip-path: polygon(0 0, calc(100% - 24px) 0, 100% 24px, 100% 100%, 24px 100%, 0 calc(100% - 24px));
@@ -135,11 +136,11 @@
         }
         
         .icon-admin {
-            background: linear-gradient(135deg, var(--color-magenta), #ff3366);
+            background: linear-gradient(135deg, var(--color-magenta), #ffc56a);
         }
         
         .icon-tenant {
-            background: linear-gradient(135deg, var(--color-electric), #00ccff);
+            background: linear-gradient(135deg, var(--color-electric), #6ef3d6);
         }
         
         @keyframes iconPulse {
@@ -184,7 +185,7 @@
         .form-input {
             width: 100%;
             background: rgba(10, 10, 15, 0.8);
-            border: 2px solid rgba(0, 255, 245, 0.2);
+            border: 2px solid rgba(39, 241, 199, 0.18);
             color: #ffffff;
             padding: 0.875rem 1rem 0.875rem 3rem;
             font-family: var(--font-mono);
@@ -196,7 +197,7 @@
         .form-input:focus {
             outline: none;
             border-color: var(--color-electric);
-            box-shadow: 0 0 20px rgba(0, 255, 245, 0.2);
+            box-shadow: 0 0 24px rgba(39, 241, 199, 0.24);
         }
         
         .form-input::placeholder {
@@ -234,9 +235,9 @@
             font-weight: 700;
             font-size: 1rem;
             padding: 1rem 2rem;
-            background: var(--color-electric);
-            color: var(--color-void);
-            border: 2px solid var(--color-electric);
+            background: linear-gradient(120deg, var(--color-electric), #6ef3d6, #ffe6b3);
+            color: #031b16;
+            border: 2px solid rgba(255, 255, 255, 0.08);
             text-transform: uppercase;
             letter-spacing: 0.05em;
             cursor: pointer;
@@ -253,7 +254,7 @@
             background: transparent;
             color: var(--color-electric);
             transform: translateY(-2px);
-            box-shadow: 0 10px 30px rgba(0, 255, 245, 0.3);
+            box-shadow: 0 10px 30px rgba(39, 241, 199, 0.28);
         }
         
         .btn-submit:disabled {
@@ -262,14 +263,14 @@
         }
         
         .btn-admin {
-            background: var(--color-magenta);
-            border-color: var(--color-magenta);
+            background: linear-gradient(120deg, var(--color-magenta), #ffc56a);
+            border-color: rgba(255, 255, 255, 0.12);
         }
         
         .btn-admin:hover:not(:disabled) {
             background: transparent;
             color: var(--color-magenta);
-            box-shadow: 0 10px 30px rgba(255, 0, 110, 0.3);
+            box-shadow: 0 10px 30px rgba(255, 179, 71, 0.28);
         }
         
         /* Alert */

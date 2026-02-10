@@ -3,92 +3,102 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Admin Login - Onboarding System</title>
+    <title>Acceso Admin - Jeturing</title>
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Bricolage+Grotesque:wght@500;600;700;800&family=Sora:wght@400;500;600;700&display=swap" rel="stylesheet">
     <link rel="stylesheet" href="/static/css/tailwind.css">
-    <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:opsz,wght,FILL,GRAD@20..48,100..700,0..1,-50..200" />
-    <style>
-        body { font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif; }
-    </style>
+    <link rel="stylesheet" href="/static/css/brand.css">
 </head>
-<body class="bg-gradient-to-br from-slate-900 via-slate-800 to-slate-900 min-h-screen flex items-center justify-center p-4">
-    <div class="w-full max-w-md">
-        <div class="bg-white rounded-lg shadow-2xl p-8">
-            <!-- Logo/Header -->
-            <div class="flex items-center justify-center mb-8">
-                <span class="material-symbols-outlined text-4xl text-blue-600">admin_panel_settings</span>
-                <h1 class="text-2xl font-bold text-slate-900 ml-2">Administración</h1>
+<body class="brand-shell min-h-screen flex items-center justify-center p-6 relative">
+    <div class="grain"></div>
+    <div class="w-full max-w-5xl grid lg:grid-cols-[1.15fr_0.9fr] gap-8 items-stretch">
+        <!-- Story panel -->
+        <section class="panel-ghost p-8 lg:p-10 relative overflow-hidden">
+            <div class="absolute inset-0 pointer-events-none" style="background: radial-gradient(circle at 30% 20%, rgba(39,241,199,0.16), transparent 40%), radial-gradient(circle at 80% 10%, rgba(255,179,71,0.2), transparent 45%); filter: blur(10px);"></div>
+            <div class="flex flex-col gap-5 relative z-10">
+                <span class="tag w-fit">Admin • sajet.us multitenant</span>
+                <h1 class="heading-hero text-white">Operaciones sin ruido, decisiones con luz verde</h1>
+                <p class="subhead">Controla provisionamiento, facturación y túneles Cloudflare desde un cockpit diseñado para alta visibilidad y baja fricción.</p>
+                <div class="soft-divider"></div>
+                <div class="grid sm:grid-cols-2 gap-4 text-sm text-slate-200">
+                    <div class="flex items-center gap-3">
+                        <span class="material-symbols-outlined text-[#27f1c7]">monitoring</span>
+                        Alertas y métricas en tiempo real
+                    </div>
+                    <div class="flex items-center gap-3">
+                        <span class="material-symbols-outlined text-[#ffb347]">security</span>
+                        Acceso seguro con cookies httpOnly
+                    </div>
+                    <div class="flex items-center gap-3">
+                        <span class="material-symbols-outlined text-[#27f1c7]">bolt</span>
+                        Provisionamiento en minutos
+                    </div>
+                    <div class="flex items-center gap-3">
+                        <span class="material-symbols-outlined text-[#ff6675]">visibility</span>
+                        Logs centrales y trazabilidad
+                    </div>
+                </div>
+            </div>
+        </section>
+
+        <!-- Login card -->
+        <section class="panel p-8 lg:p-10 relative">
+            <div class="flex items-start justify-between gap-4 mb-6">
+                <div>
+                    <span class="tag">Acceso Privado</span>
+                    <h2 class="text-2xl font-bold text-white mt-2">Dashboard Administrativo</h2>
+                    <p class="text-sm text-slate-400">Credenciales definidas vía variables de entorno.</p>
+                </div>
+                <a href="/" class="chip">← Volver</a>
             </div>
 
-            <!-- Título -->
-            <h2 class="text-xl font-semibold text-slate-800 mb-2 text-center">Dashboard Administrativo</h2>
-            <p class="text-sm text-slate-600 text-center mb-6">Ingresa tus credenciales para acceder</p>
-
-            <!-- Formulario de Login -->
             <form id="loginForm" class="space-y-4">
                 <div>
-                    <label for="username" class="block text-sm font-medium text-slate-700 mb-1">Usuario</label>
+                    <label for="username" class="block text-sm font-semibold text-slate-200 mb-2">Usuario</label>
                     <input 
                         type="text" 
                         id="username" 
                         name="username" 
                         required 
-                        class="w-full px-4 py-2 border border-slate-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent transition"
+                        class="w-full"
                         placeholder="admin"
                     />
                 </div>
 
-                <div>
-                    <label for="password" class="block text-sm font-medium text-slate-700 mb-1">Contraseña</label>
+            <div>
+                    <label for="password" class="block text-sm font-semibold text-slate-200 mb-2">Contraseña</label>
                     <input 
                         type="password" 
                         id="password" 
                         name="password" 
                         required 
-                        class="w-full px-4 py-2 border border-slate-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent transition"
+                        class="w-full"
                         placeholder="••••••••"
                     />
                 </div>
 
-                <!-- Mensaje de Error -->
-                <div id="errorMessage" class="hidden bg-red-50 border border-red-200 text-red-700 px-4 py-3 rounded-lg text-sm flex items-center">
-                    <span class="material-symbols-outlined mr-2 text-base">error</span>
+                <!-- Mensajes -->
+                <div id="errorMessage" class="hidden glass border border-rose-400/30 text-rose-200 px-4 py-3 rounded-lg text-sm flex items-center gap-2">
+                    <span class="material-symbols-outlined text-[18px]">error</span>
                     <span id="errorText"></span>
                 </div>
 
-                <!-- Mensaje de Carga -->
-                <div id="loadingMessage" class="hidden bg-blue-50 border border-blue-200 text-blue-700 px-4 py-3 rounded-lg text-sm flex items-center">
-                    <svg class="animate-spin h-4 w-4 mr-2" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
-                        <circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"></circle>
-                        <path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
-                    </svg>
+                <div id="loadingMessage" class="hidden glass border border-cyan-400/30 text-cyan-100 px-4 py-3 rounded-lg text-sm flex items-center gap-2">
+                    <span class="material-symbols-outlined text-[18px]" aria-hidden="true">autorenew</span>
                     Validando credenciales...
                 </div>
 
-                <!-- Botón Submit -->
                 <button 
                     type="submit" 
-                    class="w-full bg-blue-600 hover:bg-blue-700 text-white font-semibold py-2 px-4 rounded-lg transition duration-200 flex items-center justify-center gap-2"
+                    class="btn-aurora w-full h-12 text-base"
                     id="submitBtn"
                 >
-                    <span class="material-symbols-outlined">login</span>
-                    Iniciar Sesión
+                    <span class="material-symbols-outlined text-[20px]">login</span>
+                    <span id="btnText">Iniciar sesión</span>
                 </button>
             </form>
-
-            <!-- Pie de página -->
-            <div class="mt-6 pt-6 border-t border-slate-200">
-                <p class="text-xs text-slate-600 text-center">
-                    Las credenciales se configuram mediante variables de entorno
-                </p>
-            </div>
-        </div>
-
-        <!-- Footer -->
-        <div class="text-center mt-6">
-            <p class="text-sm text-slate-400">
-                <a href="/" class="text-slate-300 hover:text-slate-200 underline">← Volver al inicio</a>
-            </p>
-        </div>
+        </section>
     </div>
 
     <script>
@@ -101,11 +111,13 @@
             const errorDiv = document.getElementById('errorMessage');
             const loadingDiv = document.getElementById('loadingMessage');
             const submitBtn = document.getElementById('submitBtn');
+            const btnText = document.getElementById('btnText');
             
             // Mostrar carga, esconder error
             errorDiv.classList.add('hidden');
             loadingDiv.classList.remove('hidden');
             submitBtn.disabled = true;
+            btnText.innerHTML = '<span class="material-symbols-outlined animate-spin">progress_activity</span>';
             
             try {
                 // Usar la API segura que setea cookies httpOnly
@@ -123,8 +135,6 @@
                 });
                 
                 if (response.ok) {
-                    // La cookie se setea automáticamente por el servidor
-                    // Redirigir al dashboard
                     window.location.href = '/admin';
                 } else {
                     const data = await response.json();
@@ -132,12 +142,14 @@
                     errorDiv.classList.remove('hidden');
                     loadingDiv.classList.add('hidden');
                     submitBtn.disabled = false;
+                    btnText.textContent = 'Iniciar sesión';
                 }
             } catch (error) {
                 document.getElementById('errorText').textContent = 'Error al conectar con el servidor';
                 errorDiv.classList.remove('hidden');
                 loadingDiv.classList.add('hidden');
                 submitBtn.disabled = false;
+                btnText.textContent = 'Iniciar sesión';
                 console.error('Login error:', error);
             }
         });
