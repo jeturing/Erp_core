@@ -1,0 +1,24 @@
+[Unit]
+Description=Odoo Database Watcher - Auto-detect new tenants and create DNS
+Documentation=file:///opt/nodo/docs/DB_WATCHER.md
+After=network.target postgresql.service
+Wants=postgresql.service
+
+[Service]
+Type=simple
+User=root
+WorkingDirectory=/opt/odoo/scripts
+Environment=PYTHONUNBUFFERED=1
+Environment=ODOO_DOMAIN=sajet.us
+Environment=DB_WATCHER_INTERVAL=10
+ExecStart=/usr/bin/python3 /opt/odoo/scripts/odoo_db_watcher.py
+Restart=always
+RestartSec=10
+StartLimitInterval=60s
+StartLimitBurst=3
+StandardOutput=journal
+StandardError=journal
+SyslogIdentifier=odoo-db-watcher
+
+[Install]
+WantedBy=multi-user.target

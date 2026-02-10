@@ -1,0 +1,23 @@
+[Unit]
+Description=Odoo Local Provisioning API
+Documentation=file:///opt/nodo/docs/API.md
+After=network.target postgresql.service
+Wants=postgresql.service
+
+[Service]
+Type=simple
+User=root
+WorkingDirectory=/opt/odoo/scripts
+Environment=PYTHONUNBUFFERED=1
+Environment=PROVISIONING_API_KEY=prov-key-2026-secure
+ExecStart=/usr/bin/python3 /opt/odoo/scripts/odoo_local_api.py
+Restart=always
+RestartSec=10
+StartLimitInterval=60s
+StartLimitBurst=3
+StandardOutput=journal
+StandardError=journal
+SyslogIdentifier=odoo-local-api
+
+[Install]
+WantedBy=multi-user.target

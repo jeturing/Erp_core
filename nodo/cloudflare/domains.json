@@ -1,0 +1,13 @@
+{
+  "zones": {
+    "sajet.us": "4a83b88793ac3688486ace69b6ae80f9",
+    "jeturing.com": "0004e8b57924141f4758f3b3ba02dd9e",
+    "gmfcllc.com": "67515031fb2b16a5daf3cb09da010c02",
+    "lslogistic.net": "d5d4702bbcd7e6751bb1d4e090ae9433",
+    "aysautorepair.com": "5d152d21ef579da1025bafab212a9d6c",
+    "esecure.do": "ce7d0136b71576ffd9dbb00cbde568f6"
+  },
+  "tunnel_id": "da2bc763-a93b-41f5-9a22-1731403127e3",
+  "default_domain": "sajet.us",
+  "description": "Configuración de Cloudflare para tenants multi-dominio"
+}
