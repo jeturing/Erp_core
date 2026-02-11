@@ -147,11 +147,35 @@ document.addEventListener('DOMContentLoaded', () => {
 
 async function loadBillingMetrics() {
     try {
-        const res = await fetch('/api/dashboard/metrics', {credentials: 'same-origin'});
-        if (!res.ok) return;
+        const res = await fetch('/api/billing/metrics', {credentials: 'same-origin'});
+        if (!res.ok) {
+            if (res.status === 401) {
+                window.location.href = '/login/admin';
+                return;
+            }
+            throw new Error('Error cargando métricas');
+        }
         const data = await res.json();
-        document.getElementById('totalMRR').textContent = `$${data.total_revenue || 0}`;
-        document.getElementById('monthRevenue').textContent = `$${data.total_revenue || 0}`;
+        
+        // MRR y revenue
+        document.getElementById('totalMRR').textContent = `$${data.mrr_total || 0}`;
+        document.getElementById('monthRevenue').textContent = `$${data.month_revenue || 0}`;
+        document.getElementById('invoiceCount').textContent = `${data.total_active || 0} suscripciones activas`;
+        
+        // Pendiente de cobro
+        document.getElementById('pendingAmount').textContent = `$${data.pending_amount || 0}`;
+        document.getElementById('pendingCount').textContent = `${data.pending_count || 0} pagos pendientes`;
+        
+        // Distribución por plan
+        if (data.plan_distribution) {
+            const dist = data.plan_distribution;
+            document.getElementById('enterpriseCount').textContent = `${dist.enterprise?.count || 0} tenants`;
+            document.getElementById('enterpriseRevenue').textContent = `$${dist.enterprise?.revenue || 0}`;
+            document.getElementById('proCount').textContent = `${dist.pro?.count || 0} tenants`;
+            document.getElementById('proRevenue').textContent = `$${dist.pro?.revenue || 0}`;
+            document.getElementById('basicCount').textContent = `${dist.basic?.count || 0} tenants`;
+            document.getElementById('basicRevenue').textContent = `$${dist.basic?.revenue || 0}`;
+        }
     } catch (err) {
         console.error('Error loading billing metrics', err);
     }
@@ -160,41 +184,52 @@ async function loadBillingMetrics() {
 async function loadInvoices() {
     const body = document.getElementById('invoicesBody');
     try {
-        const res = await fetch('/api/tenants', {credentials: 'same-origin'});
+        const res = await fetch('/api/billing/invoices?limit=15', {credentials: 'same-origin'});
         if (!res.ok) {
             body.innerHTML = '<tr><td colspan="6" class="px-6 py-4 text-center text-slate-500">No hay facturas</td></tr>';
             return;
         }
         const data = await res.json();
-        const items = data.items || [];
+        const items = data.invoices || [];
         
         if (items.length === 0) {
             body.innerHTML = '<tr><td colspan="6" class="px-6 py-4 text-center text-slate-500">No hay facturas</td></tr>';
             return;
         }
         
-        const priceMap = {basic: 29, pro: 49, enterprise: 99};
-        body.innerHTML = items.map(t => {
-            const amount = priceMap[t.plan] || 0;
-            const statusClass = t.status === 'active' ? 'bg-emerald-500/10 text-emerald-400' : 'bg-amber-500/10 text-amber-400';
-            const statusText = t.status === 'active' ? 'Pagado' : 'Pendiente';
+        body.innerHTML = items.map(inv => {
+            const statusClasses = {
+                'paid': 'bg-emerald-500/10 text-emerald-400',
+                'pending': 'bg-amber-500/10 text-amber-400',
+                'failed': 'bg-rose-500/10 text-rose-400',
+                'cancelled': 'bg-slate-500/10 text-slate-400'
+            };
+            const statusClass = statusClasses[inv.status] || statusClasses.pending;
+            const statusLabels = {
+                'paid': 'Pagado',
+                'pending': 'Pendiente',
+                'failed': 'Fallido',
+                'cancelled': 'Cancelado'
+            };
+            const statusText = statusLabels[inv.status] || inv.status;
+            
             return `
                 <tr class="hover:bg-surface-highlight/50 transition-colors">
                     <td class="px-6 py-3">
                         <div class="flex items-center gap-3">
-                            <div class="size-8 rounded-lg bg-primary/10 flex items-center justify-center text-primary font-bold text-xs">${initials(t.company_name)}</div>
+                            <div class="size-8 rounded-lg bg-primary/10 flex items-center justify-center text-primary font-bold text-xs">${initials(inv.company_name)}</div>
                             <div>
-                                <p class="text-sm font-medium text-slate-900 dark:text-white">${t.company_name}</p>
-                                <p class="text-xs text-slate-500">${t.email || ''}</p>
+                                <p class="text-sm font-medium text-slate-900 dark:text-white">${escapeHtml(inv.company_name)}</p>
+                                <p class="text-xs text-slate-500">${escapeHtml(inv.email || '')}</p>
                             </div>
                         </div>
                     </td>
-                    <td class="px-6 py-3 capitalize text-sm">${t.plan || '-'}</td>
-                    <td class="px-6 py-3 font-mono text-sm">$${amount}</td>
+                    <td class="px-6 py-3 capitalize text-sm">${inv.plan || '-'}</td>
+                    <td class="px-6 py-3 font-mono text-sm">$${inv.amount}</td>
                     <td class="px-6 py-3">
                         <span class="inline-flex items-center px-2 py-0.5 rounded-full text-xs font-medium ${statusClass}">${statusText}</span>
                     </td>
-                    <td class="px-6 py-3 text-sm text-slate-400">${formatDate(t.created_at)}</td>
+                    <td class="px-6 py-3 text-sm text-slate-400">${formatDate(inv.created_at)}</td>
                     <td class="px-6 py-3 text-center">
                         <button class="size-8 rounded-lg flex items-center justify-center text-slate-400 hover:text-white hover:bg-slate-700 transition-colors mx-auto">
                             <span class="material-symbols-outlined text-[20px]">more_vert</span>
@@ -215,6 +250,10 @@ function initials(name) {
 function formatDate(iso) {
     if (!iso) return '-';
     return new Date(iso).toLocaleDateString('es-ES', {day: '2-digit', month: 'short', year: 'numeric'});
+}
+
+function escapeHtml(str = "") {
+    return str.replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;");
 }
 </script>
 {% endblock %}

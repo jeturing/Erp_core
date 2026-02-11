@@ -108,22 +108,122 @@
 document.addEventListener('DOMContentLoaded', () => {
     loadLogs();
     loadStripeEvents();
+    loadSystemStatus();
 });
 
-document.getElementById('refreshLogsBtn').addEventListener('click', loadLogs);
+document.getElementById('refreshLogsBtn').addEventListener('click', () => {
+    loadLogs();
+    loadSystemStatus();
+});
 
 async function loadLogs() {
     const container = document.getElementById('logContainer');
-    // Placeholder - implementar API de logs
-    container.innerHTML = `
-        <div class="text-emerald-400">[2026-01-19 10:15:32] INFO: Provisioning started for subdomain: acme</div>
-        <div class="text-emerald-400">[2026-01-19 10:15:33] INFO: Creating database sajet.us_acme...</div>
-        <div class="text-emerald-400">[2026-01-19 10:15:35] INFO: Running pct exec 105 -- /opt/create_tenant.sh acme</div>
-        <div class="text-amber-400">[2026-01-19 10:15:40] WARN: High memory usage detected (85%)</div>
-        <div class="text-emerald-400">[2026-01-19 10:16:01] INFO: Tenant acme.sajet.us provisioned successfully</div>
-        <div class="text-emerald-400">[2026-01-19 10:16:02] INFO: Cloudflare tunnel configured</div>
-        <div class="text-slate-500">[2026-01-19 10:16:05] DEBUG: Webhook checkout.session.completed processed</div>
-    `;
+    const filter = document.getElementById('logFilter').value;
+    container.innerHTML = '<div class="text-slate-500">[Cargando logs...]</div>';
+    
+    try {
+        let url = '/api/logs/provisioning?lines=100';
+        if (filter && filter !== 'all') {
+            url += `&level=${filter}`;
+        }
+        
+        const res = await fetch(url, {credentials: 'same-origin'});
+        if (!res.ok) {
+            if (res.status === 401) {
+                window.location.href = '/login/admin';
+                return;
+            }
+            throw new Error('Error cargando logs');
+        }
+        
+        const data = await res.json();
+        
+        if (!data.logs || data.logs.length === 0) {
+            container.innerHTML = '<div class="text-slate-500">[Sin logs recientes]</div>';
+            return;
+        }
+        
+        container.innerHTML = data.logs.map(log => 
+            `<div class="${log.class}">${escapeHtml(log.line)}</div>`
+        ).join('');
+        
+        // Scroll al final
+        container.scrollTop = container.scrollHeight;
+    } catch (err) {
+        console.error('Error:', err);
+        container.innerHTML = `<div class="text-rose-400">[Error cargando logs: ${err.message}]</div>`;
+    }
+}
+
+async function loadSystemStatus() {
+    try {
+        const res = await fetch('/api/logs/status', {credentials: 'same-origin'});
+        if (!res.ok) return;
+        
+        const status = await res.json();
+        
+        // PostgreSQL
+        const pgCard = document.querySelector('[data-service="postgresql"]') || 
+                      document.querySelectorAll('.p-5.rounded-xl')[0];
+        if (pgCard && status.postgresql) {
+            const statusDot = pgCard.querySelector('.size-2');
+            const statusText = pgCard.querySelector('.text-xl');
+            const latencyText = pgCard.querySelector('.font-mono');
+            
+            if (status.postgresql.status === 'healthy') {
+                statusDot.className = 'size-2 rounded-full bg-emerald-500 animate-pulse';
+                statusText.textContent = 'Healthy';
+                if (latencyText) latencyText.textContent = `${status.postgresql.latency_ms}ms latency`;
+            } else {
+                statusDot.className = 'size-2 rounded-full bg-rose-500';
+                statusText.textContent = 'Error';
+            }
+        }
+        
+        // LXC 105
+        const lxcCard = document.querySelectorAll('.p-5.rounded-xl')[2];
+        if (lxcCard && status.lxc_105) {
+            const statusDot = lxcCard.querySelector('.size-2');
+            const statusText = lxcCard.querySelector('.text-xl');
+            
+            if (status.lxc_105.status === 'active') {
+                statusDot.className = 'size-2 rounded-full bg-emerald-500';
+                statusText.textContent = 'Active';
+            } else {
+                statusDot.className = 'size-2 rounded-full bg-amber-500';
+                statusText.textContent = status.lxc_105.status || 'Unknown';
+            }
+        }
+        
+        // Disk
+        const diskCard = document.querySelectorAll('.p-5.rounded-xl')[3];
+        if (diskCard && status.disk) {
+            const usageEl = document.getElementById('diskUsage');
+            const progressBar = diskCard.querySelector('.bg-amber-500, .bg-emerald-500, .bg-rose-500');
+            
+            if (usageEl) usageEl.textContent = `${status.disk.usage_percent}%`;
+            if (progressBar) {
+                progressBar.style.width = `${status.disk.usage_percent}%`;
+                // Cambiar color según uso
+                if (status.disk.usage_percent > 80) {
+                    progressBar.className = 'bg-rose-500 h-full rounded-full';
+                } else if (status.disk.usage_percent > 60) {
+                    progressBar.className = 'bg-amber-500 h-full rounded-full';
+                } else {
+                    progressBar.className = 'bg-emerald-500 h-full rounded-full';
+                }
+            }
+        }
+    } catch (err) {
+        console.error('Error cargando status:', err);
+    }
+}
+
+// Filtro de logs
+document.getElementById('logFilter').addEventListener('change', loadLogs);
+
+function escapeHtml(str = "") {
+    return str.replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;");
 }
 
 async function loadStripeEvents() {

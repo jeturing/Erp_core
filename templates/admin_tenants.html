@@ -445,7 +445,16 @@
     async function createTenant() {
         const form = document.getElementById('newTenantForm');
         const formData = new FormData(form);
-        const data = Object.fromEntries(formData.entries());
+        
+        // Mapear campos del formulario a lo que espera la API
+        const data = {
+            subdomain: formData.get('subdomain'),
+            company_name: formData.get('company_name'),
+            admin_email: formData.get('email'),
+            plan: formData.get('plan'),
+            server_id: formData.get('node') === 'auto' ? null : formData.get('node'),
+            use_fast_method: true
+        };
         
         try {
             const response = await fetch('/api/tenants', {
@@ -457,8 +466,10 @@
             
             if (response.ok) {
                 closeNewTenantModal();
+                form.reset();
                 loadTenants();
-                alert('Tenant creado exitosamente. El provisioning comenzará en breve.');
+                const result = await response.json();
+                alert(`Tenant "${data.subdomain}" creado exitosamente.\n\nURL: https://${data.subdomain}.sajet.us`);
             } else {
                 const error = await response.json();
                 alert('Error: ' + (error.detail || 'No se pudo crear el tenant'));
@@ -618,6 +629,7 @@
             console.error('Error:', error);
             alert('Error de conexión');
         }
+    }
 
     // Filter buttons
     document.querySelectorAll('.filter-btn').forEach(btn => {
