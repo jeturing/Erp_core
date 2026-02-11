@@ -7,145 +7,708 @@
 
 {% block content %}
 <div class="space-y-6">
-    <!-- General Settings -->
-    <div class="bg-white dark:bg-surface-dark rounded-xl border border-slate-200 dark:border-slate-700 p-6">
-        <h3 class="text-lg font-bold text-slate-900 dark:text-white mb-4 flex items-center gap-2">
-            <span class="material-symbols-outlined text-blue-600 dark:text-primary">tune</span>
-            Configuración General
-        </h3>
+    
+    <!-- Loading State -->
+    <div id="loadingState" class="flex items-center justify-center py-12">
+        <div class="animate-spin rounded-full h-8 w-8 border-b-2 border-blue-600 dark:border-primary"></div>
+        <span class="ml-3 text-slate-600 dark:text-slate-400">Cargando configuración...</span>
+    </div>
+
+    <!-- Main Content (hidden initially) -->
+    <div id="mainContent" class="space-y-6 hidden">
         
-        <div class="grid gap-4">
-            <div class="flex items-center justify-between p-4 bg-slate-50 dark:bg-surface-highlight rounded-lg">
-                <div>
-                    <p class="font-medium text-slate-900 dark:text-white">Modo de mantenimiento</p>
-                    <p class="text-sm text-slate-500 dark:text-slate-400">Deshabilita el acceso público al sistema</p>
+        <!-- Tabs Navigation -->
+        <div class="bg-white dark:bg-surface-dark rounded-xl border border-slate-200 dark:border-slate-700 p-2">
+            <nav class="flex gap-2 flex-wrap" role="tablist">
+                <button onclick="showTab('odoo')" id="tab-odoo" 
+                    class="tab-btn px-4 py-2 rounded-lg font-medium text-sm transition flex items-center gap-2 bg-blue-100 dark:bg-primary/20 text-blue-700 dark:text-primary">
+                    <span class="material-symbols-outlined text-[18px]">database</span>
+                    Odoo / Tenants
+                </button>
+                <button onclick="showTab('stripe')" id="tab-stripe"
+                    class="tab-btn px-4 py-2 rounded-lg font-medium text-sm transition flex items-center gap-2 text-slate-600 dark:text-slate-400 hover:bg-slate-100 dark:hover:bg-surface-highlight">
+                    <span class="material-symbols-outlined text-[18px]">payments</span>
+                    Stripe
+                </button>
+                <button onclick="showTab('security')" id="tab-security"
+                    class="tab-btn px-4 py-2 rounded-lg font-medium text-sm transition flex items-center gap-2 text-slate-600 dark:text-slate-400 hover:bg-slate-100 dark:hover:bg-surface-highlight">
+                    <span class="material-symbols-outlined text-[18px]">shield</span>
+                    Seguridad
+                </button>
+                <button onclick="showTab('general')" id="tab-general"
+                    class="tab-btn px-4 py-2 rounded-lg font-medium text-sm transition flex items-center gap-2 text-slate-600 dark:text-slate-400 hover:bg-slate-100 dark:hover:bg-surface-highlight">
+                    <span class="material-symbols-outlined text-[18px]">tune</span>
+                    General
+                </button>
+            </nav>
+        </div>
+        
+        <!-- =====================================================
+             TAB: ODOO / TENANTS
+             ===================================================== -->
+        <div id="panel-odoo" class="tab-panel space-y-6">
+            
+            <!-- Credenciales Admin por defecto -->
+            <div class="bg-white dark:bg-surface-dark rounded-xl border border-slate-200 dark:border-slate-700 p-6">
+                <h3 class="text-lg font-bold text-slate-900 dark:text-white mb-4 flex items-center gap-2">
+                    <span class="material-symbols-outlined text-blue-600 dark:text-primary">person</span>
+                    Credenciales Admin por Defecto
+                </h3>
+                <p class="text-sm text-slate-500 dark:text-slate-400 mb-4">
+                    Estas credenciales se usarán para todos los nuevos tenants creados.
+                </p>
+                
+                <div class="grid md:grid-cols-2 gap-4">
+                    <div>
+                        <label class="block text-sm font-medium text-slate-700 dark:text-slate-300 mb-2">
+                            Email Admin
+                        </label>
+                        <input type="email" id="odoo_admin_login" 
+                            class="w-full px-4 py-2 bg-slate-50 dark:bg-surface-highlight border border-slate-300 dark:border-slate-600 rounded-lg text-slate-900 dark:text-white focus:ring-2 focus:ring-blue-500 dark:focus:ring-primary focus:border-transparent"
+                            placeholder="admin@sajet.us">
+                    </div>
+                    
+                    <div>
+                        <label class="block text-sm font-medium text-slate-700 dark:text-slate-300 mb-2">
+                            Password Admin
+                        </label>
+                        <div class="relative">
+                            <input type="password" id="odoo_admin_password" 
+                                class="w-full px-4 py-2 pr-10 bg-slate-50 dark:bg-surface-highlight border border-slate-300 dark:border-slate-600 rounded-lg text-slate-900 dark:text-white focus:ring-2 focus:ring-blue-500 dark:focus:ring-primary focus:border-transparent"
+                                placeholder="Dejar vacío para no cambiar">
+                            <button type="button" onclick="togglePassword('odoo_admin_password')" 
+                                class="absolute right-3 top-1/2 -translate-y-1/2 text-slate-400 hover:text-slate-600 dark:hover:text-slate-300">
+                                <span class="material-symbols-outlined text-[20px]">visibility</span>
+                            </button>
+                        </div>
+                    </div>
                 </div>
-                <label class="relative inline-flex items-center cursor-pointer">
-                    <input type="checkbox" class="sr-only peer" id="maintenanceMode">
-                    <div class="w-11 h-6 bg-slate-300 peer-focus:ring-4 peer-focus:ring-blue-300 dark:peer-focus:ring-primary/20 rounded-full peer dark:bg-slate-600 peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-slate-300 after:border after:rounded-full after:h-5 after:w-5 after:transition-all peer-checked:bg-blue-600 dark:peer-checked:bg-primary"></div>
-                </label>
             </div>
             
-            <div class="flex items-center justify-between p-4 bg-slate-50 dark:bg-surface-highlight rounded-lg">
-                <div>
-                    <p class="font-medium text-slate-900 dark:text-white">Permitir registro público</p>
-                    <p class="text-sm text-slate-500 dark:text-slate-400">Permite a nuevos usuarios crear cuentas</p>
+            <!-- Configuración PostgreSQL -->
+            <div class="bg-white dark:bg-surface-dark rounded-xl border border-slate-200 dark:border-slate-700 p-6">
+                <h3 class="text-lg font-bold text-slate-900 dark:text-white mb-4 flex items-center gap-2">
+                    <span class="material-symbols-outlined text-emerald-600 dark:text-emerald-400">storage</span>
+                    PostgreSQL (Servidor Odoo)
+                </h3>
+                
+                <div class="grid md:grid-cols-2 gap-4">
+                    <div>
+                        <label class="block text-sm font-medium text-slate-700 dark:text-slate-300 mb-2">
+                            Usuario BD
+                        </label>
+                        <input type="text" id="odoo_db_user" 
+                            class="w-full px-4 py-2 bg-slate-50 dark:bg-surface-highlight border border-slate-300 dark:border-slate-600 rounded-lg text-slate-900 dark:text-white focus:ring-2 focus:ring-blue-500 dark:focus:ring-primary focus:border-transparent"
+                            placeholder="Jeturing">
+                    </div>
+                    
+                    <div>
+                        <label class="block text-sm font-medium text-slate-700 dark:text-slate-300 mb-2">
+                            Password BD
+                        </label>
+                        <div class="relative">
+                            <input type="password" id="odoo_db_password" 
+                                class="w-full px-4 py-2 pr-10 bg-slate-50 dark:bg-surface-highlight border border-slate-300 dark:border-slate-600 rounded-lg text-slate-900 dark:text-white focus:ring-2 focus:ring-blue-500 dark:focus:ring-primary focus:border-transparent"
+                                placeholder="Dejar vacío para no cambiar">
+                            <button type="button" onclick="togglePassword('odoo_db_password')" 
+                                class="absolute right-3 top-1/2 -translate-y-1/2 text-slate-400 hover:text-slate-600 dark:hover:text-slate-300">
+                                <span class="material-symbols-outlined text-[20px]">visibility</span>
+                            </button>
+                        </div>
+                    </div>
+                    
+                    <div>
+                        <label class="block text-sm font-medium text-slate-700 dark:text-slate-300 mb-2">
+                            Master Password (Odoo)
+                        </label>
+                        <div class="relative">
+                            <input type="password" id="odoo_master_password" 
+                                class="w-full px-4 py-2 pr-10 bg-slate-50 dark:bg-surface-highlight border border-slate-300 dark:border-slate-600 rounded-lg text-slate-900 dark:text-white focus:ring-2 focus:ring-blue-500 dark:focus:ring-primary focus:border-transparent"
+                                placeholder="Dejar vacío para no cambiar">
+                            <button type="button" onclick="togglePassword('odoo_master_password')" 
+                                class="absolute right-3 top-1/2 -translate-y-1/2 text-slate-400 hover:text-slate-600 dark:hover:text-slate-300">
+                                <span class="material-symbols-outlined text-[20px]">visibility</span>
+                            </button>
+                        </div>
+                        <p class="text-xs text-slate-500 dark:text-slate-400 mt-1">
+                            Usado para crear/eliminar bases de datos en Odoo
+                        </p>
+                    </div>
                 </div>
-                <label class="relative inline-flex items-center cursor-pointer">
-                    <input type="checkbox" class="sr-only peer" id="publicRegistration" checked>
-                    <div class="w-11 h-6 bg-slate-300 peer-focus:ring-4 peer-focus:ring-blue-300 dark:peer-focus:ring-primary/20 rounded-full peer dark:bg-slate-600 peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-slate-300 after:border after:rounded-full after:h-5 after:w-5 after:transition-all peer-checked:bg-blue-600 dark:peer-checked:bg-primary"></div>
-                </label>
+            </div>
+            
+            <!-- Configuración de Tenants -->
+            <div class="bg-white dark:bg-surface-dark rounded-xl border border-slate-200 dark:border-slate-700 p-6">
+                <h3 class="text-lg font-bold text-slate-900 dark:text-white mb-4 flex items-center gap-2">
+                    <span class="material-symbols-outlined text-cyan-600 dark:text-cyan-400">dns</span>
+                    Configuración de Tenants
+                </h3>
+                
+                <div class="grid md:grid-cols-2 gap-4">
+                    <div>
+                        <label class="block text-sm font-medium text-slate-700 dark:text-slate-300 mb-2">
+                            Dominio Base
+                        </label>
+                        <input type="text" id="odoo_base_domain" 
+                            class="w-full px-4 py-2 bg-slate-50 dark:bg-surface-highlight border border-slate-300 dark:border-slate-600 rounded-lg text-slate-900 dark:text-white focus:ring-2 focus:ring-blue-500 dark:focus:ring-primary focus:border-transparent"
+                            placeholder="sajet.us">
+                        <p class="text-xs text-slate-500 dark:text-slate-400 mt-1">
+                            Los tenants serán: cliente.sajet.us
+                        </p>
+                    </div>
+                    
+                    <div>
+                        <label class="block text-sm font-medium text-slate-700 dark:text-slate-300 mb-2">
+                            BD Template
+                        </label>
+                        <input type="text" id="odoo_template_db" 
+                            class="w-full px-4 py-2 bg-slate-50 dark:bg-surface-highlight border border-slate-300 dark:border-slate-600 rounded-lg text-slate-900 dark:text-white focus:ring-2 focus:ring-blue-500 dark:focus:ring-primary focus:border-transparent"
+                            placeholder="template_tenant">
+                        <p class="text-xs text-slate-500 dark:text-slate-400 mt-1">
+                            Base de datos que se duplica al crear tenants
+                        </p>
+                    </div>
+                    
+                    <div>
+                        <label class="block text-sm font-medium text-slate-700 dark:text-slate-300 mb-2">
+                            Idioma por Defecto
+                        </label>
+                        <select id="odoo_default_lang" 
+                            class="w-full px-4 py-2 bg-slate-50 dark:bg-surface-highlight border border-slate-300 dark:border-slate-600 rounded-lg text-slate-900 dark:text-white focus:ring-2 focus:ring-blue-500 dark:focus:ring-primary focus:border-transparent">
+                            <option value="es_DO">Español (República Dominicana)</option>
+                            <option value="es_MX">Español (México)</option>
+                            <option value="es_ES">Español (España)</option>
+                            <option value="en_US">English (US)</option>
+                        </select>
+                    </div>
+                    
+                    <div>
+                        <label class="block text-sm font-medium text-slate-700 dark:text-slate-300 mb-2">
+                            País por Defecto
+                        </label>
+                        <select id="odoo_default_country" 
+                            class="w-full px-4 py-2 bg-slate-50 dark:bg-surface-highlight border border-slate-300 dark:border-slate-600 rounded-lg text-slate-900 dark:text-white focus:ring-2 focus:ring-blue-500 dark:focus:ring-primary focus:border-transparent">
+                            <option value="DO">República Dominicana</option>
+                            <option value="MX">México</option>
+                            <option value="ES">España</option>
+                            <option value="US">Estados Unidos</option>
+                        </select>
+                    </div>
+                </div>
+            </div>
+            
+            <!-- Estado del Servidor -->
+            <div class="bg-white dark:bg-surface-dark rounded-xl border border-slate-200 dark:border-slate-700 p-6">
+                <h3 class="text-lg font-bold text-slate-900 dark:text-white mb-4 flex items-center gap-2">
+                    <span class="material-symbols-outlined text-green-600 dark:text-green-400">monitoring</span>
+                    Estado del Servidor
+                </h3>
+                
+                <div id="serverStatus" class="grid md:grid-cols-4 gap-4">
+                    <!-- Se llena con JavaScript -->
+                </div>
+            </div>
+            
+            <!-- Botones de acción -->
+            <div class="flex flex-wrap justify-between items-center gap-4">
+                <button onclick="testOdooConnection()" 
+                    class="px-4 py-2 bg-slate-200 dark:bg-slate-700 text-slate-700 dark:text-slate-300 rounded-lg hover:bg-slate-300 dark:hover:bg-slate-600 transition font-medium flex items-center gap-2">
+                    <span class="material-symbols-outlined text-[18px]">speed</span>
+                    Probar Conexión
+                </button>
+                
+                <button onclick="saveOdooConfig()" id="saveOdooBtn"
+                    class="px-6 py-2 bg-blue-600 dark:bg-primary text-white rounded-lg hover:bg-blue-700 dark:hover:bg-primary/90 transition font-medium flex items-center gap-2">
+                    <span class="material-symbols-outlined text-[18px]">save</span>
+                    Guardar Configuración Odoo
+                </button>
             </div>
         </div>
-    </div>
-    
-    <!-- Stripe Configuration -->
-    <div class="bg-white dark:bg-surface-dark rounded-xl border border-slate-200 dark:border-slate-700 p-6">
-        <h3 class="text-lg font-bold text-slate-900 dark:text-white mb-4 flex items-center gap-2">
-            <span class="material-symbols-outlined text-purple-600 dark:text-purple-400">payments</span>
-            Stripe (Pagos)
-        </h3>
         
-        <div class="grid gap-4">
-            <div>
-                <label class="block text-sm font-medium text-slate-700 dark:text-slate-300 mb-2">Estado de conexión</label>
-                <div class="flex items-center gap-2 p-3 bg-emerald-50 dark:bg-emerald-900/20 border border-emerald-200 dark:border-emerald-700 rounded-lg">
-                    <span class="size-3 bg-emerald-500 rounded-full animate-pulse"></span>
-                    <span class="text-emerald-700 dark:text-emerald-400 font-medium">Conectado (Modo Test)</span>
+        <!-- =====================================================
+             TAB: STRIPE
+             ===================================================== -->
+        <div id="panel-stripe" class="tab-panel space-y-6 hidden">
+            <div class="bg-white dark:bg-surface-dark rounded-xl border border-slate-200 dark:border-slate-700 p-6">
+                <h3 class="text-lg font-bold text-slate-900 dark:text-white mb-4 flex items-center gap-2">
+                    <span class="material-symbols-outlined text-purple-600 dark:text-purple-400">payments</span>
+                    Stripe (Pagos)
+                </h3>
+                
+                <div class="grid gap-4">
+                    <div>
+                        <label class="block text-sm font-medium text-slate-700 dark:text-slate-300 mb-2">Estado de conexión</label>
+                        <div id="stripeStatus" class="flex items-center gap-2 p-3 bg-emerald-50 dark:bg-emerald-900/20 border border-emerald-200 dark:border-emerald-700 rounded-lg">
+                            <span class="size-3 bg-emerald-500 rounded-full animate-pulse"></span>
+                            <span class="text-emerald-700 dark:text-emerald-400 font-medium">Conectado</span>
+                        </div>
+                    </div>
+                    
+                    <div>
+                        <label class="block text-sm font-medium text-slate-700 dark:text-slate-300 mb-2">Webhook URL</label>
+                        <div class="flex items-center gap-2">
+                            <input type="text" id="stripeWebhookUrl" value="https://sajet.us/webhook/stripe" readonly 
+                                class="flex-1 px-4 py-2 bg-slate-100 dark:bg-surface-highlight border border-slate-300 dark:border-slate-600 rounded-lg text-slate-700 dark:text-slate-300 font-mono text-sm">
+                            <button onclick="copyToClipboard('stripeWebhookUrl')" 
+                                class="px-4 py-2 bg-slate-200 dark:bg-slate-700 text-slate-700 dark:text-slate-300 rounded-lg hover:bg-slate-300 dark:hover:bg-slate-600 transition">
+                                <span class="material-symbols-outlined text-[18px]">content_copy</span>
+                            </button>
+                        </div>
+                    </div>
+                    
+                    <div class="p-4 bg-amber-50 dark:bg-amber-900/20 border border-amber-200 dark:border-amber-700 rounded-lg">
+                        <p class="text-amber-800 dark:text-amber-300 text-sm">
+                            <strong>Nota:</strong> Las credenciales de Stripe se configuran en el archivo <code class="bg-amber-100 dark:bg-amber-800 px-1 rounded">.env</code> por seguridad.
+                        </p>
+                    </div>
+                </div>
+            </div>
+        </div>
+        
+        <!-- =====================================================
+             TAB: SEGURIDAD
+             ===================================================== -->
+        <div id="panel-security" class="tab-panel space-y-6 hidden">
+            <div class="bg-white dark:bg-surface-dark rounded-xl border border-slate-200 dark:border-slate-700 p-6">
+                <h3 class="text-lg font-bold text-slate-900 dark:text-white mb-4 flex items-center gap-2">
+                    <span class="material-symbols-outlined text-rose-600 dark:text-rose-400">shield</span>
+                    Seguridad
+                </h3>
+                
+                <div class="grid gap-4">
+                    <div class="flex items-center justify-between p-4 bg-slate-50 dark:bg-surface-highlight rounded-lg">
+                        <div>
+                            <p class="font-medium text-slate-900 dark:text-white">Forzar HTTPS</p>
+                            <p class="text-sm text-slate-500 dark:text-slate-400">Redirige todo el tráfico a HTTPS</p>
+                        </div>
+                        <label class="relative inline-flex items-center cursor-pointer">
+                            <input type="checkbox" class="sr-only peer" id="forceHttps">
+                            <div class="w-11 h-6 bg-slate-300 peer-focus:ring-4 peer-focus:ring-blue-300 dark:peer-focus:ring-primary/20 rounded-full peer dark:bg-slate-600 peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-slate-300 after:border after:rounded-full after:h-5 after:w-5 after:transition-all peer-checked:bg-blue-600 dark:peer-checked:bg-primary"></div>
+                        </label>
+                    </div>
+                    
+                    <div class="flex items-center justify-between p-4 bg-slate-50 dark:bg-surface-highlight rounded-lg">
+                        <div>
+                            <p class="font-medium text-slate-900 dark:text-white">WAF (Web Application Firewall)</p>
+                            <p class="text-sm text-slate-500 dark:text-slate-400">Protección contra ataques comunes</p>
+                        </div>
+                        <label class="relative inline-flex items-center cursor-pointer">
+                            <input type="checkbox" class="sr-only peer" id="enableWaf" checked>
+                            <div class="w-11 h-6 bg-slate-300 peer-focus:ring-4 peer-focus:ring-blue-300 dark:peer-focus:ring-primary/20 rounded-full peer dark:bg-slate-600 peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-slate-300 after:border after:rounded-full after:h-5 after:w-5 after:transition-all peer-checked:bg-blue-600 dark:peer-checked:bg-primary"></div>
+                        </label>
+                    </div>
+                    
+                    <div>
+                        <label class="block text-sm font-medium text-slate-700 dark:text-slate-300 mb-2">Expiración de tokens (minutos)</label>
+                        <input type="number" id="tokenExpiration" value="15" 
+                            class="w-full max-w-xs px-4 py-2 bg-slate-50 dark:bg-surface-highlight border border-slate-300 dark:border-slate-600 rounded-lg text-slate-900 dark:text-white">
+                    </div>
+                </div>
+            </div>
+        </div>
+        
+        <!-- =====================================================
+             TAB: GENERAL
+             ===================================================== -->
+        <div id="panel-general" class="tab-panel space-y-6 hidden">
+            <div class="bg-white dark:bg-surface-dark rounded-xl border border-slate-200 dark:border-slate-700 p-6">
+                <h3 class="text-lg font-bold text-slate-900 dark:text-white mb-4 flex items-center gap-2">
+                    <span class="material-symbols-outlined text-blue-600 dark:text-primary">tune</span>
+                    Configuración General
+                </h3>
+                
+                <div class="grid gap-4">
+                    <div class="flex items-center justify-between p-4 bg-slate-50 dark:bg-surface-highlight rounded-lg">
+                        <div>
+                            <p class="font-medium text-slate-900 dark:text-white">Modo de mantenimiento</p>
+                            <p class="text-sm text-slate-500 dark:text-slate-400">Deshabilita el acceso público al sistema</p>
+                        </div>
+                        <label class="relative inline-flex items-center cursor-pointer">
+                            <input type="checkbox" class="sr-only peer" id="maintenanceMode">
+                            <div class="w-11 h-6 bg-slate-300 peer-focus:ring-4 peer-focus:ring-blue-300 dark:peer-focus:ring-primary/20 rounded-full peer dark:bg-slate-600 peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-slate-300 after:border after:rounded-full after:h-5 after:w-5 after:transition-all peer-checked:bg-blue-600 dark:peer-checked:bg-primary"></div>
+                        </label>
+                    </div>
+                    
+                    <div class="flex items-center justify-between p-4 bg-slate-50 dark:bg-surface-highlight rounded-lg">
+                        <div>
+                            <p class="font-medium text-slate-900 dark:text-white">Permitir registro público</p>
+                            <p class="text-sm text-slate-500 dark:text-slate-400">Permite a nuevos usuarios crear cuentas</p>
+                        </div>
+                        <label class="relative inline-flex items-center cursor-pointer">
+                            <input type="checkbox" class="sr-only peer" id="publicRegistration" checked>
+                            <div class="w-11 h-6 bg-slate-300 peer-focus:ring-4 peer-focus:ring-blue-300 dark:peer-focus:ring-primary/20 rounded-full peer dark:bg-slate-600 peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-slate-300 after:border after:rounded-full after:h-5 after:w-5 after:transition-all peer-checked:bg-blue-600 dark:peer-checked:bg-primary"></div>
+                        </label>
+                    </div>
+                    
+                    <div>
+                        <label class="block text-sm font-medium text-slate-700 dark:text-slate-300 mb-2">Email de Soporte</label>
+                        <input type="email" id="supportEmail" value="soporte@sajet.us" 
+                            class="w-full max-w-md px-4 py-2 bg-slate-50 dark:bg-surface-highlight border border-slate-300 dark:border-slate-600 rounded-lg text-slate-900 dark:text-white">
+                    </div>
                 </div>
             </div>
             
-            <div>
-                <label class="block text-sm font-medium text-slate-700 dark:text-slate-300 mb-2">Webhook URL</label>
-                <div class="flex items-center gap-2">
-                    <input type="text" value="https://tu-dominio.com/webhook/stripe" readonly class="flex-1 px-4 py-2 bg-slate-100 dark:bg-surface-highlight border border-slate-300 dark:border-slate-600 rounded-lg text-slate-700 dark:text-slate-300 font-mono text-sm">
-                    <button class="px-4 py-2 bg-slate-200 dark:bg-slate-700 text-slate-700 dark:text-slate-300 rounded-lg hover:bg-slate-300 dark:hover:bg-slate-600 transition">
-                        <span class="material-symbols-outlined text-[18px]">content_copy</span>
+            <!-- Inicializar Configuración -->
+            <div class="bg-white dark:bg-surface-dark rounded-xl border border-slate-200 dark:border-slate-700 p-6">
+                <h3 class="text-lg font-bold text-slate-900 dark:text-white mb-4 flex items-center gap-2">
+                    <span class="material-symbols-outlined text-amber-600 dark:text-amber-400">settings_suggest</span>
+                    Administración
+                </h3>
+                
+                <div class="space-y-4">
+                    <p class="text-sm text-slate-600 dark:text-slate-400">
+                        Inicializa la configuración por defecto en la base de datos. Útil para primera instalación.
+                    </p>
+                    
+                    <button onclick="initDefaults()" 
+                        class="px-4 py-2 bg-amber-100 dark:bg-amber-900/30 text-amber-800 dark:text-amber-300 rounded-lg hover:bg-amber-200 dark:hover:bg-amber-900/50 transition font-medium flex items-center gap-2">
+                        <span class="material-symbols-outlined text-[18px]">restart_alt</span>
+                        Inicializar Configuración por Defecto
                     </button>
                 </div>
             </div>
         </div>
-    </div>
-    
-    <!-- Tenant Provisioning -->
-    <div class="bg-white dark:bg-surface-dark rounded-xl border border-slate-200 dark:border-slate-700 p-6">
-        <h3 class="text-lg font-bold text-slate-900 dark:text-white mb-4 flex items-center gap-2">
-            <span class="material-symbols-outlined text-cyan-600 dark:text-cyan-400">dns</span>
-            Provisioning de Tenants
-        </h3>
         
-        <div class="grid md:grid-cols-2 gap-4">
-            <div>
-                <label class="block text-sm font-medium text-slate-700 dark:text-slate-300 mb-2">Contenedor LXC</label>
-                <input type="text" value="105" class="w-full px-4 py-2 bg-slate-50 dark:bg-surface-highlight border border-slate-300 dark:border-slate-600 rounded-lg text-slate-900 dark:text-white">
-            </div>
-            
-            <div>
-                <label class="block text-sm font-medium text-slate-700 dark:text-slate-300 mb-2">Dominio Base</label>
-                <input type="text" value="sajet.us" class="w-full px-4 py-2 bg-slate-50 dark:bg-surface-highlight border border-slate-300 dark:border-slate-600 rounded-lg text-slate-900 dark:text-white">
-            </div>
-            
-            <div>
-                <label class="block text-sm font-medium text-slate-700 dark:text-slate-300 mb-2">Timeout (segundos)</label>
-                <input type="number" value="300" class="w-full px-4 py-2 bg-slate-50 dark:bg-surface-highlight border border-slate-300 dark:border-slate-600 rounded-lg text-slate-900 dark:text-white">
-            </div>
-            
-            <div>
-                <label class="block text-sm font-medium text-slate-700 dark:text-slate-300 mb-2">Estado del cluster</label>
-                <div class="flex items-center gap-2 p-3 bg-emerald-50 dark:bg-emerald-900/20 border border-emerald-200 dark:border-emerald-700 rounded-lg h-[42px]">
-                    <span class="size-3 bg-emerald-500 rounded-full"></span>
-                    <span class="text-emerald-700 dark:text-emerald-400 font-medium text-sm">Online</span>
-                </div>
-            </div>
-        </div>
-    </div>
-    
-    <!-- Security Settings -->
-    <div class="bg-white dark:bg-surface-dark rounded-xl border border-slate-200 dark:border-slate-700 p-6">
-        <h3 class="text-lg font-bold text-slate-900 dark:text-white mb-4 flex items-center gap-2">
-            <span class="material-symbols-outlined text-rose-600 dark:text-rose-400">shield</span>
-            Seguridad
-        </h3>
-        
-        <div class="grid gap-4">
-            <div class="flex items-center justify-between p-4 bg-slate-50 dark:bg-surface-highlight rounded-lg">
-                <div>
-                    <p class="font-medium text-slate-900 dark:text-white">Forzar HTTPS</p>
-                    <p class="text-sm text-slate-500 dark:text-slate-400">Redirige todo el tráfico a HTTPS</p>
-                </div>
-                <label class="relative inline-flex items-center cursor-pointer">
-                    <input type="checkbox" class="sr-only peer" id="forceHttps">
-                    <div class="w-11 h-6 bg-slate-300 peer-focus:ring-4 peer-focus:ring-blue-300 dark:peer-focus:ring-primary/20 rounded-full peer dark:bg-slate-600 peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-slate-300 after:border after:rounded-full after:h-5 after:w-5 after:transition-all peer-checked:bg-blue-600 dark:peer-checked:bg-primary"></div>
-                </label>
-            </div>
-            
-            <div class="flex items-center justify-between p-4 bg-slate-50 dark:bg-surface-highlight rounded-lg">
-                <div>
-                    <p class="font-medium text-slate-900 dark:text-white">WAF (Web Application Firewall)</p>
-                    <p class="text-sm text-slate-500 dark:text-slate-400">Protección contra ataques comunes</p>
-                </div>
-                <label class="relative inline-flex items-center cursor-pointer">
-                    <input type="checkbox" class="sr-only peer" id="enableWaf" checked>
-                    <div class="w-11 h-6 bg-slate-300 peer-focus:ring-4 peer-focus:ring-blue-300 dark:peer-focus:ring-primary/20 rounded-full peer dark:bg-slate-600 peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-slate-300 after:border after:rounded-full after:h-5 after:w-5 after:transition-all peer-checked:bg-blue-600 dark:peer-checked:bg-primary"></div>
-                </label>
-            </div>
-            
-            <div>
-                <label class="block text-sm font-medium text-slate-700 dark:text-slate-300 mb-2">Expiración de tokens (minutos)</label>
-                <input type="number" value="15" class="w-full max-w-xs px-4 py-2 bg-slate-50 dark:bg-surface-highlight border border-slate-300 dark:border-slate-600 rounded-lg text-slate-900 dark:text-white">
-            </div>
-        </div>
-    </div>
-    
-    <!-- Save Button -->
-    <div class="flex justify-end gap-3">
-        <button class="px-6 py-2 bg-slate-200 dark:bg-slate-700 text-slate-700 dark:text-slate-300 rounded-lg hover:bg-slate-300 dark:hover:bg-slate-600 transition font-medium">
-            Cancelar
-        </button>
-        <button class="px-6 py-2 bg-blue-600 dark:bg-primary text-white rounded-lg hover:bg-blue-700 dark:hover:bg-primary/90 transition font-medium flex items-center gap-2">
-            <span class="material-symbols-outlined text-[18px]">save</span>
-            Guardar Cambios
-        </button>
     </div>
 </div>
+
+<!-- Toast Notification -->
+<div id="toast" class="fixed bottom-4 right-4 transform translate-y-full opacity-0 transition-all duration-300 z-50">
+    <div class="bg-slate-900 dark:bg-slate-700 text-white px-6 py-3 rounded-lg shadow-lg flex items-center gap-3">
+        <span id="toastIcon" class="material-symbols-outlined text-[20px]">check_circle</span>
+        <span id="toastMessage">Configuración guardada</span>
+    </div>
+</div>
+
+{% endblock %}
+
+{% block extra_js %}
+<script>
+const API_BASE = '/api/settings';
+let currentConfig = {};
+
+// =====================================================
+// INICIALIZACIÓN
+// =====================================================
+
+document.addEventListener('DOMContentLoaded', async () => {
+    await Promise.all([
+        loadOdooConfig(),
+        loadServerStatus()
+    ]);
+    document.getElementById('loadingState').classList.add('hidden');
+    document.getElementById('mainContent').classList.remove('hidden');
+});
+
+// =====================================================
+// TABS
+// =====================================================
+
+function showTab(tabId) {
+    // Ocultar todos los paneles
+    document.querySelectorAll('.tab-panel').forEach(panel => {
+        panel.classList.add('hidden');
+    });
+    
+    // Resetear estilos de tabs
+    document.querySelectorAll('.tab-btn').forEach(btn => {
+        btn.classList.remove('bg-blue-100', 'dark:bg-primary/20', 'text-blue-700', 'dark:text-primary');
+        btn.classList.add('text-slate-600', 'dark:text-slate-400', 'hover:bg-slate-100', 'dark:hover:bg-surface-highlight');
+    });
+    
+    // Mostrar panel activo
+    document.getElementById(`panel-${tabId}`).classList.remove('hidden');
+    
+    // Activar tab
+    const activeTab = document.getElementById(`tab-${tabId}`);
+    activeTab.classList.remove('text-slate-600', 'dark:text-slate-400', 'hover:bg-slate-100', 'dark:hover:bg-surface-highlight');
+    activeTab.classList.add('bg-blue-100', 'dark:bg-primary/20', 'text-blue-700', 'dark:text-primary');
+}
+
+// =====================================================
+// CARGAR CONFIGURACIÓN
+// =====================================================
+
+async function loadOdooConfig() {
+    try {
+        const token = localStorage.getItem('admin_token');
+        const response = await fetch(`${API_BASE}/odoo/current`, {
+            headers: {
+                'Authorization': `Bearer ${token}`
+            }
+        });
+        
+        if (response.ok) {
+            const data = await response.json();
+            currentConfig = data.config;
+            
+            // Poblar campos
+            document.getElementById('odoo_admin_login').value = currentConfig.admin_login || '';
+            document.getElementById('odoo_db_user').value = currentConfig.db_user || '';
+            document.getElementById('odoo_base_domain').value = currentConfig.base_domain || '';
+            document.getElementById('odoo_template_db').value = currentConfig.template_db || '';
+            
+            // Selects
+            if (currentConfig.default_lang) {
+                document.getElementById('odoo_default_lang').value = currentConfig.default_lang;
+            }
+            if (currentConfig.default_country) {
+                document.getElementById('odoo_default_country').value = currentConfig.default_country;
+            }
+        } else if (response.status === 401) {
+            window.location.href = '/admin/login';
+        } else {
+            console.error('Error cargando config:', response.status);
+        }
+    } catch (error) {
+        console.error('Error:', error);
+    }
+}
+
+async function loadServerStatus() {
+    try {
+        const token = localStorage.getItem('admin_token');
+        const response = await fetch('/api/tenants/servers', {
+            headers: {
+                'Authorization': `Bearer ${token}`
+            }
+        });
+        
+        if (response.ok) {
+            const data = await response.json();
+            renderServerStatus(data);
+        }
+    } catch (error) {
+        console.error('Error cargando estado de servidores:', error);
+    }
+}
+
+function renderServerStatus(data) {
+    const container = document.getElementById('serverStatus');
+    const summary = data.summary || {};
+    
+    container.innerHTML = `
+        <div class="p-4 bg-slate-50 dark:bg-surface-highlight rounded-lg text-center">
+            <div class="text-2xl font-bold text-slate-900 dark:text-white">${summary.online_servers || 0}</div>
+            <div class="text-sm text-slate-500 dark:text-slate-400">Servidores Online</div>
+        </div>
+        <div class="p-4 bg-slate-50 dark:bg-surface-highlight rounded-lg text-center">
+            <div class="text-2xl font-bold text-slate-900 dark:text-white">${summary.total_databases || 0}</div>
+            <div class="text-sm text-slate-500 dark:text-slate-400">Total Bases de Datos</div>
+        </div>
+        <div class="p-4 bg-slate-50 dark:bg-surface-highlight rounded-lg text-center">
+            <div class="text-2xl font-bold text-emerald-600 dark:text-emerald-400">${summary.available_slots || 0}</div>
+            <div class="text-sm text-slate-500 dark:text-slate-400">Slots Disponibles</div>
+        </div>
+        <div class="p-4 bg-slate-50 dark:bg-surface-highlight rounded-lg text-center">
+            <div class="flex items-center justify-center gap-2">
+                <span class="size-3 ${summary.online_servers > 0 ? 'bg-emerald-500' : 'bg-rose-500'} rounded-full"></span>
+                <span class="text-sm font-medium ${summary.online_servers > 0 ? 'text-emerald-600 dark:text-emerald-400' : 'text-rose-600 dark:text-rose-400'}">
+                    ${summary.online_servers > 0 ? 'Operativo' : 'Sin conexión'}
+                </span>
+            </div>
+            <div class="text-sm text-slate-500 dark:text-slate-400 mt-1">Estado General</div>
+        </div>
+    `;
+}
+
+// =====================================================
+// GUARDAR CONFIGURACIÓN ODOO
+// =====================================================
+
+async function saveOdooConfig() {
+    const btn = document.getElementById('saveOdooBtn');
+    btn.disabled = true;
+    btn.innerHTML = '<span class="animate-spin material-symbols-outlined text-[18px]">progress_activity</span> Guardando...';
+    
+    const token = localStorage.getItem('admin_token');
+    
+    const payload = {};
+    
+    // Solo enviar campos que tienen valor
+    const fields = {
+        admin_login: document.getElementById('odoo_admin_login').value.trim(),
+        admin_password: document.getElementById('odoo_admin_password').value.trim(),
+        db_user: document.getElementById('odoo_db_user').value.trim(),
+        db_password: document.getElementById('odoo_db_password').value.trim(),
+        master_password: document.getElementById('odoo_master_password').value.trim(),
+        base_domain: document.getElementById('odoo_base_domain').value.trim(),
+        template_db: document.getElementById('odoo_template_db').value.trim(),
+        default_lang: document.getElementById('odoo_default_lang').value,
+        default_country: document.getElementById('odoo_default_country').value
+    };
+    
+    for (const [key, value] of Object.entries(fields)) {
+        if (value) payload[key] = value;
+    }
+    
+    if (Object.keys(payload).length === 0) {
+        showToast('No hay cambios para guardar', 'warning');
+        resetSaveBtn();
+        return;
+    }
+    
+    try {
+        const response = await fetch(`${API_BASE}/odoo`, {
+            method: 'PUT',
+            headers: {
+                'Authorization': `Bearer ${token}`,
+                'Content-Type': 'application/json'
+            },
+            body: JSON.stringify(payload)
+        });
+        
+        if (response.ok) {
+            showToast('Configuración guardada exitosamente', 'success');
+            
+            // Limpiar campos de contraseña
+            document.getElementById('odoo_admin_password').value = '';
+            document.getElementById('odoo_db_password').value = '';
+            document.getElementById('odoo_master_password').value = '';
+            
+            // Recargar config
+            await loadOdooConfig();
+        } else {
+            const error = await response.json();
+            showToast(error.detail || 'Error guardando configuración', 'error');
+        }
+    } catch (error) {
+        console.error('Error:', error);
+        showToast('Error de conexión', 'error');
+    } finally {
+        resetSaveBtn();
+    }
+}
+
+function resetSaveBtn() {
+    const btn = document.getElementById('saveOdooBtn');
+    btn.disabled = false;
+    btn.innerHTML = '<span class="material-symbols-outlined text-[18px]">save</span> Guardar Configuración Odoo';
+}
+
+// =====================================================
+// PROBAR CONEXIÓN
+// =====================================================
+
+async function testOdooConnection() {
+    const token = localStorage.getItem('admin_token');
+    
+    showToast('Probando conexión...', 'info');
+    
+    try {
+        const response = await fetch('/api/tenants/servers', {
+            headers: {
+                'Authorization': `Bearer ${token}`
+            }
+        });
+        
+        if (response.ok) {
+            const data = await response.json();
+            const online = data.summary?.online_servers || 0;
+            const total = data.summary?.total_servers || 0;
+            
+            if (online > 0) {
+                showToast(`✓ Conexión exitosa: ${online}/${total} servidores online`, 'success');
+                await loadServerStatus();
+            } else {
+                showToast('⚠ No hay servidores online', 'warning');
+            }
+        } else {
+            showToast('✗ Error probando conexión', 'error');
+        }
+    } catch (error) {
+        showToast('✗ Error de conexión', 'error');
+    }
+}
+
+// =====================================================
+// INICIALIZAR DEFAULTS
+// =====================================================
+
+async function initDefaults() {
+    if (!confirm('¿Inicializar configuración por defecto?\n\nEsto creará las entradas faltantes en la base de datos.')) {
+        return;
+    }
+    
+    const token = localStorage.getItem('admin_token');
+    
+    try {
+        const response = await fetch(`${API_BASE}/init-defaults`, {
+            method: 'POST',
+            headers: {
+                'Authorization': `Bearer ${token}`
+            }
+        });
+        
+        if (response.ok) {
+            const data = await response.json();
+            showToast(`Configuración inicializada: ${data.created} nuevos, ${data.skipped} existentes`, 'success');
+            await loadOdooConfig();
+        } else {
+            showToast('Error inicializando configuración', 'error');
+        }
+    } catch (error) {
+        showToast('Error de conexión', 'error');
+    }
+}
+
+// =====================================================
+// UTILIDADES
+// =====================================================
+
+function togglePassword(inputId) {
+    const input = document.getElementById(inputId);
+    const btn = input.nextElementSibling;
+    const icon = btn.querySelector('span');
+    
+    if (input.type === 'password') {
+        input.type = 'text';
+        icon.textContent = 'visibility_off';
+    } else {
+        input.type = 'password';
+        icon.textContent = 'visibility';
+    }
+}
+
+function copyToClipboard(inputId) {
+    const input = document.getElementById(inputId);
+    input.select();
+    document.execCommand('copy');
+    showToast('Copiado al portapapeles', 'success');
+}
+
+function showToast(message, type = 'success') {
+    const toast = document.getElementById('toast');
+    const icon = document.getElementById('toastIcon');
+    const msg = document.getElementById('toastMessage');
+    
+    msg.textContent = message;
+    
+    // Iconos según tipo
+    const icons = {
+        success: 'check_circle',
+        error: 'error',
+        warning: 'warning',
+        info: 'info'
+    };
+    icon.textContent = icons[type] || icons.info;
+    
+    // Colores según tipo
+    const colors = {
+        success: 'text-emerald-400',
+        error: 'text-rose-400',
+        warning: 'text-amber-400',
+        info: 'text-blue-400'
+    };
+    icon.className = `material-symbols-outlined text-[20px] ${colors[type] || colors.info}`;
+    
+    // Mostrar
+    toast.classList.remove('translate-y-full', 'opacity-0');
+    
+    // Ocultar después de 3 segundos
+    setTimeout(() => {
+        toast.classList.add('translate-y-full', 'opacity-0');
+    }, 3000);
+}
+</script>
 {% endblock %}
