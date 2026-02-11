@@ -51,15 +51,15 @@ class SecurityMiddleware(BaseHTTPMiddleware):
         if self.force_https:
             response.headers["Strict-Transport-Security"] = "max-age=31536000; includeSubDomains"
         
-        # CSP básico
+        # CSP - Content Security Policy
         response.headers["Content-Security-Policy"] = (
             "default-src 'self'; "
-            "script-src 'self' 'unsafe-inline' https://cdn.jsdelivr.net https://js.stripe.com; "
+            "script-src 'self' 'unsafe-inline' https://cdn.jsdelivr.net https://js.stripe.com https://static.cloudflareinsights.com; "
             "style-src 'self' 'unsafe-inline' https://cdn.jsdelivr.net https://fonts.googleapis.com; "
-            "font-src 'self' https://fonts.gstatic.com https://cdn.jsdelivr.net; "
+            "font-src 'self' https://fonts.gstatic.com https://cdn.jsdelivr.net https://r2cdn.perplexity.ai data:; "
             "img-src 'self' data: https:; "
             "frame-src https://js.stripe.com; "
-            "connect-src 'self' https://api.stripe.com"
+            "connect-src 'self' https://api.stripe.com https://cloudflareinsights.com"
         )
         
         return response
