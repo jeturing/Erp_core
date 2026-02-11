@@ -1,7 +1,7 @@
 """
 Settings Routes - Configuración del sistema administrable desde /admin
 """
-from fastapi import APIRouter, HTTPException, Header, Query
+from fastapi import APIRouter, HTTPException, Header, Query, Cookie
 from pydantic import BaseModel, Field
 from typing import Optional, List, Dict, Any
 from ..models.database import (
@@ -49,13 +49,21 @@ class OdooConfigUpdateRequest(BaseModel):
 # HELPERS
 # =====================================================
 
-def require_admin(authorization: str = None):
-    """Verifica que el usuario sea admin"""
-    if not authorization or not authorization.startswith("Bearer "):
+def require_admin(authorization: str = None, cookie_token: str = None):
+    """Verifica que el usuario sea admin. Acepta Bearer token o cookie."""
+    token = None
+    
+    # Primero intentar con Authorization header
+    if authorization and authorization.startswith("Bearer "):
+        token = authorization[7:]
+    # Si no hay header, intentar con cookie
+    elif cookie_token:
+        token = cookie_token
+    
+    if not token:
         raise HTTPException(status_code=401, detail="Token requerido")
     
     try:
-        token = authorization[7:]
         payload = verify_token(token)
         # Aquí podrías verificar roles específicos
         return payload
@@ -72,7 +80,8 @@ def require_admin(authorization: str = None):
 @router.get("")
 async def list_all_configs(
     category: Optional[str] = Query(None, description="Filtrar por categoría"),
-    authorization: str = Header(None)
+    authorization: str = Header(None),
+    access_token: str = Cookie(None)
 ):
     """
     Lista todas las configuraciones del sistema.
@@ -83,7 +92,7 @@ async def list_all_configs(
     - security: Configuración de seguridad
     - general: Configuración general
     """
-    require_admin(authorization)
+    require_admin(authorization, access_token)
     
     try:
         configs = get_all_configs(category)
@@ -109,10 +118,11 @@ async def list_all_configs(
 @router.get("/{key}")
 async def get_config_value(
     key: str,
-    authorization: str = Header(None)
+    authorization: str = Header(None),
+    access_token: str = Cookie(None)
 ):
     """Obtiene el valor de una configuración específica"""
-    require_admin(authorization)
+    require_admin(authorization, access_token)
     
     value = get_config(key, None)
     if value is None:
@@ -137,10 +147,11 @@ async def get_config_value(
 async def update_config_value(
     key: str,
     payload: ConfigUpdateRequest,
-    authorization: str = Header(None)
+    authorization: str = Header(None),
+    access_token: str = Cookie(None)
 ):
     """Actualiza el valor de una configuración"""
-    require_admin(authorization)
+    require_admin(authorization, access_token)
     
     if payload.key != key:
         raise HTTPException(status_code=400, detail="Key en URL y body no coinciden")
@@ -171,10 +182,11 @@ async def update_config_value(
 @router.post("/bulk")
 async def update_configs_bulk(
     payload: ConfigBulkUpdateRequest,
-    authorization: str = Header(None)
+    authorization: str = Header(None),
+    access_token: str = Cookie(None)
 ):
     """Actualiza múltiples configuraciones a la vez"""
-    require_admin(authorization)
+    require_admin(authorization, access_token)
     
     results = []
     for config in payload.configs:
@@ -201,12 +213,15 @@ async def update_configs_bulk(
 # =====================================================
 
 @router.get("/odoo/current")
-async def get_odoo_settings(authorization: str = Header(None)):
+async def get_odoo_settings(
+    authorization: str = Header(None),
+    access_token: str = Cookie(None)
+):
     """
     Obtiene la configuración actual de Odoo para provisioning de tenants.
     Las contraseñas se muestran enmascaradas.
     """
-    require_admin(authorization)
+    require_admin(authorization, access_token)
     
     return {
         "config": get_odoo_config(),
@@ -218,7 +233,8 @@ async def get_odoo_settings(authorization: str = Header(None)):
 @router.put("/odoo")
 async def update_odoo_settings(
     payload: OdooConfigUpdateRequest,
-    authorization: str = Header(None)
+    authorization: str = Header(None),
+    access_token: str = Cookie(None)
 ):
     """
     Actualiza la configuración de Odoo.
@@ -226,7 +242,7 @@ async def update_odoo_settings(
     Los cambios se guardan en la base de datos y tienen prioridad
     sobre las variables de entorno.
     """
-    require_admin(authorization)
+    require_admin(authorization, access_token)
     
     updates = []
     
@@ -277,12 +293,15 @@ async def update_odoo_settings(
 # =====================================================
 
 @router.post("/init-defaults")
-async def initialize_default_configs(authorization: str = Header(None)):
+async def initialize_default_configs(
+    authorization: str = Header(None),
+    access_token: str = Cookie(None)
+):
     """
     Inicializa las configuraciones por defecto en la base de datos.
     Útil para primera instalación o reset de configuración.
     """
-    require_admin(authorization)
+    require_admin(authorization, access_token)
     
     defaults = [
         # Odoo
@@ -328,12 +347,15 @@ async def initialize_default_configs(authorization: str = Header(None)):
 
 
 @router.get("/env")
-async def get_env_vars(authorization: str = Header(None)):
+async def get_env_vars(
+    authorization: str = Header(None),
+    access_token: str = Cookie(None)
+):
     """
     Muestra las variables de entorno relevantes (para debug).
     Solo disponible en modo desarrollo.
     """
-    require_admin(authorization)
+    require_admin(authorization, access_token)
     
     env = os.getenv("ENVIRONMENT", "development")
     if env == "production":

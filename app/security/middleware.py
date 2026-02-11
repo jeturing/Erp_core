@@ -274,8 +274,8 @@ class WAFMiddleware(BaseHTTPMiddleware):
                     content={"detail": "Solicitud bloqueada por razones de seguridad"}
                 )
         
-        # Verificar headers sospechosos
-        suspicious_headers = ["User-Agent", "Referer", "Cookie"]
+        # Verificar headers sospechosos (excluir Cookie que contiene JWT tokens)
+        suspicious_headers = ["User-Agent", "Referer"]
         for header in suspicious_headers:
             value = request.headers.get(header, "")
             if value:
