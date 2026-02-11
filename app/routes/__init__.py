@@ -9,4 +9,8 @@ Routers disponibles:
 - tenants: Gestión de tenants
 - onboarding: Flujo de registro y checkout
 - tenant_portal: Portal del cliente
+- nodes: Multi-Proxmox management
+- tunnels: Cloudflare Tunnel management
+- provisioning: Auto-provisioning de tenants Odoo
+- settings: Configuración administrable desde /admin
 """

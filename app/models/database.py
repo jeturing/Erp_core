@@ -208,6 +208,104 @@ class ResourceMetric(Base):
     # Timestamp
     recorded_at = Column(DateTime, default=datetime.utcnow, index=True)
 
+
+class SystemConfig(Base):
+    """
+    Configuración del sistema administrable desde /admin
+    
+    Permite cambiar configuraciones sin reiniciar la app.
+    Los valores aquí sobreescriben las variables de entorno.
+    """
+    __tablename__ = "system_config"
+    
+    id = Column(Integer, primary_key=True, index=True)
+    key = Column(String(100), unique=True, nullable=False, index=True)
+    value = Column(Text, nullable=False)
+    description = Column(String(500))
+    category = Column(String(50), default="general")  # odoo, stripe, security, etc.
+    is_secret = Column(Boolean, default=False)  # Si es contraseña/token, no mostrar valor
+    is_editable = Column(Boolean, default=True)  # Si se puede editar desde UI
+    created_at = Column(DateTime, default=datetime.utcnow)
+    updated_at = Column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
+    updated_by = Column(String(100))  # Usuario que hizo el último cambio
+    
+    def __repr__(self):
+        return f"<SystemConfig {self.key}={self.value if not self.is_secret else '***'}>"
+
+
+# ===== HELPER FUNCTIONS PARA CONFIGURACIÓN =====
+
+def get_config(key: str, default: str = None) -> str:
+    """
+    Obtiene valor de configuración.
+    Prioridad: BD > Variable de entorno > Default
+    """
+    db = SessionLocal()
+    try:
+        config = db.query(SystemConfig).filter(SystemConfig.key == key).first()
+        if config:
+            return config.value
+        return os.getenv(key, default)
+    except:
+        return os.getenv(key, default)
+    finally:
+        db.close()
+
+
+def set_config(key: str, value: str, description: str = None, category: str = "general", 
+               is_secret: bool = False, updated_by: str = "system") -> bool:
+    """Guarda o actualiza un valor de configuración en la BD"""
+    db = SessionLocal()
+    try:
+        config = db.query(SystemConfig).filter(SystemConfig.key == key).first()
+        if config:
+            config.value = value
+            config.updated_by = updated_by
+            if description:
+                config.description = description
+        else:
+            config = SystemConfig(
+                key=key,
+                value=value,
+                description=description,
+                category=category,
+                is_secret=is_secret,
+                updated_by=updated_by
+            )
+            db.add(config)
+        db.commit()
+        return True
+    except Exception as e:
+        db.rollback()
+        return False
+    finally:
+        db.close()
+
+
+def get_all_configs(category: str = None) -> list:
+    """Obtiene todas las configuraciones, opcionalmente filtradas por categoría"""
+    db = SessionLocal()
+    try:
+        query = db.query(SystemConfig)
+        if category:
+            query = query.filter(SystemConfig.category == category)
+        configs = query.all()
+        return [
+            {
+                "key": c.key,
+                "value": c.value if not c.is_secret else "********",
+                "description": c.description,
+                "category": c.category,
+                "is_secret": c.is_secret,
+                "is_editable": c.is_editable,
+                "updated_at": c.updated_at.isoformat() if c.updated_at else None,
+                "updated_by": c.updated_by
+            }
+            for c in configs
+        ]
+    finally:
+        db.close()
+
 # Database connection
 DATABASE_URL = os.getenv("DATABASE_URL", "postgresql://jeturing:321Abcd@localhost/onboarding_db")
 engine = create_engine(DATABASE_URL)

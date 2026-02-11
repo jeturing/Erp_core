@@ -13,7 +13,7 @@ from dotenv import load_dotenv
 load_dotenv()
 
 # Import routers
-from .routes import auth, dashboard, tenants, onboarding, roles, tenant_portal, secure_auth, nodes, tunnels, provisioning
+from .routes import auth, dashboard, tenants, onboarding, roles, tenant_portal, secure_auth, nodes, tunnels, provisioning, settings
 
 # Import security middleware
 from .security.middleware import SecurityMiddleware, WAFMiddleware
@@ -71,6 +71,7 @@ app.include_router(tenant_portal.router)
 app.include_router(nodes.router)  # Multi-Proxmox management
 app.include_router(tunnels.router)  # Cloudflare Tunnel management
 app.include_router(provisioning.router)  # Auto-provisioning de tenants Odoo
+app.include_router(settings.router)  # Configuración administrable
 
 
 @app.get("/health")
