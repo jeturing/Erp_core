@@ -6,7 +6,6 @@
   
   let username = '';
   let password = '';
-  let loginType: 'admin' | 'tenant' = 'tenant'; // Default a portal de cliente
   let isSubmitting = false;
   let error = '';
   
@@ -31,14 +30,13 @@
     isSubmitting = true;
     
     try {
-      // Llamar API directamente para controlar el rol
+      // Llamar API - el backend detecta automáticamente el tipo de usuario
       const response = await fetch('/api/auth/login', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
           email: username,
-          password: password,
-          role: loginType
+          password: password
         }),
         credentials: 'include'
       });
@@ -60,7 +58,7 @@
         // Inicializar auth store
         await auth.init();
         
-        // Redirigir según el rol
+        // Redirigir según el rol devuelto por el backend
         redirectByRole(data.role);
       }, 100);
       
@@ -87,75 +85,39 @@
     
     <div class="space-y-6">
       <h1 class="text-4xl font-bold text-white leading-tight">
-        {#if loginType === 'admin'}
-          ERP Core
-          <span class="block text-accent-400">Management Platform</span>
-        {:else}
-          Portal de
-          <span class="block text-accent-400">Cliente</span>
-        {/if}
+        Bienvenido a
+        <span class="block text-accent-400">Jeturing</span>
       </h1>
       <p class="text-lg text-primary-200 max-w-md">
-        {#if loginType === 'admin'}
-          Gestiona tus tenants, suscripciones e infraestructura desde un único panel de control.
-        {:else}
-          Accede a tus servicios, gestiona tus dominios y consulta tu facturación.
-        {/if}
+        Gestiona tu negocio de forma inteligente. Accede a todos tus servicios desde un único lugar.
       </p>
       
       <!-- Features -->
       <div class="grid grid-cols-2 gap-4 pt-4">
-        {#if loginType === 'admin'}
-          <div class="flex items-center gap-2 text-primary-200">
-            <svg class="w-5 h-5 text-accent-400" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-              <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 13l4 4L19 7" />
-            </svg>
-            <span>Multi-tenant</span>
-          </div>
-          <div class="flex items-center gap-2 text-primary-200">
-            <svg class="w-5 h-5 text-accent-400" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-              <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 13l4 4L19 7" />
-            </svg>
-            <span>Auto-provisioning</span>
-          </div>
-          <div class="flex items-center gap-2 text-primary-200">
-            <svg class="w-5 h-5 text-accent-400" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-              <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 13l4 4L19 7" />
-            </svg>
-            <span>Stripe Integration</span>
-          </div>
-          <div class="flex items-center gap-2 text-primary-200">
-            <svg class="w-5 h-5 text-accent-400" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-              <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 13l4 4L19 7" />
-            </svg>
-            <span>Proxmox Ready</span>
-          </div>
-        {:else}
-          <div class="flex items-center gap-2 text-primary-200">
-            <svg class="w-5 h-5 text-accent-400" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-              <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 13l4 4L19 7" />
-            </svg>
-            <span>Dominios personalizados</span>
-          </div>
-          <div class="flex items-center gap-2 text-primary-200">
-            <svg class="w-5 h-5 text-accent-400" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-              <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 13l4 4L19 7" />
-            </svg>
-            <span>SSL gratuito</span>
-          </div>
-          <div class="flex items-center gap-2 text-primary-200">
-            <svg class="w-5 h-5 text-accent-400" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-              <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 13l4 4L19 7" />
-            </svg>
-            <span>Soporte 24/7</span>
-          </div>
-          <div class="flex items-center gap-2 text-primary-200">
-            <svg class="w-5 h-5 text-accent-400" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-              <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 13l4 4L19 7" />
-            </svg>
-            <span>Odoo ERP incluido</span>
-          </div>
-        {/if}
+        <div class="flex items-center gap-2 text-primary-200">
+          <svg class="w-5 h-5 text-accent-400" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 13l4 4L19 7" />
+          </svg>
+          <span>Gestión empresarial</span>
+        </div>
+        <div class="flex items-center gap-2 text-primary-200">
+          <svg class="w-5 h-5 text-accent-400" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 13l4 4L19 7" />
+          </svg>
+          <span>Facturación integrada</span>
+        </div>
+        <div class="flex items-center gap-2 text-primary-200">
+          <svg class="w-5 h-5 text-accent-400" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 13l4 4L19 7" />
+          </svg>
+          <span>Dominios personalizados</span>
+        </div>
+        <div class="flex items-center gap-2 text-primary-200">
+          <svg class="w-5 h-5 text-accent-400" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 13l4 4L19 7" />
+          </svg>
+          <span>Soporte 24/7</span>
+        </div>
       </div>
     </div>
     
@@ -175,38 +137,10 @@
         <span class="text-2xl font-bold text-white">Jeturing</span>
       </div>
       
-      <!-- Login Type Selector -->
-      <div class="flex rounded-lg bg-surface-highlight p-1">
-        <button
-          type="button"
-          class="flex-1 py-2 px-4 rounded-md text-sm font-medium transition-all duration-200
-                 {loginType === 'tenant' 
-                   ? 'bg-accent-500 text-primary-900' 
-                   : 'text-secondary-400 hover:text-white'}"
-          on:click={() => loginType = 'tenant'}
-        >
-          Portal de Cliente
-        </button>
-        <button
-          type="button"
-          class="flex-1 py-2 px-4 rounded-md text-sm font-medium transition-all duration-200
-                 {loginType === 'admin' 
-                   ? 'bg-accent-500 text-primary-900' 
-                   : 'text-secondary-400 hover:text-white'}"
-          on:click={() => loginType = 'admin'}
-        >
-          Administrador
-        </button>
-      </div>
-      
       <div class="text-center lg:text-left">
         <h2 class="text-2xl font-bold text-white">Iniciar sesión</h2>
         <p class="mt-2 text-secondary-400">
-          {#if loginType === 'admin'}
-            Accede al panel de administración
-          {:else}
-            Accede a tu portal de cliente
-          {/if}
+          Ingresa tus credenciales para continuar
         </p>
       </div>
       
@@ -218,10 +152,10 @@
         {/if}
         
         <Input
-          label={loginType === 'admin' ? 'Usuario' : 'Email'}
+          label="Usuario o Email"
           name="username"
-          type={loginType === 'admin' ? 'text' : 'email'}
-          placeholder={loginType === 'admin' ? 'admin' : 'tu@email.com'}
+          type="text"
+          placeholder="usuario o email@ejemplo.com"
           bind:value={username}
           required
           disabled={isSubmitting}

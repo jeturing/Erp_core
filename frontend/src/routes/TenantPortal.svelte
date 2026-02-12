@@ -210,7 +210,7 @@
                   </svg>
                 </div>
                 <div class="flex-1">
-                  <p class="font-medium text-white group-hover:text-emerald-400 transition-colors">Acceder a Odoo ERP</p>
+                  <p class="font-medium text-white group-hover:text-emerald-400 transition-colors">Acceder a Sajet ERP</p>
                   <p class="text-sm text-slate-400">Tu panel de gestión empresarial</p>
                 </div>
                 <svg class="w-5 h-5 text-slate-500 group-hover:text-emerald-400 transition-colors" fill="none" viewBox="0 0 24 24" stroke="currentColor">

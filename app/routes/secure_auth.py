@@ -31,7 +31,6 @@ ADMIN_PASSWORD = os.getenv("ADMIN_PASSWORD", "admin123")
 class LoginRequest(BaseModel):
     email: str
     password: str
-    role: str = "tenant"  # 'admin' o 'tenant'
     totp_code: Optional[str] = None
 
 
@@ -75,8 +74,10 @@ def get_client_ip(request: Request) -> str:
 @router.post("/login", response_model=LoginResponse)
 async def secure_login(request: Request, login_data: LoginRequest):
     """
-    Login seguro con rate limiting, audit logging y soporte 2FA.
+    Login seguro con detección automática de tipo de usuario.
     
+    - Si es admin: usuario sin @ (ej: admin)
+    - Si es tenant: email con @ (ej: cliente@demo.com)
     - Rate limiting: 5 intentos en 5 minutos, bloqueo de 15 minutos
     - Tokens en cookies httpOnly
     - Soporte para TOTP (2FA)
@@ -97,7 +98,10 @@ async def secure_login(request: Request, login_data: LoginRequest):
         user_id = None
         tenant_id = None
         
-        if login_data.role == "admin":
+        # Auto-detectar tipo de usuario basándose en el formato
+        is_admin_login = '@' not in login_data.email or login_data.email == ADMIN_USERNAME
+        
+        if is_admin_login:
             # Login de admin
             if login_data.email != ADMIN_USERNAME or login_data.password != ADMIN_PASSWORD:
                 AuditLogger.log_login_failed(
@@ -114,8 +118,8 @@ async def secure_login(request: Request, login_data: LoginRequest):
             role = "admin"
             redirect_url = "/admin"
             
-        elif login_data.role == "tenant":
-            # Login de tenant
+        else:
+            # Login de tenant (tiene @)
             customer = db.query(Customer).filter_by(email=login_data.email).first()
             
             if not customer:
@@ -126,7 +130,7 @@ async def secure_login(request: Request, login_data: LoginRequest):
                 )
                 raise HTTPException(
                     status_code=status.HTTP_401_UNAUTHORIZED,
-                    detail="Email no encontrado"
+                    detail="Credenciales inválidas"
                 )
             
             # Verificar password hasheado (formato: salt:hash)
@@ -144,13 +148,13 @@ async def secure_login(request: Request, login_data: LoginRequest):
                         )
                         raise HTTPException(
                             status_code=status.HTTP_401_UNAUTHORIZED,
-                            detail="Contraseña incorrecta"
+                            detail="Credenciales inválidas"
                         )
                 else:
                     # Hash inválido, rechazar
                     raise HTTPException(
                         status_code=status.HTTP_401_UNAUTHORIZED,
-                        detail="Error de autenticación"
+                        detail="Credenciales inválidas"
                     )
             else:
                 # Sin password configurada
@@ -169,11 +173,6 @@ async def secure_login(request: Request, login_data: LoginRequest):
             user_id = customer.id
             tenant_id = customer.id
             redirect_url = "/tenant/portal"
-        else:
-            raise HTTPException(
-                status_code=status.HTTP_400_BAD_REQUEST,
-                detail="Rol no válido"
-            )
         
         # Verificar 2FA si está habilitado
         effective_user_id = user_id if user_id else 0  # 0 para admin

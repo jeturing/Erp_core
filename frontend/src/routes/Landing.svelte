@@ -11,7 +11,7 @@
       price: '29',
       description: 'Perfecto para pequeñas empresas',
       features: [
-        'Odoo ERP completo',
+        'Sajet ERP completo',
         '1 dominio personalizado',
         '5 GB almacenamiento',
         'Soporte por email',
@@ -60,8 +60,8 @@
   const features = [
     {
       icon: 'M19 21V5a2 2 0 00-2-2H7a2 2 0 00-2 2v16m14 0h2m-2 0h-5m-9 0H3m2 0h5M9 7h1m-1 4h1m4-4h1m-1 4h1m-5 10v-5a1 1 0 011-1h2a1 1 0 011 1v5m-4 0h4',
-      title: 'Odoo ERP Completo',
-      description: 'Accede a todos los módulos de Odoo: ventas, compras, inventario, contabilidad, CRM y más.'
+      title: 'Sajet ERP Completo',
+      description: 'Accede a todos los módulos: ventas, compras, inventario, contabilidad, CRM y más.'
     },
     {
       icon: 'M21 12a9 9 0 01-9 9m9-9a9 9 0 00-9-9m9 9H3m9 9a9 9 0 01-9-9m9 9c1.657 0 3-4.03 3-9s-1.343-9-3-9m0 18c-1.657 0-3-4.03-3-9s1.343-9 3-9m-9 9a9 9 0 019-9',
@@ -151,7 +151,7 @@
 
 <svelte:head>
   <title>Jeturing ERP - Gestión Empresarial en la Nube</title>
-  <meta name="description" content="Plataforma ERP empresarial con Odoo. Gestiona tu negocio desde cualquier lugar con dominios personalizados y soporte 24/7." />
+  <meta name="description" content="Plataforma ERP empresarial en la nube. Gestiona tu negocio desde cualquier lugar con dominios personalizados y soporte 24/7." />
 </svelte:head>
 
 <div class="min-h-screen bg-slate-950 text-white">
@@ -268,7 +268,7 @@
       
       <!-- Subheadline -->
       <p class="text-lg sm:text-xl text-slate-400 max-w-3xl mx-auto mb-10">
-        Gestiona ventas, inventario, contabilidad y más con Odoo ERP. 
+        Gestiona ventas, inventario, contabilidad y más con Sajet ERP. 
         Despliega en minutos con tu propio dominio y soporte experto 24/7.
       </p>
       
