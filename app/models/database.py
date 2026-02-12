@@ -54,6 +54,7 @@ class Customer(Base):
     
     id = Column(Integer, primary_key=True, index=True)
     email = Column(String, unique=True, index=True, nullable=False)
+    password_hash = Column(String(255))  # Para autenticación de portal
     full_name = Column(String, nullable=False)
     company_name = Column(String)
     subdomain = Column(String, unique=True, index=True, nullable=False)

@@ -1,29 +1,40 @@
 <script lang="ts">
   import { onMount } from 'svelte';
   import './app.css';
-  import { auth, isAuthenticated } from './lib/stores';
+  import { auth, isAuthenticated, currentUser } from './lib/stores';
   import Layout from './lib/components/Layout.svelte';
   import Login from './routes/Login.svelte';
+  import Landing from './routes/Landing.svelte';
   import Dashboard from './routes/Dashboard.svelte';
+  import TenantPortal from './routes/TenantPortal.svelte';
   import Domains from './pages/Domains.svelte';
   import { Spinner } from './lib/components';
   
-  let currentRoute = 'dashboard';
-  let currentPage: 'login' | 'dashboard' | 'customers' | 'domains' | 'infrastructure' | 'billing' | 'settings' = 'dashboard';
+  let currentRoute = 'landing';
+  let currentPage: 'landing' | 'login' | 'dashboard' | 'portal' | 'customers' | 'domains' | 'infrastructure' | 'billing' | 'settings' = 'landing';
   
   // Simple hash-based routing
   function handleRouteChange() {
-    const hash = window.location.hash.slice(2) || 'dashboard'; // Remove '#/'
-    const route = hash.split('/')[0] || 'dashboard';
+    const hash = window.location.hash.slice(2) || ''; // Remove '#/'
+    const route = hash.split('/')[0] || '';
     currentRoute = route;
     
     // Determine which page to show
-    if (route === 'login') {
+    if (route === '' || route === 'home') {
+      // Landing page (no auth required)
+      currentPage = 'landing';
+    } else if (route === 'login') {
       currentPage = 'login';
     } else if (!$isAuthenticated && !$auth.isLoading) {
-      // Redirect to login if not authenticated
+      // Redirect to login if not authenticated (for protected routes)
       window.location.hash = '#/login';
       currentPage = 'login';
+    } else if ($currentUser?.role === 'tenant') {
+      // Tenant users go to portal
+      currentPage = 'portal';
+      if (route !== 'portal') {
+        window.location.hash = '#/portal';
+      }
     } else {
       currentPage = route as typeof currentPage;
     }
@@ -50,15 +61,19 @@
   }
 </script>
 
-{#if $auth.isLoading}
+{#if $auth.isLoading && currentPage !== 'landing'}
   <div class="min-h-screen bg-surface-dark flex items-center justify-center">
     <div class="text-center">
       <Spinner size="lg" />
       <p class="mt-4 text-secondary-400">Cargando...</p>
     </div>
   </div>
+{:else if currentPage === 'landing'}
+  <Landing />
 {:else if currentPage === 'login'}
   <Login />
+{:else if currentPage === 'portal'}
+  <TenantPortal />
 {:else}
   <Layout {currentRoute}>
     {#if currentPage === 'dashboard'}

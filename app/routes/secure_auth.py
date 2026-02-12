@@ -129,8 +129,40 @@ async def secure_login(request: Request, login_data: LoginRequest):
                     detail="Email no encontrado"
                 )
             
-            # TODO: Verificar password hasheado
-            # Por ahora aceptamos cualquier password para demo
+            # Verificar password hasheado (formato: salt:hash)
+            if customer.password_hash:
+                import hashlib
+                parts = customer.password_hash.split(':')
+                if len(parts) == 2:
+                    salt, stored_hash = parts
+                    computed_hash = hashlib.sha256((login_data.password + salt).encode()).hexdigest()
+                    if computed_hash != stored_hash:
+                        AuditLogger.log_login_failed(
+                            username=login_data.email,
+                            reason="Invalid password",
+                            request=request
+                        )
+                        raise HTTPException(
+                            status_code=status.HTTP_401_UNAUTHORIZED,
+                            detail="Contraseña incorrecta"
+                        )
+                else:
+                    # Hash inválido, rechazar
+                    raise HTTPException(
+                        status_code=status.HTTP_401_UNAUTHORIZED,
+                        detail="Error de autenticación"
+                    )
+            else:
+                # Sin password configurada
+                AuditLogger.log_login_failed(
+                    username=login_data.email,
+                    reason="No password set",
+                    request=request
+                )
+                raise HTTPException(
+                    status_code=status.HTTP_401_UNAUTHORIZED,
+                    detail="Cuenta sin contraseña configurada. Contacte al administrador."
+                )
             
             username = customer.email
             role = "tenant"

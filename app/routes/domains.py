@@ -15,13 +15,20 @@ from .roles import verify_token_with_role
 router = APIRouter(prefix="/api/domains", tags=["domains"])
 
 
-# ==================== Auth Dependency ====================
+# ==================== Auth Dependencies ====================
 
 async def get_current_admin(access_token: str = Cookie(None)):
     """Dependency para verificar token de admin desde cookie"""
     if not access_token:
         raise HTTPException(status_code=401, detail="No autorizado")
     return verify_token_with_role(access_token, required_role="admin")
+
+
+async def get_current_tenant(access_token: str = Cookie(None)):
+    """Dependency para verificar token de tenant desde cookie"""
+    if not access_token:
+        raise HTTPException(status_code=401, detail="No autorizado")
+    return verify_token_with_role(access_token, required_role="tenant")
 
 
 # ==================== Schemas ====================
@@ -103,7 +110,7 @@ async def list_domains(
     db: Session = Depends(get_db),
     current_user: dict = Depends(get_current_admin)
 ):
-    """Lista todos los dominios con filtros opcionales"""
+    """Lista todos los dominios con filtros opcionales (solo admin)"""
     manager = DomainManager(db)
     return manager.list_domains(
         customer_id=customer_id,
@@ -111,6 +118,24 @@ async def list_domains(
         is_active=is_active,
         limit=limit,
         offset=offset
+    )
+
+
+@router.get("/my-domains", response_model=DomainListResponse)
+async def list_my_domains(
+    db: Session = Depends(get_db),
+    current_user: dict = Depends(get_current_tenant)
+):
+    """Lista los dominios del cliente autenticado (portal de cliente)"""
+    tenant_id = current_user.get("tenant_id") or current_user.get("user_id")
+    if not tenant_id:
+        raise HTTPException(status_code=400, detail="No se encontró ID de tenant")
+    
+    manager = DomainManager(db)
+    return manager.list_domains(
+        customer_id=tenant_id,
+        limit=100,
+        offset=0
     )
 
 

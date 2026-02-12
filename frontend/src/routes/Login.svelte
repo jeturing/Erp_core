@@ -2,18 +2,28 @@
   import { auth } from '../lib/stores';
   import { Button, Input, Spinner } from '../lib/components';
   import { onMount } from 'svelte';
+  import { api } from '../lib/api';
   
   let username = '';
   let password = '';
+  let loginType: 'admin' | 'tenant' = 'tenant'; // Default a portal de cliente
   let isSubmitting = false;
   let error = '';
   
   // Redirect if already logged in
   onMount(() => {
     if ($auth.user) {
-      window.location.hash = '#/dashboard';
+      redirectByRole($auth.user.role);
     }
   });
+  
+  function redirectByRole(role: string) {
+    if (role === 'admin') {
+      window.location.hash = '#/dashboard';
+    } else {
+      window.location.hash = '#/portal';
+    }
+  }
   
   async function handleSubmit(e: Event) {
     e.preventDefault();
@@ -21,12 +31,39 @@
     isSubmitting = true;
     
     try {
-      const success = await auth.login({ username, password });
-      if (success) {
-        window.location.hash = '#/dashboard';
-      } else {
-        error = $auth.error || 'Credenciales inválidas';
+      // Llamar API directamente para controlar el rol
+      const response = await fetch('/api/auth/login', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          email: username,
+          password: password,
+          role: loginType
+        }),
+        credentials: 'include'
+      });
+      
+      if (!response.ok) {
+        const err = await response.json();
+        throw new Error(err.detail || 'Credenciales inválidas');
       }
+      
+      const data = await response.json();
+      
+      // Leer el token de la cookie y guardarlo
+      setTimeout(async () => {
+        const match = document.cookie.match(/access_token=([^;]+)/);
+        if (match) {
+          api.setToken(match[1]);
+        }
+        
+        // Inicializar auth store
+        await auth.init();
+        
+        // Redirigir según el rol
+        redirectByRole(data.role);
+      }, 100);
+      
     } catch (err) {
       error = err instanceof Error ? err.message : 'Error de conexión';
     } finally {
@@ -50,44 +87,80 @@
     
     <div class="space-y-6">
       <h1 class="text-4xl font-bold text-white leading-tight">
-        ERP Core
-        <span class="block text-accent-400">Management Platform</span>
+        {#if loginType === 'admin'}
+          ERP Core
+          <span class="block text-accent-400">Management Platform</span>
+        {:else}
+          Portal de
+          <span class="block text-accent-400">Cliente</span>
+        {/if}
       </h1>
       <p class="text-lg text-primary-200 max-w-md">
-        Gestiona tus tenants, suscripciones e infraestructura desde un único panel de control.
+        {#if loginType === 'admin'}
+          Gestiona tus tenants, suscripciones e infraestructura desde un único panel de control.
+        {:else}
+          Accede a tus servicios, gestiona tus dominios y consulta tu facturación.
+        {/if}
       </p>
       
       <!-- Features -->
       <div class="grid grid-cols-2 gap-4 pt-4">
-        <div class="flex items-center gap-2 text-primary-200">
-          <svg class="w-5 h-5 text-accent-400" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 13l4 4L19 7" />
-          </svg>
-          <span>Multi-tenant</span>
-        </div>
-        <div class="flex items-center gap-2 text-primary-200">
-          <svg class="w-5 h-5 text-accent-400" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 13l4 4L19 7" />
-          </svg>
-          <span>Auto-provisioning</span>
-        </div>
-        <div class="flex items-center gap-2 text-primary-200">
-          <svg class="w-5 h-5 text-accent-400" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 13l4 4L19 7" />
-          </svg>
-          <span>Stripe Integration</span>
-        </div>
-        <div class="flex items-center gap-2 text-primary-200">
-          <svg class="w-5 h-5 text-accent-400" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 13l4 4L19 7" />
-          </svg>
-          <span>Proxmox Ready</span>
-        </div>
+        {#if loginType === 'admin'}
+          <div class="flex items-center gap-2 text-primary-200">
+            <svg class="w-5 h-5 text-accent-400" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+              <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 13l4 4L19 7" />
+            </svg>
+            <span>Multi-tenant</span>
+          </div>
+          <div class="flex items-center gap-2 text-primary-200">
+            <svg class="w-5 h-5 text-accent-400" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+              <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 13l4 4L19 7" />
+            </svg>
+            <span>Auto-provisioning</span>
+          </div>
+          <div class="flex items-center gap-2 text-primary-200">
+            <svg class="w-5 h-5 text-accent-400" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+              <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 13l4 4L19 7" />
+            </svg>
+            <span>Stripe Integration</span>
+          </div>
+          <div class="flex items-center gap-2 text-primary-200">
+            <svg class="w-5 h-5 text-accent-400" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+              <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 13l4 4L19 7" />
+            </svg>
+            <span>Proxmox Ready</span>
+          </div>
+        {:else}
+          <div class="flex items-center gap-2 text-primary-200">
+            <svg class="w-5 h-5 text-accent-400" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+              <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 13l4 4L19 7" />
+            </svg>
+            <span>Dominios personalizados</span>
+          </div>
+          <div class="flex items-center gap-2 text-primary-200">
+            <svg class="w-5 h-5 text-accent-400" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+              <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 13l4 4L19 7" />
+            </svg>
+            <span>SSL gratuito</span>
+          </div>
+          <div class="flex items-center gap-2 text-primary-200">
+            <svg class="w-5 h-5 text-accent-400" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+              <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 13l4 4L19 7" />
+            </svg>
+            <span>Soporte 24/7</span>
+          </div>
+          <div class="flex items-center gap-2 text-primary-200">
+            <svg class="w-5 h-5 text-accent-400" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+              <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 13l4 4L19 7" />
+            </svg>
+            <span>Odoo ERP incluido</span>
+          </div>
+        {/if}
       </div>
     </div>
     
     <p class="text-sm text-primary-400">
-      © 2024 Jeturing Technologies. All rights reserved.
+      © 2026 Jeturing Technologies. All rights reserved.
     </p>
   </div>
   
@@ -102,10 +175,38 @@
         <span class="text-2xl font-bold text-white">Jeturing</span>
       </div>
       
+      <!-- Login Type Selector -->
+      <div class="flex rounded-lg bg-surface-highlight p-1">
+        <button
+          type="button"
+          class="flex-1 py-2 px-4 rounded-md text-sm font-medium transition-all duration-200
+                 {loginType === 'tenant' 
+                   ? 'bg-accent-500 text-primary-900' 
+                   : 'text-secondary-400 hover:text-white'}"
+          on:click={() => loginType = 'tenant'}
+        >
+          Portal de Cliente
+        </button>
+        <button
+          type="button"
+          class="flex-1 py-2 px-4 rounded-md text-sm font-medium transition-all duration-200
+                 {loginType === 'admin' 
+                   ? 'bg-accent-500 text-primary-900' 
+                   : 'text-secondary-400 hover:text-white'}"
+          on:click={() => loginType = 'admin'}
+        >
+          Administrador
+        </button>
+      </div>
+      
       <div class="text-center lg:text-left">
         <h2 class="text-2xl font-bold text-white">Iniciar sesión</h2>
         <p class="mt-2 text-secondary-400">
-          Ingresa tus credenciales para acceder al panel
+          {#if loginType === 'admin'}
+            Accede al panel de administración
+          {:else}
+            Accede a tu portal de cliente
+          {/if}
         </p>
       </div>
       
@@ -117,9 +218,10 @@
         {/if}
         
         <Input
-          label="Usuario"
+          label={loginType === 'admin' ? 'Usuario' : 'Email'}
           name="username"
-          placeholder="admin"
+          type={loginType === 'admin' ? 'text' : 'email'}
+          placeholder={loginType === 'admin' ? 'admin' : 'tu@email.com'}
           bind:value={username}
           required
           disabled={isSubmitting}
