@@ -221,6 +221,52 @@ async def secure_login(request: Request, login_data: LoginRequest):
         db.close()
 
 
+@router.get("/me")
+async def get_current_user(request: Request):
+    """
+    Obtiene información del usuario autenticado actual.
+    """
+    access_token = request.cookies.get("access_token")
+    
+    if not access_token:
+        raise HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED,
+            detail="No autenticado"
+        )
+    
+    try:
+        payload = TokenManager.verify_access_token(access_token)
+        
+        user_data = {
+            "username": payload.get("sub"),
+            "email": payload.get("sub"),
+            "role": payload.get("role"),
+            "user_id": payload.get("user_id"),
+            "tenant_id": payload.get("tenant_id")
+        }
+        
+        # Si es tenant, obtener más info del cliente
+        if payload.get("role") == "tenant" and payload.get("user_id"):
+            db = SessionLocal()
+            try:
+                customer = db.query(Customer).filter(
+                    Customer.id == payload.get("user_id")
+                ).first()
+                if customer:
+                    user_data["company_name"] = customer.company_name
+                    user_data["plan"] = customer.plan
+            finally:
+                db.close()
+        
+        return user_data
+        
+    except ValueError as e:
+        raise HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED,
+            detail=str(e)
+        )
+
+
 @router.post("/refresh")
 async def refresh_token(request: Request):
     """
