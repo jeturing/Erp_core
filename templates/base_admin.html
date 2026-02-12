@@ -109,6 +109,11 @@
         </main>
     </div>
 
+    <!-- Core JS Libraries -->
+    <script src="/static/js/toast.js"></script>
+    <script src="/static/js/global-search.js"></script>
+    <script src="/static/js/export.js"></script>
+    
     <script>
         // Theme Toggle
         const themeToggle = document.getElementById('themeToggle');
@@ -122,27 +127,32 @@
             }
         }
         
-        themeToggle.addEventListener('click', () => {
-            document.documentElement.classList.toggle('dark');
-            const isDark = document.documentElement.classList.contains('dark');
-            localStorage.setItem('darkMode', isDark);
-            updateThemeIcon();
-        });
+        if (themeToggle) {
+            themeToggle.addEventListener('click', () => {
+                document.documentElement.classList.toggle('dark');
+                const isDark = document.documentElement.classList.contains('dark');
+                localStorage.setItem('darkMode', isDark);
+                updateThemeIcon();
+            });
+        }
         
         updateThemeIcon();
 
         // Logout function
         async function logout() {
-            if (confirm('¿Estás seguro de que deseas cerrar sesión?')) {
-                await fetch('/api/logout', { method: 'POST', credentials: 'same-origin' });
-                localStorage.removeItem('admin_token');
-                localStorage.removeItem('access_token');
-                localStorage.removeItem('user_role');
-                window.location.href = '/login/admin';
+            try {
+                await fetch('/api/auth/logout', { method: 'POST', credentials: 'same-origin' });
+            } catch (e) {
+                console.warn('Logout API failed, clearing local state');
             }
+            localStorage.removeItem('admin_token');
+            localStorage.removeItem('access_token');
+            localStorage.removeItem('user_role');
+            toast.info('Sesión cerrada correctamente');
+            setTimeout(() => window.location.href = '/login/admin', 500);
         }
 
-        // Interceptar fetch para agregar credentials
+        // Interceptar fetch para agregar credentials y manejar errores
         const originalFetch = window.fetch;
         window.fetch = function(...args) {
             const [resource, config] = args;
@@ -150,7 +160,47 @@
                 if (!config) args[1] = {};
                 args[1].credentials = 'same-origin';
             }
-            return originalFetch.apply(this, args);
+            return originalFetch.apply(this, args).then(response => {
+                // Redirigir a login si no autorizado
+                if (response.status === 401 && typeof resource === 'string' && resource.startsWith('/api/')) {
+                    console.warn('Session expired, redirecting to login');
+                    window.location.href = '/login/admin';
+                }
+                return response;
+            });
+        };
+
+        // Helper global para API calls con toast
+        window.apiCall = async function(url, options = {}) {
+            const loadingId = options.loading ? toast.loading(options.loading) : null;
+            try {
+                const response = await fetch(url, {
+                    ...options,
+                    headers: {
+                        'Content-Type': 'application/json',
+                        ...options.headers
+                    },
+                    credentials: 'same-origin'
+                });
+                
+                const data = await response.json();
+                
+                if (loadingId) toast.dismiss(loadingId);
+                
+                if (!response.ok) {
+                    throw new Error(data.detail || data.message || 'Error en la operación');
+                }
+                
+                if (options.successMessage) {
+                    toast.success(options.successMessage);
+                }
+                
+                return data;
+            } catch (error) {
+                if (loadingId) toast.dismiss(loadingId);
+                toast.error(error.message || 'Error de conexión');
+                throw error;
+            }
         };
     </script>
     {% block extra_scripts %}{% endblock %}

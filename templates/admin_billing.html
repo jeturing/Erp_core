@@ -9,7 +9,7 @@
     <span class="material-symbols-outlined text-[20px]">calendar_today</span>
     <span>Últimos 30 días</span>
 </button>
-<button class="flex items-center gap-2 bg-primary hover:bg-primary-dark text-white px-4 py-2 rounded-xl font-medium text-sm transition-all shadow-lg shadow-primary/25">
+<button onclick="exportBillingData()" class="flex items-center gap-2 bg-primary hover:bg-primary-dark text-white px-4 py-2 rounded-xl font-medium text-sm transition-all shadow-lg shadow-primary/25">
     <span class="material-symbols-outlined text-[20px]">download</span>
     <span>Exportar</span>
 </button>
@@ -140,10 +140,31 @@
 
 {% block extra_scripts %}
 <script>
+let invoicesData = [];
+
 document.addEventListener('DOMContentLoaded', () => {
     loadBillingMetrics();
     loadInvoices();
 });
+
+function exportBillingData() {
+    if (invoicesData.length === 0) {
+        toast.warning('No hay datos de facturación para exportar');
+        return;
+    }
+    
+    const columns = [
+        { key: 'company_name', label: 'Cliente' },
+        { key: 'email', label: 'Email' },
+        { key: 'subdomain', label: 'Subdominio' },
+        { key: 'plan', label: 'Plan' },
+        { key: 'amount', label: 'Monto (USD)' },
+        { key: 'status', label: 'Estado' },
+        { key: 'created_at', label: 'Fecha' }
+    ];
+    
+    exportToCSV(invoicesData, `facturacion_${new Date().toISOString().split('T')[0]}`, columns);
+}
 
 async function loadBillingMetrics() {
     try {
@@ -176,8 +197,11 @@ async function loadBillingMetrics() {
             document.getElementById('basicCount').textContent = `${dist.basic?.count || 0} tenants`;
             document.getElementById('basicRevenue').textContent = `$${dist.basic?.revenue || 0}`;
         }
+        
+        toast.success('Métricas de facturación cargadas', { duration: 2000 });
     } catch (err) {
         console.error('Error loading billing metrics', err);
+        toast.error('Error cargando métricas de facturación');
     }
 }
 
@@ -191,6 +215,7 @@ async function loadInvoices() {
         }
         const data = await res.json();
         const items = data.invoices || [];
+        invoicesData = items; // Guardar para exportar
         
         if (items.length === 0) {
             body.innerHTML = '<tr><td colspan="6" class="px-6 py-4 text-center text-slate-500">No hay facturas</td></tr>';
@@ -240,6 +265,7 @@ async function loadInvoices() {
         }).join('');
     } catch (err) {
         body.innerHTML = '<tr><td colspan="6" class="px-6 py-4 text-center text-slate-500">Error al cargar facturas</td></tr>';
+        toast.error('Error cargando facturas');
     }
 }
 

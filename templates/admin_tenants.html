@@ -100,6 +100,11 @@
             <option value="node-1">Node 1 (LXC 105)</option>
             <option value="node-2">Node 2 (LXC 106)</option>
         </select>
+        
+        <button onclick="exportTenants()" class="flex items-center gap-2 px-4 py-2 bg-slate-100 dark:bg-slate-800 hover:bg-slate-200 dark:hover:bg-slate-700 text-slate-700 dark:text-slate-300 rounded-lg text-sm font-medium transition-all">
+            <span class="material-symbols-outlined text-[18px]">download</span>
+            Exportar
+        </button>
     </div>
 </div>
 
@@ -278,13 +283,58 @@
     async function loadTenants() {
         try {
             const response = await fetch('/api/tenants', { credentials: 'same-origin' });
+            if (!response.ok) {
+                if (response.status === 401) {
+                    window.location.href = '/login/admin';
+                    return;
+                }
+                throw new Error('Error cargando tenants');
+            }
             const data = await response.json();
             tenantsData = data.items || [];
             updateStats();
             renderTenants();
+            
+            // Verificar si hay que resaltar algún tenant (desde búsqueda)
+            const urlParams = new URLSearchParams(window.location.search);
+            const highlight = urlParams.get('highlight');
+            if (highlight) {
+                setTimeout(() => highlightTenant(highlight), 500);
+            }
         } catch (error) {
             console.error('Error loading tenants:', error);
+            toast.error('Error cargando tenants');
         }
+    }
+    
+    function highlightTenant(subdomain) {
+        const row = document.querySelector(`[data-subdomain="${subdomain}"]`);
+        if (row) {
+            row.scrollIntoView({ behavior: 'smooth', block: 'center' });
+            row.classList.add('ring-2', 'ring-cyan-500', 'bg-cyan-500/10');
+            setTimeout(() => {
+                row.classList.remove('ring-2', 'ring-cyan-500', 'bg-cyan-500/10');
+            }, 3000);
+        }
+    }
+    
+    function exportTenants() {
+        if (tenantsData.length === 0) {
+            toast.warning('No hay tenants para exportar');
+            return;
+        }
+        
+        const columns = [
+            { key: 'company_name', label: 'Empresa' },
+            { key: 'email', label: 'Email' },
+            { key: 'subdomain', label: 'Subdominio' },
+            { key: 'plan', label: 'Plan' },
+            { key: 'status', label: 'Estado' },
+            { key: 'server', label: 'Servidor' },
+            { key: 'created_at', label: 'Fecha Creación' }
+        ];
+        
+        exportToCSV(tenantsData, `tenants_${new Date().toISOString().split('T')[0]}`, columns);
     }
 
     function updateStats() {
@@ -371,7 +421,7 @@
                           tenant.status === 'suspended' ? 'Suspendido' : 'Cancelado';
 
         return `
-            <tr class="hover:bg-slate-50 dark:hover:bg-slate-800/30 transition-colors">
+            <tr class="hover:bg-slate-50 dark:hover:bg-slate-800/30 transition-colors" data-subdomain="${tenant.subdomain}">
                 <td class="px-6 py-4">
                     <div class="flex items-center gap-3">
                         <div class="size-10 rounded-xl bg-gradient-to-br from-purple-500 to-pink-500 flex items-center justify-center text-white font-bold text-sm">
@@ -395,7 +445,7 @@
                     <span class="px-2 py-1 rounded-full text-xs font-medium capitalize ${planClass}">${tenant.plan}</span>
                 </td>
                 <td class="px-6 py-4">
-                    <span class="text-sm text-slate-600 dark:text-slate-400">${tenant.node || 'Node 1'}</span>
+                    <span class="text-sm text-slate-600 dark:text-slate-400">${tenant.server || 'Node 1'}</span>
                 </td>
                 <td class="px-6 py-4">
                     <span class="inline-flex items-center gap-1 px-2 py-1 rounded-full text-xs font-medium ${statusClass}">
@@ -412,7 +462,7 @@
                     </div>
                 </td>
                 <td class="px-6 py-4">
-                    <span class="text-sm text-slate-600 dark:text-slate-400">${new Date(tenant.created_at).toLocaleDateString('es-ES')}</span>
+                    <span class="text-sm text-slate-600 dark:text-slate-400">${tenant.created_at ? new Date(tenant.created_at).toLocaleDateString('es-ES') : '-'}</span>
                 </td>
                 <td class="px-6 py-4 text-right">
                     <div class="flex items-center justify-end gap-1">
@@ -456,6 +506,8 @@
             use_fast_method: true
         };
         
+        const loadingId = toast.loading('Creando tenant...', { title: 'Provisioning' });
+        
         try {
             const response = await fetch('/api/tenants', {
                 method: 'POST',
@@ -464,19 +516,26 @@
                 body: JSON.stringify(data)
             });
             
+            toast.dismiss(loadingId);
+            
             if (response.ok) {
                 closeNewTenantModal();
                 form.reset();
                 loadTenants();
                 const result = await response.json();
-                alert(`Tenant "${data.subdomain}" creado exitosamente.\n\nURL: https://${data.subdomain}.sajet.us`);
+                toast.success(`Tenant "${data.subdomain}" creado exitosamente`, {
+                    title: '¡Tenant Creado!',
+                    action: `window.open('https://${data.subdomain}.sajet.us', '_blank')`,
+                    actionText: 'Abrir Odoo'
+                });
             } else {
                 const error = await response.json();
-                alert('Error: ' + (error.detail || 'No se pudo crear el tenant'));
+                toast.error(error.detail || 'No se pudo crear el tenant');
             }
         } catch (error) {
+            toast.dismiss(loadingId);
             console.error('Error creating tenant:', error);
-            alert('Error de conexión');
+            toast.error('Error de conexión al servidor');
         }
     }
 
@@ -522,13 +581,11 @@
         const tenant = tenantsData.find(t => t.id === parseInt(tenantId));
         
         if (!newPassword || newPassword.length < 6) {
-            alert('La contraseña debe tener al menos 6 caracteres');
+            toast.warning('La contraseña debe tener al menos 6 caracteres');
             return;
         }
         
-        if (!confirm(`¿Cambiar contraseña del admin de "${tenant.company_name}"?`)) {
-            return;
-        }
+        const loadingId = toast.loading('Cambiando contraseña...', { title: 'Actualizando' });
         
         try {
             const response = await fetch('/api/provisioning/tenant/password', {
@@ -540,21 +597,24 @@
                 body: JSON.stringify({
                     subdomain: tenant.subdomain,
                     new_password: newPassword,
-                    server: tenant.node_id || 'primary'
+                    server: tenant.server_id || 'primary'
                 })
             });
             
+            toast.dismiss(loadingId);
+            
             if (response.ok) {
-                alert('Contraseña actualizada exitosamente');
+                toast.success(`Contraseña actualizada para "${tenant.company_name}"`);
                 document.getElementById('newAdminPassword').value = '';
                 closeActionsModal();
             } else {
                 const error = await response.json();
-                alert('Error: ' + (error.detail || 'No se pudo cambiar la contraseña'));
+                toast.error(error.detail || 'No se pudo cambiar la contraseña');
             }
         } catch (error) {
+            toast.dismiss(loadingId);
             console.error('Error:', error);
-            alert('Error de conexión');
+            toast.error('Error de conexión');
         }
     }
 
@@ -562,9 +622,7 @@
         const tenantId = document.getElementById('tenantActionsForm').dataset.tenantId;
         const tenant = tenantsData.find(t => t.id === parseInt(tenantId));
         
-        if (!confirm(`¿Suspender el servicio de "${tenant.company_name}"? Los usuarios no podrán acceder.`)) {
-            return;
-        }
+        const loadingId = toast.loading('Suspendiendo tenant...', { title: 'Procesando' });
         
         try {
             const response = await fetch('/api/provisioning/tenant/suspend', {
@@ -576,22 +634,25 @@
                 body: JSON.stringify({
                     subdomain: tenant.subdomain,
                     suspend: true,
-                    reason: 'Suspensión por falta de pago',
-                    server: tenant.node_id || 'primary'
+                    reason: 'Suspensión manual por administrador',
+                    server: tenant.server_id || 'primary'
                 })
             });
             
+            toast.dismiss(loadingId);
+            
             if (response.ok) {
-                alert('Tenant suspendido exitosamente');
+                toast.success(`"${tenant.company_name}" ha sido suspendido`);
                 closeActionsModal();
                 loadTenants();
             } else {
                 const error = await response.json();
-                alert('Error: ' + (error.detail || 'No se pudo suspender el tenant'));
+                toast.error(error.detail || 'No se pudo suspender el tenant');
             }
         } catch (error) {
+            toast.dismiss(loadingId);
             console.error('Error:', error);
-            alert('Error de conexión');
+            toast.error('Error de conexión');
         }
     }
 
@@ -599,9 +660,7 @@
         const tenantId = document.getElementById('tenantActionsForm').dataset.tenantId;
         const tenant = tenantsData.find(t => t.id === parseInt(tenantId));
         
-        if (!confirm(`¿Reactivar el servicio de "${tenant.company_name}"? Los usuarios podrán acceder nuevamente.`)) {
-            return;
-        }
+        const loadingId = toast.loading('Reactivando tenant...', { title: 'Procesando' });
         
         try {
             const response = await fetch('/api/provisioning/tenant/suspend', {
@@ -613,21 +672,53 @@
                 body: JSON.stringify({
                     subdomain: tenant.subdomain,
                     suspend: false,
-                    server: tenant.node_id || 'primary'
+                    server: tenant.server_id || 'primary'
                 })
             });
             
+            toast.dismiss(loadingId);
+            
             if (response.ok) {
-                alert('Tenant reactivado exitosamente');
+                toast.success(`"${tenant.company_name}" ha sido reactivado`);
                 closeActionsModal();
                 loadTenants();
             } else {
                 const error = await response.json();
-                alert('Error: ' + (error.detail || 'No se pudo reactivar el tenant'));
+                toast.error(error.detail || 'No se pudo reactivar el tenant');
             }
         } catch (error) {
+            toast.dismiss(loadingId);
             console.error('Error:', error);
-            alert('Error de conexión');
+            toast.error('Error de conexión');
+        }
+    }
+
+    async function deleteTenant() {
+        const tenantId = document.getElementById('tenantActionsForm').dataset.tenantId;
+        const tenant = tenantsData.find(t => t.id === parseInt(tenantId));
+        
+        const loadingId = toast.loading('Eliminando tenant...', { title: '⚠️ Eliminando' });
+        
+        try {
+            const response = await fetch(`/api/tenants/${tenant.subdomain}?confirm=true&server_id=${tenant.server_id || ''}`, {
+                method: 'DELETE',
+                credentials: 'same-origin'
+            });
+            
+            toast.dismiss(loadingId);
+            
+            if (response.ok) {
+                toast.success(`"${tenant.company_name}" ha sido eliminado permanentemente`, { duration: 6000 });
+                closeActionsModal();
+                loadTenants();
+            } else {
+                const error = await response.json();
+                toast.error(error.detail || 'No se pudo eliminar el tenant');
+            }
+        } catch (error) {
+            toast.dismiss(loadingId);
+            console.error('Error:', error);
+            toast.error('Error de conexión');
         }
     }
 

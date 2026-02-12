@@ -92,13 +92,10 @@ async def dashboard_metrics(request: Request, access_token: str = Cookie(None)):
             "cluster_load": cluster_load,
         }
     except Exception as e:
-        # Si la BD no está disponible, retornar datos mockeados
-        return {
-            "total_revenue": 225,
-            "active_tenants": 5,
-            "pending_setup": 2,
-            "cluster_load": {"cpu": 42, "ram": 64},
-        }
+        # Log error and return empty state - NO MOCKED DATA
+        import logging
+        logging.error(f"Error fetching dashboard metrics: {e}")
+        raise HTTPException(status_code=500, detail=f"Database error: {str(e)}")
     finally:
         db.close()
 

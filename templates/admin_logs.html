@@ -5,11 +5,11 @@
 {% block page_subtitle %}Logs en tiempo real de provisioning y sistema{% endblock %}
 
 {% block header_actions %}
-<button id="refreshLogsBtn" class="flex items-center gap-2 bg-surface-dark hover:bg-surface-highlight text-white px-4 py-2 rounded-xl font-medium text-sm transition-all">
+<button id="refreshLogsBtn" onclick="refreshAllLogs()" class="flex items-center gap-2 bg-surface-dark hover:bg-surface-highlight text-white px-4 py-2 rounded-xl font-medium text-sm transition-all">
     <span class="material-symbols-outlined text-[20px]">refresh</span>
     <span>Actualizar</span>
 </button>
-<button class="flex items-center gap-2 bg-primary hover:bg-primary-dark text-white px-4 py-2 rounded-xl font-medium text-sm transition-all shadow-lg shadow-primary/25">
+<button onclick="exportLogs()" class="flex items-center gap-2 bg-primary hover:bg-primary-dark text-white px-4 py-2 rounded-xl font-medium text-sm transition-all shadow-lg shadow-primary/25">
     <span class="material-symbols-outlined text-[20px]">download</span>
     <span>Exportar</span>
 </button>
@@ -105,16 +105,48 @@
 
 {% block extra_scripts %}
 <script>
+let currentLogs = [];
+let autoRefreshInterval = null;
+
 document.addEventListener('DOMContentLoaded', () => {
     loadLogs();
     loadStripeEvents();
     loadSystemStatus();
+    
+    // Auto-refresh cada 30 segundos
+    autoRefreshInterval = setInterval(() => {
+        loadLogs();
+        loadSystemStatus();
+    }, 30000);
 });
 
-document.getElementById('refreshLogsBtn').addEventListener('click', () => {
+function refreshAllLogs() {
     loadLogs();
     loadSystemStatus();
-});
+    loadStripeEvents();
+    toast.success('Logs actualizados');
+}
+
+function exportLogs() {
+    if (currentLogs.length === 0) {
+        toast.warning('No hay logs para exportar');
+        return;
+    }
+    
+    // Crear texto plano con los logs
+    const text = currentLogs.map(log => log.line).join('\n');
+    const blob = new Blob([text], { type: 'text/plain;charset=utf-8;' });
+    const url = URL.createObjectURL(blob);
+    const link = document.createElement('a');
+    link.href = url;
+    link.download = `logs_${new Date().toISOString().split('T')[0]}.log`;
+    document.body.appendChild(link);
+    link.click();
+    document.body.removeChild(link);
+    URL.revokeObjectURL(url);
+    
+    toast.success(`Exportados ${currentLogs.length} líneas de log`);
+}
 
 async function loadLogs() {
     const container = document.getElementById('logContainer');
@@ -137,6 +169,7 @@ async function loadLogs() {
         }
         
         const data = await res.json();
+        currentLogs = data.logs || []; // Guardar para exportar
         
         if (!data.logs || data.logs.length === 0) {
             container.innerHTML = '<div class="text-slate-500">[Sin logs recientes]</div>';
@@ -152,6 +185,7 @@ async function loadLogs() {
     } catch (err) {
         console.error('Error:', err);
         container.innerHTML = `<div class="text-rose-400">[Error cargando logs: ${err.message}]</div>`;
+        toast.error('Error cargando logs');
     }
 }
 
@@ -235,6 +269,12 @@ async function loadStripeEvents() {
             return;
         }
         const data = await res.json();
+        
+        if (!data.events || data.events.length === 0) {
+            body.innerHTML = '<tr><td colspan="4" class="px-6 py-4 text-center text-slate-500">No hay eventos recientes</td></tr>';
+            return;
+        }
+        
         body.innerHTML = data.events.map(e => `
             <tr class="hover:bg-surface-highlight/50">
                 <td class="px-6 py-3 font-mono text-xs text-slate-400">${e.event_id}</td>
@@ -251,5 +291,12 @@ async function loadStripeEvents() {
         body.innerHTML = '<tr><td colspan="4" class="px-6 py-4 text-center text-slate-500">Error al cargar eventos</td></tr>';
     }
 }
+
+// Limpiar interval al salir
+window.addEventListener('beforeunload', () => {
+    if (autoRefreshInterval) {
+        clearInterval(autoRefreshInterval);
+    }
+});
 </script>
 {% endblock %}

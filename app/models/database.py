@@ -35,6 +35,20 @@ class PlanType(enum.Enum):
     pro = "pro"               # Semi-dedicado
     enterprise = "enterprise" # Dedicado - recursos garantizados
 
+
+class DomainVerificationStatus(enum.Enum):
+    pending = "pending"
+    verifying = "verifying"
+    verified = "verified"
+    failed = "failed"
+
+
+class CustomerStatus(enum.Enum):
+    active = "active"
+    inactive = "inactive"
+    suspended = "suspended"
+
+
 class Customer(Base):
     __tablename__ = "customers"
     
@@ -44,21 +58,36 @@ class Customer(Base):
     company_name = Column(String)
     subdomain = Column(String, unique=True, index=True, nullable=False)
     stripe_customer_id = Column(String, unique=True, index=True)
+    plan = Column(Enum(PlanType), default=PlanType.basic)
+    status = Column(Enum(CustomerStatus), default=CustomerStatus.active)
+    phone = Column(String(50))
+    notes = Column(Text)
     created_at = Column(DateTime, default=datetime.utcnow)
     updated_at = Column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
+    
+    # Relaciones
+    custom_domains = relationship("CustomDomain", back_populates="customer", cascade="all, delete-orphan")
+    subscriptions = relationship("Subscription", back_populates="customer")
 
 class Subscription(Base):
     __tablename__ = "subscriptions"
     
     id = Column(Integer, primary_key=True, index=True)
-    customer_id = Column(Integer, nullable=False)
+    customer_id = Column(Integer, ForeignKey("customers.id"), nullable=False)
     stripe_subscription_id = Column(String, unique=True, index=True)
     stripe_checkout_session_id = Column(String, unique=True, index=True)
     plan_name = Column(String, nullable=False)
     status = Column(Enum(SubscriptionStatus), default=SubscriptionStatus.pending)
     tenant_provisioned = Column(Boolean, default=False)
+    monthly_amount = Column(Float, default=0)
+    currency = Column(String(3), default="USD")
+    current_period_start = Column(DateTime)
+    current_period_end = Column(DateTime)
     created_at = Column(DateTime, default=datetime.utcnow)
     updated_at = Column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
+    
+    # Relaciones
+    customer = relationship("Customer", back_populates="subscriptions")
 
 class StripeEvent(Base):
     __tablename__ = "stripe_events"
@@ -188,6 +217,70 @@ class TenantDeployment(Base):
     
     # Relaciones
     container = relationship("LXCContainer", back_populates="deployments")
+    custom_domains = relationship("CustomDomain", back_populates="deployment")
+
+
+class CustomDomain(Base):
+    """
+    Dominios personalizados de clientes.
+    Cada cliente puede tener múltiples dominios externos que apuntan a su subdominio de sajet.us
+    
+    Ejemplo:
+    - external_domain: "www.impulse-max.com"
+    - sajet_subdomain: "impulse-max" 
+    - sajet_full_domain: "impulse-max.sajet.us" (generado)
+    """
+    __tablename__ = "custom_domains"
+    
+    id = Column(Integer, primary_key=True, index=True)
+    
+    # Relaciones
+    customer_id = Column(Integer, ForeignKey("customers.id", ondelete="CASCADE"), nullable=False)
+    tenant_deployment_id = Column(Integer, ForeignKey("tenant_deployments.id", ondelete="SET NULL"), nullable=True)
+    
+    # Dominio externo del cliente
+    external_domain = Column(String(255), unique=True, nullable=False, index=True)  # ej: "www.impulse-max.com"
+    
+    # Subdominio interno de sajet.us
+    sajet_subdomain = Column(String(100), unique=True, nullable=False, index=True)  # ej: "impulse-max"
+    
+    # Estado de verificación
+    verification_status = Column(Enum(DomainVerificationStatus), default=DomainVerificationStatus.pending)
+    verification_token = Column(String(64))  # Token para verificar propiedad
+    verified_at = Column(DateTime)
+    
+    # Configuración Cloudflare
+    cloudflare_dns_record_id = Column(String(50))  # ID del registro CNAME en zona sajet.us
+    cloudflare_configured = Column(Boolean, default=False)
+    tunnel_ingress_configured = Column(Boolean, default=False)
+    
+    # SSL (manejado por Cloudflare automáticamente)
+    ssl_status = Column(String(20), default="pending")  # pending, active, error
+    
+    # Estado
+    is_active = Column(Boolean, default=False)
+    is_primary = Column(Boolean, default=False)  # Dominio principal del tenant
+    
+    # Nodo asignado (para arquitectura multi-nodo)
+    target_node_ip = Column(String(50))  # IP del nodo Odoo (Tailscale o privada)
+    target_port = Column(Integer, default=8069)
+    
+    # Auditoría
+    created_at = Column(DateTime, default=datetime.utcnow)
+    updated_at = Column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
+    created_by = Column(String(100))
+    
+    # Relaciones
+    customer = relationship("Customer", back_populates="custom_domains")
+    deployment = relationship("TenantDeployment", back_populates="custom_domains")
+    
+    @property
+    def sajet_full_domain(self) -> str:
+        """Genera el dominio completo de sajet.us"""
+        return f"{self.sajet_subdomain}.sajet.us"
+    
+    def __repr__(self):
+        return f"<CustomDomain {self.external_domain} → {self.sajet_full_domain}>"
 
 
 class ResourceMetric(Base):
@@ -306,8 +399,8 @@ def get_all_configs(category: str = None) -> list:
     finally:
         db.close()
 
-# Database connection
-DATABASE_URL = os.getenv("DATABASE_URL", "postgresql://jeturing:321Abcd@localhost/onboarding_db")
+# Database connection - PCT 160 (SRV-Sajet)
+DATABASE_URL = os.getenv("DATABASE_URL", "postgresql://jeturing:321Abcd@10.10.10.20:5432/erp_core_db")
 engine = create_engine(DATABASE_URL)
 SessionLocal = sessionmaker(autocommit=False, autoflush=False, bind=engine)
 

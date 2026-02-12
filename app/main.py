@@ -13,7 +13,7 @@ from dotenv import load_dotenv
 load_dotenv()
 
 # Import routers
-from .routes import auth, dashboard, tenants, onboarding, roles, tenant_portal, secure_auth, nodes, tunnels, provisioning, settings, billing, logs
+from .routes import auth, dashboard, tenants, onboarding, roles, tenant_portal, secure_auth, nodes, tunnels, provisioning, settings, billing, logs, domains
 
 # Import security middleware
 from .security.middleware import SecurityMiddleware, WAFMiddleware
@@ -74,6 +74,7 @@ app.include_router(provisioning.router)  # Auto-provisioning de tenants Odoo
 app.include_router(settings.router)  # Configuración administrable
 app.include_router(billing.router)  # Facturación y métricas de pagos
 app.include_router(logs.router)  # Logs del sistema en tiempo real
+app.include_router(domains.router)  # Gestión de dominios personalizados
 
 
 @app.get("/health")

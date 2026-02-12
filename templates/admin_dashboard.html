@@ -116,11 +116,11 @@
             <span id="tenant-count" class="px-3 py-1 rounded-full bg-cyan-500/20 text-sm font-medium text-cyan-400 border border-cyan-500/30">0</span>
         </h3>
         <div class="flex gap-2">
-            <button class="flex items-center gap-2 px-4 py-2 rounded-xl bg-slate-800 border border-slate-700 text-slate-300 text-sm font-medium hover:bg-slate-700 hover:border-slate-600 transition-all">
+            <button onclick="filterTenantsPopup()" class="flex items-center gap-2 px-4 py-2 rounded-xl bg-slate-800 border border-slate-700 text-slate-300 text-sm font-medium hover:bg-slate-700 hover:border-slate-600 transition-all">
                 <span class="material-symbols-outlined text-[18px]">filter_list</span>
                 Filtrar
             </button>
-            <button class="flex items-center gap-2 px-4 py-2 rounded-xl bg-slate-800 border border-slate-700 text-slate-300 text-sm font-medium hover:bg-slate-700 hover:border-slate-600 transition-all">
+            <button onclick="exportDashboardData()" class="flex items-center gap-2 px-4 py-2 rounded-xl bg-slate-800 border border-slate-700 text-slate-300 text-sm font-medium hover:bg-slate-700 hover:border-slate-600 transition-all">
                 <span class="material-symbols-outlined text-[18px]">download</span>
                 Exportar
             </button>
@@ -210,9 +210,39 @@ async function loadMetrics() {
                 healthEl.innerHTML = '<span class="size-2 rounded-full bg-emerald-400 animate-pulse"></span><span class="text-emerald-400">Healthy</span>';
             }
         }
+        
+        // Guardar datos para exportar
+        window.dashboardMetrics = data;
     } catch (err) {
         console.error("metrics error", err);
+        if (typeof toast !== 'undefined') {
+            toast.error('Error cargando métricas del dashboard');
+        }
     }
+}
+
+// Almacenar tenants para exportar
+let dashboardTenants = [];
+
+function filterTenantsPopup() {
+    toast.info('Usa la búsqueda global (Ctrl+K) o ve a la página de Tenants para filtrar', { duration: 5000 });
+}
+
+function exportDashboardData() {
+    if (dashboardTenants.length === 0) {
+        toast.warning('No hay datos de tenants para exportar');
+        return;
+    }
+    
+    const columns = [
+        { key: 'company_name', label: 'Empresa' },
+        { key: 'subdomain', label: 'Subdominio' },
+        { key: 'plan', label: 'Plan' },
+        { key: 'status', label: 'Estado' },
+        { key: 'created_at', label: 'Fecha Creación' }
+    ];
+    
+    exportToCSV(dashboardTenants, `dashboard_tenants_${new Date().toISOString().split('T')[0]}`, columns);
 }
 
 function animateValue(id, newValue) {
@@ -243,8 +273,9 @@ async function loadTenants() {
         }
         const data = await res.json();
         const items = data.items || [];
+        dashboardTenants = items; // Guardar para exportar
         setText("tenant-count", items.length);
-        items.forEach((t) => body.appendChild(renderTenantRow(t)));
+        items.slice(0, 10).forEach((t) => body.appendChild(renderTenantRow(t)));
         if (items.length === 0) {
             const tr = document.createElement("tr");
             const td = document.createElement("td");
@@ -270,6 +301,9 @@ async function loadTenants() {
         }
     } catch (err) {
         console.error("tenants error", err);
+        if (typeof toast !== 'undefined') {
+            toast.error('Error cargando lista de tenants');
+        }
     }
 }
 
