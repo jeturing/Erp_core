@@ -8,7 +8,8 @@
   const plans = [
     {
       name: 'Basic',
-      price: '29',
+      price: '100',
+      pricePerUser: '',
       description: 'Perfecto para pequeñas empresas',
       features: [
         'Sajet ERP completo',
@@ -23,12 +24,13 @@
     },
     {
       name: 'Pro',
-      price: '79',
+      price: '200',
+      pricePerUser: '$35 USD por usuario',
       description: 'Para empresas en crecimiento',
       features: [
         'Todo de Basic +',
-        '5 dominios personalizados',
-        '25 GB almacenamiento',
+        '3 dominios personalizados',
+        '20 GB almacenamiento',
         'Soporte prioritario 24/7',
         'Backups cada 6 horas',
         'Recursos dedicados',
@@ -40,12 +42,13 @@
     },
     {
       name: 'Enterprise',
-      price: '199',
+      price: '400',
+      pricePerUser: '$40 USD por usuario',
       description: 'Soluciones a medida',
       features: [
         'Todo de Pro +',
         'Dominios ilimitados',
-        '100 GB almacenamiento',
+        '50 GB almacenamiento',
         'Gerente de cuenta dedicado',
         'SLA 99.9% garantizado',
         'Servidor dedicado',
@@ -56,7 +59,7 @@
       cta: 'Contactar Ventas'
     }
   ];
-  
+
   const features = [
     {
       icon: 'M19 21V5a2 2 0 00-2-2H7a2 2 0 00-2 2v16m14 0h2m-2 0h-5m-9 0H3m2 0h5M9 7h1m-1 4h1m4-4h1m-1 4h1m-5 10v-5a1 1 0 011-1h2a1 1 0 011 1v5m-4 0h4',
@@ -386,6 +389,9 @@
                   <span class="text-4xl font-bold">${plan.price}</span>
                   <span class="text-slate-400">/mes</span>
                 </div>
+                {#if plan.pricePerUser}
+                  <p class="text-emerald-400 text-sm mt-2">{plan.pricePerUser}</p>
+                {/if}
               </div>
               
               <ul class="space-y-4 mb-8">

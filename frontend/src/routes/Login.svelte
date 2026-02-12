@@ -9,7 +9,6 @@
   let isSubmitting = false;
   let error = '';
   
-  // Redirect if already logged in
   onMount(() => {
     if ($auth.user) {
       redirectByRole($auth.user.role);
@@ -26,20 +25,20 @@
   
   async function handleSubmit(e: Event) {
     e.preventDefault();
+    console.log('[Login] Submit clicked:', username);
     error = '';
     isSubmitting = true;
     
     try {
-      // Llamar API - el backend detecta automáticamente el tipo de usuario
+      console.log('[Login] Fetching...');
       const response = await fetch('/api/auth/login', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          email: username,
-          password: password
-        }),
+        body: JSON.stringify({ email: username, password: password }),
         credentials: 'include'
       });
+      
+      console.log('[Login] Response:', response.status);
       
       if (!response.ok) {
         const err = await response.json();
@@ -47,22 +46,17 @@
       }
       
       const data = await response.json();
+      console.log('[Login] Success:', data);
       
-      // Leer el token de la cookie y guardarlo
       setTimeout(async () => {
         const match = document.cookie.match(/access_token=([^;]+)/);
-        if (match) {
-          api.setToken(match[1]);
-        }
-        
-        // Inicializar auth store
+        if (match) api.setToken(match[1]);
         await auth.init();
-        
-        // Redirigir según el rol devuelto por el backend
         redirectByRole(data.role);
       }, 100);
       
     } catch (err) {
+      console.error('[Login] Error:', err);
       error = err instanceof Error ? err.message : 'Error de conexión';
     } finally {
       isSubmitting = false;
@@ -71,10 +65,8 @@
 </script>
 
 <div class="min-h-screen flex">
-  <!-- Left Panel - Branding -->
   <div class="hidden lg:flex lg:w-1/2 bg-gradient-to-br from-primary-900 via-primary-800 to-primary-900 p-12 flex-col justify-between">
     <div>
-      <!-- Logo -->
       <div class="flex items-center gap-3">
         <div class="w-10 h-10 rounded-lg bg-accent-500 flex items-center justify-center">
           <span class="text-primary-900 font-bold text-xl">J</span>
@@ -82,135 +74,55 @@
         <span class="text-2xl font-bold text-white">Jeturing</span>
       </div>
     </div>
-    
     <div class="space-y-6">
-      <h1 class="text-4xl font-bold text-white leading-tight">
-        Bienvenido a
-        <span class="block text-accent-400">Jeturing</span>
-      </h1>
-      <p class="text-lg text-primary-200 max-w-md">
-        Gestiona tu negocio de forma inteligente. Accede a todos tus servicios desde un único lugar.
-      </p>
-      
-      <!-- Features -->
+      <h1 class="text-4xl font-bold text-white leading-tight">Bienvenido a<span class="block text-accent-400">Jeturing</span></h1>
+      <p class="text-lg text-primary-200 max-w-md">Gestiona tu negocio de forma inteligente.</p>
       <div class="grid grid-cols-2 gap-4 pt-4">
-        <div class="flex items-center gap-2 text-primary-200">
-          <svg class="w-5 h-5 text-accent-400" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 13l4 4L19 7" />
-          </svg>
-          <span>Gestión empresarial</span>
-        </div>
-        <div class="flex items-center gap-2 text-primary-200">
-          <svg class="w-5 h-5 text-accent-400" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 13l4 4L19 7" />
-          </svg>
-          <span>Facturación integrada</span>
-        </div>
-        <div class="flex items-center gap-2 text-primary-200">
-          <svg class="w-5 h-5 text-accent-400" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 13l4 4L19 7" />
-          </svg>
-          <span>Dominios personalizados</span>
-        </div>
-        <div class="flex items-center gap-2 text-primary-200">
-          <svg class="w-5 h-5 text-accent-400" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 13l4 4L19 7" />
-          </svg>
-          <span>Soporte 24/7</span>
-        </div>
+        <div class="flex items-center gap-2 text-primary-200"><svg class="w-5 h-5 text-accent-400" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 13l4 4L19 7" /></svg><span>Gestión empresarial</span></div>
+        <div class="flex items-center gap-2 text-primary-200"><svg class="w-5 h-5 text-accent-400" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 13l4 4L19 7" /></svg><span>Facturación</span></div>
+        <div class="flex items-center gap-2 text-primary-200"><svg class="w-5 h-5 text-accent-400" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 13l4 4L19 7" /></svg><span>Dominios</span></div>
+        <div class="flex items-center gap-2 text-primary-200"><svg class="w-5 h-5 text-accent-400" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 13l4 4L19 7" /></svg><span>Soporte 24/7</span></div>
       </div>
     </div>
-    
-    <p class="text-sm text-primary-400">
-      © 2026 Jeturing Technologies. All rights reserved.
-    </p>
+    <p class="text-sm text-primary-400">© 2026 Jeturing Technologies.</p>
   </div>
   
-  <!-- Right Panel - Login Form -->
   <div class="w-full lg:w-1/2 flex items-center justify-center p-8 bg-surface-dark">
     <div class="w-full max-w-md space-y-8">
-      <!-- Mobile Logo -->
       <div class="lg:hidden flex items-center justify-center gap-3 mb-8">
-        <div class="w-10 h-10 rounded-lg bg-accent-500 flex items-center justify-center">
-          <span class="text-primary-900 font-bold text-xl">J</span>
-        </div>
+        <div class="w-10 h-10 rounded-lg bg-accent-500 flex items-center justify-center"><span class="text-primary-900 font-bold text-xl">J</span></div>
         <span class="text-2xl font-bold text-white">Jeturing</span>
       </div>
       
       <div class="text-center lg:text-left">
         <h2 class="text-2xl font-bold text-white">Iniciar sesión</h2>
-        <p class="mt-2 text-secondary-400">
-          Ingresa tus credenciales para continuar
-        </p>
+        <p class="mt-2 text-secondary-400">Ingresa tus credenciales</p>
       </div>
       
       <form on:submit={handleSubmit} class="space-y-6">
         {#if error}
-          <div class="p-4 rounded-lg bg-error/10 border border-error/20">
-            <p class="text-sm text-error">{error}</p>
-          </div>
+          <div class="p-4 rounded-lg bg-error/10 border border-error/20"><p class="text-sm text-error">{error}</p></div>
         {/if}
         
-        <Input
-          label="Usuario o Email"
-          name="username"
-          type="text"
-          placeholder="usuario o email@ejemplo.com"
-          bind:value={username}
-          required
-          disabled={isSubmitting}
-        />
-        
-        <Input
-          label="Contraseña"
-          type="password"
-          name="password"
-          placeholder="••••••••"
-          bind:value={password}
-          required
-          disabled={isSubmitting}
-        />
+        <Input label="Usuario o Email" name="username" type="text" placeholder="usuario o email" bind:value={username} required disabled={isSubmitting} />
+        <Input label="Contraseña" type="password" name="password" placeholder="••••••••" bind:value={password} required disabled={isSubmitting} />
         
         <div class="flex items-center justify-between">
           <label class="flex items-center gap-2 cursor-pointer">
-            <input 
-              type="checkbox" 
-              class="w-4 h-4 rounded border-surface-border bg-surface-highlight 
-                     text-primary-500 focus:ring-primary-500/50"
-            />
+            <input type="checkbox" class="w-4 h-4 rounded border-surface-border bg-surface-highlight text-primary-500" />
             <span class="text-sm text-secondary-400">Recordarme</span>
           </label>
-          
-          <a href="#/forgot-password" class="text-sm text-primary-400 hover:text-primary-300">
-            ¿Olvidaste tu contraseña?
-          </a>
+          <a href="#/forgot-password" class="text-sm text-primary-400 hover:text-primary-300">¿Olvidaste tu contraseña?</a>
         </div>
         
-        <Button
-          type="submit"
-          variant="accent"
-          size="lg"
-          loading={isSubmitting}
-          disabled={isSubmitting || !username || !password}
-        >
-          {isSubmitting ? 'Iniciando sesión...' : 'Iniciar sesión'}
+        <Button type="submit" variant="accent" size="lg" loading={isSubmitting} disabled={isSubmitting || !username || !password}>
+          {isSubmitting ? 'Iniciando...' : 'Iniciar sesión'}
         </Button>
       </form>
       
       <div class="pt-4 text-center">
-        <p class="text-sm text-secondary-500">
-          ¿Necesitas ayuda? 
-          <a href="mailto:soporte@jeturing.net" class="text-primary-400 hover:text-primary-300">
-            Contacta soporte
-          </a>
-        </p>
+        <p class="text-sm text-secondary-500">¿Ayuda? <a href="mailto:soporte@jeturing.net" class="text-primary-400">Contacta soporte</a></p>
       </div>
     </div>
   </div>
 </div>
-
-<style>
-  button[type="submit"] {
-    width: 100%;
-  }
-</style>
