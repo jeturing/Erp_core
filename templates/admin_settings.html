@@ -433,11 +433,8 @@ function showTab(tabId) {
 
 async function loadOdooConfig() {
     try {
-        const token = localStorage.getItem('admin_token');
         const response = await fetch(`${API_BASE}/odoo/current`, {
-            headers: {
-                'Authorization': `Bearer ${token}`
-            }
+            credentials: 'same-origin'
         });
         
         if (response.ok) {
@@ -469,11 +466,8 @@ async function loadOdooConfig() {
 
 async function loadServerStatus() {
     try {
-        const token = localStorage.getItem('admin_token');
         const response = await fetch('/api/tenants/servers', {
-            headers: {
-                'Authorization': `Bearer ${token}`
-            }
+            credentials: 'same-origin'
         });
         
         if (response.ok) {
@@ -523,8 +517,6 @@ async function saveOdooConfig() {
     btn.disabled = true;
     btn.innerHTML = '<span class="animate-spin material-symbols-outlined text-[18px]">progress_activity</span> Guardando...';
     
-    const token = localStorage.getItem('admin_token');
-    
     const payload = {};
     
     // Solo enviar campos que tienen valor
@@ -554,9 +546,9 @@ async function saveOdooConfig() {
         const response = await fetch(`${API_BASE}/odoo`, {
             method: 'PUT',
             headers: {
-                'Authorization': `Bearer ${token}`,
                 'Content-Type': 'application/json'
             },
+            credentials: 'same-origin',
             body: JSON.stringify(payload)
         });
         
@@ -593,15 +585,11 @@ function resetSaveBtn() {
 // =====================================================
 
 async function testOdooConnection() {
-    const token = localStorage.getItem('admin_token');
-    
     showToast('Probando conexión...', 'info');
     
     try {
         const response = await fetch('/api/tenants/servers', {
-            headers: {
-                'Authorization': `Bearer ${token}`
-            }
+            credentials: 'same-origin'
         });
         
         if (response.ok) {
@@ -632,14 +620,10 @@ async function initDefaults() {
         return;
     }
     
-    const token = localStorage.getItem('admin_token');
-    
     try {
         const response = await fetch(`${API_BASE}/init-defaults`, {
             method: 'POST',
-            headers: {
-                'Authorization': `Bearer ${token}`
-            }
+            credentials: 'same-origin'
         });
         
         if (response.ok) {
