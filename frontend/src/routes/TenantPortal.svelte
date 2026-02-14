@@ -4,6 +4,7 @@
   import { Badge, Button, Card, Spinner } from '../lib/components';
   import { api, portalApi } from '../lib/api';
   import type { Domain, TenantPortalBilling, TenantPortalInfo } from '../lib/types';
+  import { formatCurrency, formatDate } from '../lib/utils/formatters';
 
   let loading = true;
   let actionLoading = false;
@@ -80,23 +81,6 @@
     }
   }
 
-  function currency(value: number) {
-    return new Intl.NumberFormat('en-US', {
-      style: 'currency',
-      currency: 'USD',
-      minimumFractionDigits: 2,
-      maximumFractionDigits: 2,
-    }).format(value || 0);
-  }
-
-  function formatDate(date?: string) {
-    if (!date) return '-';
-    return new Intl.DateTimeFormat('es-ES', {
-      day: '2-digit',
-      month: 'short',
-      year: 'numeric',
-    }).format(new Date(date));
-  }
 </script>
 
 <div class="min-h-screen bg-gradient-to-br from-slate-900 via-slate-800 to-slate-900">
@@ -197,7 +181,7 @@
               {#each billing?.invoices || [] as invoice}
                 <div class="rounded-lg border border-slate-700 p-3 bg-slate-800/30 flex items-center justify-between gap-3">
                   <div>
-                    <p class="text-sm text-white">{currency(invoice.amount)} {invoice.currency.toUpperCase()}</p>
+                    <p class="text-sm text-white">{formatCurrency(invoice.amount, { style: 'currency', currency: 'USD', minimumFractionDigits: 2, maximumFractionDigits: 2 })} {invoice.currency.toUpperCase()}</p>
                     <p class="text-xs text-slate-500">{formatDate(invoice.date)}</p>
                   </div>
                   <Badge variant={invoice.status === 'paid' ? 'success' : invoice.status === 'open' ? 'warning' : 'secondary'}>

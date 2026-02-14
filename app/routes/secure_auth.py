@@ -42,6 +42,12 @@ class TOTPVerifyRequest(BaseModel):
     code: str
 
 
+class TOTPLoginRequest(BaseModel):
+    email: str
+    password: str
+    totp_code: str
+
+
 class TokenRefreshRequest(BaseModel):
     pass  # El refresh token viene en la cookie
 
@@ -250,6 +256,19 @@ async def secure_login(request: Request, login_data: LoginRequest):
         
     finally:
         db.close()
+
+
+@router.post("/totp/verify", response_model=LoginResponse)
+async def verify_totp_login(request: Request, payload: TOTPLoginRequest):
+    """
+    Completa login 2FA reutilizando el flujo principal de autenticación.
+    """
+    login_data = LoginRequest(
+        email=payload.email,
+        password=payload.password,
+        totp_code=payload.totp_code,
+    )
+    return await secure_login(request, login_data)
 
 
 @router.get("/me")

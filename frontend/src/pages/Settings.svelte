@@ -2,6 +2,7 @@
   import { onMount } from 'svelte';
   import { Button, Card, Input, Modal, Spinner } from '../lib/components';
   import { settingsApi } from '../lib/api';
+  import { addToast } from '../lib/stores';
   import type { OdooSettingsResponse, SettingsEntry } from '../lib/types';
 
   let loading = true;
@@ -26,6 +27,7 @@
       odooConfig = odooData.config;
     } catch (err) {
       error = err instanceof Error ? err.message : 'No se pudo cargar configuraciones';
+      addToast(error, 'error');
     } finally {
       loading = false;
     }
@@ -47,9 +49,10 @@
     try {
       await settingsApi.updateConfig(editingKey, editingValue, editingDescription || undefined);
       showEditModal = false;
+      addToast(`Configuracion ${editingKey} actualizada`, 'success');
       await loadData();
     } catch (err) {
-      error = err instanceof Error ? err.message : 'No se pudo guardar configuracion';
+      addToast(err instanceof Error ? err.message : 'No se pudo guardar configuracion', 'error');
     } finally {
       saving = false;
     }
@@ -71,9 +74,10 @@
         base_domain: odooConfig.base_domain,
         template_db: odooConfig.template_db,
       });
+      addToast('Configuracion Odoo actualizada', 'success');
       await loadData();
     } catch (err) {
-      error = err instanceof Error ? err.message : 'No se pudo actualizar configuracion Odoo';
+      addToast(err instanceof Error ? err.message : 'No se pudo actualizar configuracion Odoo', 'error');
     } finally {
       saving = false;
     }

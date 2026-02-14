@@ -5,6 +5,8 @@
 
   let username = '';
   let password = '';
+  let totpCode = '';
+  let requiresTotp = false;
   let isSubmitting = false;
   let localError = '';
 
@@ -28,12 +30,25 @@
     isSubmitting = true;
 
     try {
-      const success = await auth.login({ username, password });
-      if (!success) {
-        localError = $auth.error || 'Credenciales invalidas';
+      const result = await auth.login({
+        username,
+        password,
+        totp_code: requiresTotp ? totpCode : undefined,
+      });
+
+      if (result.requiresTotp) {
+        requiresTotp = true;
+        localError = '';
         return;
       }
 
+      if (!result.success) {
+        localError = result.error || $auth.error || 'Credenciales invalidas';
+        return;
+      }
+
+      requiresTotp = false;
+      totpCode = '';
       if ($auth.user) {
         redirectByRole($auth.user.role);
       }
@@ -74,7 +89,9 @@
 
       <div class="text-center lg:text-left">
         <h2 class="text-2xl font-bold text-white">Iniciar sesion</h2>
-        <p class="mt-2 text-secondary-400">Credenciales administradas por `/api/auth/login`</p>
+        <p class="mt-2 text-secondary-400">
+          {requiresTotp ? 'Ingresa tu codigo 2FA para completar el acceso' : 'Credenciales administradas por `/api/auth/login`'}
+        </p>
       </div>
 
       <form on:submit={handleSubmit} class="space-y-6">
@@ -106,14 +123,33 @@
           disabled={isSubmitting}
         />
 
+        {#if requiresTotp}
+          <Input
+            label="Codigo 2FA"
+            name="totp_code"
+            type="text"
+            placeholder="123456"
+            autocomplete="one-time-code"
+            bind:value={totpCode}
+            required
+            disabled={isSubmitting}
+          />
+        {/if}
+
         <Button
           type="submit"
           variant="accent"
           size="lg"
           loading={isSubmitting}
-          disabled={isSubmitting || !username || !password}
+          disabled={isSubmitting || !username || !password || (requiresTotp && !totpCode)}
         >
-          {isSubmitting ? 'Ingresando...' : 'Iniciar sesion'}
+          {#if isSubmitting}
+            Verificando...
+          {:else if requiresTotp}
+            Verificar 2FA
+          {:else}
+            Iniciar sesion
+          {/if}
         </Button>
       </form>
 

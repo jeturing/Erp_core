@@ -98,13 +98,8 @@ class ApiClient {
     return this.request<T>(endpoint, { method: 'DELETE' });
   }
 
-  async login(credentials: LoginRequest): Promise<LoginResponse> {
-    const payload = {
-      email: credentials.username.trim(),
-      password: credentials.password,
-    };
-
-    const response = await fetch(`${this.baseUrl}/api/auth/login`, {
+  private async authenticate(endpoint: string, payload: { email: string; password: string; totp_code?: string }): Promise<LoginResponse> {
+    const response = await fetch(`${this.baseUrl}${endpoint}`, {
       method: 'POST',
       headers: {
         'Content-Type': 'application/json',
@@ -119,6 +114,29 @@ class ApiClient {
     }
 
     return response.json() as Promise<LoginResponse>;
+  }
+
+  async login(credentials: LoginRequest): Promise<LoginResponse> {
+    const payload: { email: string; password: string; totp_code?: string } = {
+      email: credentials.username.trim(),
+      password: credentials.password,
+    };
+    if (credentials.totp_code?.trim()) {
+      payload.totp_code = credentials.totp_code.trim();
+    }
+    return this.authenticate('/api/auth/login', payload);
+  }
+
+  async verifyTotp(credentials: LoginRequest): Promise<LoginResponse> {
+    const payload = {
+      email: credentials.username.trim(),
+      password: credentials.password,
+      totp_code: credentials.totp_code?.trim() || '',
+    };
+    if (!payload.totp_code) {
+      throw new Error('Codigo 2FA requerido');
+    }
+    return this.authenticate('/api/auth/totp/verify', payload);
   }
 
   async logout() {

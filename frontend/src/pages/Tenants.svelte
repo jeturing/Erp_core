@@ -2,6 +2,7 @@
   import { onMount } from 'svelte';
   import { Badge, Button, Card, Input, Modal, Spinner } from '../lib/components';
   import { tenantsApi } from '../lib/api';
+  import { addToast } from '../lib/stores';
   import type { Tenant } from '../lib/types';
 
   let tenants: Tenant[] = [];
@@ -36,6 +37,7 @@
       tenants = response.items;
     } catch (err) {
       error = err instanceof Error ? err.message : 'No se pudo cargar tenants';
+      addToast(error, 'error');
     } finally {
       loading = false;
     }
@@ -85,9 +87,10 @@
         admin_password: '',
         plan: 'basic',
       };
+      addToast('Tenant creado correctamente', 'success');
       await loadTenants();
     } catch (err) {
-      createError = err instanceof Error ? err.message : 'No se pudo crear tenant';
+      addToast(err instanceof Error ? err.message : 'No se pudo crear tenant', 'error');
     } finally {
       creating = false;
     }
@@ -100,9 +103,10 @@
         subdomain: tenant.subdomain,
         suspend: tenant.status === 'active',
       });
+      addToast(tenant.status === 'active' ? 'Tenant suspendido' : 'Tenant reactivado', 'success');
       await loadTenants();
     } catch (err) {
-      error = err instanceof Error ? err.message : 'No se pudo cambiar estado';
+      addToast(err instanceof Error ? err.message : 'No se pudo cambiar estado', 'error');
     } finally {
       actionLoadingTenant = '';
     }
@@ -133,8 +137,9 @@
       showPasswordModal = false;
       passwordTenant = null;
       newPassword = '';
+      addToast('Password actualizado correctamente', 'success');
     } catch (err) {
-      passwordError = err instanceof Error ? err.message : 'No se pudo cambiar la contraseña';
+      addToast(err instanceof Error ? err.message : 'No se pudo cambiar la contraseña', 'error');
     } finally {
       passwordLoading = false;
     }

@@ -12,7 +12,9 @@
     Bell,
     Search,
     ExternalLink,
-    LifeBuoy,
+    FileText,
+    Route,
+    Shield,
   } from 'lucide-svelte';
   import { auth } from '../stores';
 
@@ -28,12 +30,10 @@
     { id: 'infrastructure', label: 'Infrastructure', icon: Server, href: '#/infrastructure' },
     { id: 'billing', label: 'Billing', icon: CreditCard, href: '#/billing' },
     { id: 'settings', label: 'Settings', icon: Settings, href: '#/settings' },
+    { id: 'logs', label: 'Logs', icon: FileText, href: '#/logs' },
+    { id: 'tunnels', label: 'Tunnels', icon: Route, href: '#/tunnels' },
+    { id: 'roles', label: 'Roles', icon: Shield, href: '#/roles' },
     { id: 'portal', label: 'Portal tenant', icon: ExternalLink, href: '#/portal' },
-  ];
-
-  const legacyLinks = [
-    { label: 'Logs legacy', href: '/admin/logs' },
-    { label: 'Tunnels legacy', href: '/admin/tunnels' },
   ];
 
   function handleLogout() {
@@ -111,21 +111,6 @@
         {/each}
       </ul>
 
-      {#if !sidebarCollapsed}
-        <div class="mt-6 pt-6 border-t border-surface-border">
-          <p class="px-4 mb-2 text-[11px] uppercase tracking-wider text-secondary-500">Operaciones legacy</p>
-          <ul class="space-y-1">
-            {#each legacyLinks as link}
-              <li>
-                <a href={link.href} class="sidebar-link" target="_blank" rel="noreferrer" title={link.label}>
-                  <LifeBuoy size={18} />
-                  <span>{link.label}</span>
-                </a>
-              </li>
-            {/each}
-          </ul>
-        </div>
-      {/if}
     </nav>
 
     <div class="p-3 border-t border-surface-border">

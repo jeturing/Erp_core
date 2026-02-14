@@ -8,6 +8,12 @@ interface AuthState {
   error: string | null;
 }
 
+export interface AuthLoginResult {
+  success: boolean;
+  requiresTotp: boolean;
+  error?: string;
+}
+
 function createAuthStore() {
   const { subscribe, set, update } = writable<AuthState>({
     user: null,
@@ -27,26 +33,32 @@ function createAuthStore() {
       }
     },
 
-    login: async (credentials: LoginRequest) => {
+    login: async (credentials: LoginRequest): Promise<AuthLoginResult> => {
       update((state) => ({ ...state, isLoading: true, error: null }));
       try {
-        const result = await api.login(credentials);
+        const result = credentials.totp_code ? await api.verifyTotp(credentials) : await api.login(credentials);
         if (result.requires_totp) {
-          update((state) => ({
-            ...state,
-            isLoading: false,
-            error: 'Este usuario requiere codigo 2FA. Flujo 2FA pendiente en SPA.',
-          }));
-          return false;
+          update((state) => ({ ...state, isLoading: false, error: null }));
+          return {
+            success: false,
+            requiresTotp: true,
+          };
         }
 
         const user = await api.get<User>('/api/auth/me');
         update((state) => ({ ...state, user, isLoading: false, error: null }));
-        return true;
+        return {
+          success: true,
+          requiresTotp: false,
+        };
       } catch (err) {
         const message = err instanceof Error ? err.message : 'Error de autenticacion';
         update((state) => ({ ...state, error: message, isLoading: false }));
-        return false;
+        return {
+          success: false,
+          requiresTotp: false,
+          error: message,
+        };
       }
     },
 

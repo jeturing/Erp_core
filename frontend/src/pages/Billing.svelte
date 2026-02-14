@@ -3,6 +3,7 @@
   import { Badge, Button, Card, Spinner } from '../lib/components';
   import { billingApi } from '../lib/api';
   import type { BillingInvoice, BillingMetrics, StripeEventItem } from '../lib/types';
+  import { formatCurrency, formatDate, formatPercent } from '../lib/utils/formatters';
 
   let loading = true;
   let error = '';
@@ -31,31 +32,11 @@
 
   onMount(loadData);
 
-  function currency(value: number) {
-    return new Intl.NumberFormat('en-US', {
-      style: 'currency',
-      currency: 'USD',
-      minimumFractionDigits: 0,
-      maximumFractionDigits: 0,
-    }).format(value || 0);
-  }
-
   function statusVariant(status: string) {
     if (status === 'paid' || status === 'active') return 'success';
     if (status === 'pending') return 'warning';
     if (status === 'failed' || status === 'cancelled') return 'error';
     return 'secondary';
-  }
-
-  function formatDate(date?: string | null) {
-    if (!date) return '-';
-    return new Intl.DateTimeFormat('es-ES', {
-      day: '2-digit',
-      month: 'short',
-      year: 'numeric',
-      hour: '2-digit',
-      minute: '2-digit',
-    }).format(new Date(date));
   }
 </script>
 
@@ -78,16 +59,16 @@
     <div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
       <Card>
         <p class="text-xs uppercase tracking-wider text-secondary-500">MRR</p>
-        <p class="mt-2 text-2xl font-bold text-white">{currency(metrics?.mrr_total || 0)}</p>
+        <p class="mt-2 text-2xl font-bold text-white">{formatCurrency(metrics?.mrr_total || 0)}</p>
       </Card>
       <Card>
         <p class="text-xs uppercase tracking-wider text-secondary-500">Pendiente</p>
-        <p class="mt-2 text-2xl font-bold text-white">{currency(metrics?.pending_amount || 0)}</p>
+        <p class="mt-2 text-2xl font-bold text-white">{formatCurrency(metrics?.pending_amount || 0)}</p>
         <p class="text-xs text-secondary-500 mt-1">{metrics?.pending_count || 0} suscripciones</p>
       </Card>
       <Card>
         <p class="text-xs uppercase tracking-wider text-secondary-500">Churn 30d</p>
-        <p class="mt-2 text-2xl font-bold text-white">{(metrics?.churn_rate || 0).toFixed(1)}%</p>
+        <p class="mt-2 text-2xl font-bold text-white">{formatPercent(metrics?.churn_rate || 0, 1)}</p>
       </Card>
       <Card>
         <p class="text-xs uppercase tracking-wider text-secondary-500">Activas</p>
@@ -100,17 +81,17 @@
         <div class="p-4 rounded-lg bg-surface-highlight border border-surface-border">
           <p class="text-secondary-400">Basic</p>
           <p class="text-white font-semibold mt-1">{metrics?.plan_distribution.basic.count || 0} tenants</p>
-          <p class="text-secondary-500">{currency(metrics?.plan_distribution.basic.revenue || 0)}</p>
+          <p class="text-secondary-500">{formatCurrency(metrics?.plan_distribution.basic.revenue || 0)}</p>
         </div>
         <div class="p-4 rounded-lg bg-surface-highlight border border-surface-border">
           <p class="text-secondary-400">Pro</p>
           <p class="text-white font-semibold mt-1">{metrics?.plan_distribution.pro.count || 0} tenants</p>
-          <p class="text-secondary-500">{currency(metrics?.plan_distribution.pro.revenue || 0)}</p>
+          <p class="text-secondary-500">{formatCurrency(metrics?.plan_distribution.pro.revenue || 0)}</p>
         </div>
         <div class="p-4 rounded-lg bg-surface-highlight border border-surface-border">
           <p class="text-secondary-400">Enterprise</p>
           <p class="text-white font-semibold mt-1">{metrics?.plan_distribution.enterprise.count || 0} tenants</p>
-          <p class="text-secondary-500">{currency(metrics?.plan_distribution.enterprise.revenue || 0)}</p>
+          <p class="text-secondary-500">{formatCurrency(metrics?.plan_distribution.enterprise.revenue || 0)}</p>
         </div>
       </div>
     </Card>
@@ -135,9 +116,9 @@
                   <p class="text-xs text-secondary-500">{invoice.email}</p>
                 </td>
                 <td class="text-secondary-300">{invoice.plan}</td>
-                <td class="text-secondary-300">{currency(invoice.amount)}</td>
+                <td class="text-secondary-300">{formatCurrency(invoice.amount)}</td>
                 <td><Badge variant={statusVariant(invoice.status)}>{invoice.status}</Badge></td>
-                <td class="text-secondary-300">{formatDate(invoice.created_at)}</td>
+                <td class="text-secondary-300">{formatDate(invoice.created_at, { day: '2-digit', month: 'short', year: 'numeric', hour: '2-digit', minute: '2-digit' })}</td>
               </tr>
             {:else}
               <tr>
@@ -168,7 +149,7 @@
                 <td>
                   <Badge variant={event.processed ? 'success' : 'warning'}>{event.processed ? 'si' : 'no'}</Badge>
                 </td>
-                <td class="text-secondary-300">{formatDate(event.created_at)}</td>
+                <td class="text-secondary-300">{formatDate(event.created_at, { day: '2-digit', month: 'short', year: 'numeric', hour: '2-digit', minute: '2-digit' })}</td>
               </tr>
             {:else}
               <tr>

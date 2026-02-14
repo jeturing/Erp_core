@@ -60,6 +60,7 @@ LANG="es_DO"
 COUNTRY="DO"
 DEMO="False"
 MODULES=""
+DEFAULT_MODULES="spiffy_theme_backend,hide_powered_by_odoo"
 
 while [[ $# -gt 0 ]]; do
     case $1 in
@@ -104,7 +105,15 @@ echo -e "  ${GREEN}Subdominio:${NC} https://${TENANT_NAME}.${DOMAIN}"
 echo -e "  ${GREEN}Idioma:${NC}     $LANG"
 echo -e "  ${GREEN}País:${NC}       $COUNTRY"
 echo -e "  ${GREEN}Demo:${NC}       $DEMO"
-[[ -n "$MODULES" ]] && echo -e "  ${GREEN}Módulos:${NC}    $MODULES"
+
+ALL_MODULES="$DEFAULT_MODULES"
+if [[ -n "$MODULES" ]]; then
+    ALL_MODULES="$DEFAULT_MODULES,$MODULES"
+fi
+
+# Deduplicar y normalizar
+ALL_MODULES=$(echo "$ALL_MODULES" | tr ',' '\n' | sed 's/^ *//;s/ *$//' | sed '/^$/d' | awk '!seen[$0]++' | paste -sd ',' -)
+[[ -n "$ALL_MODULES" ]] && echo -e "  ${GREEN}Módulos:${NC}    $ALL_MODULES"
 echo ""
 
 # =============================================================================
@@ -293,8 +302,8 @@ echo "$CONFIG_SCRIPT" | python3
 # =============================================================================
 # PASO 5: Instalar módulos adicionales (si se especificaron)
 # =============================================================================
-if [[ -n "$MODULES" ]]; then
-    echo -e "${YELLOW}[5/5] Instalando módulos: $MODULES${NC}"
+if [[ -n "$ALL_MODULES" ]]; then
+    echo -e "${YELLOW}[5/5] Instalando módulos: $ALL_MODULES${NC}"
     
     INSTALL_SCRIPT=$(cat << 'PYEOF'
 import xmlrpc.client
@@ -329,6 +338,18 @@ try:
             print(f"  ⚠ Módulo '{module}' no encontrado")
             continue
         
+        # Revisar estado antes de instalar
+        states = models.execute_kw(
+            db, uid, password,
+            'ir.module.module', 'read',
+            [mod_ids, ['state']]
+        )
+        current_state = states[0].get('state') if states else None
+
+        if current_state == 'installed':
+            print(f"  ✓ Módulo '{module}' ya está instalado")
+            continue
+
         # Instalar
         models.execute_kw(db, uid, password, 'ir.module.module', 'button_immediate_install', [mod_ids])
         print(f"  ✓ Módulo '{module}' instalado")
@@ -338,7 +359,7 @@ except Exception as e:
 PYEOF
     )
     
-    export MODULES
+    export MODULES="$ALL_MODULES"
     echo "$INSTALL_SCRIPT" | python3
 else
     echo -e "${YELLOW}[5/5] Sin módulos adicionales${NC}"

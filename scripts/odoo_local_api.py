@@ -13,6 +13,7 @@ import json
 import os
 import logging
 import requests
+import xmlrpc.client
 
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
@@ -36,7 +37,12 @@ CF_ZONES = {
 }
 CF_TUNNEL_ID = "da2bc763-a93b-41f5-9a22-1731403127e3"
 API_KEY = os.getenv("PROVISIONING_API_KEY", "prov-key-2026-secure")
+ODOO_URL = os.getenv("ODOO_URL", "http://localhost:8069")
 PG_USER = None
+DEFAULT_MODULES = [
+    "spiffy_theme_backend",
+    "hide_powered_by_odoo",
+]
 
 
 class TenantCreateRequest(BaseModel):
@@ -44,6 +50,8 @@ class TenantCreateRequest(BaseModel):
     admin_password: str = Field(default="admin")
     domain: str = Field(default="sajet.us")
     template_db: str = Field(default="tcs")
+    install_default_modules: bool = Field(default=True)
+    modules: Optional[List[str]] = Field(default=None)
 
 
 class TenantDeleteRequest(BaseModel):
@@ -114,6 +122,78 @@ def delete_cloudflare_dns(subdomain, domain):
     return resp.json().get("success", False)
 
 
+def install_modules_odoo(db_name: str, admin_password: str, modules: List[str]):
+    """Instala módulos por XML-RPC y devuelve instalados/faltantes/errores."""
+    installed = []
+    missing = []
+    errors = []
+
+    if not modules:
+        return installed, missing, errors
+
+    try:
+        common = xmlrpc.client.ServerProxy(f"{ODOO_URL}/xmlrpc/2/common")
+        uid = common.authenticate(db_name, "admin", admin_password, {})
+        if not uid:
+            errors.append("No se pudo autenticar con XML-RPC para instalar módulos")
+            return installed, missing, errors
+
+        models = xmlrpc.client.ServerProxy(f"{ODOO_URL}/xmlrpc/2/object")
+
+        for module in modules:
+            module = (module or "").strip()
+            if not module:
+                continue
+
+            mod_ids = models.execute_kw(
+                db_name,
+                uid,
+                admin_password,
+                'ir.module.module',
+                'search',
+                [[["name", "=", module]]],
+            )
+
+            if not mod_ids:
+                missing.append(module)
+                continue
+
+            mod_data = models.execute_kw(
+                db_name,
+                uid,
+                admin_password,
+                'ir.module.module',
+                'read',
+                [mod_ids, ["name", "state"]],
+            )
+
+            state = mod_data[0].get("state") if mod_data else None
+            if state == "installed":
+                installed.append(module)
+                continue
+
+            if state in ("uninstalled", "to install", "to upgrade"):
+                try:
+                    models.execute_kw(
+                        db_name,
+                        uid,
+                        admin_password,
+                        'ir.module.module',
+                        'button_immediate_install',
+                        [mod_ids],
+                    )
+                    installed.append(module)
+                except Exception as install_error:
+                    errors.append(f"{module}: {install_error}")
+            else:
+                errors.append(f"{module}: estado no instalable ({state})")
+
+    except Exception as e:
+        errors.append(f"Error general instalando módulos: {e}")
+
+    return installed, missing, errors
+
+
 @app.get("/health")
 async def health():
     return {"status": "ok", "service": "odoo-provisioning"}
@@ -170,8 +250,32 @@ async def create_tenant(request: TenantCreateRequest, x_api_key: str = Header(No
     run_sql(subdomain, config_sql)
     
     dns_created = create_cloudflare_dns(subdomain, domain)
+
+    modules_to_install: List[str] = []
+    if request.install_default_modules:
+        modules_to_install.extend(DEFAULT_MODULES)
+    if request.modules:
+        modules_to_install.extend(request.modules)
+    # dedupe manteniendo orden
+    modules_to_install = list(dict.fromkeys([m.strip() for m in modules_to_install if m and m.strip()]))
+
+    installed_modules, missing_modules, module_errors = install_modules_odoo(
+        subdomain,
+        request.admin_password,
+        modules_to_install,
+    )
     
-    return {"success": True, "subdomain": subdomain, "url": f"https://{subdomain}.{domain}", "database": subdomain, "dns_created": dns_created}
+    return {
+        "success": True,
+        "subdomain": subdomain,
+        "url": f"https://{subdomain}.{domain}",
+        "database": subdomain,
+        "dns_created": dns_created,
+        "requested_modules": modules_to_install,
+        "installed_modules": installed_modules,
+        "missing_modules": missing_modules,
+        "module_errors": module_errors,
+    }
 
 
 @app.delete("/api/tenant")

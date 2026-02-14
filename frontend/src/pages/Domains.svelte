@@ -2,7 +2,9 @@
   import { onMount } from 'svelte';
   import { Globe, CheckCircle2, Clock3, ShieldCheck } from 'lucide-svelte';
   import { Badge, Button, Card, Input, Modal, StatCard } from '../lib/components';
+  import { addToast } from '../lib/stores';
   import { domainStats, domainsStore, type CustomDomain } from '../lib/stores/domains';
+  import { formatDate } from '../lib/utils/formatters';
 
   let showCreateModal = false;
   let showDetailsModal = false;
@@ -10,8 +12,6 @@
   let selectedDomain: CustomDomain | null = null;
 
   let search = '';
-  let feedback = '';
-  let feedbackError = false;
 
   let createLoading = false;
   let createError = '';
@@ -32,11 +32,6 @@
     domainsStore.load();
   });
 
-  function clearFeedback() {
-    feedback = '';
-    feedbackError = false;
-  }
-
   function statusBadge(status: string) {
     if (status === 'verified') return 'success';
     if (status === 'pending' || status === 'verifying') return 'warning';
@@ -54,11 +49,10 @@
       };
       const result = await domainsStore.create(payload);
       createInstructions = result.instructions || null;
-      feedback = 'Dominio registrado correctamente.';
-      feedbackError = false;
+      addToast('Dominio registrado correctamente', 'success');
       await domainsStore.load();
     } catch (error) {
-      createError = error instanceof Error ? error.message : 'No se pudo crear dominio';
+      addToast(error instanceof Error ? error.message : 'No se pudo crear dominio', 'error');
     } finally {
       createLoading = false;
     }
@@ -70,48 +64,39 @@
   }
 
   async function verifyDomain(domain: CustomDomain) {
-    clearFeedback();
     try {
       const result = await domainsStore.verify(domain.id);
-      feedback = result.message || 'Dominio verificado';
-      feedbackError = !result.success;
+      addToast(result.message || 'Dominio verificado', result.success ? 'success' : 'warning');
       await domainsStore.load();
     } catch (error) {
-      feedback = error instanceof Error ? error.message : 'No se pudo verificar dominio';
-      feedbackError = true;
+      addToast(error instanceof Error ? error.message : 'No se pudo verificar dominio', 'error');
     }
   }
 
   async function configureCloudflare(domain: CustomDomain) {
-    clearFeedback();
     try {
       const result = await domainsStore.configureCloudflare(domain.id);
-      feedback = result.message || 'Cloudflare configurado';
-      feedbackError = !result.success;
+      addToast(result.message || 'Cloudflare configurado', result.success ? 'success' : 'warning');
       await domainsStore.load();
       await domainsStore.get(domain.id);
     } catch (error) {
-      feedback = error instanceof Error ? error.message : 'No se pudo configurar Cloudflare';
-      feedbackError = true;
+      addToast(error instanceof Error ? error.message : 'No se pudo configurar Cloudflare', 'error');
     }
   }
 
   async function toggleActive(domain: CustomDomain) {
-    clearFeedback();
     try {
       if (domain.is_active) {
         await domainsStore.deactivate(domain.id);
-        feedback = 'Dominio desactivado';
+        addToast('Dominio desactivado', 'success');
       } else {
         await domainsStore.activate(domain.id);
-        feedback = 'Dominio activado';
+        addToast('Dominio activado', 'success');
       }
-      feedbackError = false;
       await domainsStore.load();
       await domainsStore.get(domain.id);
     } catch (error) {
-      feedback = error instanceof Error ? error.message : 'No se pudo cambiar estado';
-      feedbackError = true;
+      addToast(error instanceof Error ? error.message : 'No se pudo cambiar estado', 'error');
     }
   }
 
@@ -125,12 +110,10 @@
     try {
       await domainsStore.delete(selectedDomain.id);
       showDeleteModal = false;
-      feedback = 'Dominio eliminado correctamente';
-      feedbackError = false;
+      addToast('Dominio eliminado correctamente', 'success');
       selectedDomain = null;
     } catch (error) {
-      feedback = error instanceof Error ? error.message : 'No se pudo eliminar dominio';
-      feedbackError = true;
+      addToast(error instanceof Error ? error.message : 'No se pudo eliminar dominio', 'error');
     }
   }
 
@@ -159,12 +142,6 @@
     </div>
     <Button on:click={() => (showCreateModal = true)}>+ Nuevo dominio</Button>
   </div>
-
-  {#if feedback}
-    <div class={`rounded-lg border px-4 py-3 text-sm ${feedbackError ? 'bg-error/10 border-error/30 text-error' : 'bg-success/10 border-success/30 text-success'}`}>
-      {feedback}
-    </div>
-  {/if}
 
   <Card>
     <div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-5 gap-3">
@@ -293,6 +270,17 @@
         <Badge variant={selectedDomain.is_active ? 'success' : 'secondary'}>
           {selectedDomain.is_active ? 'Activo' : 'Inactivo'}
         </Badge>
+      </div>
+
+      <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
+        <div>
+          <p class="text-secondary-500 uppercase text-xs">Creado</p>
+          <p class="text-secondary-200">{formatDate(selectedDomain.created_at)}</p>
+        </div>
+        <div>
+          <p class="text-secondary-500 uppercase text-xs">Actualizado</p>
+          <p class="text-secondary-200">{formatDate(selectedDomain.updated_at)}</p>
+        </div>
       </div>
 
       <div class="rounded-lg bg-surface-highlight border border-surface-border p-4">

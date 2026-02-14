@@ -2,9 +2,10 @@
   import { onMount, onDestroy } from 'svelte';
   import { dashboard, auth } from '../lib/stores';
   import { Card, StatCard, Badge, Spinner, Button } from '../lib/components';
-  import { RefreshCw, AlertCircle, Cpu, MemoryStick, DollarSign, Users, Clock3 } from 'lucide-svelte';
+  import { RefreshCw, AlertCircle, Cpu, DollarSign, Users, Clock3 } from 'lucide-svelte';
   import { tenantsApi } from '../lib/api';
   import type { Tenant } from '../lib/types';
+  import { formatCurrency, formatDate, formatPercent } from '../lib/utils/formatters';
 
   let recentTenants: Tenant[] = [];
   let tenantsError = '';
@@ -34,29 +35,6 @@
   onDestroy(() => {
     dashboard.stopAutoRefresh();
   });
-
-  function formatCurrency(amount: number): string {
-    return new Intl.NumberFormat('en-US', {
-      style: 'currency',
-      currency: 'USD',
-      minimumFractionDigits: 0,
-      maximumFractionDigits: 0,
-    }).format(amount || 0);
-  }
-
-  function formatPercent(value: number): string {
-    if (Number.isNaN(value)) return '0%';
-    return `${Math.max(0, Math.round(value))}%`;
-  }
-
-  function formatDate(dateString?: string | null): string {
-    if (!dateString) return '-';
-    return new Intl.DateTimeFormat('es-ES', {
-      day: '2-digit',
-      month: 'short',
-      year: 'numeric',
-    }).format(new Date(dateString));
-  }
 
   function statusVariant(status: string) {
     if (status === 'active') return 'success';
@@ -146,7 +124,7 @@
           <div>
             <div class="flex justify-between text-sm text-secondary-300 mb-1">
               <span>CPU</span>
-              <span>{formatPercent($dashboard.data.cluster_load.cpu)}</span>
+              <span>{formatPercent(Math.max(0, Math.round($dashboard.data.cluster_load.cpu)))}</span>
             </div>
             <div class="h-2 bg-surface-highlight rounded-full overflow-hidden">
               <div class="h-full bg-primary-500 rounded-full" style={`width: ${Math.min(100, $dashboard.data.cluster_load.cpu)}%`}></div>
@@ -155,7 +133,7 @@
           <div>
             <div class="flex justify-between text-sm text-secondary-300 mb-1">
               <span>RAM</span>
-              <span>{formatPercent($dashboard.data.cluster_load.ram)}</span>
+              <span>{formatPercent(Math.max(0, Math.round($dashboard.data.cluster_load.ram)))}</span>
             </div>
             <div class="h-2 bg-surface-highlight rounded-full overflow-hidden">
               <div class="h-full bg-accent-500 rounded-full" style={`width: ${Math.min(100, $dashboard.data.cluster_load.ram)}%`}></div>
@@ -164,13 +142,16 @@
         </div>
       </Card>
 
-      <Card title="Accesos Operativos" subtitle="Compatibilidad con vistas legacy">
+      <Card title="Sistema" subtitle="Monitoreo y administracion">
         <div class="space-y-3">
-          <a href="/admin/logs" target="_blank" rel="noreferrer" class="block p-3 rounded-lg bg-surface-highlight hover:bg-surface-border transition-colors text-secondary-200">
-            Abrir Logs legacy
+          <a href="#/logs" class="block p-3 rounded-lg bg-surface-highlight hover:bg-surface-border transition-colors text-secondary-200">
+            Ver logs del sistema
           </a>
-          <a href="/admin/tunnels" target="_blank" rel="noreferrer" class="block p-3 rounded-lg bg-surface-highlight hover:bg-surface-border transition-colors text-secondary-200">
-            Abrir Tunnels legacy
+          <a href="#/tunnels" class="block p-3 rounded-lg bg-surface-highlight hover:bg-surface-border transition-colors text-secondary-200">
+            Gestionar tunnels Cloudflare
+          </a>
+          <a href="#/roles" class="block p-3 rounded-lg bg-surface-highlight hover:bg-surface-border transition-colors text-secondary-200">
+            Configurar roles y permisos
           </a>
           <a href="#/infrastructure" class="block p-3 rounded-lg bg-surface-highlight hover:bg-surface-border transition-colors text-secondary-200">
             Ver estado de infraestructura

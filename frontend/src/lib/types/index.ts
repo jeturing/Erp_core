@@ -19,6 +19,7 @@ export interface User {
 export interface LoginRequest {
   username: string;
   password: string;
+  totp_code?: string;
 }
 
 export interface LoginResponse {
@@ -266,6 +267,76 @@ export interface ContainerItem {
 
 export interface ContainersListResponse {
   items: ContainerItem[];
+  total: number;
+}
+
+export interface LogEntry {
+  line: string;
+  class: string;
+}
+
+export interface LogsResponse {
+  logs: LogEntry[];
+  total: number;
+  file?: string;
+  source?: string;
+  error?: string;
+}
+
+export interface SystemStatusResponse {
+  postgresql: {
+    status: string;
+    latency_ms?: number | null;
+    error?: string;
+  };
+  fastapi: {
+    status: string;
+    port?: number;
+  };
+  lxc_105: {
+    status: string;
+    name?: string;
+  };
+  disk: {
+    usage_percent: number;
+    free_gb: number;
+  };
+}
+
+export interface TunnelDeployment {
+  subdomain: string;
+  domain?: string;
+  url?: string;
+  plan?: string;
+  subscription_id?: number;
+}
+
+export interface Tunnel {
+  id: string;
+  name: string;
+  status: string;
+  deployment?: TunnelDeployment | null;
+}
+
+export interface TunnelsListResponse {
+  success: boolean;
+  total: number;
+  tunnels: Tunnel[];
+  warning?: string;
+  error?: string;
+}
+
+export interface Role {
+  id: number;
+  name: string;
+  description: string;
+  permissions: string[];
+  system: boolean;
+  updated_at?: string | null;
+}
+
+export interface RolesListResponse {
+  items: Role[];
   total: number;
 }
 
