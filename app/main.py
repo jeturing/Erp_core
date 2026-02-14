@@ -38,10 +38,32 @@ app = FastAPI(
 )
 
 # CORS configuration
-ALLOWED_ORIGINS = os.getenv("ALLOWED_ORIGINS", "http://localhost:4443,https://sajet.us").split(",")
+# Permite origenes administrables por env y soporte multi-dominio.
+default_origins = ",".join([
+    "http://localhost:4443",
+    "https://sajet.us",
+    "https://techeels.sajet.us",
+    "https://tcs.sajet.us",
+    "https://boocking.sajet.us",
+    "https://cliente1.sajet.us",
+    "https://demo_cliente.sajet.us",
+    "https://techeels.io",
+    "https://www.techeels.io",
+    "https://evolucionamujer.com",
+    "https://www.evolucionamujer.com",
+    "https://impulse-max.com",
+    "https://www.impulse-max.com",
+])
+
+ALLOWED_ORIGINS = [o.strip() for o in os.getenv("ALLOWED_ORIGINS", default_origins).split(",") if o.strip()]
+ALLOWED_ORIGIN_REGEX = os.getenv(
+    "ALLOWED_ORIGIN_REGEX",
+    r"https://([a-z0-9-]+\.)?sajet\.us$|https://(www\.)?(techeels\.io|evolucionamujer\.com|impulse-max\.com)$"
+)
 app.add_middleware(
     CORSMiddleware,
     allow_origins=ALLOWED_ORIGINS,
+    allow_origin_regex=ALLOWED_ORIGIN_REGEX,
     allow_credentials=True,
     allow_methods=["GET", "POST", "PUT", "DELETE", "OPTIONS"],
     allow_headers=["*"],

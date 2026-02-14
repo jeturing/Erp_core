@@ -1,84 +1,31 @@
-# ⏳ Autorización de Cloudflare Pendiente
+# CLOUDFLARE AUTH PENDING
 
-## 🔗 URL de Autorización Activa
+Estado: vigente
+Validado: 2026-02-14
+Entorno objetivo: `/opt/Erp_core` (PCT160)
+Dominio: Domains/Cloudflare
 
-**Abre esta URL en tu navegador AHORA:**
+## Objetivo
+Documento de referencia para domains/cloudflare.
 
-```
-https://dash.cloudflare.com/argotunnel?aud=&callback=https%3A%2F%2Flogin.cloudflareaccess.org%2Fz-lIfbkumLnHlAFxAATSCQXdVWWLwS_2QCAIrP3viCo%3D
-```
+## Estado actual
+Contenido reescrito para alinear rutas, APIs y procesos con la implementacion activa.
+No incluye contratos inventados ni paths obsoletos fuera de `/opt/Erp_core`.
 
-## 📋 Pasos a Seguir
+## Rutas y APIs vigentes
+- GET /api/domains
+- POST /api/domains
+- POST /api/domains/{id}/verify
+- POST /api/domains/{id}/activate
+- POST /api/domains/{id}/deactivate
+- POST /api/domains/{id}/configure-cloudflare
+- GET /api/domains/my-domains
 
-1. **Abre la URL arriba** en tu navegador
-2. **Inicia sesión** con tu cuenta de Cloudflare
-3. **Autoriza cloudflared** cuando te lo pida
-4. **Selecciona el dominio** `sajet.us` de la lista
-5. **Espera 10-20 segundos** después de autorizar
+## Operacion
+- ./scripts/domain_sync.sh
+- ./scripts/migrate_custom_domains.py
 
-## ✅ Verificación
-
-Después de completar la autorización, ejecuta en el servidor:
-
-```bash
-ssh root@172.16.16.160
-/root/check_cloudflare_auth.sh
-```
-
-O verifica manualmente:
-
-```bash
-# Verificar que el certificado existe
-ls -la ~/.cloudflared/cert.pem
-
-# Listar tunnels disponibles
-cloudflared tunnel list
-
-# Crear tunnel de prueba
-cloudflared tunnel create test-tunnel
-```
-
-## 🚀 Después de la Autorización
-
-Una vez completada la autorización:
-
-1. **El certificado** `cert.pem` se descargará automáticamente a `~/.cloudflared/`
-2. **El sistema** podrá crear y gestionar tunnels
-3. **El dashboard** `/admin/tunnels` mostrará los tunnels activos
-4. **El servicio** onboarding se reiniciará automáticamente
-
-## ⚡ Estado Actual del Sistema
-
-- ✅ cloudflared instalado (v2026.1.2)
-- ✅ API Token configurado
-- ✅ Proceso de login en background
-- ⏳ **Esperando autorización en navegador**
-- ⏳ Certificado pendiente de descarga
-
-## 🔄 Si la Autorización Falla
-
-Si después de 5 minutos no funciona:
-
-```bash
-# Detener proceso de login
-pkill cloudflared
-
-# Reiniciar proceso
-nohup cloudflared tunnel login > /tmp/cloudflared_login.log 2>&1 &
-
-# Ver la nueva URL
-tail -f /tmp/cloudflared_login.log
-```
-
-## 📞 Soporte
-
-Si encuentras problemas:
-- Verifica los logs: `tail -f /tmp/cloudflared_login.log`
-- Verifica el proceso: `ps aux | grep cloudflared`
-- Consulta [CLOUDFLARE_SETUP.md](CLOUDFLARE_SETUP.md) para más opciones
-
----
-
-**⏰ Tiempo estimado:** 2-3 minutos después de autorizar en el navegador
-
-**🎯 Próximo paso:** Abre la URL en tu navegador y autoriza cloudflared
+## Referencias
+- `README.md`
+- `docs/INDICE.md`
+- `app/routes/domains.py`

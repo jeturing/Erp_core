@@ -9,6 +9,7 @@ from datetime import datetime, timedelta
 import jwt
 import os
 from ..models.database import Customer, SessionLocal
+from ..services.spa_shell import render_spa_shell
 
 router = APIRouter(tags=["Roles"])
 
@@ -83,14 +84,11 @@ def verify_token_with_role(token: str, required_role: str = None) -> dict:
 # Routes
 @router.get("/login/{role}", response_class=HTMLResponse)
 async def role_login_page(request: Request, role: str):
-    """Página de login según rol (admin o tenant)"""
+    """Entrada pública de login unificado en SPA."""
     if role not in ["admin", "tenant"]:
         raise HTTPException(status_code=404, detail="Rol no válido")
-    
-    return templates.TemplateResponse("role_login.html", {
-        "request": request,
-        "role": role
-    })
+
+    return render_spa_shell("login", {"loginRole": role})
 
 
 @router.post("/api/logout")

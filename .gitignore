@@ -59,3 +59,10 @@ htmlcov/
 
 # Cloudflare credentials
 Cloudflare/.cf_credentials
+
+# Keep frontend source lib tracked
+!frontend/src/lib/
+!frontend/src/lib/**
+
+# Generated SPA build output
+static/spa/

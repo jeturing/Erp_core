@@ -8,54 +8,108 @@
   import Dashboard from './routes/Dashboard.svelte';
   import TenantPortal from './routes/TenantPortal.svelte';
   import Domains from './pages/Domains.svelte';
+  import Tenants from './pages/Tenants.svelte';
+  import Infrastructure from './pages/Infrastructure.svelte';
+  import Billing from './pages/Billing.svelte';
+  import Settings from './pages/Settings.svelte';
   import { Spinner } from './lib/components';
-  
+
+  type AppPage =
+    | 'landing'
+    | 'login'
+    | 'dashboard'
+    | 'portal'
+    | 'tenants'
+    | 'domains'
+    | 'infrastructure'
+    | 'billing'
+    | 'settings'
+    | 'notfound';
+
   let currentRoute = 'landing';
-  let currentPage: 'landing' | 'login' | 'dashboard' | 'portal' | 'customers' | 'domains' | 'infrastructure' | 'billing' | 'settings' = 'landing';
-  
-  // Simple hash-based routing
+  let currentPage: AppPage = 'landing';
+
+  function getRouteFromLocation(): string {
+    const hash = window.location.hash.replace(/^#\/?/, '');
+    const hashRoute = hash.split('?')[0].split('/')[0];
+    if (hashRoute) {
+      return hashRoute;
+    }
+
+    const path = window.location.pathname;
+    if (path.startsWith('/admin')) return 'dashboard';
+    if (path.startsWith('/tenant/portal')) return 'portal';
+    if (path.startsWith('/login')) return 'login';
+    return 'landing';
+  }
+
+  function setRouteHash(route: string) {
+    window.location.hash = `#/${route}`;
+  }
+
   function handleRouteChange() {
-    const hash = window.location.hash.slice(2) || ''; // Remove '#/'
-    const route = hash.split('/')[0] || '';
+    const route = getRouteFromLocation();
     currentRoute = route;
-    
-    // Determine which page to show
-    if (route === '' || route === 'home') {
-      // Landing page (no auth required)
+
+    if (route === 'landing' || route === 'home' || route === '') {
       currentPage = 'landing';
-    } else if (route === 'login') {
+      return;
+    }
+
+    if (route === 'login') {
       currentPage = 'login';
-    } else if (!$isAuthenticated && !$auth.isLoading) {
-      // Redirect to login if not authenticated (for protected routes)
-      window.location.hash = '#/login';
+      return;
+    }
+
+    if (!$isAuthenticated && !$auth.isLoading) {
       currentPage = 'login';
-    } else if ($currentUser?.role === 'tenant') {
-      // Tenant users go to portal
+      setRouteHash('login');
+      return;
+    }
+
+    if ($currentUser?.role === 'tenant') {
       currentPage = 'portal';
       if (route !== 'portal') {
-        window.location.hash = '#/portal';
+        setRouteHash('portal');
       }
-    } else {
-      currentPage = route as typeof currentPage;
+      return;
+    }
+
+    switch (route) {
+      case 'dashboard':
+      case 'portal':
+      case 'tenants':
+      case 'domains':
+      case 'infrastructure':
+      case 'billing':
+      case 'settings':
+        currentPage = route;
+        break;
+      default:
+        currentPage = 'notfound';
+        break;
     }
   }
-  
-  onMount(async () => {
-    // Initialize auth state
-    await auth.init();
-    
-    // Handle initial route
-    handleRouteChange();
-    
-    // Listen for hash changes
+
+  onMount(() => {
+    let active = true;
+
+    const init = async () => {
+      await auth.init();
+      if (active) {
+        handleRouteChange();
+      }
+    };
+
+    init();
     window.addEventListener('hashchange', handleRouteChange);
-    
+
     return () => {
+      active = false;
       window.removeEventListener('hashchange', handleRouteChange);
     };
   });
-  
-  // React to auth changes
+
   $: if (!$auth.isLoading) {
     handleRouteChange();
   }
@@ -75,38 +129,24 @@
 {:else if currentPage === 'portal'}
   <TenantPortal />
 {:else}
-  <Layout {currentRoute}>
+  <Layout currentRoute={currentPage === 'notfound' ? currentRoute : currentPage}>
     {#if currentPage === 'dashboard'}
       <Dashboard />
-    {:else if currentPage === 'customers'}
-      <div class="p-6">
-        <h1 class="text-2xl font-bold text-white">Clientes</h1>
-        <p class="text-secondary-400 mt-2">Gestión de clientes - Próximamente</p>
-      </div>
+    {:else if currentPage === 'tenants'}
+      <Tenants />
     {:else if currentPage === 'domains'}
       <Domains />
     {:else if currentPage === 'infrastructure'}
-      <div class="p-6">
-        <h1 class="text-2xl font-bold text-white">Infraestructura</h1>
-        <p class="text-secondary-400 mt-2">Gestión de nodos y contenedores - Próximamente</p>
-      </div>
+      <Infrastructure />
     {:else if currentPage === 'billing'}
-      <div class="p-6">
-        <h1 class="text-2xl font-bold text-white">Facturación</h1>
-        <p class="text-secondary-400 mt-2">Gestión de pagos y suscripciones - Próximamente</p>
-      </div>
+      <Billing />
     {:else if currentPage === 'settings'}
-      <div class="p-6">
-        <h1 class="text-2xl font-bold text-white">Configuración</h1>
-        <p class="text-secondary-400 mt-2">Ajustes del sistema - Próximamente</p>
-      </div>
+      <Settings />
     {:else}
       <div class="p-6">
-        <h1 class="text-2xl font-bold text-white">404 - Página no encontrada</h1>
-        <p class="text-secondary-400 mt-2">La página que buscas no existe.</p>
-        <a href="#/dashboard" class="text-primary-400 hover:text-primary-300 mt-4 inline-block">
-          Volver al Dashboard
-        </a>
+        <h1 class="text-2xl font-bold text-white">404 - Pagina no encontrada</h1>
+        <p class="text-secondary-400 mt-2">La ruta solicitada no existe dentro de la SPA.</p>
+        <a href="#/dashboard" class="text-primary-400 hover:text-primary-300 mt-4 inline-block">Volver al Dashboard</a>
       </div>
     {/if}
   </Layout>

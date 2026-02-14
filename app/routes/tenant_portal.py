@@ -3,17 +3,15 @@ Portal del Tenant - Vista de facturación y gestión de suscripción
 """
 from fastapi import APIRouter, HTTPException, Request, status, Depends, Cookie
 from fastapi.responses import HTMLResponse, JSONResponse, RedirectResponse
-from fastapi.templating import Jinja2Templates
 from sqlalchemy.orm import Session
 from ..models.database import Customer, Subscription, SessionLocal, SubscriptionStatus
 from .roles import verify_token_with_role
+from ..services.spa_shell import render_spa_shell
 import stripe
 import os
 from datetime import datetime
 
 router = APIRouter(prefix="/tenant", tags=["Tenant Portal"])
-BASE_DIR = os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
-templates = Jinja2Templates(directory=os.path.join(BASE_DIR, "templates"))
 
 # Stripe config
 stripe.api_key = os.getenv("STRIPE_SECRET_KEY")
@@ -39,7 +37,7 @@ def get_current_tenant(request: Request, access_token: str = Cookie(None)):
 
 @router.get("/portal", response_class=HTMLResponse)
 async def tenant_portal_page(request: Request, access_token: str = Cookie(None)):
-    """Página principal del portal del tenant."""
+    """SPA shell del portal del tenant."""
     token = access_token
     if token is None:
         auth_header = request.headers.get("Authorization", "")
@@ -51,9 +49,7 @@ async def tenant_portal_page(request: Request, access_token: str = Cookie(None))
     
     try:
         verify_token_with_role(token, required_role="tenant")
-        return templates.TemplateResponse("tenant_portal.html", {
-            "request": request
-        })
+        return render_spa_shell("portal")
     except HTTPException:
         return RedirectResponse(url="/login/tenant", status_code=302)
 

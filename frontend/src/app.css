@@ -122,6 +122,10 @@
   .badge-accent {
     @apply badge bg-accent-500/10 text-accent-500;
   }
+
+  .badge-secondary {
+    @apply badge bg-secondary-700 text-secondary-200;
+  }
   
   /* Plan badges */
   .badge-basic {

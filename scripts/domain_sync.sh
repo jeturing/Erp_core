@@ -19,7 +19,9 @@ CF_API_TOKEN="${CF_API_TOKEN:-$(cat /root/.cf_credentials 2>/dev/null || echo ''
 CF_ZONE_ID="4a83b88793ac3688486ace69b6ae80f9"  # sajet.us
 CF_TUNNEL_NAME="tcs-sajet-tunnel"
 
-CLOUDFLARED_CONFIG="/etc/cloudflared/config.yml"
+# Config/servicio real del túnel en PCT 105
+CLOUDFLARED_CONFIG="${CLOUDFLARED_CONFIG:-/etc/cloudflared/tcs-sajet-tunnel.yml}"
+CLOUDFLARED_SERVICE="${CLOUDFLARED_SERVICE:-cloudflared-tcs-sajet-tunnel}"
 LOG_FILE="/var/log/domain_sync.log"
 
 # === FUNCIONES DE UTILIDAD ===
@@ -29,13 +31,19 @@ log() {
 }
 
 check_dependencies() {
-    local deps=("psql" "cloudflared" "jq" "curl")
+    local deps=("psql" "cloudflared" "jq" "curl" "python3")
     for dep in "${deps[@]}"; do
         if ! command -v "$dep" &> /dev/null; then
             log "ERROR: $dep no está instalado"
             exit 1
         fi
     done
+
+    if ! python3 -c "import yaml" &>/dev/null; then
+        log "ERROR: módulo Python PyYAML no está disponible"
+        log "Instale con: apt install -y python3-yaml"
+        exit 1
+    fi
 }
 
 # === FUNCIONES DE BASE DE DATOS ===
@@ -63,7 +71,9 @@ get_verified_domains_for_tunnel() {
             cd.id,
             cd.sajet_subdomain,
             cd.external_domain,
-            td.direct_url
+            td.direct_url,
+            cd.verification_status,
+            cd.is_active
         FROM custom_domains cd
         LEFT JOIN tenant_deployments td ON cd.tenant_deployment_id = td.id
         WHERE cd.cloudflare_configured = true 
@@ -157,15 +167,14 @@ check_dns_record_exists() {
 # === FUNCIONES DE CLOUDFLARED TUNNEL ===
 
 add_ingress_rule() {
-    local subdomain=$1
+    local hostname=$1
     local backend_url=$2
-    local full_domain="${subdomain}.sajet.us"
     
-    log "Agregando ingress rule: $full_domain → $backend_url"
+    log "Agregando ingress rule: $hostname → $backend_url"
     
     # Verificar si ya existe la regla
-    if grep -q "hostname: ${full_domain}" "$CLOUDFLARED_CONFIG" 2>/dev/null; then
-        log "⚠️ Ingress rule ya existe para $full_domain"
+    if grep -q "hostname: ${hostname}" "$CLOUDFLARED_CONFIG" 2>/dev/null; then
+        log "⚠️ Ingress rule ya existe para $hostname"
         return 0
     fi
     
@@ -184,14 +193,14 @@ with open('$CLOUDFLARED_CONFIG', 'r') as f:
 
 # Nueva regla de ingress
 new_rule = {
-    'hostname': '${full_domain}',
+    'hostname': '${hostname}',
     'service': 'http://${backend_url}'
 }
 
 # Insertar antes del catch-all (último elemento)
 if 'ingress' in config:
     # Buscar si ya existe
-    exists = any(r.get('hostname') == '${full_domain}' for r in config['ingress'])
+    exists = any(r.get('hostname') == '${hostname}' for r in config['ingress'])
     if not exists:
         # Insertar antes del último (catch-all)
         config['ingress'].insert(-1, new_rule)
@@ -223,11 +232,11 @@ reload_cloudflared() {
     log "Recargando cloudflared..."
     
     # Validar configuración primero
-    if cloudflared tunnel ingress validate &>/dev/null; then
-        systemctl restart cloudflared
+    if cloudflared tunnel ingress validate --config "$CLOUDFLARED_CONFIG" &>/dev/null; then
+        systemctl restart "$CLOUDFLARED_SERVICE"
         sleep 3
         
-        if systemctl is-active --quiet cloudflared; then
+        if systemctl is-active --quiet "$CLOUDFLARED_SERVICE"; then
             log "✅ cloudflared reiniciado correctamente"
             return 0
         else
@@ -292,7 +301,7 @@ process_tunnel_ingress() {
     local count=0
     local needs_reload=false
     
-    while IFS='|' read -r id subdomain external_domain backend_url; do
+    while IFS='|' read -r id subdomain external_domain backend_url verification_status is_active; do
         [ -z "$id" ] && continue
         
         # Si no hay backend URL, usar el default
@@ -300,9 +309,18 @@ process_tunnel_ingress() {
             backend_url="localhost:8069"
         fi
         
-        log "Configurando tunnel: $subdomain → $backend_url"
-        
-        if add_ingress_rule "$subdomain" "$backend_url"; then
+        local sajet_hostname="${subdomain}.sajet.us"
+        log "Configurando tunnel fallback: $sajet_hostname → $backend_url"
+
+        # 1) Siempre garantizar fallback interno por subdominio sajet.us
+        if add_ingress_rule "$sajet_hostname" "$backend_url"; then
+            # 2) Si dominio externo está verificado/activo, también enrutarlo
+            if [[ "$verification_status" == "verified" && "$is_active" == "t" ]]; then
+                if [[ -n "$external_domain" ]]; then
+                    add_ingress_rule "$external_domain" "$backend_url" || true
+                fi
+            fi
+
             update_domain_status "$id" "true" "true" ""
             activate_domain "$id"
             needs_reload=true

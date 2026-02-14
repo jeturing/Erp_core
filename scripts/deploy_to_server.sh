@@ -2,43 +2,47 @@
 
 set -euo pipefail
 
-# deploy_to_server.sh
-# Copiar el contenido del repositorio al servidor remoto usando rsync+ssh
-# Requiere definir variables de entorno o pasarlas como argumentos.
-
 show_help() {
-  cat <<'EOF'
-Usage: ./scripts/deploy_to_server.sh [--dry-run] [--service "sudo systemctl restart myapp"]
+  cat <<'USAGE'
+Usage: ./scripts/deploy_to_server.sh [--profile pct160] [--dry-run] [--skip-build]
 
-Environment variables (alternativa a args):
-  SERVER_USER   - usuario SSH remoto
-  SERVER_HOST   - host o IP remoto
-  SERVER_PATH   - ruta remota donde desplegar (ej: /var/www/myapp)
-  SSH_KEY       - ruta al private key SSH (opcional)
-  SSH_PORT      - puerto SSH (opcional, default 22)
+Environment variables:
+  SERVER_USER      Usuario SSH remoto
+  SERVER_HOST      Host o IP remota
+  SERVER_PATH      Ruta remota del proyecto (default: /opt/Erp_core)
+  SSH_KEY          Ruta private key SSH (opcional)
+  SSH_PORT         Puerto SSH (default: 22)
+  APP_SERVICE      Servicio systemd a reiniciar (opcional)
+  APP_BASE_URL     URL para smoke test remoto (default: http://127.0.0.1:4443)
+
+Profiles:
+  pct160           Aplica defaults para despliegue en PCT160
 
 Examples:
-  SERVER_USER=deploy SERVER_HOST=example.com SERVER_PATH=/var/www/myapp ./scripts/deploy_to_server.sh
-  SSH_KEY=~/.ssh/id_rsa SERVER_USER=deploy SERVER_HOST=example.com SERVER_PATH=/var/www/myapp ./scripts/deploy_to_server.sh --service "sudo systemctl restart myapp"
-  ./scripts/deploy_to_server.sh --dry-run
-EOF
+  ./scripts/deploy_to_server.sh --profile pct160
+  APP_SERVICE=erp-core SERVER_HOST=10.0.0.160 ./scripts/deploy_to_server.sh
+  ./scripts/deploy_to_server.sh --profile pct160 --dry-run
+USAGE
 }
 
-# Defaults
 SSH_PORT=${SSH_PORT:-22}
+PROFILE=""
 DRY_RUN=""
-SERVICE_CMD=""
+RUN_BUILD=1
 
-# Parse simple flags
 while [[ $# -gt 0 ]]; do
   case "$1" in
+    --profile)
+      PROFILE="$2"
+      shift 2
+      ;;
     --dry-run)
       DRY_RUN="--dry-run"
       shift
       ;;
-    --service)
-      SERVICE_CMD="$2"
-      shift 2
+    --skip-build)
+      RUN_BUILD=0
+      shift
       ;;
     -h|--help)
       show_help
@@ -52,35 +56,59 @@ while [[ $# -gt 0 ]]; do
   esac
 done
 
-# Validate required environment variables
-: "${SERVER_USER:?Please set SERVER_USER}" 
+if [[ "${PROFILE}" == "pct160" ]]; then
+  SERVER_USER=${SERVER_USER:-root}
+  SERVER_HOST=${SERVER_HOST:-${PCT160_HOST:-pct160}}
+  SERVER_PATH=${SERVER_PATH:-/opt/Erp_core}
+  APP_SERVICE=${APP_SERVICE:-erp-core}
+fi
+
+: "${SERVER_USER:?Please set SERVER_USER}"
 : "${SERVER_HOST:?Please set SERVER_HOST}"
 : "${SERVER_PATH:?Please set SERVER_PATH}"
 
-SSH_OPTS=( -p "$SSH_PORT" )
-if [ -n "${SSH_KEY-}" ]; then
-  SSH_OPTS=( -i "$SSH_KEY" -p "$SSH_PORT" )
+if [[ ${RUN_BUILD} -eq 1 && -z "${DRY_RUN}" ]]; then
+  echo "[deploy] Build SPA local"
+  PROJECT_ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
+  "${PROJECT_ROOT}/scripts/build_static.sh"
 fi
 
-RSYNC_EXCLUDES=( --exclude '.git' --exclude 'venv' --exclude '__pycache__' --exclude '.DS_Store' )
-
-RSYNC_CMD=( rsync -az --delete "${RSYNC_EXCLUDES[@]}" )
-if [ -n "$DRY_RUN" ]; then
-  RSYNC_CMD+=( --dry-run )
+SSH_OPTS=(-p "${SSH_PORT}")
+if [[ -n "${SSH_KEY-}" ]]; then
+  SSH_OPTS=(-i "${SSH_KEY}" -p "${SSH_PORT}")
 fi
-RSYNC_CMD+=( -e "ssh ${SSH_OPTS[*]}" ./ "$SERVER_USER@$SERVER_HOST:$SERVER_PATH" )
 
-echo "Ejecutando rsync hacia $SERVER_HOST:$SERVER_PATH"
-# Mostrar y ejecutar
-echo "${RSYNC_CMD[*]}"
-# Ejecutar
+RSYNC_EXCLUDES=(
+  --exclude '.git'
+  --exclude '.github'
+  --exclude 'venv'
+  --exclude '__pycache__'
+  --exclude '.DS_Store'
+  --exclude 'frontend/node_modules'
+  --exclude 'frontend/dist'
+)
+
+RSYNC_CMD=(rsync -az --delete "${RSYNC_EXCLUDES[@]}")
+if [[ -n "${DRY_RUN}" ]]; then
+  RSYNC_CMD+=(--dry-run)
+fi
+RSYNC_CMD+=(-e "ssh ${SSH_OPTS[*]}" ./ "${SERVER_USER}@${SERVER_HOST}:${SERVER_PATH}")
+
+echo "[deploy] Sync ${SERVER_HOST}:${SERVER_PATH}"
 eval "${RSYNC_CMD[*]}"
 
-if [ -n "$SERVICE_CMD" ]; then
-  echo "Ejecutando comando remoto: $SERVICE_CMD"
-  SSH_CMD=( ssh "${SSH_OPTS[@]}" "$SERVER_USER@$SERVER_HOST" "$SERVICE_CMD" )
-  echo "${SSH_CMD[*]}"
-  eval "${SSH_CMD[*]}"
+if [[ -n "${DRY_RUN}" ]]; then
+  echo "[deploy] Dry run complete"
+  exit 0
 fi
 
-echo "Despliegue completado. Verifica en el servidor que los archivos estén correctos."
+if [[ -n "${APP_SERVICE-}" ]]; then
+  echo "[deploy] Restart service ${APP_SERVICE}"
+  ssh "${SSH_OPTS[@]}" "${SERVER_USER}@${SERVER_HOST}" "sudo systemctl restart ${APP_SERVICE} && sudo systemctl is-active ${APP_SERVICE}"
+fi
+
+APP_BASE_URL=${APP_BASE_URL:-http://127.0.0.1:4443}
+echo "[deploy] Run smoke tests"
+ssh "${SSH_OPTS[@]}" "${SERVER_USER}@${SERVER_HOST}" "cd ${SERVER_PATH} && APP_BASE_URL='${APP_BASE_URL}' ./scripts/smoke_pct160.sh"
+
+echo "[deploy] Deployment complete"

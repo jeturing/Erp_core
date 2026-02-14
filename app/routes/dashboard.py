@@ -7,6 +7,7 @@ from fastapi.templating import Jinja2Templates
 import os
 from ..models.database import Customer, Subscription, SubscriptionStatus, SessionLocal
 from .roles import verify_token_with_role
+from ..services.spa_shell import render_spa_shell
 
 router = APIRouter(tags=["Dashboard"])
 
@@ -18,12 +19,12 @@ templates = Jinja2Templates(directory=os.path.join(BASE_DIR, "templates"))
 @router.get("/login", response_class=HTMLResponse)
 async def login_page(request: Request):
     """Página de login para administradores"""
-    return templates.TemplateResponse("admin_login.html", {"request": request})
+    return RedirectResponse(url="/login/admin", status_code=302)
 
 
 @router.get("/admin", response_class=HTMLResponse)
 async def admin_dashboard(request: Request, access_token: str = Cookie(None)):
-    """Vista del dashboard administrativo - requiere autenticación."""
+    """SPA shell para dashboard administrativo - requiere autenticación."""
     token = access_token
     if token is None:
         # Intentar obtener del header Authorization
@@ -36,10 +37,7 @@ async def admin_dashboard(request: Request, access_token: str = Cookie(None)):
     
     try:
         verify_token_with_role(token, required_role="admin")
-        return templates.TemplateResponse("admin_dashboard.html", {
-            "request": request,
-            "active_page": "dashboard"
-        })
+        return render_spa_shell("dashboard")
     except HTTPException:
         return RedirectResponse(url="/login/admin", status_code=302)
 
