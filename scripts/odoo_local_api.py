@@ -42,6 +42,7 @@ PG_USER = None
 DEFAULT_MODULES = [
     "spiffy_theme_backend",
     "hide_powered_by_odoo",
+    "rest_api_odoo",
 ]
 
 
