@@ -2,7 +2,6 @@
   import { auth } from '../lib/stores';
   import { Button, Input, Spinner } from '../lib/components';
   import { onMount } from 'svelte';
-  import { api } from '../lib/api';
   
   let username = '';
   let password = '';
@@ -16,6 +15,7 @@
   });
   
   function redirectByRole(role: string) {
+    console.log('[Login] Redirecting to:', role === 'admin' ? '/dashboard' : '/portal');
     if (role === 'admin') {
       window.location.hash = '#/dashboard';
     } else {
@@ -48,12 +48,12 @@
       const data = await response.json();
       console.log('[Login] Success:', data);
       
-      setTimeout(async () => {
-        const match = document.cookie.match(/access_token=([^;]+)/);
-        if (match) api.setToken(match[1]);
-        await auth.init();
-        redirectByRole(data.role);
-      }, 100);
+      // IMPORTANTE: Inicializar el store de auth ANTES del redirect
+      // Esto asegura que App.svelte reconozca al usuario como autenticado
+      await auth.init();
+      
+      console.log('[Login] Auth initialized, redirecting based on role:', data.role);
+      redirectByRole(data.role);
       
     } catch (err) {
       console.error('[Login] Error:', err);
@@ -104,8 +104,8 @@
           <div class="p-4 rounded-lg bg-error/10 border border-error/20"><p class="text-sm text-error">{error}</p></div>
         {/if}
         
-        <Input label="Usuario o Email" name="username" type="text" placeholder="usuario o email" bind:value={username} required disabled={isSubmitting} />
-        <Input label="Contraseña" type="password" name="password" placeholder="••••••••" bind:value={password} required disabled={isSubmitting} />
+        <Input label="Usuario o Email" name="username" type="text" placeholder="usuario o email" autocomplete="username" bind:value={username} required disabled={isSubmitting} />
+        <Input label="Contraseña" type="password" name="password" placeholder="••••••••" autocomplete="current-password" bind:value={password} required disabled={isSubmitting} />
         
         <div class="flex items-center justify-between">
           <label class="flex items-center gap-2 cursor-pointer">

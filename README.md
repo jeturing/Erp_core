@@ -1,23 +1,42 @@
-# Onboarding System - Phase 2 Complete ✅
+# Sajet.us – SaaS ERP Platform | Phase 2 + Phase 3 (Partner-Led Onboarding)
 
 ## Overview
-Sistema de onboarding SaaS que automatiza el registro de clientes, pagos con Stripe, y provisioning de instancias Odoo multitenant en contenedores LXC. Incluye landing pública, flujo de alta, panel admin y portal del cliente.
+Sistema de onboarding SaaS multi-canal que automatiza registro de clientes vía **Stripe Checkout** (directo) o **Partners/Implementadores** (partner-led), con provisioning de instancias Odoo multitenant en contenedores LXC. Incluye landing pública, formularios sin precios, panel admin avanzado, portal de socios y portal del cliente.
 
-**Current Status**: ✅ Phase 2 Complete
-**Last Updated**: Enero 2026
+**Current Status**: ✅ Phase 2 Complete | 🚧 Phase 3 (Partner-Led) – En Documentación  
+**Last Updated**: Febrero 14, 2026
 
 ---
 
 ## 🎯 Phase 2 Deliverables - All Complete ✅
 
-### Nuevas Funcionalidades
+### Nuevas Funcionalidades (Phase 2)
 1. ✅ **Landing Page** - Página de marketing en `/` con CTAs a signup
-2. ✅ **Signup Flow** - Formulario en `/signup` con selección de plan
+2. ✅ **Signup Flow** - Formulario en `/signup` con selección de plan + checkout Stripe
 3. ✅ **Dual Auth System** - Login admin/tenant con cookies httpOnly
 4. ✅ **Admin Dashboard Mejorado** - Navbar Core, páginas de logs y billing
 5. ✅ **Tenant Portal** - Portal cliente con facturación Stripe
 6. ✅ **MCP Integration** - Model Context Protocol para API, logs y PostgreSQL
 7. ✅ **Templates Core** - Sistema de plantillas base reutilizables
+
+---
+
+## 🚀 Phase 3 – Partner-Led Onboarding (En Documentación)
+
+### Nuevas Funcionalidades (Phase 3)
+1. 📋 **Onboarding Público Sin Precios** - Formulario multi-etapa (`/onboarding/leads`) para captar leads sin mostrar dinero
+2. 🤝 **Rol Proveedor de Servicio (Partner)** - Portal de socios con acceso a leads asignados y creación de tenants
+3. 📊 **Cotizador Interno** - Dimensionamiento técnico (complejidad, migración, requerimientos) con gating automático
+4. 💼 **Gestión de Partners** - Administración de proveedores, comisiones (50/50), trazabilidad de leads
+5. ⚙️ **Flujo Partner-Led** - Lead → Partner califica → Tenant activo → Factura + Comisión
+6. 🎯 **Gating de Jeturing** - Custom (integraciones, MRP, multi-empresa) solo si Jeturing lo aprueba
+
+**Documentación Phase 3**:
+- [RESUMEN_EJECUTIVO_PHASE_3.md](docs/RESUMEN_EJECUTIVO_PHASE_3.md) – Visión ejecutiva
+- [ONBOARDING_PUBLICO_SIN_PRECIOS.md](docs/ONBOARDING_PUBLICO_SIN_PRECIOS.md) – Flujo, API, BD, gating
+- [ROLES_PERMISOS_MATRIZ.md](docs/ROLES_PERMISOS_MATRIZ.md) – ACL y permisos por rol
+- [PR_TEMPLATE_ONBOARDING_PARTNER.md](docs/PR_TEMPLATE_ONBOARDING_PARTNER.md) – Checklist de integración
+- [VALIDACION_NO_REGRESION.md](docs/VALIDACION_NO_REGRESION.md) – Pruebas de no-regresión
 
 ### Rutas Principales
 | Ruta | Descripción |
