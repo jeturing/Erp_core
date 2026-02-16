@@ -1,277 +1,248 @@
 <script lang="ts">
   import { onMount } from 'svelte';
-  import { Plus, Edit, Shield, Lock } from 'lucide-svelte';
-  import { rolesApi } from '../lib/api/roles';
-  import type { Role } from '../lib/api/roles';
-  import { Modal } from '../lib/components';
+  import { rolesApi } from '../lib/api';
   import { toasts } from '../lib/stores/toast';
   import { formatDate } from '../lib/utils/formatters';
+  import { Lock, Plus } from 'lucide-svelte';
 
-  let roles: Role[] = [];
-  let total = 0;
-  let loading = false;
+  interface Role {
+    id: string | number;
+    name: string;
+    description?: string;
+    permissions: string[];
+    is_system?: boolean;
+    created_at?: string;
+  }
 
-  // Modal state
-  let modalOpen = false;
-  let modalLoading = false;
-  let editingRole: Role | null = null;
+  let roles = $state<Role[]>([]);
+  let loading = $state(true);
+  let showAddForm = $state(false);
 
-  // Form fields
-  let formName = '';
-  let formDescription = '';
-  let formPermissions = '';
+  // Add form
+  let addName = $state('');
+  let addDescription = $state('');
+  let addPermissions = $state('');
+  let addLoading = $state(false);
+
+  // Edit state - inline per row
+  let editingRoleId = $state<string | number | null>(null);
+  let editName = $state('');
+  let editDescription = $state('');
+  let editPermissions = $state('');
+  let editLoading = $state(false);
 
   async function loadRoles() {
     loading = true;
     try {
-      const resp = await rolesApi.list();
-      roles = resp.roles || [];
-      total = resp.total || 0;
-    } catch (err) {
-      toasts.error(err instanceof Error ? err.message : 'Error al cargar roles');
+      const data = await rolesApi.list();
+      roles = data.roles ?? [];
+    } catch (e: any) {
+      toasts.error(e?.message ?? 'Error al cargar roles');
     } finally {
       loading = false;
     }
   }
 
-  function openCreateModal() {
-    editingRole = null;
-    formName = '';
-    formDescription = '';
-    formPermissions = '';
-    modalOpen = true;
-  }
-
-  function openEditModal(role: Role) {
-    if (role.is_system) return;
-    editingRole = role;
-    formName = role.name;
-    formDescription = role.description || '';
-    formPermissions = (role.permissions || []).join('\n');
-    modalOpen = true;
-  }
-
-  function parsePermissions(raw: string): string[] {
-    return raw
-      .split(/[\n,]/)
-      .map(p => p.trim())
-      .filter(p => p.length > 0);
-  }
-
-  async function handleSave() {
-    if (!formName.trim()) {
-      toasts.warning('El nombre del rol es requerido');
-      return;
-    }
-
-    modalLoading = true;
-    const permissions = parsePermissions(formPermissions);
-
+  async function handleCreate(e: Event) {
+    e.preventDefault();
+    addLoading = true;
     try {
-      if (editingRole) {
-        await rolesApi.update(editingRole.id, {
-          name: formName.trim(),
-          description: formDescription.trim() || undefined,
-          permissions,
-        });
-        toasts.success(`Rol "${formName}" actualizado correctamente`);
-      } else {
-        await rolesApi.create({
-          name: formName.trim(),
-          description: formDescription.trim() || undefined,
-          permissions,
-        });
-        toasts.success(`Rol "${formName}" creado correctamente`);
-      }
-      modalOpen = false;
+      const permissions = addPermissions
+        .split('\n')
+        .map(p => p.trim())
+        .filter(Boolean);
+      await rolesApi.create({ name: addName, description: addDescription, permissions });
+      toasts.success('Rol creado');
+      showAddForm = false;
+      addName = '';
+      addDescription = '';
+      addPermissions = '';
       await loadRoles();
-    } catch (err) {
-      toasts.error(err instanceof Error ? err.message : 'Error al guardar el rol');
+    } catch (e: any) {
+      toasts.error(e?.message ?? 'Error al crear rol');
     } finally {
-      modalLoading = false;
+      addLoading = false;
     }
   }
 
-  function getVisiblePermissions(perms: string[]): string[] {
-    return perms.slice(0, 3);
+  function startEdit(role: Role) {
+    editingRoleId = role.id;
+    editName = role.name;
+    editDescription = role.description ?? '';
+    editPermissions = (role.permissions ?? []).join('\n');
+  }
+
+  function cancelEdit() {
+    editingRoleId = null;
+    editName = '';
+    editDescription = '';
+    editPermissions = '';
+  }
+
+  async function handleUpdate(id: string | number) {
+    editLoading = true;
+    try {
+      const permissions = editPermissions
+        .split('\n')
+        .map(p => p.trim())
+        .filter(Boolean);
+      await rolesApi.update(id as number, { name: editName, description: editDescription, permissions });
+      toasts.success('Rol actualizado');
+      cancelEdit();
+      await loadRoles();
+    } catch (e: any) {
+      toasts.error(e?.message ?? 'Error al actualizar rol');
+    } finally {
+      editLoading = false;
+    }
   }
 
   onMount(loadRoles);
 </script>
 
-<div class="p-6 space-y-6">
+<div class="space-y-6">
   <!-- Header -->
   <div class="flex items-center justify-between">
     <div>
       <h1 class="page-title">GESTIÓN DE ROLES</h1>
-      <p class="page-subtitle mt-1">Administración de roles y permisos del sistema</p>
+      <p class="page-subtitle">Control de permisos y acceso</p>
     </div>
-    <button class="btn btn-primary btn-sm" on:click={openCreateModal}>
-      <Plus class="w-3.5 h-3.5 mr-1.5 inline" />
+    <button class="btn-accent px-4 py-2 flex items-center gap-2" onclick={() => showAddForm = !showAddForm}>
+      <Plus size={14} />
       NUEVO ROL
     </button>
   </div>
 
-  <!-- Stats -->
-  <div class="grid grid-cols-2 sm:grid-cols-3 gap-4">
-    <div class="stat-card">
-      <div class="stat-value">{total}</div>
-      <div class="stat-label">Total Roles</div>
+  <!-- Inline Add Form -->
+  {#if showAddForm}
+    <div class="card border-l-2 border-l-terracotta">
+      <h3 class="section-heading mb-5">NUEVO ROL</h3>
+      <form onsubmit={handleCreate} class="space-y-4">
+        <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
+          <div>
+            <label class="label" for="f-name">Nombre</label>
+            <input id="f-name" class="input w-full px-3 py-2" type="text" bind:value={addName} placeholder="editor" required />
+          </div>
+          <div>
+            <label class="label" for="f-desc">Descripción</label>
+            <input id="f-desc" class="input w-full px-3 py-2" type="text" bind:value={addDescription} placeholder="Descripción del rol" />
+          </div>
+        </div>
+        <div>
+          <label class="label" for="f-perms">Permisos (uno por línea)</label>
+          <textarea
+            id="f-perms"
+            class="input w-full px-3 py-2 font-mono text-xs"
+            rows="5"
+            bind:value={addPermissions}
+            placeholder="tenants:read&#10;tenants:write&#10;billing:read"
+          ></textarea>
+        </div>
+        <div class="flex gap-3 pt-2">
+          <button type="button" class="btn-secondary px-4 py-2" onclick={() => showAddForm = false}>CANCELAR</button>
+          <button type="submit" class="btn-accent px-4 py-2 disabled:opacity-60" disabled={addLoading}>
+            {addLoading ? 'GUARDANDO...' : 'GUARDAR'}
+          </button>
+        </div>
+      </form>
     </div>
-    <div class="stat-card">
-      <div class="stat-value text-amber-600">{roles.filter(r => r.is_system).length}</div>
-      <div class="stat-label">Roles Sistema</div>
-    </div>
-    <div class="stat-card">
-      <div class="stat-value text-text-primary">{roles.filter(r => !r.is_system).length}</div>
-      <div class="stat-label">Roles Personalizados</div>
-    </div>
-  </div>
+  {/if}
 
   <!-- Table -->
   <div class="card p-0 overflow-hidden">
     {#if loading}
-      <div class="py-16 flex items-center justify-center">
-        <div class="text-sm text-gray-500 animate-pulse">Cargando roles...</div>
-      </div>
+      <div class="p-8 text-center text-gray-500 text-sm">Cargando roles...</div>
     {:else if roles.length === 0}
-      <div class="py-16 flex flex-col items-center justify-center gap-2">
-        <Shield class="w-8 h-8 text-border-light" />
-        <p class="text-sm text-gray-500">No hay roles definidos</p>
-      </div>
+      <div class="p-8 text-center text-gray-500 text-sm">No hay roles definidos</div>
     {:else}
-      <div class="overflow-x-auto">
-        <table class="table w-full">
-          <thead>
+      <table class="table w-full">
+        <thead>
+          <tr>
+            <th>NOMBRE</th>
+            <th>DESCRIPCIÓN</th>
+            <th>PERMISOS</th>
+            <th>TIPO</th>
+            <th>CREADO</th>
+            <th>ACCIONES</th>
+          </tr>
+        </thead>
+        <tbody>
+          {#each roles as role (role.id)}
             <tr>
-              <th>Nombre</th>
-              <th>Descripción</th>
-              <th>Permisos</th>
-              <th>Tipo</th>
-              <th>Creado</th>
-              <th>Acciones</th>
-            </tr>
-          </thead>
-          <tbody>
-            {#each roles as role}
-              <tr>
-                <td>
-                  <div class="flex items-center gap-2">
-                    {#if role.is_system}
-                      <Lock class="w-3.5 h-3.5 text-amber-500 flex-shrink-0" />
-                    {:else}
-                      <Shield class="w-3.5 h-3.5 text-gray-500 flex-shrink-0" />
-                    {/if}
-                    <span class="text-sm font-semibold text-text-primary">{role.name}</span>
-                  </div>
-                </td>
-                <td>
-                  <span class="text-sm text-text-secondary">
-                    {#if role.description}{role.description}{:else}<span class="text-gray-500 italic text-xs">Sin descripción</span>{/if}
-                  </span>
-                </td>
-                <td>
-                  <div class="flex items-center gap-1.5 flex-wrap">
-                    {#if role.permissions && role.permissions.length > 0}
-                      {#each getVisiblePermissions(role.permissions) as perm}
-                        <span class="badge badge-info text-[9px]">{perm}</span>
-                      {/each}
-                      {#if role.permissions.length > 3}
-                        <span class="badge badge-neutral text-[9px]">+{role.permissions.length - 3} más</span>
-                      {/if}
-                      <span class="text-[10px] text-gray-500 ml-1">({role.permissions.length})</span>
-                    {:else}
-                      <span class="text-xs text-gray-500 italic">Sin permisos</span>
-                    {/if}
-                  </div>
-                </td>
-                <td>
+              <td>
+                <div class="flex items-center gap-2">
                   {#if role.is_system}
-                    <span class="badge badge-warning">Sistema</span>
-                  {:else}
-                    <span class="badge badge-neutral">Custom</span>
+                    <Lock size={12} class="text-gray-400 shrink-0" />
                   {/if}
-                </td>
-                <td>
-                  <span class="text-xs text-text-secondary">{formatDate(role.created_at)}</span>
-                </td>
-                <td>
-                  <button
-                    class="btn btn-secondary btn-sm {role.is_system ? 'opacity-40 cursor-not-allowed' : ''}"
-                    on:click={() => openEditModal(role)}
-                    disabled={role.is_system}
-                    title={role.is_system ? 'Los roles del sistema no se pueden editar' : 'Editar rol'}
-                  >
-                    <Edit class="w-3 h-3 mr-1 inline" />
-                    EDITAR
-                  </button>
+                  <span class="font-medium text-sm">{role.name}</span>
+                </div>
+              </td>
+              <td class="text-sm text-gray-500">{role.description ?? '-'}</td>
+              <td>
+                <div class="flex flex-wrap gap-1">
+                  {#each (role.permissions ?? []).slice(0, 3) as perm}
+                    <span class="badge-neutral text-[10px]">{perm}</span>
+                  {/each}
+                  {#if (role.permissions ?? []).length > 3}
+                    <span class="text-xs text-gray-400">+{(role.permissions ?? []).length - 3} más</span>
+                  {/if}
+                </div>
+              </td>
+              <td>
+                {#if role.is_system}
+                  <span class="badge-info">Sistema</span>
+                {:else}
+                  <span class="badge-neutral">Custom</span>
+                {/if}
+              </td>
+              <td class="text-sm text-gray-500">{role.created_at ? formatDate(role.created_at) : '-'}</td>
+              <td>
+                {#if !role.is_system}
+                  <button class="btn-secondary btn-sm" onclick={() => startEdit(role)}>EDITAR</button>
+                {/if}
+              </td>
+            </tr>
+            <!-- Inline edit row -->
+            {#if editingRoleId === role.id}
+              <tr class="bg-bg-page">
+                <td colspan="6" class="py-4 px-6">
+                  <div class="space-y-4">
+                    <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
+                      <div>
+                        <label class="label" for="e-name-{role.id}">Nombre</label>
+                        <input id="e-name-{role.id}" class="input w-full px-3 py-2" type="text" bind:value={editName} required />
+                      </div>
+                      <div>
+                        <label class="label" for="e-desc-{role.id}">Descripción</label>
+                        <input id="e-desc-{role.id}" class="input w-full px-3 py-2" type="text" bind:value={editDescription} />
+                      </div>
+                    </div>
+                    <div>
+                      <label class="label" for="e-perms-{role.id}">Permisos (uno por línea)</label>
+                      <textarea
+                        id="e-perms-{role.id}"
+                        class="input w-full px-3 py-2 font-mono text-xs"
+                        rows="5"
+                        bind:value={editPermissions}
+                      ></textarea>
+                    </div>
+                    <div class="flex gap-3">
+                      <button class="btn-secondary btn-sm" onclick={cancelEdit}>CANCELAR</button>
+                      <button
+                        class="btn-accent btn-sm disabled:opacity-60"
+                        disabled={editLoading}
+                        onclick={() => handleUpdate(role.id)}
+                      >
+                        {editLoading ? 'GUARDANDO...' : 'GUARDAR'}
+                      </button>
+                    </div>
+                  </div>
                 </td>
               </tr>
-            {/each}
-          </tbody>
-        </table>
-      </div>
+            {/if}
+          {/each}
+        </tbody>
+      </table>
     {/if}
   </div>
 </div>
-
-<!-- Create/Edit Modal -->
-<Modal
-  isOpen={modalOpen}
-  title={editingRole ? `Editar Rol: ${editingRole.name}` : 'Nuevo Rol'}
-  confirmText={editingRole ? 'GUARDAR CAMBIOS' : 'CREAR ROL'}
-  loading={modalLoading}
-  size="md"
-  on:close={() => { modalOpen = false; }}
-  on:confirm={handleSave}
->
-  <div class="space-y-4">
-    <div>
-      <label class="label block mb-1.5" for="role-name">Nombre del Rol</label>
-      <input
-        id="role-name"
-        class="input w-full px-3 py-2 text-sm rounded"
-        type="text"
-        placeholder="ej. Supervisor de Ventas"
-        bind:value={formName}
-        disabled={modalLoading}
-      />
-    </div>
-
-    <div>
-      <label class="label block mb-1.5" for="role-desc">Descripción</label>
-      <input
-        id="role-desc"
-        class="input w-full px-3 py-2 text-sm rounded"
-        type="text"
-        placeholder="Descripción opcional del rol"
-        bind:value={formDescription}
-        disabled={modalLoading}
-      />
-    </div>
-
-    <div>
-      <label class="label block mb-1.5" for="role-perms">Permisos</label>
-      <textarea
-        id="role-perms"
-        class="input w-full px-3 py-2 text-sm rounded font-mono resize-none"
-        rows="6"
-        placeholder="Un permiso por línea o separados por coma:&#10;read:tenants&#10;write:tenants&#10;admin:billing"
-        bind:value={formPermissions}
-        disabled={modalLoading}
-      ></textarea>
-      <p class="text-[10px] text-gray-500 mt-1">Un permiso por línea o separados por coma.</p>
-    </div>
-
-    {#if formPermissions}
-      <div>
-        <span class="label block mb-1.5">Vista previa de permisos</span>
-        <div class="flex flex-wrap gap-1.5 p-3 bg-bg-page rounded border border-border-light min-h-[40px]">
-          {#each parsePermissions(formPermissions) as perm}
-            <span class="badge badge-info text-[10px]">{perm}</span>
-          {/each}
-        </div>
-      </div>
-    {/if}
-  </div>
-</Modal>

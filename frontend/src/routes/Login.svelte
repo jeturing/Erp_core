@@ -1,184 +1,218 @@
 <script lang="ts">
-  import { onMount } from 'svelte';
   import { auth } from '../lib/stores';
-  import { Eye, EyeOff } from 'lucide-svelte';
-  import { api } from '../lib/api';
 
-  let username = '';
-  let password = '';
-  let totpCode = '';
-  let showPassword = false;
-  let step: 'credentials' | 'totp' = 'credentials';
-  let userRole: 'admin' | 'partner' | 'tenant' = 'admin';
+  let email = $state('');
+  let password = $state('');
+  let showPassword = $state(false);
+  let loading = $state(false);
+  let error = $state('');
+  let selectedRole = $state<'admin' | 'partner' | 'empresa'>('admin');
+  let requiresTotp = $state(false);
+  let totpCode = $state('');
+  let storedEmail = $state('');
+  let storedPassword = $state('');
 
-  const roles = [
-    { id: 'admin',   label: 'Admin' },
-    { id: 'partner', label: 'Partner' },
-    { id: 'tenant',  label: 'Empresa' },
-  ] as const;
+  async function handleLogin(e: Event) {
+    e.preventDefault();
+    loading = true;
+    error = '';
 
-  async function handleSubmit() {
-    if (step === 'credentials') {
-      const result = await auth.login(username, password);
-      if (result?.requires_totp) {
-        step = 'totp';
-      }
-    } else {
-      // TOTP verify
-      try {
-        await api.post('/api/auth/totp/verify', { code: totpCode, username });
-        await auth.init();
-      } catch {
-        auth.setError('Código TOTP inválido');
-      }
+    const result = await auth.login(email, password);
+
+    if (result.requires_totp) {
+      storedEmail = email;
+      storedPassword = password;
+      requiresTotp = true;
+      loading = false;
+      return;
     }
+
+    if (result.error) {
+      error = result.error;
+      loading = false;
+      return;
+    }
+
+    if (result.success) {
+      window.location.hash = '#/dashboard';
+    }
+
+    loading = false;
   }
 
-  function handleKeydown(e: KeyboardEvent) {
-    if (e.key === 'Enter') handleSubmit();
-  }
+  async function handleTotp(e: Event) {
+    e.preventDefault();
+    loading = true;
+    error = '';
 
-  onMount(() => {
-    username = '';
-    password = '';
-  });
+    const result = await auth.loginWithTotp(storedEmail, storedPassword, totpCode);
+
+    if (result.error) {
+      error = result.error;
+      loading = false;
+      return;
+    }
+
+    if (result.success) {
+      window.location.hash = '#/dashboard';
+    }
+
+    loading = false;
+  }
 </script>
 
-<div class="min-h-screen flex bg-bg-page">
-  <!-- Left panel – charcoal -->
-  <div class="hidden lg:flex w-[600px] flex-shrink-0 bg-charcoal flex-col justify-between px-14 py-16">
-    <div class="flex items-center gap-3">
-      <div class="w-8 h-8 bg-terracotta flex items-center justify-center">
-        <span class="text-text-light font-bold font-sans text-sm">S</span>
-      </div>
-      <span class="font-sans font-bold text-text-light tracking-wide text-sm uppercase">Sajet ERP</span>
-      <span class="ml-2 text-gray-500 font-body text-xs">Enterprise Resource Planning</span>
-    </div>
-
+<div class="min-h-screen flex">
+  <!-- Left Panel -->
+  <div class="hidden lg:flex lg:w-1/2 bg-charcoal flex-col justify-between p-12">
     <div>
-      <h1 class="font-sans font-bold text-text-light text-5xl leading-tight">
-        Gestiona tu negocio<br />desde un solo lugar.
-      </h1>
-      <p class="mt-6 text-gray-500 font-body text-base max-w-sm">
-        Plataforma multi-tenant para distribuidores, gestores y empresas que buscan escalar con tecnología.
-      </p>
+      <div class="flex items-center gap-3 mb-16">
+        <div class="w-10 h-10 bg-terracotta flex items-center justify-center">
+          <span class="text-white font-bold text-xl">S</span>
+        </div>
+        <span class="text-white font-bold text-lg tracking-widest uppercase">SAJET ERP</span>
+      </div>
+      <div class="mt-16">
+        <p class="text-gray-400 text-xs uppercase tracking-[0.15em] mb-6">Plataforma Empresarial</p>
+        <h2 class="text-white text-4xl font-bold leading-tight mb-8">
+          Gestión inteligente<br />para tu empresa.
+        </h2>
+        <p class="text-gray-500 text-sm leading-relaxed max-w-sm">
+          Controla tenants, infraestructura, dominios y facturación desde un solo panel administrativo unificado.
+        </p>
+      </div>
     </div>
-
-    <p class="text-gray-600 font-body text-xs">© {new Date().getFullYear()} Sajet ERP. Todos los derechos reservados.</p>
+    <div>
+      <p class="text-gray-600 text-xs">© 2026 Sajet. Todos los derechos reservados.</p>
+    </div>
   </div>
 
-  <!-- Right panel -->
-  <div class="flex-1 flex items-center justify-center px-8 py-16 bg-bg-page">
+  <!-- Right Panel -->
+  <div class="w-full lg:w-1/2 bg-bg-page flex items-center justify-center p-8">
     <div class="w-full max-w-sm">
-      {#if step === 'credentials'}
-        <h2 class="font-sans font-bold text-text-primary text-2xl mb-1">Iniciar Sesión</h2>
-        <p class="text-gray-500 font-body text-sm mb-8">Ingresa tus credenciales para acceder al sistema.</p>
+      <!-- Mobile logo -->
+      <div class="flex lg:hidden items-center gap-3 mb-10">
+        <div class="w-9 h-9 bg-terracotta flex items-center justify-center">
+          <span class="text-white font-bold text-lg">S</span>
+        </div>
+        <span class="font-bold text-base tracking-widest uppercase text-text-primary">SAJET ERP</span>
+      </div>
 
-        <!-- Fields -->
-        <div class="space-y-5">
+      {#if !requiresTotp}
+        <h2 class="text-2xl font-bold text-text-primary mb-1">Iniciar Sesión</h2>
+        <p class="text-sm text-gray-500 mb-8">Accede al panel de administración</p>
+
+        <!-- Role tabs -->
+        <div class="flex gap-1 mb-8 bg-bg-card border border-border-light p-1">
+          {#each [['admin', 'Admin'], ['partner', 'Partner'], ['empresa', 'Empresa']] as [val, label]}
+            <button
+              type="button"
+              class="flex-1 py-1.5 text-[11px] uppercase tracking-[0.08em] font-semibold transition-colors {selectedRole === val ? 'bg-charcoal text-white' : 'text-gray-500 hover:text-text-primary'}"
+              onclick={() => selectedRole = val as typeof selectedRole}
+            >
+              {label}
+            </button>
+          {/each}
+        </div>
+
+        <form onsubmit={handleLogin} class="space-y-5">
           <div>
-            <label class="label" for="login-user">Correo o usuario</label>
+            <label class="label" for="email">Email</label>
             <input
-              id="login-user"
-              type="text"
-              class="input"
-              placeholder="usuario@empresa.com"
-              bind:value={username}
-              on:keydown={handleKeydown}
-              autocomplete="username"
+              id="email"
+              type="email"
+              class="input w-full px-3 py-2"
+              placeholder="admin@sajet.us"
+              bind:value={email}
+              required
+              autocomplete="email"
             />
           </div>
+
           <div>
-            <div class="flex items-center justify-between mb-1.5">
-              <label class="label !mb-0" for="login-pass">Contraseña</label>
-              <a href="#/forgot-password" class="text-[11px] text-terracotta font-sans hover:underline">¿Olvidaste tu contraseña?</a>
-            </div>
+            <label class="label" for="password">Contraseña</label>
             <div class="relative">
               <input
-                id="login-pass"
+                id="password"
                 type={showPassword ? 'text' : 'password'}
-                class="input pr-11"
+                class="input w-full px-3 py-2 pr-10"
                 placeholder="••••••••"
                 bind:value={password}
-                on:keydown={handleKeydown}
+                required
                 autocomplete="current-password"
               />
               <button
                 type="button"
-                class="absolute right-3 top-1/2 -translate-y-1/2 text-gray-400 hover:text-text-secondary"
-                on:click={() => (showPassword = !showPassword)}
-                tabindex="-1"
+                class="absolute right-3 top-1/2 -translate-y-1/2 text-gray-400 hover:text-gray-600"
+                onclick={() => showPassword = !showPassword}
+                aria-label={showPassword ? 'Ocultar contraseña' : 'Mostrar contraseña'}
               >
-                {#if showPassword}<EyeOff size={16} />{:else}<Eye size={16} />{/if}
+                {#if showPassword}
+                  <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M17.94 17.94A10.07 10.07 0 0 1 12 20c-7 0-11-8-11-8a18.45 18.45 0 0 1 5.06-5.94M9.9 4.24A9.12 9.12 0 0 1 12 4c7 0 11 8 11 8a18.5 18.5 0 0 1-2.16 3.19m-6.72-1.07a3 3 0 1 1-4.24-4.24"/><line x1="1" y1="1" x2="23" y2="23"/></svg>
+                {:else}
+                  <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"/><circle cx="12" cy="12" r="3"/></svg>
+                {/if}
               </button>
             </div>
           </div>
-        </div>
 
-        {#if $auth.error}
-          <p class="mt-4 text-sm text-error font-body">{$auth.error}</p>
-        {/if}
+          {#if error}
+            <div class="bg-red-50 border border-red-200 text-red-700 text-sm px-3 py-2">
+              {error}
+            </div>
+          {/if}
 
-        <button
-          type="button"
-          class="btn-primary w-full mt-6 py-3"
-          on:click={handleSubmit}
-          disabled={$auth.isLoading}
-        >
-          {$auth.isLoading ? 'Ingresando...' : 'INGRESAR AL SISTEMA'}
-        </button>
-
-        <!-- Role selector -->
-        <div class="mt-8">
-          <p class="text-[11px] uppercase tracking-widest text-gray-500 font-sans mb-3 text-center">Tipo de acceso</p>
-          <div class="flex gap-2 justify-center">
-            {#each roles as r}
-              <button
-                type="button"
-                class={`px-4 py-2 text-[10px] font-semibold uppercase tracking-widest font-sans border transition-colors ${
-                  userRole === r.id
-                    ? 'bg-charcoal text-text-light border-charcoal'
-                    : 'bg-transparent text-gray-500 border-border-light hover:border-charcoal'
-                }`}
-                on:click={() => (userRole = r.id)}
-              >
-                {r.label}
-              </button>
-            {/each}
-          </div>
-        </div>
-
+          <button
+            type="submit"
+            class="btn-primary w-full py-3 mt-2 disabled:opacity-60"
+            disabled={loading}
+          >
+            {loading ? 'Iniciando...' : 'Ingresar'}
+          </button>
+        </form>
       {:else}
         <!-- TOTP Step -->
-        <h2 class="font-sans font-bold text-text-primary text-2xl mb-1">Verificación 2FA</h2>
-        <p class="text-gray-500 font-body text-sm mb-8">Ingresa el código de tu aplicación autenticadora.</p>
+        <h2 class="text-2xl font-bold text-text-primary mb-1">Verificación en dos pasos</h2>
+        <p class="text-sm text-gray-500 mb-8">Ingresa el código de 6 dígitos de tu aplicación autenticadora</p>
 
-        <div>
-          <label class="label" for="totp-code">Código TOTP (6 dígitos)</label>
-          <input
-            id="totp-code"
-            type="text"
-            inputmode="numeric"
-            maxlength="6"
-            class="input text-center text-xl tracking-[0.3em] font-mono"
-            placeholder="000000"
-            bind:value={totpCode}
-            on:keydown={handleKeydown}
-            autofocus
-          />
-        </div>
+        <form onsubmit={handleTotp} class="space-y-5">
+          <div>
+            <label class="label" for="totp">Código TOTP</label>
+            <input
+              id="totp"
+              type="text"
+              inputmode="numeric"
+              pattern="[0-9]{6}"
+              maxlength="6"
+              class="input w-full px-3 py-2 text-center text-2xl tracking-[0.5em] font-mono"
+              placeholder="000000"
+              bind:value={totpCode}
+              required
+              autocomplete="one-time-code"
+            />
+          </div>
 
-        {#if $auth.error}
-          <p class="mt-4 text-sm text-error font-body">{$auth.error}</p>
-        {/if}
+          {#if error}
+            <div class="bg-red-50 border border-red-200 text-red-700 text-sm px-3 py-2">
+              {error}
+            </div>
+          {/if}
 
-        <button type="button" class="btn-primary w-full mt-6 py-3" on:click={handleSubmit} disabled={$auth.isLoading}>
-          {$auth.isLoading ? 'Verificando...' : 'VERIFICAR CÓDIGO'}
-        </button>
+          <button
+            type="submit"
+            class="btn-primary w-full py-3"
+            disabled={loading || totpCode.length !== 6}
+          >
+            {loading ? 'Verificando...' : 'Verificar'}
+          </button>
 
-        <button type="button" class="btn-ghost w-full mt-3" on:click={() => { step = 'credentials'; auth.clearError?.(); }}>
-          Volver al inicio de sesión
-        </button>
+          <button
+            type="button"
+            class="btn-secondary w-full py-2"
+            onclick={() => { requiresTotp = false; totpCode = ''; error = ''; }}
+          >
+            Volver al inicio
+          </button>
+        </form>
       {/if}
     </div>
   </div>

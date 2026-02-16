@@ -94,7 +94,7 @@
       case 'logs':
       case 'tunnels':
       case 'roles':
-        currentPage = route;
+        currentPage = route as AppPage;
         break;
       default:
         currentPage = 'notfound';
@@ -129,10 +129,10 @@
 <Toast />
 
 {#if $auth.isLoading && currentPage !== 'landing'}
-  <div class="min-h-screen bg-surface-dark flex items-center justify-center">
+  <div class="min-h-screen bg-bg-page flex items-center justify-center">
     <div class="text-center">
       <Spinner size="lg" />
-      <p class="mt-4 text-secondary-400">Cargando...</p>
+      <p class="mt-4 text-gray-500">Cargando...</p>
     </div>
   </div>
 {:else if currentPage === 'landing'}
@@ -163,9 +163,9 @@
       <Roles />
     {:else}
       <div class="p-6">
-        <h1 class="text-2xl font-bold text-white">404 - Pagina no encontrada</h1>
-        <p class="text-secondary-400 mt-2">La ruta solicitada no existe dentro de la SPA.</p>
-        <a href="#/dashboard" class="text-primary-400 hover:text-primary-300 mt-4 inline-block">Volver al Dashboard</a>
+        <h1 class="page-title">404 - Página no encontrada</h1>
+        <p class="page-subtitle mt-2">La ruta solicitada no existe dentro de la SPA.</p>
+        <a href="#/dashboard" class="text-terracotta hover:underline mt-4 inline-block text-sm">Volver al Dashboard</a>
       </div>
     {/if}
   </Layout>
