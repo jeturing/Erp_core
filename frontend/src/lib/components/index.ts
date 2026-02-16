@@ -7,3 +7,4 @@ export { default as Modal } from './Modal.svelte';
 export { default as StatCard } from './StatCard.svelte';
 export { default as Spinner } from './Spinner.svelte';
 export { default as Icon } from './Icon.svelte';
+export { default as Toast } from './Toast.svelte';
