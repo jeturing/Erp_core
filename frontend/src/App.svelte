@@ -12,7 +12,11 @@
   import Infrastructure from './pages/Infrastructure.svelte';
   import Billing from './pages/Billing.svelte';
   import Settings from './pages/Settings.svelte';
+  import Logs from './pages/Logs.svelte';
+  import Tunnels from './pages/Tunnels.svelte';
+  import Roles from './pages/Roles.svelte';
   import { Spinner } from './lib/components';
+  import Toast from './lib/components/Toast.svelte';
 
   type AppPage =
     | 'landing'
@@ -24,6 +28,10 @@
     | 'infrastructure'
     | 'billing'
     | 'settings'
+    | 'logs'
+    | 'tunnels'
+    | 'roles'
+    | 'signup'
     | 'notfound';
 
   let currentRoute = 'landing';
@@ -83,6 +91,9 @@
       case 'infrastructure':
       case 'billing':
       case 'settings':
+      case 'logs':
+      case 'tunnels':
+      case 'roles':
         currentPage = route;
         break;
       default:
@@ -115,6 +126,8 @@
   }
 </script>
 
+<Toast />
+
 {#if $auth.isLoading && currentPage !== 'landing'}
   <div class="min-h-screen bg-surface-dark flex items-center justify-center">
     <div class="text-center">
@@ -142,6 +155,12 @@
       <Billing />
     {:else if currentPage === 'settings'}
       <Settings />
+    {:else if currentPage === 'logs'}
+      <Logs />
+    {:else if currentPage === 'tunnels'}
+      <Tunnels />
+    {:else if currentPage === 'roles'}
+      <Roles />
     {:else}
       <div class="p-6">
         <h1 class="text-2xl font-bold text-white">404 - Pagina no encontrada</h1>

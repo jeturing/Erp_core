@@ -1,9 +1,9 @@
 <script lang="ts">
   import { onMount, onDestroy } from 'svelte';
   import { dashboard, auth } from '../lib/stores';
-  import { Card, StatCard, Badge, Spinner, Button } from '../lib/components';
-  import { RefreshCw, AlertCircle, Cpu, MemoryStick, DollarSign, Users, Clock3 } from 'lucide-svelte';
   import { tenantsApi } from '../lib/api';
+  import { formatCurrency, formatDate, formatPercent } from '../lib/utils/formatters';
+  import { RefreshCw, AlertCircle, CheckCircle, AlertTriangle, XCircle } from 'lucide-svelte';
   import type { Tenant } from '../lib/types';
 
   let recentTenants: Tenant[] = [];
@@ -11,18 +11,19 @@
 
   async function loadTenants() {
     try {
-      const response = await tenantsApi.list();
-      recentTenants = [...response.items]
-        .sort((a, b) => {
-          const aDate = a.created_at ? new Date(a.created_at).getTime() : 0;
-          const bDate = b.created_at ? new Date(b.created_at).getTime() : 0;
-          return bDate - aDate;
-        })
-        .slice(0, 8);
+      const r = await tenantsApi.list();
+      recentTenants = [...r.items].sort((a, b) => {
+        return (b.created_at ? new Date(b.created_at).getTime() : 0) -
+               (a.created_at ? new Date(a.created_at).getTime() : 0);
+      }).slice(0, 5);
       tenantsError = '';
-    } catch (error) {
-      tenantsError = error instanceof Error ? error.message : 'No se pudo cargar tenants';
+    } catch (e) {
+      tenantsError = e instanceof Error ? e.message : 'Error cargando tenants';
     }
+  }
+
+  async function handleRefresh() {
+    await Promise.all([dashboard.load(), loadTenants()]);
   }
 
   onMount(async () => {
@@ -30,208 +31,176 @@
     await loadTenants();
     dashboard.startAutoRefresh(60000);
   });
+  onDestroy(() => dashboard.stopAutoRefresh());
 
-  onDestroy(() => {
-    dashboard.stopAutoRefresh();
-  });
-
-  function formatCurrency(amount: number): string {
-    return new Intl.NumberFormat('en-US', {
-      style: 'currency',
-      currency: 'USD',
-      minimumFractionDigits: 0,
-      maximumFractionDigits: 0,
-    }).format(amount || 0);
+  function statusBadge(status: string) {
+    if (status === 'active') return 'badge-success';
+    if (status === 'provisioning' || status === 'pending') return 'badge-warning';
+    if (status === 'suspended' || status === 'payment_failed') return 'badge-error';
+    return 'badge-neutral';
   }
 
-  function formatPercent(value: number): string {
-    if (Number.isNaN(value)) return '0%';
-    return `${Math.max(0, Math.round(value))}%`;
-  }
-
-  function formatDate(dateString?: string | null): string {
-    if (!dateString) return '-';
-    return new Intl.DateTimeFormat('es-ES', {
-      day: '2-digit',
-      month: 'short',
-      year: 'numeric',
-    }).format(new Date(dateString));
-  }
-
-  function statusVariant(status: string) {
-    if (status === 'active') return 'success';
-    if (status === 'pending' || status === 'provisioning') return 'warning';
-    if (status === 'payment_failed' || status === 'suspended') return 'error';
-    return 'secondary';
-  }
-
-  async function handleRefresh() {
-    await Promise.all([dashboard.load(), loadTenants()]);
-  }
+  // System status mocks (in real app would come from /api/logs/status)
+  const systemItems = [
+    { label: 'API FastAPI',       key: 'api' },
+    { label: 'Base de Datos',     key: 'db' },
+    { label: 'Servicio de Túnel', key: 'tunnel' },
+    { label: 'CDN / Storage',     key: 'cdn' },
+  ];
 </script>
 
-<div class="p-6 lg:p-8 space-y-6">
-  <div class="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
+<div class="p-10 space-y-8">
+  <!-- Header -->
+  <div class="flex items-start justify-between">
     <div>
-      <h1 class="text-2xl font-bold text-white">Dashboard</h1>
-      <p class="text-secondary-400 mt-1">Bienvenido, {$auth.user?.username || 'Admin'}</p>
+      <h1 class="page-title">DASHBOARD</h1>
+      <p class="page-subtitle">
+        Bienvenido, {$auth.user?.username || 'Admin'} · Informe al {new Date().toLocaleDateString('es-ES', { day: '2-digit', month: 'long', year: 'numeric' })}
+      </p>
     </div>
-
     <div class="flex items-center gap-3">
-      {#if $dashboard.lastUpdated}
-        <span class="text-sm text-secondary-500">Actualizado: {$dashboard.lastUpdated.toLocaleTimeString('es-ES')}</span>
-      {/if}
-      <Button variant="secondary" size="sm" on:click={handleRefresh} disabled={$dashboard.isLoading}>
-        <RefreshCw size={16} class={$dashboard.isLoading ? 'animate-spin' : ''} />
-        Actualizar
-      </Button>
+      <a href="/docs" target="_blank" rel="noreferrer" class="btn-secondary btn-sm">
+        Ir a Docs
+      </a>
+      <button class="btn-accent btn-sm" on:click={handleRefresh} disabled={$dashboard.isLoading}>
+        <RefreshCw size={14} class={$dashboard.isLoading ? 'animate-spin' : ''} />
+        EXPLORAR
+      </button>
     </div>
   </div>
 
   {#if $dashboard.isLoading && !$dashboard.data}
     <div class="flex items-center justify-center py-20">
-      <Spinner size="lg" />
+      <div class="w-8 h-8 border-2 border-terracotta border-t-transparent rounded-full animate-spin"></div>
     </div>
   {:else if $dashboard.error}
-    <Card>
-      <div class="flex items-center gap-4 text-error">
-        <AlertCircle size={24} />
-        <div>
-          <p class="font-medium">Error al cargar metricas</p>
-          <p class="text-sm opacity-80">{$dashboard.error}</p>
-        </div>
-      </div>
-      <div class="mt-4">
-        <Button variant="secondary" on:click={handleRefresh}>Reintentar</Button>
-      </div>
-    </Card>
+    <div class="card flex items-center gap-3 text-error">
+      <AlertCircle size={20} />
+      <span class="font-body text-sm">{$dashboard.error}</span>
+      <button class="btn-secondary btn-sm ml-auto" on:click={handleRefresh}>Reintentar</button>
+    </div>
   {:else if $dashboard.data}
-    <div class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
-      <StatCard
-        value={formatCurrency($dashboard.data.total_revenue)}
-        label="MRR Estimado"
-        icon={DollarSign}
-        iconBg="bg-accent-500/10"
-        iconColor="text-accent-400"
-      />
-
-      <StatCard
-        value={$dashboard.data.active_tenants}
-        label="Tenants Activos"
-        icon={Users}
-        iconBg="bg-primary-500/10"
-        iconColor="text-primary-300"
-      />
-
-      <StatCard
-        value={$dashboard.data.pending_setup}
-        label="Provision Pendiente"
-        icon={Clock3}
-        iconBg="bg-warning/10"
-        iconColor="text-warning"
-      />
-
-      <StatCard
-        value={`${formatPercent($dashboard.data.cluster_load.cpu)} / ${formatPercent($dashboard.data.cluster_load.ram)}`}
-        label="Carga CPU/RAM"
-        icon={Cpu}
-        iconBg="bg-info/10"
-        iconColor="text-info"
-      />
+    <!-- Stat cards -->
+    <div class="grid grid-cols-2 lg:grid-cols-5 gap-4">
+      <div class="stat-card">
+        <span class="stat-label">Total Tenants</span>
+        <span class="stat-value">{($dashboard.data.active_tenants ?? 0) + ($dashboard.data.pending_setup ?? 0)}</span>
+      </div>
+      <div class="stat-card">
+        <span class="stat-label">Tenants con MRR</span>
+        <span class="stat-value">{$dashboard.data.active_tenants ?? 0}</span>
+      </div>
+      <div class="stat-card">
+        <span class="stat-label">MRR Estimado</span>
+        <span class="stat-value">{formatCurrency($dashboard.data.total_revenue)}</span>
+      </div>
+      <div class="stat-card">
+        <span class="stat-label">Provisión Pendiente</span>
+        <span class="stat-value">{$dashboard.data.pending_setup ?? 0}</span>
+      </div>
+      <div class="stat-card">
+        <span class="stat-label">Infraestructura Activa</span>
+        <span class="stat-value">{formatPercent($dashboard.data.cluster_load?.cpu ?? 0)} CPU</span>
+      </div>
     </div>
 
+    <!-- Two-column layout -->
     <div class="grid grid-cols-1 lg:grid-cols-3 gap-6">
-      <Card title="Carga del Cluster" subtitle="Uso reportado por backend">
-        <div class="space-y-4">
-          <div>
-            <div class="flex justify-between text-sm text-secondary-300 mb-1">
-              <span>CPU</span>
-              <span>{formatPercent($dashboard.data.cluster_load.cpu)}</span>
+      <!-- Recent activity -->
+      <div class="lg:col-span-2 card p-0">
+        <div class="flex items-center justify-between px-6 py-4 border-b border-border-light">
+          <span class="section-heading">Actividad Reciente</span>
+          <a href="#/tenants" class="text-[11px] uppercase tracking-widest text-gray-500 hover:text-terracotta font-sans">
+            Ver todos →
+          </a>
+        </div>
+        {#if tenantsError}
+          <p class="p-6 text-sm text-error font-body">{tenantsError}</p>
+        {:else}
+          <div class="divide-y divide-border-light">
+            {#each recentTenants as t}
+              <div class="flex items-center justify-between px-6 py-3.5">
+                <div class="flex items-center gap-3">
+                  <div class="w-8 h-8 bg-charcoal flex items-center justify-center flex-shrink-0">
+                    <span class="text-text-light font-sans font-bold text-xs">
+                      {(t.company_name || t.subdomain).charAt(0).toUpperCase()}
+                    </span>
+                  </div>
+                  <div>
+                    <p class="text-sm font-semibold font-sans text-text-primary">{t.company_name || t.subdomain}</p>
+                    <p class="text-xs text-gray-500 font-body">{t.email}</p>
+                  </div>
+                </div>
+                <div class="flex items-center gap-3">
+                  <span class={statusBadge(t.status)}>{t.status}</span>
+                  <span class="text-xs text-gray-400 font-body">{formatDate(t.created_at)}</span>
+                </div>
+              </div>
+            {:else}
+              <p class="px-6 py-8 text-sm text-gray-400 font-body text-center">Sin actividad reciente</p>
+            {/each}
+          </div>
+        {/if}
+      </div>
+
+      <!-- System status -->
+      <div class="card p-0">
+        <div class="flex items-center justify-between px-6 py-4 border-b border-border-light">
+          <span class="section-heading">Estado del Sistema</span>
+          <a href="#/logs" class="text-[11px] uppercase tracking-widest text-gray-500 hover:text-terracotta font-sans">
+            Ver logs →
+          </a>
+        </div>
+        <div class="divide-y divide-border-light">
+          {#each systemItems as item}
+            <div class="flex items-center justify-between px-6 py-3.5">
+              <span class="text-sm font-body text-text-secondary">{item.label}</span>
+              <div class="flex items-center gap-2">
+                <CheckCircle size={14} class="text-success" />
+                <span class="text-[11px] font-semibold uppercase tracking-widest text-success font-sans">OK</span>
+              </div>
             </div>
-            <div class="h-2 bg-surface-highlight rounded-full overflow-hidden">
-              <div class="h-full bg-primary-500 rounded-full" style={`width: ${Math.min(100, $dashboard.data.cluster_load.cpu)}%`}></div>
+          {/each}
+        </div>
+
+        <!-- Cluster load bars -->
+        <div class="px-6 py-4 border-t border-border-light space-y-3">
+          <div>
+            <div class="flex justify-between mb-1">
+              <span class="text-[11px] uppercase tracking-widest text-gray-500 font-sans">CPU</span>
+              <span class="text-[11px] font-semibold text-text-primary font-sans">{formatPercent($dashboard.data.cluster_load.cpu)}</span>
+            </div>
+            <div class="h-1.5 bg-border-light">
+              <div class="h-full bg-charcoal" style={`width:${Math.min(100, $dashboard.data.cluster_load.cpu)}%`}></div>
             </div>
           </div>
           <div>
-            <div class="flex justify-between text-sm text-secondary-300 mb-1">
-              <span>RAM</span>
-              <span>{formatPercent($dashboard.data.cluster_load.ram)}</span>
+            <div class="flex justify-between mb-1">
+              <span class="text-[11px] uppercase tracking-widest text-gray-500 font-sans">RAM</span>
+              <span class="text-[11px] font-semibold text-text-primary font-sans">{formatPercent($dashboard.data.cluster_load.ram)}</span>
             </div>
-            <div class="h-2 bg-surface-highlight rounded-full overflow-hidden">
-              <div class="h-full bg-accent-500 rounded-full" style={`width: ${Math.min(100, $dashboard.data.cluster_load.ram)}%`}></div>
+            <div class="h-1.5 bg-border-light">
+              <div class="h-full bg-terracotta" style={`width:${Math.min(100, $dashboard.data.cluster_load.ram)}%`}></div>
             </div>
           </div>
         </div>
-      </Card>
-
-      <Card title="Accesos Operativos" subtitle="Compatibilidad con vistas legacy">
-        <div class="space-y-3">
-          <a href="/admin/logs" target="_blank" rel="noreferrer" class="block p-3 rounded-lg bg-surface-highlight hover:bg-surface-border transition-colors text-secondary-200">
-            Abrir Logs legacy
-          </a>
-          <a href="/admin/tunnels" target="_blank" rel="noreferrer" class="block p-3 rounded-lg bg-surface-highlight hover:bg-surface-border transition-colors text-secondary-200">
-            Abrir Tunnels legacy
-          </a>
-          <a href="#/infrastructure" class="block p-3 rounded-lg bg-surface-highlight hover:bg-surface-border transition-colors text-secondary-200">
-            Ver estado de infraestructura
-          </a>
-        </div>
-      </Card>
-
-      <Card title="Navegacion Core" subtitle="Atajos de administracion">
-        <div class="grid grid-cols-2 gap-3 text-sm">
-          <a href="#/tenants" class="p-3 rounded-lg bg-surface-highlight hover:bg-surface-border transition-colors text-center">Tenants</a>
-          <a href="#/domains" class="p-3 rounded-lg bg-surface-highlight hover:bg-surface-border transition-colors text-center">Domains</a>
-          <a href="#/billing" class="p-3 rounded-lg bg-surface-highlight hover:bg-surface-border transition-colors text-center">Billing</a>
-          <a href="#/settings" class="p-3 rounded-lg bg-surface-highlight hover:bg-surface-border transition-colors text-center">Settings</a>
-        </div>
-      </Card>
+      </div>
     </div>
 
-    <Card title="Tenants Recientes" subtitle="Fuente: /api/tenants" padding="none">
-      {#if tenantsError}
-        <div class="p-6 text-error text-sm">{tenantsError}</div>
-      {:else}
-        <div class="overflow-x-auto">
-          <table class="table">
-            <thead>
-              <tr>
-                <th>Tenant</th>
-                <th>Plan</th>
-                <th>Estado</th>
-                <th>Creado</th>
-              </tr>
-            </thead>
-            <tbody>
-              {#each recentTenants as tenant}
-                <tr>
-                  <td>
-                    <div>
-                      <p class="font-medium text-white">{tenant.company_name || tenant.subdomain}</p>
-                      <p class="text-xs text-secondary-500">{tenant.email}</p>
-                    </div>
-                  </td>
-                  <td>
-                    <Badge variant={tenant.plan === 'enterprise' ? 'enterprise' : tenant.plan === 'pro' ? 'pro' : 'basic'}>
-                      {tenant.plan || 'basic'}
-                    </Badge>
-                  </td>
-                  <td>
-                    <Badge variant={statusVariant(tenant.status)} dot>
-                      {tenant.status}
-                    </Badge>
-                  </td>
-                  <td class="text-secondary-400">{formatDate(tenant.created_at)}</td>
-                </tr>
-              {:else}
-                <tr>
-                  <td colspan="4" class="text-center text-secondary-500 py-8">No hay tenants para mostrar</td>
-                </tr>
-              {/each}
-            </tbody>
-          </table>
-        </div>
-      {/if}
-    </Card>
+    <!-- Quick nav -->
+    <div class="grid grid-cols-2 sm:grid-cols-4 lg:grid-cols-6 gap-3">
+      {#each [
+        { href: '#/tenants',        label: 'Tenants' },
+        { href: '#/domains',        label: 'Domains' },
+        { href: '#/infrastructure', label: 'Infra' },
+        { href: '#/billing',        label: 'Billing' },
+        { href: '#/logs',           label: 'Logs' },
+        { href: '#/settings',       label: 'Settings' },
+      ] as link}
+        <a href={link.href} class="card p-4 text-center hover:border-terracotta transition-colors">
+          <span class="text-[11px] font-semibold uppercase tracking-widest text-text-secondary font-sans">{link.label}</span>
+        </a>
+      {/each}
+    </div>
   {/if}
 </div>
