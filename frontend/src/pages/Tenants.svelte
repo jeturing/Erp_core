@@ -1,462 +1,358 @@
 <script lang="ts">
   import { onMount } from 'svelte';
-  import { Modal } from '../lib/components';
-  import { tenantsApi } from '../lib/api';
+  import { tenantsApi, api } from '../lib/api';
   import { toasts } from '../lib/stores/toast';
   import { formatDate } from '../lib/utils/formatters';
+  import { Plus, RefreshCw, Search } from 'lucide-svelte';
   import type { Tenant } from '../lib/types';
-  import { Plus, KeyRound, ShieldOff, ShieldCheck, Trash2, Eye, EyeOff } from 'lucide-svelte';
 
-  let tenants: Tenant[] = [];
-  let loading = true;
-  let search = '';
 
-  // Create modal
-  let showCreateModal = false;
-  let creating = false;
-  let createError = '';
-  let showCreatePassword = false;
-  let createForm = {
-    subdomain: '',
-    company_name: '',
-    email: '',
-    plan: 'basic' as 'basic' | 'pro' | 'enterprise',
-    password: '',
-    confirm_password: '',
-  };
+  let tenants = $state<Tenant[]>([]);
+  let loading = $state(true);
+  let searchQuery = $state('');
+  let showForm = $state(false);
 
-  // Password modal
-  let showPasswordModal = false;
-  let passwordLoading = false;
-  let passwordError = '';
-  let showNewPassword = false;
-  let showConfirmPassword = false;
-  let passwordTenant: Tenant | null = null;
-  let newPassword = '';
-  let confirmPassword = '';
+  // Form fields
+  let formNombre = $state('');
+  let formEmail = $state('');
+  let formSubdomain = $state('');
+  let formPlan = $state<'basic' | 'pro' | 'enterprise'>('basic');
+  let formPassword = $state('');
+  let formConfirmPassword = $state('');
+  let formLoading = $state(false);
 
-  // Delete modal
-  let showDeleteModal = false;
-  let deleteTenant: Tenant | null = null;
-  let deleteLoading = false;
-
-  let actionLoading: Record<string, boolean> = {};
+  // Per-row action state
+  let expandedPasswordRow = $state<string | null>(null);
+  let rowPassword = $state('');
+  let rowConfirmPassword = $state('');
+  let rowPasswordLoading = $state(false);
 
   async function loadTenants() {
     loading = true;
     try {
-      const res = await tenantsApi.list();
-      tenants = res.items;
-    } catch (err) {
-      toasts.error(err instanceof Error ? err.message : 'Error cargando tenants');
+      const data = await tenantsApi.list();
+      tenants = data.items ?? [];
+    } catch (e: any) {
+      toasts.error(e?.message ?? 'Error al cargar tenants');
     } finally {
       loading = false;
     }
   }
 
-  onMount(loadTenants);
-
-  $: filteredTenants = tenants.filter((t) => {
-    const q = search.toLowerCase().trim();
-    if (!q) return true;
-    return `${t.company_name} ${t.email} ${t.subdomain}`.toLowerCase().includes(q);
-  });
-
-  $: totalActive = tenants.filter((t) => t.status === 'active').length;
-
-  function statusBadge(status: string) {
-    if (status === 'active') return 'badge-success';
-    if (status === 'provisioning' || status === 'pending') return 'badge-warning';
-    if (status === 'suspended' || status === 'payment_failed') return 'badge-error';
-    return 'badge-neutral';
-  }
-
-  function planBadge(plan: string) {
-    if (plan === 'enterprise') return 'badge-enterprise';
-    if (plan === 'pro') return 'badge-pro';
-    return 'badge-basic';
-  }
-
-  function resetCreateForm() {
-    createForm = { subdomain: '', company_name: '', email: '', plan: 'basic', password: '', confirm_password: '' };
-    createError = '';
-    showCreatePassword = false;
-  }
-
-  async function handleCreate() {
-    createError = '';
-    if (!createForm.subdomain.trim()) { createError = 'El subdominio es obligatorio'; return; }
-    if (!createForm.email.trim()) { createError = 'El email es obligatorio'; return; }
-    if (createForm.password && createForm.password !== createForm.confirm_password) {
-      createError = 'Las contraseñas no coinciden'; return;
+  async function handleCreate(e: Event) {
+    e.preventDefault();
+    if (formPassword !== formConfirmPassword) {
+      toasts.error('Las contraseñas no coinciden');
+      return;
     }
-    creating = true;
+    formLoading = true;
     try {
       await tenantsApi.create({
-        subdomain: createForm.subdomain.trim(),
-        company_name: createForm.company_name.trim() || createForm.subdomain.trim(),
-        admin_email: createForm.email.trim(),
-        admin_password: createForm.password || undefined,
-        plan: createForm.plan,
-        use_fast_method: true,
+        subdomain: formSubdomain,
+        company_name: formNombre,
+        admin_email: formEmail,
+        admin_password: formPassword,
+        plan: formPlan,
       });
-      showCreateModal = false;
-      resetCreateForm();
       toasts.success('Tenant creado exitosamente');
+      showForm = false;
+      formNombre = '';
+      formEmail = '';
+      formSubdomain = '';
+      formPlan = 'basic';
+      formPassword = '';
+      formConfirmPassword = '';
       await loadTenants();
-    } catch (err) {
-      createError = err instanceof Error ? err.message : 'Error creando tenant';
+    } catch (e: any) {
+      toasts.error(e?.message ?? 'Error al crear tenant');
     } finally {
-      creating = false;
+      formLoading = false;
     }
   }
 
-  function openPasswordModal(tenant: Tenant) {
-    passwordTenant = tenant;
-    newPassword = '';
-    confirmPassword = '';
-    passwordError = '';
-    showNewPassword = false;
-    showConfirmPassword = false;
-    showPasswordModal = true;
-  }
-
-  async function handleChangePassword() {
-    if (!passwordTenant) return;
-    passwordError = '';
-    if (newPassword.length < 6) { passwordError = 'La contraseña debe tener al menos 6 caracteres'; return; }
-    if (newPassword !== confirmPassword) { passwordError = 'Las contraseñas no coinciden'; return; }
-    passwordLoading = true;
+  async function handleChangePassword(subdomain: string) {
+    if (rowPassword !== rowConfirmPassword) {
+      toasts.error('Las contraseñas no coinciden');
+      return;
+    }
+    if (!rowPassword) {
+      toasts.error('Ingresa una contraseña');
+      return;
+    }
+    rowPasswordLoading = true;
     try {
-      await tenantsApi.changePassword({ subdomain: passwordTenant.subdomain, new_password: newPassword });
-      showPasswordModal = false;
-      toasts.success(`Contraseña de ${passwordTenant.subdomain} actualizada`);
-    } catch (err) {
-      passwordError = err instanceof Error ? err.message : 'Error cambiando contraseña';
+      await tenantsApi.changePassword({ subdomain, new_password: rowPassword });
+      toasts.success('Contraseña actualizada');
+      expandedPasswordRow = null;
+      rowPassword = '';
+      rowConfirmPassword = '';
+    } catch (e: any) {
+      toasts.error(e?.message ?? 'Error al cambiar contraseña');
     } finally {
-      passwordLoading = false;
+      rowPasswordLoading = false;
     }
   }
 
-  async function toggleSuspend(tenant: Tenant) {
-    actionLoading = { ...actionLoading, [tenant.subdomain]: true };
+  async function handleSuspend(tenant: Tenant) {
+    const isActive = tenant.status === 'active';
+    const action = isActive ? 'suspender' : 'reactivar';
+    if (!window.confirm(`¿Deseas ${action} el tenant "${tenant.subdomain}"?`)) return;
     try {
-      const isSuspending = tenant.status === 'active';
-      await tenantsApi.suspend({ subdomain: tenant.subdomain, suspend: isSuspending });
-      toasts.success(`Tenant ${isSuspending ? 'suspendido' : 'reactivado'}`);
+      await tenantsApi.suspend({ subdomain: tenant.subdomain, suspend: isActive, server: tenant.server });
+      toasts.success(`Tenant ${isActive ? 'suspendido' : 'reactivado'}`);
       await loadTenants();
-    } catch (err) {
-      toasts.error(err instanceof Error ? err.message : 'Error cambiando estado');
-    } finally {
-      actionLoading = { ...actionLoading, [tenant.subdomain]: false };
+    } catch (e: any) {
+      toasts.error(e?.message ?? 'Error al actualizar estado');
     }
   }
 
-  function openDeleteModal(tenant: Tenant) {
-    deleteTenant = tenant;
-    showDeleteModal = true;
-  }
-
-  async function handleDelete() {
-    if (!deleteTenant) return;
-    deleteLoading = true;
+  async function handleDelete(tenant: Tenant) {
+    if (!window.confirm(`¿Eliminar permanentemente el tenant "${tenant.subdomain}"? Esta acción no se puede deshacer.`)) return;
     try {
-      await tenantsApi.delete(deleteTenant.subdomain);
-      showDeleteModal = false;
-      toasts.success(`Tenant ${deleteTenant.subdomain} eliminado`);
-      deleteTenant = null;
+      await api.delete(`/api/tenants/${tenant.subdomain}?confirm=true`);
+      toasts.success('Tenant eliminado');
       await loadTenants();
-    } catch (err) {
-      toasts.error(err instanceof Error ? err.message : 'Error eliminando tenant');
-    } finally {
-      deleteLoading = false;
+    } catch (e: any) {
+      toasts.error(e?.message ?? 'Error al eliminar tenant');
     }
   }
+
+  function togglePasswordRow(subdomain: string) {
+    if (expandedPasswordRow === subdomain) {
+      expandedPasswordRow = null;
+      rowPassword = '';
+      rowConfirmPassword = '';
+    } else {
+      expandedPasswordRow = subdomain;
+      rowPassword = '';
+      rowConfirmPassword = '';
+    }
+  }
+
+  let filteredTenants = $derived(
+    tenants.filter(t => {
+      if (!searchQuery) return true;
+      const q = searchQuery.toLowerCase();
+      return (
+        t.subdomain?.toLowerCase().includes(q) ||
+        t.email?.toLowerCase().includes(q) ||
+        t.company_name?.toLowerCase().includes(q)
+      );
+    })
+  );
+
+  let totalTenants = $derived(tenants.length);
+  let activeTenants = $derived(tenants.filter(t => t.status === 'active').length);
+
+  onMount(loadTenants);
 </script>
 
-<div class="p-6 lg:p-8 space-y-6">
-  <!-- Page Header -->
-  <div class="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
+<div class="space-y-6">
+  <!-- Header -->
+  <div class="flex items-center justify-between">
     <div>
       <h1 class="page-title">TENANTS</h1>
-      <p class="page-subtitle mt-1">Gestión operativa de clientes y acciones de provisioning</p>
+      <p class="page-subtitle">Gestión de clientes y sus instancias</p>
     </div>
-    <button class="btn btn-accent" on:click={() => { resetCreateForm(); showCreateModal = true; }}>
+    <button class="btn-accent px-4 py-2 flex items-center gap-2" onclick={() => showForm = !showForm}>
       <Plus size={14} />
       NUEVO TENANT
     </button>
   </div>
 
-  <!-- Stats + Search -->
-  <div class="grid grid-cols-1 md:grid-cols-3 gap-4">
-    <div class="md:col-span-1">
-      <label class="label block mb-1" for="tenant-search">Buscar</label>
-      <input
-        id="tenant-search"
-        class="input w-full"
-        placeholder="empresa, email o subdominio..."
-        bind:value={search}
-      />
+  <!-- Inline Add Form -->
+  {#if showForm}
+    <div class="card border-l-2 border-l-terracotta">
+      <h3 class="section-heading mb-5">NUEVO TENANT</h3>
+      <form onsubmit={handleCreate} class="space-y-4">
+        <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
+          <div>
+            <label class="label" for="f-nombre">Nombre empresa</label>
+            <input id="f-nombre" class="input w-full px-3 py-2" type="text" bind:value={formNombre} placeholder="Empresa S.A." required />
+          </div>
+          <div>
+            <label class="label" for="f-email">Email administrador</label>
+            <input id="f-email" class="input w-full px-3 py-2" type="email" bind:value={formEmail} placeholder="admin@empresa.com" required />
+          </div>
+          <div>
+            <label class="label" for="f-subdomain">Subdominio</label>
+            <div class="flex items-stretch">
+              <input
+                id="f-subdomain"
+                class="input flex-1 px-3 py-2 border-r-0"
+                type="text"
+                bind:value={formSubdomain}
+                placeholder="mi-empresa"
+                required
+                pattern="[a-z0-9\-]+"
+              />
+              <span class="bg-bg-card border border-border-light px-3 py-2 text-sm text-gray-500 whitespace-nowrap">.sajet.us</span>
+            </div>
+          </div>
+          <div>
+            <label class="label" for="f-plan">Plan</label>
+            <select id="f-plan" class="input w-full px-3 py-2" bind:value={formPlan}>
+              <option value="basic">Basic</option>
+              <option value="pro">Pro</option>
+              <option value="enterprise">Enterprise</option>
+            </select>
+          </div>
+          <div>
+            <label class="label" for="f-password">Contraseña</label>
+            <input id="f-password" class="input w-full px-3 py-2" type="password" bind:value={formPassword} placeholder="••••••••" required />
+          </div>
+          <div>
+            <label class="label" for="f-confirm">Confirmar contraseña</label>
+            <input id="f-confirm" class="input w-full px-3 py-2" type="password" bind:value={formConfirmPassword} placeholder="••••••••" required />
+          </div>
+        </div>
+        <div class="flex gap-3 pt-2">
+          <button type="button" class="btn-secondary px-4 py-2" onclick={() => showForm = false}>CANCELAR</button>
+          <button type="submit" class="btn-accent px-4 py-2 disabled:opacity-60" disabled={formLoading}>
+            {formLoading ? 'CREANDO...' : 'CREAR TENANT'}
+          </button>
+        </div>
+      </form>
     </div>
-    <div class="stat-card">
-      <span class="stat-label">Total Tenants</span>
-      <span class="stat-value">{tenants.length}</span>
+  {/if}
+
+  <!-- Stats -->
+  <div class="grid grid-cols-2 md:grid-cols-4 gap-4">
+    <div class="stat-card card">
+      <div class="stat-value">{totalTenants}</div>
+      <div class="stat-label">Total Tenants</div>
     </div>
-    <div class="stat-card">
-      <span class="stat-label">Activos</span>
-      <span class="stat-value text-success">{totalActive}</span>
+    <div class="stat-card card">
+      <div class="stat-value">{activeTenants}</div>
+      <div class="stat-label">Activos</div>
     </div>
+  </div>
+
+  <!-- Search -->
+  <div class="relative">
+    <Search size={14} class="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400" />
+    <input
+      class="input w-full pl-9 pr-3 py-2"
+      type="text"
+      placeholder="Buscar por subdominio, email o empresa..."
+      bind:value={searchQuery}
+    />
   </div>
 
   <!-- Table -->
   <div class="card p-0 overflow-hidden">
-    <div class="flex items-center justify-between px-6 py-4 border-b border-border-light">
-      <span class="section-heading">Listado de Tenants</span>
-      <span class="text-[11px] text-gray-500">{filteredTenants.length} resultado{filteredTenants.length !== 1 ? 's' : ''}</span>
-    </div>
     {#if loading}
-      <div class="py-16 flex justify-center">
-        <div class="w-8 h-8 border-2 border-charcoal border-t-transparent rounded-full animate-spin"></div>
-      </div>
+      <div class="p-8 text-center text-gray-500 text-sm">Cargando tenants...</div>
+    {:else if filteredTenants.length === 0}
+      <div class="p-8 text-center text-gray-500 text-sm">No se encontraron tenants</div>
     {:else}
-      <div class="overflow-x-auto">
-        <table class="table">
-          <thead>
+      <table class="table w-full">
+        <thead>
+          <tr>
+            <th>TENANT</th>
+            <th>PLAN</th>
+            <th>ESTADO</th>
+            <th>SERVIDOR</th>
+            <th>CREADO</th>
+            <th>ACCIONES</th>
+          </tr>
+        </thead>
+        <tbody>
+          {#each filteredTenants as tenant (tenant.id)}
             <tr>
-              <th>Tenant</th>
-              <th>Plan</th>
-              <th>Estado</th>
-              <th>Servidor</th>
-              <th>Creado</th>
-              <th>Acciones</th>
+              <td>
+                <div class="font-medium text-text-primary text-sm">{tenant.company_name ?? '-'}</div>
+                <div class="text-xs text-gray-500">{tenant.email ?? '-'}</div>
+                <span class="badge-neutral text-[10px] mt-1 inline-block">{tenant.subdomain}.sajet.us</span>
+              </td>
+              <td>
+                {#if tenant.plan === 'enterprise'}
+                  <span class="badge-enterprise">{tenant.plan}</span>
+                {:else if tenant.plan === 'pro'}
+                  <span class="badge-pro">{tenant.plan}</span>
+                {:else}
+                  <span class="badge-basic">{tenant.plan ?? 'basic'}</span>
+                {/if}
+              </td>
+              <td>
+                {#if tenant.status === 'active'}
+                  <span class="badge-success">Activo</span>
+                {:else if tenant.status === 'suspended'}
+                  <span class="badge-warning">Suspendido</span>
+                {:else}
+                  <span class="badge-neutral">{tenant.status}</span>
+                {/if}
+              </td>
+              <td class="text-sm text-gray-600">{tenant.server ?? '-'}</td>
+              <td class="text-sm text-gray-500">{formatDate(tenant.created_at)}</td>
+              <td>
+                <div class="flex items-center gap-2 flex-wrap">
+                  <button
+                    class="btn-secondary btn-sm"
+                    onclick={() => togglePasswordRow(tenant.subdomain)}
+                  >
+                    CAMBIAR CLAVE
+                  </button>
+                  <button
+                    class={tenant.status === 'active' ? 'btn-danger btn-sm' : 'btn-secondary btn-sm'}
+                    onclick={() => handleSuspend(tenant)}
+                  >
+                    {tenant.status === 'active' ? 'SUSPENDER' : 'REACTIVAR'}
+                  </button>
+                  <button
+                    class="btn-danger btn-sm"
+                    onclick={() => handleDelete(tenant)}
+                  >
+                    ELIMINAR
+                  </button>
+                </div>
+              </td>
             </tr>
-          </thead>
-          <tbody>
-            {#each filteredTenants as tenant (tenant.id)}
-              <tr>
-                <td>
-                  <div class="flex flex-col gap-0.5">
-                    <span class="font-semibold text-text-primary">{tenant.company_name || tenant.subdomain}</span>
-                    <span class="text-[11px] text-gray-500">{tenant.email}</span>
-                    <span class="text-[11px] text-gray-400 font-mono">{tenant.subdomain}.sajet.us</span>
-                  </div>
-                </td>
-                <td>
-                  <span class="badge {planBadge(tenant.plan)}">{tenant.plan || 'basic'}</span>
-                </td>
-                <td>
-                  <span class="badge {statusBadge(tenant.status)}">{tenant.status}</span>
-                </td>
-                <td class="text-text-secondary text-sm">{tenant.server || '-'}</td>
-                <td class="text-text-secondary text-sm">{formatDate(tenant.created_at)}</td>
-                <td>
-                  <div class="flex flex-wrap gap-1.5">
-                    <button
-                      class="btn btn-secondary btn-sm"
-                      on:click={() => openPasswordModal(tenant)}
-                      disabled={actionLoading[tenant.subdomain]}
-                      title="Cambiar contraseña"
-                    >
-                      <KeyRound size={12} />
-                      Clave
-                    </button>
-                    <button
-                      class="btn btn-sm {tenant.status === 'active' ? 'btn-danger' : 'btn-primary'}"
-                      on:click={() => toggleSuspend(tenant)}
-                      disabled={actionLoading[tenant.subdomain]}
-                    >
-                      {#if tenant.status === 'active'}
-                        <ShieldOff size={12} />
-                        Suspender
-                      {:else}
-                        <ShieldCheck size={12} />
-                        Reactivar
-                      {/if}
-                    </button>
-                    <button
-                      class="btn btn-danger btn-sm"
-                      on:click={() => openDeleteModal(tenant)}
-                      disabled={actionLoading[tenant.subdomain]}
-                      title="Eliminar tenant"
-                    >
-                      <Trash2 size={12} />
-                    </button>
+            <!-- Inline password row -->
+            {#if expandedPasswordRow === tenant.subdomain}
+              <tr class="bg-bg-page">
+                <td colspan="6" class="py-4 px-6">
+                  <div class="flex items-end gap-4 flex-wrap">
+                    <div>
+                      <label class="label" for="rp-{tenant.subdomain}">Nueva contraseña</label>
+                      <input
+                        id="rp-{tenant.subdomain}"
+                        type="password"
+                        class="input px-3 py-2 w-48"
+                        placeholder="••••••••"
+                        bind:value={rowPassword}
+                      />
+                    </div>
+                    <div>
+                      <label class="label" for="rc-{tenant.subdomain}">Confirmar</label>
+                      <input
+                        id="rc-{tenant.subdomain}"
+                        type="password"
+                        class="input px-3 py-2 w-48"
+                        placeholder="••••••••"
+                        bind:value={rowConfirmPassword}
+                      />
+                    </div>
+                    <div class="flex gap-2">
+                      <button
+                        class="btn-secondary btn-sm"
+                        onclick={() => { expandedPasswordRow = null; rowPassword = ''; rowConfirmPassword = ''; }}
+                      >CANCELAR</button>
+                      <button
+                        class="btn-accent btn-sm disabled:opacity-60"
+                        disabled={rowPasswordLoading}
+                        onclick={() => handleChangePassword(tenant.subdomain)}
+                      >
+                        {rowPasswordLoading ? 'GUARDANDO...' : 'GUARDAR'}
+                      </button>
+                    </div>
                   </div>
                 </td>
               </tr>
-            {:else}
-              <tr>
-                <td colspan="6" class="text-center text-gray-500 py-12 text-sm">
-                  {search ? 'No hay tenants que coincidan con la búsqueda' : 'No hay tenants registrados'}
-                </td>
-              </tr>
-            {/each}
-          </tbody>
-        </table>
-      </div>
+            {/if}
+          {/each}
+        </tbody>
+      </table>
     {/if}
   </div>
 </div>
-
-<!-- Modal: Nuevo Tenant -->
-<Modal
-  bind:isOpen={showCreateModal}
-  title="Nuevo Tenant"
-  confirmText="CREAR TENANT"
-  on:confirm={handleCreate}
-  on:close={() => { showCreateModal = false; resetCreateForm(); }}
-  loading={creating}
-  size="md"
->
-  <div class="space-y-4">
-    {#if createError}
-      <div class="p-3 rounded bg-error/10 border border-error/20 text-sm text-error">{createError}</div>
-    {/if}
-
-    <div>
-      <label class="label block mb-1" for="create-company">Empresa</label>
-      <input id="create-company" class="input w-full" placeholder="Mi Empresa SRL" bind:value={createForm.company_name} />
-    </div>
-
-    <div>
-      <label class="label block mb-1" for="create-email">Email <span class="text-error">*</span></label>
-      <input id="create-email" type="email" class="input w-full" placeholder="admin@empresa.com" bind:value={createForm.email} required />
-    </div>
-
-    <div>
-      <label class="label block mb-1" for="create-subdomain">Subdominio <span class="text-error">*</span></label>
-      <div class="flex items-center gap-0">
-        <input id="create-subdomain" class="input w-full rounded-r-none" placeholder="miempresa" bind:value={createForm.subdomain} required />
-        <span class="px-3 py-2 bg-bg-card border border-l-0 border-border-light text-gray-500 text-[11px] rounded-r-md whitespace-nowrap">.sajet.us</span>
-      </div>
-    </div>
-
-    <div>
-      <label class="label block mb-1" for="create-plan">Plan</label>
-      <select id="create-plan" class="input w-full" bind:value={createForm.plan}>
-        <option value="basic">Basic</option>
-        <option value="pro">Pro</option>
-        <option value="enterprise">Enterprise</option>
-      </select>
-    </div>
-
-    <div>
-      <label class="label block mb-1" for="create-password">Contraseña admin</label>
-      <div class="relative">
-        <input
-          id="create-password"
-          type={showCreatePassword ? 'text' : 'password'}
-          class="input w-full pr-9"
-          placeholder="••••••••"
-          bind:value={createForm.password}
-        />
-        <button
-          type="button"
-          class="absolute inset-y-0 right-0 px-2.5 text-gray-500 hover:text-text-primary"
-          on:click={() => showCreatePassword = !showCreatePassword}
-        >
-          {#if showCreatePassword}<EyeOff size={14} />{:else}<Eye size={14} />{/if}
-        </button>
-      </div>
-    </div>
-
-    {#if createForm.password}
-      <div>
-        <label class="label block mb-1" for="create-confirm-password">Confirmar contraseña</label>
-        <input
-          id="create-confirm-password"
-          type="password"
-          class="input w-full"
-          placeholder="••••••••"
-          bind:value={createForm.confirm_password}
-        />
-      </div>
-    {/if}
-  </div>
-</Modal>
-
-<!-- Modal: Cambiar Contraseña -->
-<Modal
-  bind:isOpen={showPasswordModal}
-  title="Cambiar Contraseña"
-  confirmText="ACTUALIZAR"
-  on:confirm={handleChangePassword}
-  on:close={() => { showPasswordModal = false; passwordError = ''; }}
-  loading={passwordLoading}
-  size="sm"
->
-  <div class="space-y-4">
-    {#if passwordError}
-      <div class="p-3 rounded bg-error/10 border border-error/20 text-sm text-error">{passwordError}</div>
-    {/if}
-
-    <div>
-      <label class="label block mb-1" for="pw-subdomain">Subdominio</label>
-      <input id="pw-subdomain" class="input w-full opacity-60" value={passwordTenant?.subdomain || ''} readonly disabled />
-    </div>
-
-    <div>
-      <label class="label block mb-1" for="new-password">Nueva Contraseña</label>
-      <div class="relative">
-        <input
-          id="new-password"
-          type={showNewPassword ? 'text' : 'password'}
-          class="input w-full pr-9"
-          placeholder="••••••••"
-          bind:value={newPassword}
-        />
-        <button
-          type="button"
-          class="absolute inset-y-0 right-0 px-2.5 text-gray-500 hover:text-text-primary"
-          on:click={() => showNewPassword = !showNewPassword}
-        >
-          {#if showNewPassword}<EyeOff size={14} />{:else}<Eye size={14} />{/if}
-        </button>
-      </div>
-    </div>
-
-    <div>
-      <label class="label block mb-1" for="confirm-new-password">Confirmar Contraseña</label>
-      <div class="relative">
-        <input
-          id="confirm-new-password"
-          type={showConfirmPassword ? 'text' : 'password'}
-          class="input w-full pr-9"
-          placeholder="••••••••"
-          bind:value={confirmPassword}
-        />
-        <button
-          type="button"
-          class="absolute inset-y-0 right-0 px-2.5 text-gray-500 hover:text-text-primary"
-          on:click={() => showConfirmPassword = !showConfirmPassword}
-        >
-          {#if showConfirmPassword}<EyeOff size={14} />{:else}<Eye size={14} />{/if}
-        </button>
-      </div>
-    </div>
-  </div>
-</Modal>
-
-<!-- Modal: Confirmar Eliminación -->
-<Modal
-  bind:isOpen={showDeleteModal}
-  title="Eliminar Tenant"
-  confirmText="ELIMINAR"
-  confirmVariant="danger"
-  on:confirm={handleDelete}
-  on:close={() => { showDeleteModal = false; deleteTenant = null; }}
-  loading={deleteLoading}
-  size="sm"
->
-  <div class="space-y-3">
-    <p class="text-sm text-text-secondary">
-      Esta acción es <strong class="text-error">irreversible</strong>. Se eliminará permanentemente el tenant:
-    </p>
-    {#if deleteTenant}
-      <div class="p-3 rounded bg-error/5 border border-error/20">
-        <p class="font-semibold text-text-primary">{deleteTenant.company_name || deleteTenant.subdomain}</p>
-        <p class="text-[11px] text-gray-500 font-mono">{deleteTenant.subdomain}.sajet.us</p>
-      </div>
-    {/if}
-  </div>
-</Modal>
