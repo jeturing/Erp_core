@@ -1,0 +1,50 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<templates xml:space="preserve">
+
+    <t t-name="dynamic_odoo.StudioDashboardView">
+        <div t-att-class="props.className" t-ref="root">
+            <t t-component="props.Renderer" model="model" archInfo="props.archInfo" onShowCenter.bind="onShowCenter"
+               onGridChange.bind="onGridChange" onCardClick.bind="onCardClick"/>
+        </div>
+    </t>
+    <t t-name="dynamic_odoo.Dashboard.View.default">
+        <dashboard string="Dashboard Studio">
+        </dashboard>
+    </t>
+    <t t-name="dynamic_odoo.Dashboard.TabComponents">
+        <div class="dashboard_components">
+            <div>
+                <t t-foreach="DashboardWidgets" t-as="widgetName" t-key="Math.random()">
+                    <DragDashboardComponent useSlot="true" widgetName="widgetName"
+                                            archTemplate="MD_COMPONENTS[widgetName]?.ArchTemplate">
+                        <DashboardComponent type="widgetName"/>
+                    </DragDashboardComponent>
+                </t>
+            </div>
+        </div>
+    </t>
+    <t t-name="dynamic_odoo.StudioDashboardCard" t-inherit="dynamic_odoo.DashboardCard"
+       t-inherit-mode="primary" owl="1">
+        <xpath expr="//div[@class='dbCard']" position="attributes">
+             <attribute name="t-on-dblclick">onShowModifier</attribute>
+        </xpath>
+        <xpath expr="//Dropdown" position="before">
+            <a class="card_duplicate" t-on-click="onCopy">
+                <i class="fa fa-copy"/>
+            </a>
+            <a class="card_remove" t-on-click="onDelete">
+                <i class="fa fa-trash"/>
+            </a>
+            <a class="card_modifier" t-on-click="onShowModifier">
+                <i class="fa fa-cog"/>
+            </a>
+        </xpath>
+    </t>
+    <t t-name="dynamic_odoo.Dashboard.ComponentDrag">
+        <div t-att-class="props.readonly ? 'wrap_drag readonly' : 'wrap_drag SORT_COMPONENT'">
+            <div class="drag_com" t-att-data-tooltip="props.title || constructor.title">
+                <t t-slot="default"/>
+            </div>
+        </div>
+    </t>
+</templates>

@@ -1,0 +1,37 @@
+{
+  "start_time": "2026-02-16T22:55:34.497065",
+  "modules": [
+    {
+      "module": "os_pwa_backend",
+      "status": "completed",
+      "steps": [
+        {
+          "name": "copy",
+          "status": "ok"
+        },
+        {
+          "name": "analysis",
+          "status": "ok",
+          "data": {
+            "module": "os_pwa_backend",
+            "total_issues": 0,
+            "total_warnings": 1,
+            "python_issues": [],
+            "manifest_issues": [],
+            "xml_issues": [],
+            "dependency_issues": [
+              {
+                "field": "depends",
+                "value": "base_setup",
+                "severity": "MEDIUM",
+                "message": "Dependencia \"base_setup\" puede no existir en Odoo 19"
+              }
+            ]
+          }
+        }
+      ]
+    }
+  ],
+  "summary": {},
+  "end_time": "2026-02-16T22:55:34.571438"
+}

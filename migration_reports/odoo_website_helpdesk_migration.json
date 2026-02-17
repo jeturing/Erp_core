@@ -1,0 +1,147 @@
+{
+  "start_time": "2026-02-16T22:55:30.210311",
+  "modules": [
+    {
+      "module": "odoo_website_helpdesk",
+      "status": "completed",
+      "steps": [
+        {
+          "name": "copy",
+          "status": "ok"
+        },
+        {
+          "name": "analysis",
+          "status": "ok",
+          "data": {
+            "module": "odoo_website_helpdesk",
+            "total_issues": 1,
+            "total_warnings": 6,
+            "python_issues": [
+              {
+                "file": "models/ticket_helpdesk.py",
+                "line": 239,
+                "pattern": "@api.model",
+                "message": "Deprecado en Odoo 18 - considerar usar @api.model_create_multi",
+                "code": "@api.model"
+              },
+              {
+                "file": "models/ticket_helpdesk.py",
+                "line": 247,
+                "pattern": "@api.model",
+                "message": "Deprecado en Odoo 18 - considerar usar @api.model_create_multi",
+                "code": "@api.model_create_multi"
+              }
+            ],
+            "manifest_issues": [
+              {
+                "field": "version",
+                "current": "17.0.1.0.0",
+                "expected": "19.0.1.0.0",
+                "severity": "HIGH",
+                "message": "Versión aún es v17"
+              }
+            ],
+            "xml_issues": [],
+            "dependency_issues": [
+              {
+                "field": "depends",
+                "value": "sale_project",
+                "severity": "MEDIUM",
+                "message": "Dependencia \"sale_project\" puede no existir en Odoo 19"
+              },
+              {
+                "field": "depends",
+                "value": "hr_timesheet",
+                "severity": "MEDIUM",
+                "message": "Dependencia \"hr_timesheet\" puede no existir en Odoo 19"
+              },
+              {
+                "field": "depends",
+                "value": "mail",
+                "severity": "MEDIUM",
+                "message": "Dependencia \"mail\" puede no existir en Odoo 19"
+              },
+              {
+                "field": "depends",
+                "value": "contacts",
+                "severity": "MEDIUM",
+                "message": "Dependencia \"contacts\" puede no existir en Odoo 19"
+              }
+            ]
+          }
+        },
+        {
+          "name": "fix",
+          "status": "ok",
+          "data": {
+            "module": "odoo_website_helpdesk",
+            "total_fixed": 1,
+            "total_failed": 0,
+            "fixes": [
+              {
+                "file": "__manifest__.py",
+                "changes": "version: 17.0.1.0.0 → 19.0.1.0.0",
+                "status": "OK"
+              }
+            ]
+          }
+        },
+        {
+          "name": "re_analysis",
+          "status": "ok",
+          "data": {
+            "module": "odoo_website_helpdesk",
+            "total_issues": 1,
+            "total_warnings": 12,
+            "python_issues": [
+              {
+                "file": "models/ticket_helpdesk.py",
+                "line": 239,
+                "pattern": "@api.model",
+                "message": "Deprecado en Odoo 18 - considerar usar @api.model_create_multi",
+                "code": "@api.model"
+              },
+              {
+                "file": "models/ticket_helpdesk.py",
+                "line": 247,
+                "pattern": "@api.model",
+                "message": "Deprecado en Odoo 18 - considerar usar @api.model_create_multi",
+                "code": "@api.model_create_multi"
+              }
+            ],
+            "manifest_issues": [],
+            "xml_issues": [],
+            "dependency_issues": [
+              {
+                "field": "depends",
+                "value": "sale_project",
+                "severity": "MEDIUM",
+                "message": "Dependencia \"sale_project\" puede no existir en Odoo 19"
+              },
+              {
+                "field": "depends",
+                "value": "hr_timesheet",
+                "severity": "MEDIUM",
+                "message": "Dependencia \"hr_timesheet\" puede no existir en Odoo 19"
+              },
+              {
+                "field": "depends",
+                "value": "mail",
+                "severity": "MEDIUM",
+                "message": "Dependencia \"mail\" puede no existir en Odoo 19"
+              },
+              {
+                "field": "depends",
+                "value": "contacts",
+                "severity": "MEDIUM",
+                "message": "Dependencia \"contacts\" puede no existir en Odoo 19"
+              }
+            ]
+          }
+        }
+      ]
+    }
+  ],
+  "summary": {},
+  "end_time": "2026-02-16T22:55:30.337268"
+}

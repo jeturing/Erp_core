@@ -1,0 +1,18 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<templates xml:space="preserve">
+
+    <t t-name="dynamic_odoo.CharField" owl="1">
+        <input
+                class="sm_input"
+                t-att-value="formattedValue"
+                t-att-class="props.classes"
+                t-att-id="props.id"
+                t-att-type="props.isPassword ? 'password' : props.type"
+                t-att-autocomplete="props.autocomplete or (props.isPassword ? 'new-password' : 'off')"
+                t-att-maxlength="props.maxLength > 0 and props.maxLength"
+                t-att-placeholder="props.placeholder"
+                t-ref="input"
+        />
+    </t>
+
+</templates>

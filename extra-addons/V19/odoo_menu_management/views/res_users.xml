@@ -1,0 +1,29 @@
+<?xml version="1.0" encoding="utf-8"?>
+<odoo>
+    <data>
+
+        <record id="res_users_view_form_simple_modify_omm" model="ir.ui.view">
+            <field name="name">res.users.view.form.omm</field>
+            <field name="model">res.users</field>
+            <field name="inherit_id" ref="base.view_users_form_simple_modif"/>
+            <field name="arch" type="xml">
+                <group name="signature" position="after">
+                    <group name="menus_omm" invisible="not can_see_hidden_menus">
+                        <field name="hide_menu_ids" widget="many2many_tags" options="{'no_create_edit': 1, 'no_quick_create': 1}"/>
+                        <field name="can_see_hidden_menus" invisible="1"/>
+                    </group>
+                    <button name="%(odoo_menu_management.ir_ui_menu_action_advanced)d"
+                            class="btn btn-link"
+                            type="action"
+                            string="Menu Management"
+                            groups="base.group_system"
+                            colspan="2"
+                    >
+                        <i class="fa fa-long-arrow-right"/>Menu Management
+                    </button>
+                </group>
+            </field>
+        </record>
+
+    </data>
+</odoo>

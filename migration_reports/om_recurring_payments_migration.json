@@ -1,0 +1,38 @@
+{
+  "start_time": "2026-02-16T22:55:34.071243",
+  "modules": [
+    {
+      "module": "om_recurring_payments",
+      "status": "completed",
+      "steps": [
+        {
+          "name": "copy",
+          "status": "ok"
+        },
+        {
+          "name": "analysis",
+          "status": "ok",
+          "data": {
+            "module": "om_recurring_payments",
+            "total_issues": 0,
+            "total_warnings": 1,
+            "python_issues": [
+              {
+                "file": "models/recurring_payment.py",
+                "line": 88,
+                "pattern": "@api.model",
+                "message": "Deprecado en Odoo 18 - considerar usar @api.model_create_multi",
+                "code": "@api.model_create_multi"
+              }
+            ],
+            "manifest_issues": [],
+            "xml_issues": [],
+            "dependency_issues": []
+          }
+        }
+      ]
+    }
+  ],
+  "summary": {},
+  "end_time": "2026-02-16T22:55:34.095734"
+}

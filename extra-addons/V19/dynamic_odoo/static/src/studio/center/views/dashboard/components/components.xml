@@ -1,0 +1,14 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<templates xml:space="preserve">
+    <t t-name="dynamic_odoo.Dashboard.Component">
+        <div class="dashboard_component">
+            <div class="w_icon">
+                <img t-attf-src="/dynamic_odoo/static/img/#{componentInfo.thumb}"/>
+            </div>
+            <div class="w_info">
+                <h4><t t-esc="componentInfo.label" /></h4>
+                <p><t t-esc="componentInfo.desc" /></p>
+            </div>
+        </div>
+    </t>
+</templates>

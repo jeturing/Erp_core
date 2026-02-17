@@ -1,0 +1,305 @@
+{
+  "start_time": "2026-02-16T22:55:27.257890",
+  "modules": [
+    {
+      "module": "hrms_dashboard",
+      "status": "completed",
+      "steps": [
+        {
+          "name": "copy",
+          "status": "ok"
+        },
+        {
+          "name": "analysis",
+          "status": "ok",
+          "data": {
+            "module": "hrms_dashboard",
+            "total_issues": 1,
+            "total_warnings": 18,
+            "python_issues": [
+              {
+                "file": "models/hr_employee.py",
+                "line": 56,
+                "pattern": "@api.model",
+                "message": "Deprecado en Odoo 18 - considerar usar @api.model_create_multi",
+                "code": "@api.model"
+              },
+              {
+                "file": "models/hr_employee.py",
+                "line": 65,
+                "pattern": "@api.model",
+                "message": "Deprecado en Odoo 18 - considerar usar @api.model_create_multi",
+                "code": "@api.model"
+              },
+              {
+                "file": "models/hr_employee.py",
+                "line": 141,
+                "pattern": "@api.model",
+                "message": "Deprecado en Odoo 18 - considerar usar @api.model_create_multi",
+                "code": "@api.model"
+              },
+              {
+                "file": "models/hr_employee.py",
+                "line": 208,
+                "pattern": "@api.model",
+                "message": "Deprecado en Odoo 18 - considerar usar @api.model_create_multi",
+                "code": "@api.model"
+              },
+              {
+                "file": "models/hr_employee.py",
+                "line": 222,
+                "pattern": "@api.model",
+                "message": "Deprecado en Odoo 18 - considerar usar @api.model_create_multi",
+                "code": "@api.model"
+              },
+              {
+                "file": "models/hr_employee.py",
+                "line": 329,
+                "pattern": "@api.model",
+                "message": "Deprecado en Odoo 18 - considerar usar @api.model_create_multi",
+                "code": "@api.model"
+              },
+              {
+                "file": "models/hr_employee.py",
+                "line": 391,
+                "pattern": "@api.model",
+                "message": "Deprecado en Odoo 18 - considerar usar @api.model_create_multi",
+                "code": "@api.model"
+              },
+              {
+                "file": "models/hr_employee.py",
+                "line": 453,
+                "pattern": "@api.model",
+                "message": "Deprecado en Odoo 18 - considerar usar @api.model_create_multi",
+                "code": "@api.model"
+              },
+              {
+                "file": "report/broadfactor.py",
+                "line": 58,
+                "pattern": "@api.model",
+                "message": "Deprecado en Odoo 18 - considerar usar @api.model_create_multi",
+                "code": "@api.model"
+              }
+            ],
+            "manifest_issues": [
+              {
+                "field": "version",
+                "current": "17.0.1.0.2",
+                "expected": "19.0.1.0.2",
+                "severity": "HIGH",
+                "message": "Versión aún es v17"
+              }
+            ],
+            "xml_issues": [],
+            "dependency_issues": [
+              {
+                "field": "depends",
+                "value": "hr_holidays",
+                "severity": "MEDIUM",
+                "message": "Dependencia \"hr_holidays\" puede no existir en Odoo 19"
+              },
+              {
+                "field": "depends",
+                "value": "hr_timesheet",
+                "severity": "MEDIUM",
+                "message": "Dependencia \"hr_timesheet\" puede no existir en Odoo 19"
+              },
+              {
+                "field": "depends",
+                "value": "hr_payroll_community",
+                "severity": "MEDIUM",
+                "message": "Dependencia \"hr_payroll_community\" puede no existir en Odoo 19"
+              },
+              {
+                "field": "depends",
+                "value": "hr_attendance",
+                "severity": "MEDIUM",
+                "message": "Dependencia \"hr_attendance\" puede no existir en Odoo 19"
+              },
+              {
+                "field": "depends",
+                "value": "hr_timesheet_attendance",
+                "severity": "MEDIUM",
+                "message": "Dependencia \"hr_timesheet_attendance\" puede no existir en Odoo 19"
+              },
+              {
+                "field": "depends",
+                "value": "hr_recruitment",
+                "severity": "MEDIUM",
+                "message": "Dependencia \"hr_recruitment\" puede no existir en Odoo 19"
+              },
+              {
+                "field": "depends",
+                "value": "hr_resignation",
+                "severity": "MEDIUM",
+                "message": "Dependencia \"hr_resignation\" puede no existir en Odoo 19"
+              },
+              {
+                "field": "depends",
+                "value": "event",
+                "severity": "MEDIUM",
+                "message": "Dependencia \"event\" puede no existir en Odoo 19"
+              },
+              {
+                "field": "depends",
+                "value": "hr_reward_warning",
+                "severity": "MEDIUM",
+                "message": "Dependencia \"hr_reward_warning\" puede no existir en Odoo 19"
+              }
+            ]
+          }
+        },
+        {
+          "name": "fix",
+          "status": "ok",
+          "data": {
+            "module": "hrms_dashboard",
+            "total_fixed": 1,
+            "total_failed": 0,
+            "fixes": [
+              {
+                "file": "__manifest__.py",
+                "changes": "version: 17.0.1.0.2 → 19.0.1.0.2",
+                "status": "OK"
+              }
+            ]
+          }
+        },
+        {
+          "name": "re_analysis",
+          "status": "ok",
+          "data": {
+            "module": "hrms_dashboard",
+            "total_issues": 1,
+            "total_warnings": 36,
+            "python_issues": [
+              {
+                "file": "models/hr_employee.py",
+                "line": 56,
+                "pattern": "@api.model",
+                "message": "Deprecado en Odoo 18 - considerar usar @api.model_create_multi",
+                "code": "@api.model"
+              },
+              {
+                "file": "models/hr_employee.py",
+                "line": 65,
+                "pattern": "@api.model",
+                "message": "Deprecado en Odoo 18 - considerar usar @api.model_create_multi",
+                "code": "@api.model"
+              },
+              {
+                "file": "models/hr_employee.py",
+                "line": 141,
+                "pattern": "@api.model",
+                "message": "Deprecado en Odoo 18 - considerar usar @api.model_create_multi",
+                "code": "@api.model"
+              },
+              {
+                "file": "models/hr_employee.py",
+                "line": 208,
+                "pattern": "@api.model",
+                "message": "Deprecado en Odoo 18 - considerar usar @api.model_create_multi",
+                "code": "@api.model"
+              },
+              {
+                "file": "models/hr_employee.py",
+                "line": 222,
+                "pattern": "@api.model",
+                "message": "Deprecado en Odoo 18 - considerar usar @api.model_create_multi",
+                "code": "@api.model"
+              },
+              {
+                "file": "models/hr_employee.py",
+                "line": 329,
+                "pattern": "@api.model",
+                "message": "Deprecado en Odoo 18 - considerar usar @api.model_create_multi",
+                "code": "@api.model"
+              },
+              {
+                "file": "models/hr_employee.py",
+                "line": 391,
+                "pattern": "@api.model",
+                "message": "Deprecado en Odoo 18 - considerar usar @api.model_create_multi",
+                "code": "@api.model"
+              },
+              {
+                "file": "models/hr_employee.py",
+                "line": 453,
+                "pattern": "@api.model",
+                "message": "Deprecado en Odoo 18 - considerar usar @api.model_create_multi",
+                "code": "@api.model"
+              },
+              {
+                "file": "report/broadfactor.py",
+                "line": 58,
+                "pattern": "@api.model",
+                "message": "Deprecado en Odoo 18 - considerar usar @api.model_create_multi",
+                "code": "@api.model"
+              }
+            ],
+            "manifest_issues": [],
+            "xml_issues": [],
+            "dependency_issues": [
+              {
+                "field": "depends",
+                "value": "hr_holidays",
+                "severity": "MEDIUM",
+                "message": "Dependencia \"hr_holidays\" puede no existir en Odoo 19"
+              },
+              {
+                "field": "depends",
+                "value": "hr_timesheet",
+                "severity": "MEDIUM",
+                "message": "Dependencia \"hr_timesheet\" puede no existir en Odoo 19"
+              },
+              {
+                "field": "depends",
+                "value": "hr_payroll_community",
+                "severity": "MEDIUM",
+                "message": "Dependencia \"hr_payroll_community\" puede no existir en Odoo 19"
+              },
+              {
+                "field": "depends",
+                "value": "hr_attendance",
+                "severity": "MEDIUM",
+                "message": "Dependencia \"hr_attendance\" puede no existir en Odoo 19"
+              },
+              {
+                "field": "depends",
+                "value": "hr_timesheet_attendance",
+                "severity": "MEDIUM",
+                "message": "Dependencia \"hr_timesheet_attendance\" puede no existir en Odoo 19"
+              },
+              {
+                "field": "depends",
+                "value": "hr_recruitment",
+                "severity": "MEDIUM",
+                "message": "Dependencia \"hr_recruitment\" puede no existir en Odoo 19"
+              },
+              {
+                "field": "depends",
+                "value": "hr_resignation",
+                "severity": "MEDIUM",
+                "message": "Dependencia \"hr_resignation\" puede no existir en Odoo 19"
+              },
+              {
+                "field": "depends",
+                "value": "event",
+                "severity": "MEDIUM",
+                "message": "Dependencia \"event\" puede no existir en Odoo 19"
+              },
+              {
+                "field": "depends",
+                "value": "hr_reward_warning",
+                "severity": "MEDIUM",
+                "message": "Dependencia \"hr_reward_warning\" puede no existir en Odoo 19"
+              }
+            ]
+          }
+        }
+      ]
+    }
+  ],
+  "summary": {},
+  "end_time": "2026-02-16T22:55:27.406769"
+}

@@ -1,0 +1,52 @@
+{
+  "start_time": "2026-02-16T22:55:34.259519",
+  "modules": [
+    {
+      "module": "onboarding",
+      "status": "completed",
+      "steps": [
+        {
+          "name": "copy",
+          "status": "ok"
+        },
+        {
+          "name": "analysis",
+          "status": "ok",
+          "data": {
+            "module": "onboarding",
+            "total_issues": 0,
+            "total_warnings": 3,
+            "python_issues": [
+              {
+                "file": "models/onboarding_onboarding_step.py",
+                "line": 100,
+                "pattern": "@api.model",
+                "message": "Deprecado en Odoo 18 - considerar usar @api.model_create_multi",
+                "code": "@api.model"
+              },
+              {
+                "file": "models/onboarding_onboarding_step.py",
+                "line": 107,
+                "pattern": "@api.model",
+                "message": "Deprecado en Odoo 18 - considerar usar @api.model_create_multi",
+                "code": "@api.model"
+              },
+              {
+                "file": "models/onboarding_onboarding.py",
+                "line": 82,
+                "pattern": "@api.model",
+                "message": "Deprecado en Odoo 18 - considerar usar @api.model_create_multi",
+                "code": "@api.model"
+              }
+            ],
+            "manifest_issues": [],
+            "xml_issues": [],
+            "dependency_issues": []
+          }
+        }
+      ]
+    }
+  ],
+  "summary": {},
+  "end_time": "2026-02-16T22:55:34.344227"
+}

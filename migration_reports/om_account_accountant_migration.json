@@ -1,0 +1,87 @@
+{
+  "start_time": "2026-02-16T22:55:32.225342",
+  "modules": [
+    {
+      "module": "om_account_accountant",
+      "status": "completed",
+      "steps": [
+        {
+          "name": "copy",
+          "status": "ok"
+        },
+        {
+          "name": "analysis",
+          "status": "ok",
+          "data": {
+            "module": "om_account_accountant",
+            "total_issues": 0,
+            "total_warnings": 9,
+            "python_issues": [
+              {
+                "file": "models/account_move.py",
+                "line": 9,
+                "pattern": "@api.model",
+                "message": "Deprecado en Odoo 18 - considerar usar @api.model_create_multi",
+                "code": "@api.model"
+              }
+            ],
+            "manifest_issues": [],
+            "xml_issues": [],
+            "dependency_issues": [
+              {
+                "field": "depends",
+                "value": "accounting_pdf_reports",
+                "severity": "MEDIUM",
+                "message": "Dependencia \"accounting_pdf_reports\" puede no existir en Odoo 19"
+              },
+              {
+                "field": "depends",
+                "value": "om_account_asset",
+                "severity": "MEDIUM",
+                "message": "Dependencia \"om_account_asset\" puede no existir en Odoo 19"
+              },
+              {
+                "field": "depends",
+                "value": "om_account_budget",
+                "severity": "MEDIUM",
+                "message": "Dependencia \"om_account_budget\" puede no existir en Odoo 19"
+              },
+              {
+                "field": "depends",
+                "value": "om_fiscal_year",
+                "severity": "MEDIUM",
+                "message": "Dependencia \"om_fiscal_year\" puede no existir en Odoo 19"
+              },
+              {
+                "field": "depends",
+                "value": "om_recurring_payments",
+                "severity": "MEDIUM",
+                "message": "Dependencia \"om_recurring_payments\" puede no existir en Odoo 19"
+              },
+              {
+                "field": "depends",
+                "value": "om_account_bank_statement_import",
+                "severity": "MEDIUM",
+                "message": "Dependencia \"om_account_bank_statement_import\" puede no existir en Odoo 19"
+              },
+              {
+                "field": "depends",
+                "value": "om_account_daily_reports",
+                "severity": "MEDIUM",
+                "message": "Dependencia \"om_account_daily_reports\" puede no existir en Odoo 19"
+              },
+              {
+                "field": "depends",
+                "value": "om_account_followup",
+                "severity": "MEDIUM",
+                "message": "Dependencia \"om_account_followup\" puede no existir en Odoo 19"
+              }
+            ]
+          }
+        }
+      ]
+    }
+  ],
+  "summary": {},
+  "end_time": "2026-02-16T22:55:32.282344"
+}

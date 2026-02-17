@@ -1,0 +1,39 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<templates xml:space="preserve">
+
+    <t t-name="dynamic_odoo.SelectionField" owl="1">
+        <div class="selection_field">
+            <div class="dropdown-toggle w_tags input_base" data-bs-toggle="dropdown" aria-expanded="false">
+                <t t-if="props.multiple">
+                    <t t-foreach="state.value" t-as="val" t-key="Math.random()">
+                        <span class="st_tag" t-att-name="val"><t t-esc="getLabel(val)" />
+                            <i class="fa fa-close" t-on-click="() => onCloseTag.bind(this)(val)"/></span>
+                    </t>
+                </t>
+                <t t-elif="state.value">
+                    <span class="item_val text-truncate" t-att-name="state.value"><t t-esc="getLabel(state.value)" /></span>
+                </t>
+            </div>
+            <ul class="dropdown-menu" role="menu">
+                <t t-if="!props.multiple">
+                    <li role="menuitem" href="#" t-on-click.prevent="() => onCloseTag.bind(this)()">None</li>
+                </t>
+                <t t-foreach="props.options" t-as="option" t-key="option[0]">
+                    <li t-if="isVisible(option[0])" t-att-class="!props.multiple and (option[0] == state.value) ? 'active' : ''" role="menuitem" href="#"
+                        t-on-click.prevent="() => onChange.bind(this)(option[0])">
+                        <t t-esc="option[1]"/>
+                    </li>
+                </t>
+            </ul>
+        </div>
+        <!--        <select t-ref="select">-->
+        <!--            <t t-if="!state.value">-->
+        <!--                <option t-att-selected="selected"></option>-->
+        <!--            </t>-->
+        <!--            <t t-foreach="props.options" t-as="option" t-key="option[0]">-->
+        <!--                <option t-att-selected="option[0] === state.value" t-att-value="option[0]"><t t-esc="option[1]" /></option>-->
+        <!--            </t>-->
+        <!--        </select>-->
+    </t>
+
+</templates>

@@ -1,0 +1,15 @@
+{
+    "name": "Jeturing IFrame App Manager",
+    "version": "1.0",
+    "category": "Tools",
+    "summary": "Embed external apps with dynamic authentication via IFrame",
+    "depends": ["web"],
+    "data": [
+        "security/ir.model.access.csv",
+        "views/iframe_app_views.xml",
+        "views/iframe_menu.xml",
+        "views/iframe_template.xml"
+    ],
+    "installable": True,
+    "application": True
+}

@@ -1,0 +1,199 @@
+{
+  "start_time": "2026-02-16T22:55:41.781658",
+  "modules": [
+    {
+      "module": "web",
+      "status": "completed",
+      "steps": [
+        {
+          "name": "copy",
+          "status": "ok"
+        },
+        {
+          "name": "analysis",
+          "status": "ok",
+          "data": {
+            "module": "web",
+            "total_issues": 0,
+            "total_warnings": 24,
+            "python_issues": [
+              {
+                "file": "models/ir_model.py",
+                "line": 10,
+                "pattern": "@api.model",
+                "message": "Deprecado en Odoo 18 - considerar usar @api.model_create_multi",
+                "code": "@api.model"
+              },
+              {
+                "file": "models/ir_model.py",
+                "line": 28,
+                "pattern": "@api.model",
+                "message": "Deprecado en Odoo 18 - considerar usar @api.model_create_multi",
+                "code": "@api.model"
+              },
+              {
+                "file": "models/ir_model.py",
+                "line": 36,
+                "pattern": "@api.model",
+                "message": "Deprecado en Odoo 18 - considerar usar @api.model_create_multi",
+                "code": "@api.model"
+              },
+              {
+                "file": "models/ir_model.py",
+                "line": 47,
+                "pattern": "@api.model",
+                "message": "Deprecado en Odoo 18 - considerar usar @api.model_create_multi",
+                "code": "@api.model"
+              },
+              {
+                "file": "models/ir_http.py",
+                "line": 166,
+                "pattern": "@api.model",
+                "message": "Deprecado en Odoo 18 - considerar usar @api.model_create_multi",
+                "code": "@api.model"
+              },
+              {
+                "file": "models/models.py",
+                "line": 44,
+                "pattern": "@api.model",
+                "message": "Deprecado en Odoo 18 - considerar usar @api.model_create_multi",
+                "code": "@api.model"
+              },
+              {
+                "file": "models/models.py",
+                "line": 220,
+                "pattern": "@api.model",
+                "message": "Deprecado en Odoo 18 - considerar usar @api.model_create_multi",
+                "code": "@api.model"
+              },
+              {
+                "file": "models/models.py",
+                "line": 255,
+                "pattern": "@api.model",
+                "message": "Deprecado en Odoo 18 - considerar usar @api.model_create_multi",
+                "code": "@api.model"
+              },
+              {
+                "file": "models/models.py",
+                "line": 266,
+                "pattern": "@api.model",
+                "message": "Deprecado en Odoo 18 - considerar usar @api.model_create_multi",
+                "code": "@api.model"
+              },
+              {
+                "file": "models/models.py",
+                "line": 364,
+                "pattern": "@api.model",
+                "message": "Deprecado en Odoo 18 - considerar usar @api.model_create_multi",
+                "code": "@api.model"
+              },
+              {
+                "file": "models/models.py",
+                "line": 410,
+                "pattern": "@api.model",
+                "message": "Deprecado en Odoo 18 - considerar usar @api.model_create_multi",
+                "code": "@api.model"
+              },
+              {
+                "file": "models/models.py",
+                "line": 458,
+                "pattern": "@api.model",
+                "message": "Deprecado en Odoo 18 - considerar usar @api.model_create_multi",
+                "code": "@api.model"
+              },
+              {
+                "file": "models/models.py",
+                "line": 488,
+                "pattern": "@api.model",
+                "message": "Deprecado en Odoo 18 - considerar usar @api.model_create_multi",
+                "code": "@api.model"
+              },
+              {
+                "file": "models/models.py",
+                "line": 535,
+                "pattern": "@api.model",
+                "message": "Deprecado en Odoo 18 - considerar usar @api.model_create_multi",
+                "code": "@api.model"
+              },
+              {
+                "file": "models/models.py",
+                "line": 579,
+                "pattern": "@api.model",
+                "message": "Deprecado en Odoo 18 - considerar usar @api.model_create_multi",
+                "code": "@api.model"
+              },
+              {
+                "file": "models/models.py",
+                "line": 709,
+                "pattern": "@api.model",
+                "message": "Deprecado en Odoo 18 - considerar usar @api.model_create_multi",
+                "code": "@api.model"
+              },
+              {
+                "file": "models/models.py",
+                "line": 1119,
+                "pattern": "@api.model",
+                "message": "Deprecado en Odoo 18 - considerar usar @api.model_create_multi",
+                "code": "@api.model_create_multi"
+              },
+              {
+                "file": "models/base_document_layout.py",
+                "line": 34,
+                "pattern": "@api.model",
+                "message": "Deprecado en Odoo 18 - considerar usar @api.model_create_multi",
+                "code": "@api.model"
+              },
+              {
+                "file": "models/base_document_layout.py",
+                "line": 40,
+                "pattern": "@api.model",
+                "message": "Deprecado en Odoo 18 - considerar usar @api.model_create_multi",
+                "code": "@api.model"
+              },
+              {
+                "file": "models/base_document_layout.py",
+                "line": 193,
+                "pattern": "@api.model",
+                "message": "Deprecado en Odoo 18 - considerar usar @api.model_create_multi",
+                "code": "@api.model"
+              },
+              {
+                "file": "models/base_document_layout.py",
+                "line": 270,
+                "pattern": "@api.model",
+                "message": "Deprecado en Odoo 18 - considerar usar @api.model_create_multi",
+                "code": "@api.model"
+              },
+              {
+                "file": "models/base_document_layout.py",
+                "line": 278,
+                "pattern": "@api.model",
+                "message": "Deprecado en Odoo 18 - considerar usar @api.model_create_multi",
+                "code": "@api.model"
+              },
+              {
+                "file": "models/ir_qweb_fields.py",
+                "line": 60,
+                "pattern": "@api.model",
+                "message": "Deprecado en Odoo 18 - considerar usar @api.model_create_multi",
+                "code": "@api.model"
+              },
+              {
+                "file": "models/res_users.py",
+                "line": 10,
+                "pattern": "@api.model",
+                "message": "Deprecado en Odoo 18 - considerar usar @api.model_create_multi",
+                "code": "@api.model"
+              }
+            ],
+            "manifest_issues": [],
+            "xml_issues": [],
+            "dependency_issues": []
+          }
+        }
+      ]
+    }
+  ],
+  "summary": {},
+  "end_time": "2026-02-16T22:55:44.233740"
+}

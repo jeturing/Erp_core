@@ -1,0 +1,72 @@
+{
+  "start_time": "2026-02-16T22:55:36.664155",
+  "modules": [
+    {
+      "module": "pos_sale",
+      "status": "completed",
+      "steps": [
+        {
+          "name": "copy",
+          "status": "ok"
+        },
+        {
+          "name": "analysis",
+          "status": "ok",
+          "data": {
+            "module": "pos_sale",
+            "total_issues": 0,
+            "total_warnings": 6,
+            "python_issues": [
+              {
+                "file": "models/sale_order.py",
+                "line": 87,
+                "pattern": "@api.model",
+                "message": "Deprecado en Odoo 18 - considerar usar @api.model_create_multi",
+                "code": "@api.model"
+              },
+              {
+                "file": "models/pos_order.py",
+                "line": 19,
+                "pattern": "@api.model",
+                "message": "Deprecado en Odoo 18 - considerar usar @api.model_create_multi",
+                "code": "@api.model"
+              },
+              {
+                "file": "models/pos_order.py",
+                "line": 47,
+                "pattern": "@api.model",
+                "message": "Deprecado en Odoo 18 - considerar usar @api.model_create_multi",
+                "code": "@api.model"
+              },
+              {
+                "file": "report/sale_report.py",
+                "line": 10,
+                "pattern": "@api.model",
+                "message": "Deprecado en Odoo 18 - considerar usar @api.model_create_multi",
+                "code": "@api.model"
+              }
+            ],
+            "manifest_issues": [],
+            "xml_issues": [],
+            "dependency_issues": [
+              {
+                "field": "depends",
+                "value": "point_of_sale",
+                "severity": "MEDIUM",
+                "message": "Dependencia \"point_of_sale\" puede no existir en Odoo 19"
+              },
+              {
+                "field": "depends",
+                "value": "sale_management",
+                "severity": "MEDIUM",
+                "message": "Dependencia \"sale_management\" puede no existir en Odoo 19"
+              }
+            ]
+          }
+        }
+      ]
+    }
+  ],
+  "summary": {},
+  "end_time": "2026-02-16T22:55:36.845800"
+}

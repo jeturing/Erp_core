@@ -1,0 +1,37 @@
+{
+  "start_time": "2026-02-16T22:55:22.719361",
+  "modules": [
+    {
+      "module": "document_management_system",
+      "status": "completed",
+      "steps": [
+        {
+          "name": "copy",
+          "status": "ok"
+        },
+        {
+          "name": "analysis",
+          "status": "ok",
+          "data": {
+            "module": "document_management_system",
+            "total_issues": 0,
+            "total_warnings": 1,
+            "python_issues": [],
+            "manifest_issues": [],
+            "xml_issues": [],
+            "dependency_issues": [
+              {
+                "field": "depends",
+                "value": "mail",
+                "severity": "MEDIUM",
+                "message": "Dependencia \"mail\" puede no existir en Odoo 19"
+              }
+            ]
+          }
+        }
+      ]
+    }
+  ],
+  "summary": {},
+  "end_time": "2026-02-16T22:55:22.736534"
+}

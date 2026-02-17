@@ -1,0 +1,47 @@
+{
+    'name': 'Whatsapp Client',
+    'version': '19.0.2.5.0',
+    'license': 'OPL-1',
+    'author': 'Alphasoft',
+    'website': 'https://www.alphasoft.co.id/',
+    'images': [
+        'images/main_screenshot.png',
+    ],
+    'summary': 'This module is used for Whatsapp Client Connection',
+    'category': 'Extra Tools',
+    'depends': [
+        'mail',
+        'base_setup',
+        'contacts',
+        'phone_validation',
+    ],
+    'external_dependencies': {'python': ['html2text']},
+    'data': [
+        'security/ir.model.access.csv',
+        'data/ir_config_parameter.xml',
+        'data/whatsapp_data.xml',
+        'data/whatsapp_mail_message_cron.xml',
+        'wizard/check_partner_mobile_view.xml',
+        'wizard/whatsapp_message_view.xml',
+        'wizard/check_qr_code_view.xml',
+        'views/res_partner_view.xml',
+        'views/mail_channel.xml',
+        'views/mail_message.xml',
+        'views/mail_template.xml',
+        'views/ir_whatsapp_server.xml',
+        'views/menuitem_view.xml',
+    ],
+    'assets': {'web.assets_backend': ['aos_whatsapp/static/src/*', 'aos_whatsapp/static/src/core/common/**/*', 'aos_whatsapp/static/src/core/web/**/*']},
+    'demo': [
+    ],
+    'test': [
+    ],
+    'css': [
+    ],
+    'js': [
+    ],
+    'currency': 'EUR',
+    'installable': True,
+    'application': False,
+    'auto_install': False,
+}

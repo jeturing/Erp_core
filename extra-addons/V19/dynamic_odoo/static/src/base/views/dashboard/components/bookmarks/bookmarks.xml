@@ -1,0 +1,18 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<templates xml:space="preserve">
+    <t t-name="dynamic_odoo.Bookmarks">
+        <div class="bookmarks_widget">
+            <t t-foreach="state.bookmarks" t-as="bookmark" t-key="Math.random()">
+                <div class="bookmark" t-att-node-id="bookmark.nodeId">
+                    <div class="logo">
+                        <img height="30" width="30" t-att-src='bookmark.icon'/>
+                    </div>
+                    <div class="info">
+                        <a><t t-esc="bookmark.host" /></a>
+                        <p><t t-esc="bookmark.link" /></p>
+                    </div>
+                </div>
+            </t>
+        </div>
+    </t>
+</templates>

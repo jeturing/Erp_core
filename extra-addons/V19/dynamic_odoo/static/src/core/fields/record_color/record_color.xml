@@ -1,0 +1,19 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<templates xml:space="preserve">
+    <t t-name="dynamic_odoo.Widget.DecorationColor" owl="1">
+        <div class="decoration_color_widget">
+            <div class="title">
+                <h4 class="field_label">Record Color:</h4>
+            </div>
+            <div class="decoration_list">
+                <t t-foreach="decorations" t-as="name" t-key="name">
+                    <t t-set="item" t-value="decorations[name]" />
+                    <div class="decoration_item" t-att-name="name">
+                        <input class="input_base" t-att-value="state.value[name]" type="text" readonly="readonly" t-att-placeholder="item.placeholder" />
+                        <i class="fa fa-pencil" t-on-click="() => this.showCondition(name)" />
+                    </div>
+                </t>
+            </div>
+        </div>
+    </t>
+</templates>

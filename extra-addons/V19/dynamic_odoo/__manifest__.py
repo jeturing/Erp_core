@@ -1,0 +1,55 @@
+{
+    'name': 'Odoo Studio for Community v17',
+    'summary': 'Odoo Studio for Community v17',
+    'version': '17.0',
+    'category': 'Web',
+    'description': """
+        Odoo Studio. Build and Customize Odoo Apps on the fly without any technical knowledge.
+    """,
+    'author': "apps.odoo.community@gmail.com",
+    "website": "odoo-studio.com",
+    'depends': ['base_automation', 'web_editor', 'web'],
+    'data': [
+        'security/ir.model.access.csv',
+        'security/odoo_studio_security.xml',
+        'views/report_kanban_view.xml',
+        'views/base_automation_view.xml',
+    ],
+    'assets': {
+        'web.assets_qweb': [
+        ],
+        "web.report_assets_common": [
+            "/dynamic_odoo/static/src/studio/center/report/report_asset.scss",
+        ],
+        'web.assets_backend': [
+            "dynamic_odoo/static/lib/gridstackjs/*",
+            "dynamic_odoo/static/lib/benchmarkjs/*",
+            "/dynamic_odoo/static/lib/py.js/*",
+            "dynamic_odoo/static/lib/jquery.ui/*",
+            "dynamic_odoo/static/lib/jquery.ui/*/*",
+            "dynamic_odoo/static/lib/dom_to_image/*",
+            "dynamic_odoo/static/lib/jspdf/*",
+            "/dynamic_odoo/static/src/base/*/*",
+            "/dynamic_odoo/static/src/base/**/*",
+            "/dynamic_odoo/static/src/base/**/*/*",
+            "/dynamic_odoo/static/src/studio/*",
+            "/dynamic_odoo/static/src/studio/*/*",
+            "/dynamic_odoo/static/src/studio/*/*/*",
+            "/dynamic_odoo/static/src/studio/*/*/*/*",
+            "/dynamic_odoo/static/src/studio/*/*/*/*/*",
+            "/dynamic_odoo/static/src/studio/*/*/*/*/*/*",
+            "/dynamic_odoo/static/src/core/*/*",
+            "/dynamic_odoo/static/src/core/**/*",
+        ],
+    },
+    'images': ['images/main_screen.jpg'],
+    'price': 500,
+    'price_comparison': {'standard': 0, 'pro': 200, 'vip': 300},
+    'license': 'OPL-1',
+    'currency': 'EUR',
+    'installable': True,
+    'auto_install': False,
+    'application': False,
+    'images': [
+    ],
+}

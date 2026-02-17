@@ -1,0 +1,173 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- Copyright (c) 2016-Present Webkul Software Pvt. Ltd. (<https://webkul.com/>) -->
+<!-- See LICENSE file for full copyright and licensing details. -->
+<!-- License URL : <https://store.webkul.com/license.html/> -->
+
+
+<odoo>
+    <!-- odoorestapi: views -->
+    <record id="odoorestapi_view_form" model="ir.ui.view">
+        <field name="name">odoorestapi_view.form</field>
+        <field name="model">rest.api</field>
+        <field name="arch" type="xml">
+            <form string="Webservice Account">
+                <sheet>
+                    <div class="oe_button_box" name="button_box">
+                        <button name="action_show_users" type="object" groups="base.group_no_one" class="oe_stat_button" icon="fa-users" invisible="user_ids_count == 0">
+                            <field string="Users" name="user_ids_count" widget="statinfo"/>
+                        </button>
+                        
+
+                        <button name="toggle_active" type="object" class="oe_stat_button text-success" invisible="not active">
+                            <i class="fa fa-toggle-on  text-success me-2" style="font-size: 16px;"></i>
+                            Active 
+                            <field name="active" options='{"terminology": "archive"}' invisible="1"/>
+                        </button>
+                        <button name="toggle_active" type="object" class="oe_stat_button text-danger"  invisible="active">
+                            <i class="fa fa-toggle-on fa-rotate-180 text-danger me-2" style="font-size: 16px;"></i>
+                            Inactive 
+                        </button>
+                       
+                        
+                    </div>
+                    <div class="oe_title">
+                        <div class="oe_edit_only">
+                            <label for="name" string="Name"/>
+                        </div>
+                        <h1>
+                            <field name="name" default_focus="1" placeholder="Key Identifier"/>
+                        </h1>
+                    </div>
+                    <div class="row">
+                        <div class="oe_title col-6">
+                            <div>
+                                <label for="api_key" string="Api Secret Key"/>
+                            </div>
+                            <div>
+                                <field name="api_key" readonly="1"/>
+                                <button name="generate_secret_key" string="Generate Api Secret Key" type="object" class="oe_link" icon="fa-arrow-right"/>
+                            </div>
+                        </div>
+                        <div class="oe_title col-6">
+                            <div>
+                                <label for="user_authenticate" string="User Authentication"/>
+                                <field name="user_authenticate" />
+                            </div>
+                            <div class="row">
+                                <div class="col-6">
+                                    <label for="advanced_features" string="Enable Advanced Features" class="mr-4"/>
+                                    <field name="advanced_features"  />
+                                </div>
+                            </div>
+                                
+                            <div class="row"  invisible = "not advanced_features">    
+                                <div class="col-3">
+                                    <label for="limit_for_hits" string="Throatling"/>
+                                    <field name="limit_for_hits"/>
+                                </div>
+                                <div class="col-8"  invisible= "not limit_for_hits">
+                                    <label for="hit_limits" string="Limit" invisible="user_authenticate"/>
+                                    <label for="hit_limits" string="Limit per user"  invisible="not user_authenticate"/>
+                                    <field name="hit_limits" class="oe_inline"/>
+                                    <span class="oe_inline">Requests Per Day</span> 
+                                </div>
+                            </div>
+
+                            <div class="row" invisible = "not advanced_features">
+                                <div class = "col-3">
+                                    <label for="api_validity" string="API Validity"/>
+                                    <field name="api_validity" />
+                                </div>
+                                <div  class = "col-8" invisible = "not api_validity">
+                                    <label for="validity_time" string="Validity"/>
+                                    <field name="validity_time" class="oe_inline"/>
+                                    <field name="validity_time_selection" />
+                                    
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                    <group>
+                        <field name="availabilty"/>
+                    </group>
+                    <separator string="Set the resource permissions for this key:" colspan="4"  invisible = "availabilty in  ['all']"/>
+                    <field name="resource_ids" mode="tree" invisible = "availabilty in  ['all']">
+                        <tree string="Resources" editable="bottom">
+                            <field name="model_id" options="{'no_create': True}"/>
+                            <field name="read_ok"/>
+                            <field name="write_ok"/>
+                            <field name="create_ok"/>
+                            <field name="unlink_ok"/>
+                        </tree>
+                    </field>
+                    <field name="description" class="oe_inline" placeholder="For Internal purpose Only"/>
+                    <div class="oe_clear"/>
+                </sheet>
+            </form>
+        </field>
+    </record>
+
+    <record id="odoorestapi_view_tree2" model="ir.ui.view">
+        <field name="name">odoorestapi_view.tree</field>
+        <field name="model">rest.api</field>
+        <field name="arch" type="xml">
+            <tree string="Webservice Accounts">
+                <field name="name"/>
+                <field name="description"/>
+                <field name="active"/>
+            </tree>
+        </field>
+    </record>
+
+
+    <record id="odoorestapi_view_tree" model="ir.ui.view">
+        <field name="name">odoorestapi_view.tree</field>
+        <field name="model">rest.api</field>
+        <field name="arch" type="xml">
+            <tree string="Webservice Accounts">
+                <field name="name"/>
+
+            </tree>
+        </field>
+    </record>
+
+    <record id="action_swagger_doc_open" model="ir.actions.act_url">
+    	<field name="name">API</field>
+		<field name="url">/rest/docs?standalone=1</field>
+		<field name="target">new</field>
+	</record>	
+
+
+    <!-- odoorestapi : actions -->
+    <record id="odoorestapi_action" model="ir.actions.act_window">
+        <field name="name">REST WEBSERVICE ACCOUNT</field>
+        <field name="res_model">rest.api</field>
+        <field name="view_mode">tree,form</field>
+        <field name="view_id" ref="odoorestapi_view_tree2"/>
+        <field name="help" type="html">
+            <p class="oe_view_nocontent_create">
+            Click to add a new Rest Webservice Account.
+            </p>
+        </field>
+    </record>
+
+
+    <record model="ir.actions.client" id="action_rest_doc_url">
+        <field name="name" >Rest Doc</field>
+        <field name="tag">RestDocAction</field>
+    </record>
+
+    <record id="action_swagger_rest_doc" model="ir.actions.act_url">
+    	<field name="name">Swagger Doc</field>
+		<field name="url">swagger/rest/docs</field>
+		<field name="target">new</field>
+	</record>
+
+    <menuitem name="Web-Services" id="odoorestapi_main_menu" parent="base.menu_custom" sequence="1"/>
+    <menuitem id="odoorestapi_menu" name="Webservice Accounts" parent="odoorestapi_main_menu" action="odoorestapi_action" sequence="1"/>
+    <menuitem id="odoorestapiswaggerdoc_menu" name="Rest API Document" parent="odoorestapi_main_menu" action="action_swagger_rest_doc" sequence="3"/>
+
+
+
+
+</odoo>

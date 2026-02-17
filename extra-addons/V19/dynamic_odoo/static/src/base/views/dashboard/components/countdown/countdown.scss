@@ -1,0 +1,35 @@
+.countdownWidget {
+  display: flex;
+
+  .units-row {
+    flex: 3 0 0;
+    display: flex;
+    margin: auto;
+    justify-content: center;
+    align-items: stretch;
+    flex-wrap: wrap;
+    width: 100%;
+
+    .unit-wrapper {
+      flex: 0 1 auto;
+      display: flex;
+      flex-direction: column;
+      padding: 10px;
+
+      .unit-value {
+        flex: 0 1 auto;
+        position: relative;
+        text-align: center;
+        font-weight: bold;
+        font-size: 3.2em;
+        color: #383838;
+      }
+
+      .unit-name {
+        padding-top: 8px;
+        font-size: 1.2em;
+        text-align: center;
+      }
+    }
+  }
+}

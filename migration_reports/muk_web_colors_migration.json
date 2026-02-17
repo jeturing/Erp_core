@@ -1,0 +1,123 @@
+{
+  "start_time": "2026-02-16T22:55:29.088549",
+  "modules": [
+    {
+      "module": "muk_web_colors",
+      "status": "completed",
+      "steps": [
+        {
+          "name": "copy",
+          "status": "ok"
+        },
+        {
+          "name": "analysis",
+          "status": "ok",
+          "data": {
+            "module": "muk_web_colors",
+            "total_issues": 1,
+            "total_warnings": 4,
+            "python_issues": [
+              {
+                "file": "models/ir_attachment.py",
+                "line": 12,
+                "pattern": "@api.model",
+                "message": "Deprecado en Odoo 18 - considerar usar @api.model_create_multi",
+                "code": "@api.model_create_multi"
+              },
+              {
+                "file": "models/ir_asset.py",
+                "line": 12,
+                "pattern": "@api.model",
+                "message": "Deprecado en Odoo 18 - considerar usar @api.model_create_multi",
+                "code": "@api.model_create_multi"
+              }
+            ],
+            "manifest_issues": [
+              {
+                "field": "version",
+                "current": "17.0.1.0.3",
+                "expected": "19.0.1.0.3",
+                "severity": "HIGH",
+                "message": "Versión aún es v17"
+              }
+            ],
+            "xml_issues": [],
+            "dependency_issues": [
+              {
+                "field": "depends",
+                "value": "base_setup",
+                "severity": "MEDIUM",
+                "message": "Dependencia \"base_setup\" puede no existir en Odoo 19"
+              },
+              {
+                "field": "depends",
+                "value": "web_editor",
+                "severity": "MEDIUM",
+                "message": "Dependencia \"web_editor\" puede no existir en Odoo 19"
+              }
+            ]
+          }
+        },
+        {
+          "name": "fix",
+          "status": "ok",
+          "data": {
+            "module": "muk_web_colors",
+            "total_fixed": 1,
+            "total_failed": 0,
+            "fixes": [
+              {
+                "file": "__manifest__.py",
+                "changes": "version: 17.0.1.0.3 → 19.0.1.0.3",
+                "status": "OK"
+              }
+            ]
+          }
+        },
+        {
+          "name": "re_analysis",
+          "status": "ok",
+          "data": {
+            "module": "muk_web_colors",
+            "total_issues": 1,
+            "total_warnings": 8,
+            "python_issues": [
+              {
+                "file": "models/ir_attachment.py",
+                "line": 12,
+                "pattern": "@api.model",
+                "message": "Deprecado en Odoo 18 - considerar usar @api.model_create_multi",
+                "code": "@api.model_create_multi"
+              },
+              {
+                "file": "models/ir_asset.py",
+                "line": 12,
+                "pattern": "@api.model",
+                "message": "Deprecado en Odoo 18 - considerar usar @api.model_create_multi",
+                "code": "@api.model_create_multi"
+              }
+            ],
+            "manifest_issues": [],
+            "xml_issues": [],
+            "dependency_issues": [
+              {
+                "field": "depends",
+                "value": "base_setup",
+                "severity": "MEDIUM",
+                "message": "Dependencia \"base_setup\" puede no existir en Odoo 19"
+              },
+              {
+                "field": "depends",
+                "value": "web_editor",
+                "severity": "MEDIUM",
+                "message": "Dependencia \"web_editor\" puede no existir en Odoo 19"
+              }
+            ]
+          }
+        }
+      ]
+    }
+  ],
+  "summary": {},
+  "end_time": "2026-02-16T22:55:29.118836"
+}

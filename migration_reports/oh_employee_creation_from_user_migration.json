@@ -1,0 +1,83 @@
+{
+  "start_time": "2026-02-16T22:55:30.496120",
+  "modules": [
+    {
+      "module": "oh_employee_creation_from_user",
+      "status": "completed",
+      "steps": [
+        {
+          "name": "copy",
+          "status": "ok"
+        },
+        {
+          "name": "analysis",
+          "status": "ok",
+          "data": {
+            "module": "oh_employee_creation_from_user",
+            "total_issues": 1,
+            "total_warnings": 1,
+            "python_issues": [
+              {
+                "file": "models/res_users.py",
+                "line": 36,
+                "pattern": "@api.model",
+                "message": "Deprecado en Odoo 18 - considerar usar @api.model_create_multi",
+                "code": "@api.model_create_multi"
+              }
+            ],
+            "manifest_issues": [
+              {
+                "field": "version",
+                "current": "17.0.1.0.0",
+                "expected": "19.0.1.0.0",
+                "severity": "HIGH",
+                "message": "Versión aún es v17"
+              }
+            ],
+            "xml_issues": [],
+            "dependency_issues": []
+          }
+        },
+        {
+          "name": "fix",
+          "status": "ok",
+          "data": {
+            "module": "oh_employee_creation_from_user",
+            "total_fixed": 1,
+            "total_failed": 0,
+            "fixes": [
+              {
+                "file": "__manifest__.py",
+                "changes": "version: 17.0.1.0.0 → 19.0.1.0.0",
+                "status": "OK"
+              }
+            ]
+          }
+        },
+        {
+          "name": "re_analysis",
+          "status": "ok",
+          "data": {
+            "module": "oh_employee_creation_from_user",
+            "total_issues": 1,
+            "total_warnings": 2,
+            "python_issues": [
+              {
+                "file": "models/res_users.py",
+                "line": 36,
+                "pattern": "@api.model",
+                "message": "Deprecado en Odoo 18 - considerar usar @api.model_create_multi",
+                "code": "@api.model_create_multi"
+              }
+            ],
+            "manifest_issues": [],
+            "xml_issues": [],
+            "dependency_issues": []
+          }
+        }
+      ]
+    }
+  ],
+  "summary": {},
+  "end_time": "2026-02-16T22:55:30.577069"
+}

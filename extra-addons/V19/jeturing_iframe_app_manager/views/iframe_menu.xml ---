@@ -1,0 +1,4 @@
+<odoo>
+    <menuitem id="menu_iframe_app_root" name="Apps Embebidas"/>
+    <menuitem id="menu_iframe_app_manage" name="Administrar" parent="menu_iframe_app_root" action="action_iframe_app"/>
+</odoo>

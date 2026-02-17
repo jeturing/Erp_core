@@ -1,0 +1,149 @@
+{
+  "start_time": "2026-02-16T22:55:22.316761",
+  "modules": [
+    {
+      "module": "bi_pos_stripe_payment",
+      "status": "completed",
+      "steps": [
+        {
+          "name": "copy",
+          "status": "ok"
+        },
+        {
+          "name": "analysis",
+          "status": "ok",
+          "data": {
+            "module": "bi_pos_stripe_payment",
+            "total_issues": 1,
+            "total_warnings": 6,
+            "python_issues": [
+              {
+                "file": "models/stripe_config.py",
+                "line": 25,
+                "pattern": "@api.model",
+                "message": "Deprecado en Odoo 18 - considerar usar @api.model_create_multi",
+                "code": "@api.model"
+              },
+              {
+                "file": "models/payment_transactions.py",
+                "line": 36,
+                "pattern": "@api.model",
+                "message": "Deprecado en Odoo 18 - considerar usar @api.model_create_multi",
+                "code": "@api.model"
+              },
+              {
+                "file": "models/payment_transactions.py",
+                "line": 71,
+                "pattern": "@api.model",
+                "message": "Deprecado en Odoo 18 - considerar usar @api.model_create_multi",
+                "code": "@api.model"
+              }
+            ],
+            "manifest_issues": [
+              {
+                "field": "version",
+                "current": "17.0.0.1",
+                "expected": "19.0.0.1",
+                "severity": "HIGH",
+                "message": "Versión aún es v17"
+              }
+            ],
+            "xml_issues": [],
+            "dependency_issues": [
+              {
+                "field": "depends",
+                "value": "point_of_sale",
+                "severity": "MEDIUM",
+                "message": "Dependencia \"point_of_sale\" puede no existir en Odoo 19"
+              },
+              {
+                "field": "depends",
+                "value": "pos_stripe",
+                "severity": "MEDIUM",
+                "message": "Dependencia \"pos_stripe\" puede no existir en Odoo 19"
+              },
+              {
+                "field": "depends",
+                "value": "pos_self_order_stripe",
+                "severity": "MEDIUM",
+                "message": "Dependencia \"pos_self_order_stripe\" puede no existir en Odoo 19"
+              }
+            ]
+          }
+        },
+        {
+          "name": "fix",
+          "status": "ok",
+          "data": {
+            "module": "bi_pos_stripe_payment",
+            "total_fixed": 1,
+            "total_failed": 0,
+            "fixes": [
+              {
+                "file": "__manifest__.py",
+                "changes": "version: 17.0.0.1 → 19.0.0.1",
+                "status": "OK"
+              }
+            ]
+          }
+        },
+        {
+          "name": "re_analysis",
+          "status": "ok",
+          "data": {
+            "module": "bi_pos_stripe_payment",
+            "total_issues": 1,
+            "total_warnings": 12,
+            "python_issues": [
+              {
+                "file": "models/stripe_config.py",
+                "line": 25,
+                "pattern": "@api.model",
+                "message": "Deprecado en Odoo 18 - considerar usar @api.model_create_multi",
+                "code": "@api.model"
+              },
+              {
+                "file": "models/payment_transactions.py",
+                "line": 36,
+                "pattern": "@api.model",
+                "message": "Deprecado en Odoo 18 - considerar usar @api.model_create_multi",
+                "code": "@api.model"
+              },
+              {
+                "file": "models/payment_transactions.py",
+                "line": 71,
+                "pattern": "@api.model",
+                "message": "Deprecado en Odoo 18 - considerar usar @api.model_create_multi",
+                "code": "@api.model"
+              }
+            ],
+            "manifest_issues": [],
+            "xml_issues": [],
+            "dependency_issues": [
+              {
+                "field": "depends",
+                "value": "point_of_sale",
+                "severity": "MEDIUM",
+                "message": "Dependencia \"point_of_sale\" puede no existir en Odoo 19"
+              },
+              {
+                "field": "depends",
+                "value": "pos_stripe",
+                "severity": "MEDIUM",
+                "message": "Dependencia \"pos_stripe\" puede no existir en Odoo 19"
+              },
+              {
+                "field": "depends",
+                "value": "pos_self_order_stripe",
+                "severity": "MEDIUM",
+                "message": "Dependencia \"pos_self_order_stripe\" puede no existir en Odoo 19"
+              }
+            ]
+          }
+        }
+      ]
+    }
+  ],
+  "summary": {},
+  "end_time": "2026-02-16T22:55:22.366850"
+}

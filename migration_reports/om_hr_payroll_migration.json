@@ -1,0 +1,219 @@
+{
+  "start_time": "2026-02-16T22:55:33.636015",
+  "modules": [
+    {
+      "module": "om_hr_payroll",
+      "status": "completed",
+      "steps": [
+        {
+          "name": "copy",
+          "status": "ok"
+        },
+        {
+          "name": "analysis",
+          "status": "ok",
+          "data": {
+            "module": "om_hr_payroll",
+            "total_issues": 1,
+            "total_warnings": 11,
+            "python_issues": [
+              {
+                "file": "models/hr_salary_rule.py",
+                "line": 18,
+                "pattern": "@api.model",
+                "message": "Deprecado en Odoo 18 - considerar usar @api.model_create_multi",
+                "code": "@api.model"
+              },
+              {
+                "file": "models/hr_payslip.py",
+                "line": 146,
+                "pattern": "@api.model",
+                "message": "Deprecado en Odoo 18 - considerar usar @api.model_create_multi",
+                "code": "@api.model"
+              },
+              {
+                "file": "models/hr_payslip.py",
+                "line": 178,
+                "pattern": "@api.model",
+                "message": "Deprecado en Odoo 18 - considerar usar @api.model_create_multi",
+                "code": "@api.model"
+              },
+              {
+                "file": "models/hr_payslip.py",
+                "line": 234,
+                "pattern": "@api.model",
+                "message": "Deprecado en Odoo 18 - considerar usar @api.model_create_multi",
+                "code": "@api.model"
+              },
+              {
+                "file": "models/hr_payslip.py",
+                "line": 253,
+                "pattern": "@api.model",
+                "message": "Deprecado en Odoo 18 - considerar usar @api.model_create_multi",
+                "code": "@api.model"
+              },
+              {
+                "file": "models/hr_payslip.py",
+                "line": 537,
+                "pattern": "@api.model",
+                "message": "Deprecado en Odoo 18 - considerar usar @api.model_create_multi",
+                "code": "@api.model_create_multi"
+              },
+              {
+                "file": "report/report_payslip_details.py",
+                "line": 89,
+                "pattern": "@api.model",
+                "message": "Deprecado en Odoo 18 - considerar usar @api.model_create_multi",
+                "code": "@api.model"
+              },
+              {
+                "file": "report/report_contribution_register.py",
+                "line": 31,
+                "pattern": "@api.model",
+                "message": "Deprecado en Odoo 18 - considerar usar @api.model_create_multi",
+                "code": "@api.model"
+              }
+            ],
+            "manifest_issues": [
+              {
+                "field": "version",
+                "current": "17.0.1.0.2",
+                "expected": "19.0.1.0.2",
+                "severity": "HIGH",
+                "message": "Versión aún es v17"
+              }
+            ],
+            "xml_issues": [],
+            "dependency_issues": [
+              {
+                "field": "depends",
+                "value": "mail",
+                "severity": "MEDIUM",
+                "message": "Dependencia \"mail\" puede no existir en Odoo 19"
+              },
+              {
+                "field": "depends",
+                "value": "hr_contract",
+                "severity": "MEDIUM",
+                "message": "Dependencia \"hr_contract\" puede no existir en Odoo 19"
+              },
+              {
+                "field": "depends",
+                "value": "hr_holidays",
+                "severity": "MEDIUM",
+                "message": "Dependencia \"hr_holidays\" puede no existir en Odoo 19"
+              }
+            ]
+          }
+        },
+        {
+          "name": "fix",
+          "status": "ok",
+          "data": {
+            "module": "om_hr_payroll",
+            "total_fixed": 1,
+            "total_failed": 0,
+            "fixes": [
+              {
+                "file": "__manifest__.py",
+                "changes": "version: 17.0.1.0.2 → 19.0.1.0.2",
+                "status": "OK"
+              }
+            ]
+          }
+        },
+        {
+          "name": "re_analysis",
+          "status": "ok",
+          "data": {
+            "module": "om_hr_payroll",
+            "total_issues": 1,
+            "total_warnings": 22,
+            "python_issues": [
+              {
+                "file": "models/hr_salary_rule.py",
+                "line": 18,
+                "pattern": "@api.model",
+                "message": "Deprecado en Odoo 18 - considerar usar @api.model_create_multi",
+                "code": "@api.model"
+              },
+              {
+                "file": "models/hr_payslip.py",
+                "line": 146,
+                "pattern": "@api.model",
+                "message": "Deprecado en Odoo 18 - considerar usar @api.model_create_multi",
+                "code": "@api.model"
+              },
+              {
+                "file": "models/hr_payslip.py",
+                "line": 178,
+                "pattern": "@api.model",
+                "message": "Deprecado en Odoo 18 - considerar usar @api.model_create_multi",
+                "code": "@api.model"
+              },
+              {
+                "file": "models/hr_payslip.py",
+                "line": 234,
+                "pattern": "@api.model",
+                "message": "Deprecado en Odoo 18 - considerar usar @api.model_create_multi",
+                "code": "@api.model"
+              },
+              {
+                "file": "models/hr_payslip.py",
+                "line": 253,
+                "pattern": "@api.model",
+                "message": "Deprecado en Odoo 18 - considerar usar @api.model_create_multi",
+                "code": "@api.model"
+              },
+              {
+                "file": "models/hr_payslip.py",
+                "line": 537,
+                "pattern": "@api.model",
+                "message": "Deprecado en Odoo 18 - considerar usar @api.model_create_multi",
+                "code": "@api.model_create_multi"
+              },
+              {
+                "file": "report/report_payslip_details.py",
+                "line": 89,
+                "pattern": "@api.model",
+                "message": "Deprecado en Odoo 18 - considerar usar @api.model_create_multi",
+                "code": "@api.model"
+              },
+              {
+                "file": "report/report_contribution_register.py",
+                "line": 31,
+                "pattern": "@api.model",
+                "message": "Deprecado en Odoo 18 - considerar usar @api.model_create_multi",
+                "code": "@api.model"
+              }
+            ],
+            "manifest_issues": [],
+            "xml_issues": [],
+            "dependency_issues": [
+              {
+                "field": "depends",
+                "value": "mail",
+                "severity": "MEDIUM",
+                "message": "Dependencia \"mail\" puede no existir en Odoo 19"
+              },
+              {
+                "field": "depends",
+                "value": "hr_contract",
+                "severity": "MEDIUM",
+                "message": "Dependencia \"hr_contract\" puede no existir en Odoo 19"
+              },
+              {
+                "field": "depends",
+                "value": "hr_holidays",
+                "severity": "MEDIUM",
+                "message": "Dependencia \"hr_holidays\" puede no existir en Odoo 19"
+              }
+            ]
+          }
+        }
+      ]
+    }
+  ],
+  "summary": {},
+  "end_time": "2026-02-16T22:55:33.736758"
+}

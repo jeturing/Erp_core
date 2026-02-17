@@ -1,0 +1,32 @@
+.dashboard_component {
+  display: flex;
+  margin-bottom: 20px;
+  flex-direction: column;
+  background: #3c4659;;
+  border-radius: 3px;
+  overflow: hidden;
+  border: 1px solid #000000;
+
+  .w_icon {
+    width: 100%
+  }
+
+  img {
+    width: 100%;
+    border: 5px solid #4e535b;
+  }
+
+  .w_info {
+    flex: 1;
+    padding: 10px;
+
+    h4 {
+      color: #ececec !important;
+    }
+
+    p {
+      margin: 0px;
+      color: #cacfd8;
+    }
+  }
+}

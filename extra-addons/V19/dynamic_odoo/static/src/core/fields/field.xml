@@ -1,0 +1,16 @@
+<?xml version="1.0" encoding="UTF-8" ?>
+<templates xml:space="preserve">
+
+    <t t-name="dynamic_odoo.Field" owl="1">
+        <div t-att-name="props.name" t-att-class="classNames" t-att-style="props.style"
+             t-att-data-tooltip-template="tooltip and 'web.FieldTooltip'" t-att-data-tooltip-info="tooltip">
+            <div t-if="!FieldComponent.noFieldLabel and props.label" class="field_label">
+                <span><t t-esc="props.label" /></span>
+            </div>
+            <div class="field_widget">
+                <t t-component="FieldComponent" t-props="fieldComponentProps"/>
+            </div>
+        </div>
+    </t>
+
+</templates>

@@ -1,0 +1,385 @@
+{
+  "start_time": "2026-02-16T22:55:40.794623",
+  "modules": [
+    {
+      "module": "us_messenger",
+      "status": "completed",
+      "steps": [
+        {
+          "name": "copy",
+          "status": "ok"
+        },
+        {
+          "name": "analysis",
+          "status": "ok",
+          "data": {
+            "module": "us_messenger",
+            "total_issues": 1,
+            "total_warnings": 23,
+            "python_issues": [
+              {
+                "file": "models/us_messenger_trigger_webhook.py",
+                "line": 30,
+                "pattern": "@api.model",
+                "message": "Deprecado en Odoo 18 - considerar usar @api.model_create_multi",
+                "code": "@api.model"
+              },
+              {
+                "file": "models/us_messenger_trigger_webhook.py",
+                "line": 68,
+                "pattern": "@api.model",
+                "message": "Deprecado en Odoo 18 - considerar usar @api.model_create_multi",
+                "code": "@api.model"
+              },
+              {
+                "file": "models/us_messenger_trigger_webhook.py",
+                "line": 85,
+                "pattern": "@api.model",
+                "message": "Deprecado en Odoo 18 - considerar usar @api.model_create_multi",
+                "code": "@api.model"
+              },
+              {
+                "file": "models/us_messenger_trigger_mixin.py",
+                "line": 41,
+                "pattern": "@api.model",
+                "message": "Deprecado en Odoo 18 - considerar usar @api.model_create_multi",
+                "code": "@api.model_create_multi"
+              },
+              {
+                "file": "models/us_messenger_trigger_mixin.py",
+                "line": 60,
+                "pattern": "@api.model",
+                "message": "Deprecado en Odoo 18 - considerar usar @api.model_create_multi",
+                "code": "@api.model_create_multi"
+              },
+              {
+                "file": "models/us_messenger_trigger_mixin.py",
+                "line": 73,
+                "pattern": "@api.model",
+                "message": "Deprecado en Odoo 18 - considerar usar @api.model_create_multi",
+                "code": "@api.model"
+              },
+              {
+                "file": "models/us_messenger_trigger_mixin.py",
+                "line": 80,
+                "pattern": "@api.model",
+                "message": "Deprecado en Odoo 18 - considerar usar @api.model_create_multi",
+                "code": "@api.model_create_multi"
+              },
+              {
+                "file": "models/us_messenger_operator.py",
+                "line": 57,
+                "pattern": "@api.model",
+                "message": "Deprecado en Odoo 18 - considerar usar @api.model_create_multi",
+                "code": "@api.model"
+              },
+              {
+                "file": "models/us_messenger_project.py",
+                "line": 685,
+                "pattern": "@api.model",
+                "message": "Deprecado en Odoo 18 - considerar usar @api.model_create_multi",
+                "code": "@api.model_create_multi"
+              },
+              {
+                "file": "models/us_messenger_link.py",
+                "line": 47,
+                "pattern": "@api.model",
+                "message": "Deprecado en Odoo 18 - considerar usar @api.model_create_multi",
+                "code": "@api.model"
+              },
+              {
+                "file": "models/us_messenger_link.py",
+                "line": 57,
+                "pattern": "@api.model",
+                "message": "Deprecado en Odoo 18 - considerar usar @api.model_create_multi",
+                "code": "@api.model"
+              },
+              {
+                "file": "models/us_messenger_link.py",
+                "line": 81,
+                "pattern": "@api.model",
+                "message": "Deprecado en Odoo 18 - considerar usar @api.model_create_multi",
+                "code": "@api.model"
+              },
+              {
+                "file": "models/us_messenger_link.py",
+                "line": 131,
+                "pattern": "@api.model",
+                "message": "Deprecado en Odoo 18 - considerar usar @api.model_create_multi",
+                "code": "@api.model"
+              },
+              {
+                "file": "models/us_messenger_link.py",
+                "line": 137,
+                "pattern": "@api.model",
+                "message": "Deprecado en Odoo 18 - considerar usar @api.model_create_multi",
+                "code": "@api.model"
+              },
+              {
+                "file": "models/us_messenger_link.py",
+                "line": 240,
+                "pattern": "@api.model",
+                "message": "Deprecado en Odoo 18 - considerar usar @api.model_create_multi",
+                "code": "@api.model"
+              },
+              {
+                "file": "models/us_messenger_task.py",
+                "line": 156,
+                "pattern": "@api.model",
+                "message": "Deprecado en Odoo 18 - considerar usar @api.model_create_multi",
+                "code": "@api.model"
+              },
+              {
+                "file": "models/us_messenger_trigger_cron.py",
+                "line": 30,
+                "pattern": "@api.model",
+                "message": "Deprecado en Odoo 18 - considerar usar @api.model_create_multi",
+                "code": "@api.model_create_multi"
+              },
+              {
+                "file": "lib/models/ir_actions.py",
+                "line": 59,
+                "pattern": "@api.model",
+                "message": "Deprecado en Odoo 18 - considerar usar @api.model_create_multi",
+                "code": "@api.model"
+              },
+              {
+                "file": "lib/models/ir_actions.py",
+                "line": 68,
+                "pattern": "@api.model",
+                "message": "Deprecado en Odoo 18 - considerar usar @api.model_create_multi",
+                "code": "@api.model"
+              }
+            ],
+            "manifest_issues": [
+              {
+                "field": "version",
+                "current": "17.0.3.0.2",
+                "expected": "19.0.3.0.2",
+                "severity": "HIGH",
+                "message": "Versión aún es v17"
+              }
+            ],
+            "xml_issues": [],
+            "dependency_issues": [
+              {
+                "field": "depends",
+                "value": "base_automation",
+                "severity": "MEDIUM",
+                "message": "Dependencia \"base_automation\" puede no existir en Odoo 19"
+              },
+              {
+                "field": "depends",
+                "value": "mail",
+                "severity": "MEDIUM",
+                "message": "Dependencia \"mail\" puede no existir en Odoo 19"
+              },
+              {
+                "field": "depends",
+                "value": "queue_job",
+                "severity": "MEDIUM",
+                "message": "Dependencia \"queue_job\" puede no existir en Odoo 19"
+              },
+              {
+                "field": "depends",
+                "value": "us_multichat",
+                "severity": "MEDIUM",
+                "message": "Dependencia \"us_multichat\" puede no existir en Odoo 19"
+              }
+            ]
+          }
+        },
+        {
+          "name": "fix",
+          "status": "ok",
+          "data": {
+            "module": "us_messenger",
+            "total_fixed": 1,
+            "total_failed": 0,
+            "fixes": [
+              {
+                "file": "__manifest__.py",
+                "changes": "version: 17.0.3.0.2 → 19.0.3.0.2",
+                "status": "OK"
+              }
+            ]
+          }
+        },
+        {
+          "name": "re_analysis",
+          "status": "ok",
+          "data": {
+            "module": "us_messenger",
+            "total_issues": 1,
+            "total_warnings": 46,
+            "python_issues": [
+              {
+                "file": "models/us_messenger_trigger_webhook.py",
+                "line": 30,
+                "pattern": "@api.model",
+                "message": "Deprecado en Odoo 18 - considerar usar @api.model_create_multi",
+                "code": "@api.model"
+              },
+              {
+                "file": "models/us_messenger_trigger_webhook.py",
+                "line": 68,
+                "pattern": "@api.model",
+                "message": "Deprecado en Odoo 18 - considerar usar @api.model_create_multi",
+                "code": "@api.model"
+              },
+              {
+                "file": "models/us_messenger_trigger_webhook.py",
+                "line": 85,
+                "pattern": "@api.model",
+                "message": "Deprecado en Odoo 18 - considerar usar @api.model_create_multi",
+                "code": "@api.model"
+              },
+              {
+                "file": "models/us_messenger_trigger_mixin.py",
+                "line": 41,
+                "pattern": "@api.model",
+                "message": "Deprecado en Odoo 18 - considerar usar @api.model_create_multi",
+                "code": "@api.model_create_multi"
+              },
+              {
+                "file": "models/us_messenger_trigger_mixin.py",
+                "line": 60,
+                "pattern": "@api.model",
+                "message": "Deprecado en Odoo 18 - considerar usar @api.model_create_multi",
+                "code": "@api.model_create_multi"
+              },
+              {
+                "file": "models/us_messenger_trigger_mixin.py",
+                "line": 73,
+                "pattern": "@api.model",
+                "message": "Deprecado en Odoo 18 - considerar usar @api.model_create_multi",
+                "code": "@api.model"
+              },
+              {
+                "file": "models/us_messenger_trigger_mixin.py",
+                "line": 80,
+                "pattern": "@api.model",
+                "message": "Deprecado en Odoo 18 - considerar usar @api.model_create_multi",
+                "code": "@api.model_create_multi"
+              },
+              {
+                "file": "models/us_messenger_operator.py",
+                "line": 57,
+                "pattern": "@api.model",
+                "message": "Deprecado en Odoo 18 - considerar usar @api.model_create_multi",
+                "code": "@api.model"
+              },
+              {
+                "file": "models/us_messenger_project.py",
+                "line": 685,
+                "pattern": "@api.model",
+                "message": "Deprecado en Odoo 18 - considerar usar @api.model_create_multi",
+                "code": "@api.model_create_multi"
+              },
+              {
+                "file": "models/us_messenger_link.py",
+                "line": 47,
+                "pattern": "@api.model",
+                "message": "Deprecado en Odoo 18 - considerar usar @api.model_create_multi",
+                "code": "@api.model"
+              },
+              {
+                "file": "models/us_messenger_link.py",
+                "line": 57,
+                "pattern": "@api.model",
+                "message": "Deprecado en Odoo 18 - considerar usar @api.model_create_multi",
+                "code": "@api.model"
+              },
+              {
+                "file": "models/us_messenger_link.py",
+                "line": 81,
+                "pattern": "@api.model",
+                "message": "Deprecado en Odoo 18 - considerar usar @api.model_create_multi",
+                "code": "@api.model"
+              },
+              {
+                "file": "models/us_messenger_link.py",
+                "line": 131,
+                "pattern": "@api.model",
+                "message": "Deprecado en Odoo 18 - considerar usar @api.model_create_multi",
+                "code": "@api.model"
+              },
+              {
+                "file": "models/us_messenger_link.py",
+                "line": 137,
+                "pattern": "@api.model",
+                "message": "Deprecado en Odoo 18 - considerar usar @api.model_create_multi",
+                "code": "@api.model"
+              },
+              {
+                "file": "models/us_messenger_link.py",
+                "line": 240,
+                "pattern": "@api.model",
+                "message": "Deprecado en Odoo 18 - considerar usar @api.model_create_multi",
+                "code": "@api.model"
+              },
+              {
+                "file": "models/us_messenger_task.py",
+                "line": 156,
+                "pattern": "@api.model",
+                "message": "Deprecado en Odoo 18 - considerar usar @api.model_create_multi",
+                "code": "@api.model"
+              },
+              {
+                "file": "models/us_messenger_trigger_cron.py",
+                "line": 30,
+                "pattern": "@api.model",
+                "message": "Deprecado en Odoo 18 - considerar usar @api.model_create_multi",
+                "code": "@api.model_create_multi"
+              },
+              {
+                "file": "lib/models/ir_actions.py",
+                "line": 59,
+                "pattern": "@api.model",
+                "message": "Deprecado en Odoo 18 - considerar usar @api.model_create_multi",
+                "code": "@api.model"
+              },
+              {
+                "file": "lib/models/ir_actions.py",
+                "line": 68,
+                "pattern": "@api.model",
+                "message": "Deprecado en Odoo 18 - considerar usar @api.model_create_multi",
+                "code": "@api.model"
+              }
+            ],
+            "manifest_issues": [],
+            "xml_issues": [],
+            "dependency_issues": [
+              {
+                "field": "depends",
+                "value": "base_automation",
+                "severity": "MEDIUM",
+                "message": "Dependencia \"base_automation\" puede no existir en Odoo 19"
+              },
+              {
+                "field": "depends",
+                "value": "mail",
+                "severity": "MEDIUM",
+                "message": "Dependencia \"mail\" puede no existir en Odoo 19"
+              },
+              {
+                "field": "depends",
+                "value": "queue_job",
+                "severity": "MEDIUM",
+                "message": "Dependencia \"queue_job\" puede no existir en Odoo 19"
+              },
+              {
+                "field": "depends",
+                "value": "us_multichat",
+                "severity": "MEDIUM",
+                "message": "Dependencia \"us_multichat\" puede no existir en Odoo 19"
+              }
+            ]
+          }
+        }
+      ]
+    }
+  ],
+  "summary": {},
+  "end_time": "2026-02-16T22:55:40.897998"
+}

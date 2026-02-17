@@ -1,0 +1,104 @@
+.odoo_studio_mode[type='report'] {
+  .o_technical_modal, button {
+    font-size: 14px;
+  }
+
+  h4, .h4 {
+    font-size: 1.05rem;
+  }
+
+  .node-active {
+    cursor: pointer;
+    outline: 1px dashed #53b0de;
+
+    &.is_address {
+      display: inline-block;
+    }
+  }
+}
+
+.templates_container {
+  display: flex;
+
+  .template_item {
+    padding: 10px;
+    border: 1px solid #dee2e6;
+    background: rgba(83, 197, 249, 0.04);
+    margin-right: 20px;
+    flex: 1;
+    border-radius: 5px;
+    cursor: pointer;
+
+    &.active {
+      border-color: #9391e6;
+      background-color: rgba(147, 145, 230, 0.2);
+    }
+
+    &:hover:not(.active) {
+      border-color: #cfceff;
+    }
+
+    p {
+      font-size: 13px;
+      margin: 0px;
+    }
+  }
+}
+
+.report_center {
+  display: flex;
+  flex-direction: column;
+  height: 100%;
+
+
+  .structure_con {
+    [name='colspan'], [name='rowspan'] {
+      width: 45%;
+      display: inline-block;
+    }
+
+    [name='rowspan'] {
+      float: right;
+    }
+  }
+
+  .table_helper {
+    outline: 1px dashed #bdb7cd;
+  }
+
+  .virtual_column {
+    border: 1px dashed #8f8f8f !important;
+    color: #959595;
+    font-style: italic;
+    text-align: center;
+    background: rgba(205, 205, 205, 0.18) !important;
+  }
+
+  td.virtual_column {
+    border-bottom-width: 0px !important;
+    border-top-width: 0px !important;
+  }
+
+  tbody > tr:last-child .virtual_column {
+    border-bottom-width: 1px !important;
+  }
+
+  .center_component {
+    width: 100%;
+  }
+
+  .tab_container[name='views'] {
+    padding-top: 35px !important;
+  }
+
+  .print_report {
+    position: absolute;
+    top: 10px;
+    right: 25px;
+    z-index: 100;
+  }
+
+  .component_viewer {
+    position: relative;
+  }
+}

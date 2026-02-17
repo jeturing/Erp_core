@@ -1,0 +1,80 @@
+.approval {
+  border: 1px solid #cdcdcd;
+  border-radius: 4px;
+  font-size: 14px;
+  font-family: ui-serif;
+  overflow: hidden;
+  .field_widget {
+    .many2one_field input, input[type='number'], input[type='text'] {
+      background-color: white;
+      height: 30px;
+    }
+
+    .radio_field .check_area {
+      background-color: white;
+    }
+  }
+
+  .rule_head {
+    display: flex;
+    //border-top: 1px solid #cdcdcd;
+    border-bottom: 1px solid #cdcdcd;
+    padding: 5px 5px 5px 0px;
+    color: #696482;
+
+    *:hover {
+      color: #4c4861;
+    }
+
+    h4 {
+      flex: 1;
+      font-family: ui-serif;
+      color: inherit;
+      margin: 0px;
+      align-content: space-around;
+    }
+
+    i {
+      cursor: pointer;
+    }
+  }
+
+  .approval_con {
+    //.rule:first-child {
+    //  .rule_head {
+    //    border-top: 0px;
+    //  }
+    //}
+
+    .rule:last-child {
+      .rule_content {
+        border-bottom: 1px solid #cdcdcd;
+      }
+    }
+  }
+
+  .rule_content {
+    padding: 10px;
+    background: #f8f9fa;
+
+    & > div {
+      margin-bottom: 10px;
+    }
+  }
+
+  .new_approval {
+
+    padding: 5px;
+    text-decoration: underline;
+    cursor: pointer;
+    color: #696482;
+
+    i {
+      vertical-align: middle;
+    }
+
+    &:hover {
+      color: #4c4861;
+    }
+  }
+}

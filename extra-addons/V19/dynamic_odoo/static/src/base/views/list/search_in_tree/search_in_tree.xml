@@ -1,0 +1,11 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<templates xml:space="preserve">
+    <t t-name="dynamic_odoo.searchInTree">
+        <div class="search_in_tree" t-on-click="onStop">
+            <t t-set="_fieldProps" t-value="fieldProps" />
+            <t t-if="_fieldProps">
+                <Field t-props="_fieldProps" />
+            </t>
+        </div>
+    </t>
+</templates>

@@ -1,0 +1,152 @@
+.vc_con {
+  display: flex;
+  height: calc(100% - 45px);
+}
+
+.no_exist {
+  color: #787a81;
+}
+
+.tab_modifier {
+  .tab_container {
+    height: calc(100% - 39.5px);
+  }
+}
+
+.stack_wrap {
+  display: none;
+
+  &:last-child {
+    flex: 1;
+    display: block;
+    width: 100%;
+  }
+}
+
+.no_support {
+  background-color: #eaeaea;
+  height: 100%;
+  margin: auto;
+  width: 100%;
+  display: flex;
+
+  & > div {
+    margin: auto;
+  }
+  h3 {
+    font-size: 25px;
+  }
+}
+
+.undo_redo_view {
+  text-align: center;
+
+  a {
+    height: 100%;
+    border-radius: 0px;
+    font-size: 17px;
+    margin-top: -2px;
+    cursor: pointer;
+    align-content: flex-end;
+  }
+
+  .undo_report {
+    padding-right: 15px;
+    border-right: 1px solid #494b4b;
+
+    &.can_undo i {
+      color: #ff5722;
+    }
+
+    i {
+      color: #7d4a3a;
+    }
+  }
+
+  .redo_report {
+    padding-left: 15px;
+    border-left: 1px solid #1f232b;
+
+    &.can_redo i {
+      color: #03A9F4;
+    }
+
+    i {
+      color: #436777;
+    }
+  }
+}
+
+.edit_action {
+  float: left;
+  margin-top: 15px;
+  margin-left: 10px;
+  color: #7678be;
+  cursor: pointer;
+
+  &:hover {
+    color: #999acd;
+  }
+}
+
+.node-active {
+  outline: 1px dashed #53b0de;
+}
+
+.view_center {
+  height: 100%;
+}
+
+.view_tree_ctrl {
+  display: flex;
+  height: 100%;
+  font-size: 14px;
+  align-items: center;
+  padding-left: 10px;
+
+  a, i {
+    color: $color1 !important;
+    padding: 0px 5px;
+    cursor: pointer;
+
+    &:hover {
+      color: $color3 !important;
+    }
+  }
+
+  i {
+    font-size: 23px;
+  }
+}
+
+.vc_head {
+  background-color: $color1-bg;
+  border-bottom: 1px solid $color1-border;
+  min-height: 45px;
+}
+
+.vc_head, .modifier_ctrl {
+  display: flex;
+
+  & > *:not(.views_ctrl) {
+    flex: 1;
+  }
+}
+
+.views_ctrl {
+  a {
+    display: inline-block;
+    padding: 0px 8px;
+    line-height: 41px;
+    color: rgba(255, 255, 255, 0.8);
+
+    &:hover, &:active, &.active {
+      color: $color3;
+      cursor: pointer;
+    }
+  }
+
+  .no_exist {
+    color: #787a81;
+  }
+}

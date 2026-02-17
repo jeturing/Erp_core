@@ -1,0 +1,23 @@
+.login_center {
+  height: 100%;
+
+  .login_desginer {
+    height: 100%;
+  }
+
+  .login_content {
+    height: 100%;
+  }
+
+  .component_viewer {
+    overflow: auto;
+  }
+
+  .node_side {
+    border-right-color: #494b4b;
+  }
+
+  .node-active {
+    outline: 1px dashed #53b0de !important;
+  }
+}

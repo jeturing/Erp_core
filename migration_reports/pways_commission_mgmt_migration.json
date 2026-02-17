@@ -1,0 +1,51 @@
+{
+  "start_time": "2026-02-16T22:55:37.393098",
+  "modules": [
+    {
+      "module": "pways_commission_mgmt",
+      "status": "completed",
+      "steps": [
+        {
+          "name": "copy",
+          "status": "ok"
+        },
+        {
+          "name": "analysis",
+          "status": "ok",
+          "data": {
+            "module": "pways_commission_mgmt",
+            "total_issues": 0,
+            "total_warnings": 3,
+            "python_issues": [
+              {
+                "file": "report/sale_inv_comm_template.py",
+                "line": 7,
+                "pattern": "@api.model",
+                "message": "Deprecado en Odoo 18 - considerar usar @api.model_create_multi",
+                "code": "@api.model"
+              }
+            ],
+            "manifest_issues": [],
+            "xml_issues": [],
+            "dependency_issues": [
+              {
+                "field": "depends",
+                "value": "sale_management",
+                "severity": "MEDIUM",
+                "message": "Dependencia \"sale_management\" puede no existir en Odoo 19"
+              },
+              {
+                "field": "depends",
+                "value": "sale_stock",
+                "severity": "MEDIUM",
+                "message": "Dependencia \"sale_stock\" puede no existir en Odoo 19"
+              }
+            ]
+          }
+        }
+      ]
+    }
+  ],
+  "summary": {},
+  "end_time": "2026-02-16T22:55:37.525387"
+}

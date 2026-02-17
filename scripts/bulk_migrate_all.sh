@@ -90,7 +90,7 @@ for module_dir in "$SOURCE_DIR"/*; do
         echo -e "${YELLOW}[$MODULE_COUNT/$MODULES - ${PERCENT}%]${NC} Migrando: ${BLUE}$module_name${NC}"
 
         # Ejecutar migración
-        if python "$PYTHON_TOOL" \
+        if python3 "$PYTHON_TOOL" \
             --source "$SOURCE_DIR" \
             --target "$TARGET_DIR" \
             --module "$module_name" \

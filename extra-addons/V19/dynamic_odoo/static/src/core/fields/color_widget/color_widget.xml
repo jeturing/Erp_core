@@ -1,0 +1,22 @@
+<?xml version="1.0" encoding="UTF-8" ?>
+<templates xml:space="preserve">
+
+    <t t-name="dynamic_odoo.ChooseColorWidget" owl="1">
+        <div class="choose_color_widget">
+            <a class="btn">
+                <i class="fa fa-tint" t-att-style="'color:' + state.value"></i>
+                <t t-esc="props.label || 'Choose Color'"/>
+            </a>
+            <ul class="dropdown-menu colorpicker-menu">
+                <t t-component="ColorPalette" t-props="colorPaletteProps"/>
+            </ul>
+<!--            <span class="sp_wrap dropdown-toggle o-no-caret" data-bs-toggle="dropdown">-->
+<!--                <span class="sp_border" t-att-style="side + '-color:' + sideData.color">-->
+<!--                    <span class="sp_wrap" t-on-click="() => this.state.side = side"></span>-->
+<!--                </span>-->
+<!--            </span>-->
+<!--            -->
+        </div>
+    </t>
+
+</templates>

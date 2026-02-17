@@ -1,0 +1,13 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<templates xml:space="preserve">
+
+    <t t-name="dynamic_odoo.Report.FieldOptionWidget" owl="1">
+        <div class="field_option_widget">
+            <t t-set="fields" t-value="prepareFields"/>
+            <t t-foreach="fields" t-as="field" t-key="Math.random()">
+                <Field t-props="field"/>
+            </t>
+        </div>
+    </t>
+
+</templates>

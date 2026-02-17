@@ -1,0 +1,67 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<odoo>
+	<data>
+		<!-- Vista de formulario para la transaccion de pago -->
+		<record model="ir.ui.view" id="payment_transaction_form">
+			<field name="name">payment_transaction_form</field>
+			<field name="model">pos.payment.transaction</field>
+			<field name="arch" type="xml">
+				<form create="0" edit="0">
+					<header>
+						<field name="state" widget="statusbar"/>
+					</header>
+					<sheet>
+						<group>
+							<group>
+								<field name="name_on_card"/>
+								<field name="last_4_digits" placeholder="****"/>
+								<!-- El campo paid_amount es de tipo Float -->
+								<field name="paid_amount" widget="monetary" options="{'currency_field': 'currency_id'}"/>
+								<field name="order_name"/>
+							</group>
+							<group>
+								<field name="mobile"/>
+								<field name="transaction_id"/>
+								<field name="partner_id"/>
+								<field name="cashier_id"/>
+								<field name="payment_date"/>
+								<field name="mpos_serial"/>
+							</group>
+						</group>
+					</sheet>
+				</form>
+			</field>
+		</record>
+
+		<!-- Vista de Arbol para las transacciones de pago -->
+		<record model='ir.ui.view' id='payment_transaction_tree'>
+			<field name='name'>payment_transaction_tree</field>
+			<field name='model'>pos.payment.transaction</field>
+			<field name='arch' type='xml'>
+				<tree create="0">
+					<field name='transaction_id'/>
+					<field name='order_name'/>
+					<field name='last_4_digits'/>
+					<!-- El campo paid_amount es de tipo Float -->
+					<field name='paid_amount' widget="monetary" options="{'currency_field': 'currency_id'}"/>
+					<field name='state'/>
+					<field name='cashier_id'/>
+					<field name='payment_date'/>
+					<field name='mpos_serial'/>
+				</tree>
+			</field>
+		</record>
+
+		<!-- Accion para abrir la vista de transacciones de pago -->
+		<record id="payment_transaction_action" model="ir.actions.act_window">
+			<field name="name">POS Payment Transactions</field>
+			<field name="type">ir.actions.act_window</field>
+			<field name="res_model">pos.payment.transaction</field>
+			<field name="view_mode">tree,form</field>
+		</record>
+
+		<!-- Menu para acceder a las transacciones de pago en el menu del POS -->
+		<menuitem id="menu_payment_screen" name="POS Stripe Payment Transactions" parent="point_of_sale.menu_point_root" sequence="60"/>
+		<menuitem id="menu_payment__transaction" name="POS Stripe Payment Transactions" parent="menu_payment_screen" action="payment_transaction_action"/>
+	</data>
+</odoo>
