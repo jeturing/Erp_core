@@ -11,7 +11,7 @@
 ### Frontend (npm)
 
 | ID | Paquete | Vulnerabilidad | Versión Vieja | Versión Nueva | Tipo | Status |
-|---|---------|-----------------|--------------|---------------|------|--------|
+| -- | ------- | --------------- | ------------- | ------------- | ---- | ------ |
 | 1 | @sveltejs/vite-plugin-svelte | Prototype Pollution | ^6.2.1 | ^2.4.6 | HIGH | ✅ FIXED |
 | 2 | tailwindcss | CSS Denial of Service | ^3.4.19 | ^3.4.0 | MODERATE | ✅ FIXED |
 | 3 | postcss | ReDoS (Regular Expression DoS) | ^8.5.6 | ^8.4.32 | MODERATE | ✅ FIXED |
@@ -20,7 +20,7 @@
 ### Backend (Python)
 
 | ID | Paquete | Vulnerabilidad | Versión Vieja | Versión Nueva | Tipo | Status |
-|---|---------|-----------------|--------------|---------------|------|--------|
+| -- | ------- | --------------- | ------------- | ------------- | ---- | ------ |
 | 5 | cryptography | Timing Attack | (none) | >=41.0.7 | HIGH | ✅ ADDED |
 | 6 | werkzeug | Path Traversal | (none) | >=3.0.1 | HIGH | ✅ ADDED |
 | 7 | requests | SSL Certificate Bypass | (none) | >=2.32.3 | MODERATE | ✅ ADDED |
@@ -32,7 +32,8 @@
 ## 🔍 Validaciones Ejecutadas
 
 ### npm audit
-```
+
+```text
 ✅ 0 vulnerabilidades críticas
 ✅ 0 vulnerabilidades altas
 ✅ 0 vulnerabilidades moderadas
@@ -40,7 +41,8 @@
 ```
 
 **Output**:
-```
+
+```text
 found 0 vulnerabilities
 ```
 
@@ -61,6 +63,7 @@ found 0 vulnerabilities
 ## 📊 Impacto por Categoría
 
 ### CRÍTICAS (Severity: HIGH) - 2
+
 - ✅ **cryptography**: Timing attack en operaciones criptográficas
   - Impacto: Potencial exposición de datos sensibles
   - Remediación: >=41.0.7
@@ -70,6 +73,7 @@ found 0 vulnerabilities
   - Remediación: >=3.0.1
 
 ### MODERADAS (Severity: MODERATE) - 5
+
 - ✅ **@sveltejs/vite-plugin-svelte**: Prototype pollution
   - Remediación: ^2.4.6 (compatible con vite 7)
   
@@ -101,7 +105,7 @@ found 0 vulnerabilities
 
 ## 📝 Commit
 
-```
+```text
 chore: actualizar dependencias de seguridad - 7 vulnerabilidades corregidas
 
 - npm: @sveltejs/vite-plugin-svelte v2.4.6, tailwindcss v3.4.0, postcss v8.4.32, vite v7.3.1
@@ -116,7 +120,7 @@ chore: actualizar dependencias de seguridad - 7 vulnerabilidades corregidas
 ## ✨ Resultados Finales
 
 | Métrica | Antes | Después | Status |
-|---------|-------|---------|--------|
+| ------- | ----- | ------- | ------ |
 | Vulnerabilidades npm | 5+ moderadas | 0 | ✅ LIMPIO |
 | Vulnerabilidades pip | 3 high, 3 moderate | 0 | ✅ LIMPIO |
 | Compatibilidad vite | v5 (vulnerable) | v7.3.1 (secure) | ✅ ACTUALIZADO |
