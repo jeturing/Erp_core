@@ -4,12 +4,13 @@
   import { toasts } from '../lib/stores/toast';
   import { formatDate, formatCurrency, formatPercent } from '../lib/utils/formatters';
   import type { BillingMetrics, BillingInvoice } from '../lib/types';
-  import { RefreshCw, ChevronLeft, ChevronRight } from 'lucide-svelte';
+  import { RefreshCw, ChevronLeft, ChevronRight, TrendingUp, TrendingDown } from 'lucide-svelte';
 
   let loading = true;
   let metrics: BillingMetrics | null = null;
   let invoices: BillingInvoice[] = [];
   let totalInvoices = 0;
+  let comparison: any = null;
 
   const PAGE_SIZE = 20;
   let currentPage = 0;
@@ -19,6 +20,14 @@
       metrics = await billingApi.getMetrics();
     } catch (err) {
       toasts.error(err instanceof Error ? err.message : 'Error cargando métricas de billing');
+    }
+  }
+
+  async function loadComparison() {
+    try {
+      comparison = await billingApi.getComparison();
+    } catch (err) {
+      toasts.error(err instanceof Error ? err.message : 'Error cargando comparación MoM');
     }
   }
 
@@ -34,7 +43,7 @@
 
   async function loadAll() {
     loading = true;
-    await Promise.all([loadMetrics(), loadInvoices(currentPage)]);
+    await Promise.all([loadMetrics(), loadComparison(), loadInvoices(currentPage)]);
     loading = false;
   }
 
@@ -64,6 +73,8 @@
   $: totalPages = Math.max(1, Math.ceil(totalInvoices / PAGE_SIZE));
   $: startItem = currentPage * PAGE_SIZE + 1;
   $: endItem = Math.min((currentPage + 1) * PAGE_SIZE, totalInvoices);
+  $: mrmGrowth = comparison ? ((comparison.current_mrr - comparison.previous_mrr) / comparison.previous_mrr * 100) : 0;
+  $: newTenants = comparison ? (comparison.new_customers - comparison.lost_customers) : 0;
 </script>
 
 <div class="p-6 lg:p-8 space-y-6">
@@ -106,6 +117,53 @@
         <span class="text-[11px] text-gray-500">{metrics?.cancelled_30d ?? 0} cancelaciones</span>
       </div>
     </div>
+
+    <!-- MoM Comparison -->
+    {#if comparison}
+      <div class="card">
+        <div class="flex items-center justify-between mb-4">
+          <span class="section-heading">Comparación Mes a Mes</span>
+          <span class="text-[11px] text-gray-500">{comparison.previous_month} vs {comparison.current_month}</span>
+        </div>
+        <div class="grid grid-cols-1 sm:grid-cols-4 gap-4">
+          <!-- MRR Growth -->
+          <div class="rounded-lg border border-border-light p-4 bg-bg-page">
+            <div class="flex items-center gap-2 mb-2">
+              <span class="text-[11px] font-semibold text-gray-600">MRR Growth</span>
+              {#if mrmGrowth > 0}
+                <TrendingUp size={14} class="text-success" />
+              {:else if mrmGrowth < 0}
+                <TrendingDown size={14} class="text-error" />
+              {/if}
+            </div>
+            <p class="text-2xl font-bold {mrmGrowth > 0 ? 'text-success' : mrmGrowth < 0 ? 'text-error' : 'text-text-primary'}">
+              {mrmGrowth > 0 ? '+' : ''}{mrmGrowth.toFixed(1)}%
+            </p>
+            <p class="text-[11px] text-gray-500 mt-1">{formatCurrency(comparison.current_mrr)} vs {formatCurrency(comparison.previous_mrr)}</p>
+          </div>
+          <!-- New Customers -->
+          <div class="rounded-lg border border-border-light p-4 bg-bg-page">
+            <span class="text-[11px] font-semibold text-gray-600">Nuevos Clientes</span>
+            <p class="text-2xl font-bold text-text-primary mt-2">+{comparison.new_customers}</p>
+            <p class="text-[11px] text-gray-500 mt-1">{comparison.lost_customers} cancelaciones</p>
+          </div>
+          <!-- Net Growth -->
+          <div class="rounded-lg border border-border-light p-4 bg-bg-page">
+            <span class="text-[11px] font-semibold text-gray-600">Crecimiento Neto</span>
+            <p class="text-2xl font-bold {newTenants > 0 ? 'text-success' : 'text-error'} mt-2">
+              {newTenants > 0 ? '+' : ''}{newTenants}
+            </p>
+            <p class="text-[11px] text-gray-500 mt-1">clientes netos ganados</p>
+          </div>
+          <!-- Total Revenue Change -->
+          <div class="rounded-lg border border-border-light p-4 bg-bg-page">
+            <span class="text-[11px] font-semibold text-gray-600">Cambio de Ingresos</span>
+            <p class="text-2xl font-bold text-text-primary mt-2">{formatCurrency(comparison.current_revenue - comparison.previous_revenue)}</p>
+            <p class="text-[11px] text-gray-500 mt-1">{formatCurrency(comparison.current_revenue)} vs {formatCurrency(comparison.previous_revenue)}</p>
+          </div>
+        </div>
+      </div>
+    {/if}
 
     <!-- Plan Distribution -->
     <div class="card">
