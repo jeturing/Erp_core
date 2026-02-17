@@ -3,7 +3,6 @@ Dashboard Routes - Admin dashboard metrics and views
 """
 from fastapi import APIRouter, HTTPException, Request, Cookie
 from fastapi.responses import HTMLResponse, RedirectResponse
-from fastapi.templating import Jinja2Templates
 import os
 from ..models.database import Customer, Subscription, SubscriptionStatus, SessionLocal
 from .roles import verify_token_with_role
@@ -11,9 +10,7 @@ from ..services.spa_shell import render_spa_shell
 
 router = APIRouter(tags=["Dashboard"])
 
-# Templates
 BASE_DIR = os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
-templates = Jinja2Templates(directory=os.path.join(BASE_DIR, "templates"))
 
 
 @router.get("/login", response_class=HTMLResponse)
@@ -100,7 +97,7 @@ async def dashboard_metrics(request: Request, access_token: str = Cookie(None)):
 
 @router.get("/admin/logs", response_class=HTMLResponse)
 async def admin_logs_page(request: Request, access_token: str = Cookie(None)):
-    """Página de logs del sistema - requiere autenticación admin."""
+    """Página de logs del sistema - SPA shell."""
     token = access_token
     if token is None:
         auth_header = request.headers.get("Authorization", "")
@@ -108,20 +105,17 @@ async def admin_logs_page(request: Request, access_token: str = Cookie(None)):
             token = auth_header[7:]
         else:
             return RedirectResponse(url="/login/admin", status_code=302)
-    
+
     try:
         verify_token_with_role(token, required_role="admin")
-        return templates.TemplateResponse("admin_logs.html", {
-            "request": request,
-            "active_page": "logs"
-        })
+        return render_spa_shell("logs")
     except HTTPException:
         return RedirectResponse(url="/login/admin", status_code=302)
 
 
 @router.get("/admin/billing", response_class=HTMLResponse)
 async def admin_billing_page(request: Request, access_token: str = Cookie(None)):
-    """Página de facturación admin - requiere autenticación."""
+    """Página de facturación admin - SPA shell."""
     token = access_token
     if token is None:
         auth_header = request.headers.get("Authorization", "")
@@ -129,20 +123,17 @@ async def admin_billing_page(request: Request, access_token: str = Cookie(None))
             token = auth_header[7:]
         else:
             return RedirectResponse(url="/login/admin", status_code=302)
-    
+
     try:
         verify_token_with_role(token, required_role="admin")
-        return templates.TemplateResponse("admin_billing.html", {
-            "request": request,
-            "active_page": "billing"
-        })
+        return render_spa_shell("billing")
     except HTTPException:
         return RedirectResponse(url="/login/admin", status_code=302)
 
 
 @router.get("/admin/settings", response_class=HTMLResponse)
 async def admin_settings_page(request: Request, access_token: str = Cookie(None)):
-    """Página de configuración del sistema - requiere autenticación admin."""
+    """Página de configuración del sistema - SPA shell."""
     token = access_token
     if token is None:
         auth_header = request.headers.get("Authorization", "")
@@ -150,13 +141,10 @@ async def admin_settings_page(request: Request, access_token: str = Cookie(None)
             token = auth_header[7:]
         else:
             return RedirectResponse(url="/login/admin", status_code=302)
-    
+
     try:
         verify_token_with_role(token, required_role="admin")
-        return templates.TemplateResponse("admin_settings.html", {
-            "request": request,
-            "active_page": "settings"
-        })
+        return render_spa_shell("settings")
     except HTTPException:
         return RedirectResponse(url="/login/admin", status_code=302)
 
@@ -209,17 +197,14 @@ async def admin_tenants_page(request: Request, access_token: str = Cookie(None))
     
     try:
         verify_token_with_role(token, required_role="admin")
-        return templates.TemplateResponse("admin_tenants.html", {
-            "request": request,
-            "active_page": "tenants"
-        })
+        return render_spa_shell("tenants")
     except HTTPException:
         return RedirectResponse(url="/login/admin", status_code=302)
 
 
 @router.get("/admin/tunnels", response_class=HTMLResponse)
 async def admin_tunnels_page(request: Request, access_token: str = Cookie(None)):
-    """Página de gestión de Cloudflare Tunnels - requiere autenticación admin."""
+    """Página de gestión de Cloudflare Tunnels - SPA shell."""
     token = access_token
     if token is None:
         auth_header = request.headers.get("Authorization", "")
@@ -227,13 +212,10 @@ async def admin_tunnels_page(request: Request, access_token: str = Cookie(None))
             token = auth_header[7:]
         else:
             return RedirectResponse(url="/login/admin", status_code=302)
-    
+
     try:
         verify_token_with_role(token, required_role="admin")
-        return templates.TemplateResponse("admin_tunnels.html", {
-            "request": request,
-            "active_page": "tunnels"
-        })
+        return render_spa_shell("tunnels")
     except HTTPException:
         return RedirectResponse(url="/login/admin", status_code=302)
 

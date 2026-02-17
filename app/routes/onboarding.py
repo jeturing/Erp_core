@@ -3,13 +3,13 @@ Onboarding Routes - Customer registration and Stripe integration
 """
 from fastapi import APIRouter, HTTPException, Request, Form, BackgroundTasks
 from fastapi.responses import HTMLResponse, RedirectResponse, JSONResponse
-from fastapi.templating import Jinja2Templates
 from pydantic import BaseModel
 import stripe
 import os
 from datetime import datetime
 from ..models.database import Customer, Subscription, StripeEvent, SubscriptionStatus, SessionLocal
 from ..services.odoo_provisioner import provision_tenant
+from ..services.spa_shell import render_spa_shell
 import logging
 
 router = APIRouter(tags=["Onboarding"])
@@ -18,10 +18,6 @@ router = APIRouter(tags=["Onboarding"])
 stripe.api_key = os.getenv("STRIPE_SECRET_KEY", "sk_test_dummy_key_replace_with_real_key")
 STRIPE_WEBHOOK_SECRET = os.getenv("STRIPE_WEBHOOK_SECRET", "whsec_dummy_secret")
 APP_URL = os.getenv("APP_URL", "http://localhost:4443")
-
-# Templates - use relative path
-BASE_DIR = os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
-templates = Jinja2Templates(directory=os.path.join(BASE_DIR, "templates"))
 
 logger = logging.getLogger(__name__)
 
@@ -37,14 +33,14 @@ class CheckoutRequest(BaseModel):
 
 @router.get("/", response_class=HTMLResponse)
 async def landing_page(request: Request):
-    """Página de marketing principal"""
-    return templates.TemplateResponse("landing.html", {"request": request})
+    """Página de marketing principal - SPA"""
+    return render_spa_shell("landing")
 
 
 @router.get("/signup", response_class=HTMLResponse)
 async def signup_page(request: Request, plan: str = "pro"):
-    """Formulario de registro inicial en /signup"""
-    return templates.TemplateResponse("onboarding_form.html", {"request": request, "plan": plan})
+    """Formulario de registro inicial en /signup - SPA"""
+    return render_spa_shell("signup", {"plan": plan})
 
 
 @router.get("/onboarding", response_class=HTMLResponse)
@@ -161,18 +157,17 @@ async def stripe_webhook(request: Request, background_tasks: BackgroundTasks):
 
 @router.get("/success", response_class=HTMLResponse)
 async def success_page(request: Request, session_id: str = None):
-    """Página de éxito post-checkout"""
+    """Página de éxito post-checkout - SPA"""
     subdomain = None
     odoo_url = None
-    
+
     if session_id:
         db = SessionLocal()
         try:
-            # Buscar la suscripción por session_id
             subscription = db.query(Subscription).filter_by(
                 stripe_checkout_session_id=session_id
             ).first()
-            
+
             if subscription and subscription.customer:
                 subdomain = subscription.customer.subdomain
                 odoo_url = f"https://{subdomain}.sajet.us"
@@ -180,15 +175,13 @@ async def success_page(request: Request, session_id: str = None):
             logger.warning(f"Error fetching subscription: {e}")
         finally:
             db.close()
-    
-    # Si no se encontró, usar URL genérica
+
     if not odoo_url:
         odoo_url = "https://sajet.us"
         subdomain = "tu-empresa"
-    
-    return templates.TemplateResponse("success.html", {
-        "request": request,
-        "session_id": session_id,
+
+    return render_spa_shell("success", {
+        "sessionId": session_id or "",
         "subdomain": subdomain,
-        "url": odoo_url
+        "odooUrl": odoo_url,
     })

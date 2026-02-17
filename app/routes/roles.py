@@ -9,7 +9,6 @@ import os
 
 from fastapi import APIRouter, Cookie, HTTPException, Request, status
 from fastapi.responses import HTMLResponse, JSONResponse
-from fastapi.templating import Jinja2Templates
 from pydantic import BaseModel
 
 from ..models.database import Customer, SessionLocal, SystemConfig
@@ -27,9 +26,7 @@ ROLES_CONFIG_KEY = "SPA_ROLES_JSON"
 ADMIN_USERNAME = os.getenv("ADMIN_USERNAME", "admin")
 ADMIN_PASSWORD = os.getenv("ADMIN_PASSWORD", "admin123")
 
-# Templates
 BASE_DIR = os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
-templates = Jinja2Templates(directory=os.path.join(BASE_DIR, "templates"))
 
 DEFAULT_ROLES: List[Dict[str, Any]] = [
     {

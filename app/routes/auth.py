@@ -3,7 +3,6 @@ Authentication Routes - Login, JWT management
 """
 from fastapi import APIRouter, HTTPException, Request, status
 from fastapi.responses import HTMLResponse
-from fastapi.templating import Jinja2Templates
 from pydantic import BaseModel
 from datetime import datetime, timedelta
 import jwt
@@ -19,10 +18,6 @@ JWT_EXPIRATION_HOURS = 24
 # Admin credentials
 ADMIN_USERNAME = os.getenv("ADMIN_USERNAME", "admin")
 ADMIN_PASSWORD = os.getenv("ADMIN_PASSWORD", "admin123")
-
-# Templates
-BASE_DIR = os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
-templates = Jinja2Templates(directory=os.path.join(BASE_DIR, "templates"))
 
 
 # DTOs
