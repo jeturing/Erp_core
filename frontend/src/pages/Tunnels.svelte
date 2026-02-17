@@ -1,203 +1,133 @@
 <script lang="ts">
   import { onMount } from 'svelte';
-  import { Badge, Button, Card, Input, Modal, Spinner } from '../lib/components';
   import { tunnelsApi } from '../lib/api';
-  import type { Tunnel } from '../lib/types';
+  import { toasts } from '../lib/stores/toast';
+  import { formatDate } from '../lib/utils/formatters';
+  import { RefreshCw } from 'lucide-svelte';
+  import type { Tunnel, TunnelDeployment } from '../lib/api/tunnels';
 
-  let loading = true;
-  let creating = false;
-  let deleting = false;
-  let error = '';
-  let warning = '';
 
-  let tunnels: Tunnel[] = [];
-  let showCreateModal = false;
-  let showDeleteModal = false;
-  let selectedTunnel: Tunnel | null = null;
-  let formError = '';
 
-  let createForm = {
-    subscription_id: '',
-    container_id: '',
-    local_port: 8069,
-  };
+  let tunnels = $state<Tunnel[]>([]);
+  let loading = $state(true);
+  let warning = $state<string | null>(null);
+  let totalTunnels = $state(0);
 
-  function statusVariant(status: string) {
-    if (status === 'active' || status === 'healthy' || status === 'running') return 'success';
-    if (status === 'warning' || status === 'degraded') return 'warning';
-    if (status === 'error' || status === 'stopped') return 'error';
-    return 'secondary';
-  }
-
-  async function loadData() {
+  async function loadTunnels() {
     loading = true;
-    error = '';
-    warning = '';
     try {
-      const response = await tunnelsApi.listTunnels();
-      tunnels = response.tunnels || [];
-      warning = response.warning || '';
-    } catch (err) {
-      error = err instanceof Error ? err.message : 'No se pudieron cargar tunnels';
+      const data = await tunnelsApi.list();
+      tunnels = data.tunnels ?? [];
+      totalTunnels = data.total ?? tunnels.length;
+      warning = data.warning ?? null;
+    } catch (e: any) {
+      toasts.error(e?.message ?? 'Error al cargar tunnels');
     } finally {
       loading = false;
     }
   }
 
-  async function handleCreate() {
-    formError = '';
-    if (!createForm.subscription_id.trim() || !createForm.container_id.trim()) {
-      formError = 'Subscription ID y Container ID son obligatorios';
-      return;
-    }
-
-    creating = true;
+  async function handleRestart(id: string) {
     try {
-      await tunnelsApi.createTunnel({
-        subscription_id: createForm.subscription_id.trim(),
-        container_id: Number(createForm.container_id),
-        local_port: Number(createForm.local_port) || 8069,
-      });
-      showCreateModal = false;
-      createForm = { subscription_id: '', container_id: '', local_port: 8069 };
-      await loadData();
-    } catch (err) {
-      formError = err instanceof Error ? err.message : 'No se pudo crear tunnel';
-    } finally {
-      creating = false;
+      await tunnelsApi.restart(id);
+      toasts.success('Tunnel reiniciado');
+      await loadTunnels();
+    } catch (e: any) {
+      toasts.error(e?.message ?? 'Error al reiniciar tunnel');
     }
   }
 
-  function openDeleteModal(tunnel: Tunnel) {
-    selectedTunnel = tunnel;
-    showDeleteModal = true;
-  }
-
-  async function handleDelete() {
-    if (!selectedTunnel) return;
-    deleting = true;
-    formError = '';
+  async function handleDelete(tunnel: Tunnel) {
+    if (!window.confirm(`¿Eliminar el tunnel "${tunnel.name}" (${tunnel.id.slice(0, 8)})?`)) return;
     try {
-      await tunnelsApi.deleteTunnel(selectedTunnel.id || selectedTunnel.name);
-      showDeleteModal = false;
-      selectedTunnel = null;
-      await loadData();
-    } catch (err) {
-      formError = err instanceof Error ? err.message : 'No se pudo eliminar tunnel';
-    } finally {
-      deleting = false;
+      await tunnelsApi.delete(tunnel.id);
+      toasts.success('Tunnel eliminado');
+      await loadTunnels();
+    } catch (e: any) {
+      toasts.error(e?.message ?? 'Error al eliminar tunnel');
     }
   }
 
-  onMount(loadData);
+  onMount(loadTunnels);
 </script>
 
-<div class="p-6 lg:p-8 space-y-6">
-  <div class="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
+<div class="space-y-6">
+  <!-- Header -->
+  <div class="flex items-center justify-between">
     <div>
-      <h1 class="text-2xl font-bold text-white">Tunnels</h1>
-      <p class="text-secondary-400 mt-1">Gestion de Cloudflare Tunnels activos</p>
+      <h1 class="page-title">CLOUDFLARE TUNNELS</h1>
+      <p class="page-subtitle">Gestión de túneles de red</p>
     </div>
-    <div class="flex gap-2">
-      <Button variant="secondary" on:click={loadData}>Actualizar</Button>
-      <Button variant="accent" on:click={() => (showCreateModal = true)}>Crear tunnel</Button>
-    </div>
+    <button class="btn-secondary px-4 py-2 flex items-center gap-2" onclick={loadTunnels} disabled={loading}>
+      <RefreshCw size={14} class={loading ? 'animate-spin' : ''} />
+      ACTUALIZAR
+    </button>
   </div>
 
-  {#if error}
-    <Card><p class="text-sm text-error">{error}</p></Card>
-  {/if}
-
+  <!-- Warning banner -->
   {#if warning}
-    <Card><p class="text-sm text-warning">{warning}</p></Card>
-  {/if}
-
-  <Card title="Tunnels activos" subtitle="/api/tunnels" padding="none">
-    {#if loading}
-      <div class="py-12 flex justify-center"><Spinner size="lg" /></div>
-    {:else}
-      <div class="overflow-x-auto">
-        <table class="table">
-          <thead>
-            <tr>
-              <th>Tunnel</th>
-              <th>Estado</th>
-              <th>Tenant</th>
-              <th>Dominio</th>
-              <th>Acciones</th>
-            </tr>
-          </thead>
-          <tbody>
-            {#each tunnels as tunnel}
-              <tr>
-                <td>
-                  <p class="font-medium text-white">{tunnel.name}</p>
-                  <p class="text-xs text-secondary-500">{tunnel.id}</p>
-                </td>
-                <td><Badge variant={statusVariant(tunnel.status)}>{tunnel.status || 'unknown'}</Badge></td>
-                <td class="text-secondary-300">{tunnel.deployment?.subdomain || '-'}</td>
-                <td class="text-secondary-300">{tunnel.deployment?.url || tunnel.deployment?.domain || '-'}</td>
-                <td>
-                  <Button size="sm" variant="danger" on:click={() => openDeleteModal(tunnel)}>Eliminar</Button>
-                </td>
-              </tr>
-            {:else}
-              <tr>
-                <td colspan="5" class="text-center text-secondary-500 py-8">No hay tunnels activos</td>
-              </tr>
-            {/each}
-          </tbody>
-        </table>
-      </div>
-    {/if}
-  </Card>
-</div>
-
-<Modal
-  bind:isOpen={showCreateModal}
-  title="Crear tunnel"
-  confirmText="Crear"
-  on:confirm={handleCreate}
-  on:close={() => {
-    showCreateModal = false;
-    formError = '';
-  }}
-  loading={creating}
->
-  <div class="space-y-4">
-    {#if formError}
-      <div class="rounded-lg border border-error/30 bg-error/10 px-3 py-2 text-sm text-error">{formError}</div>
-    {/if}
-
-    <Input label="Subscription ID" bind:value={createForm.subscription_id} placeholder="123" required />
-    <Input label="Container ID" type="number" bind:value={createForm.container_id} placeholder="105" required />
-    <Input label="Puerto local" type="number" bind:value={createForm.local_port} placeholder="8069" />
-  </div>
-</Modal>
-
-<Modal
-  bind:isOpen={showDeleteModal}
-  title="Eliminar tunnel"
-  confirmText="Eliminar"
-  confirmVariant="danger"
-  on:confirm={handleDelete}
-  on:close={() => {
-    showDeleteModal = false;
-    selectedTunnel = null;
-    formError = '';
-  }}
-  loading={deleting}
->
-  {#if selectedTunnel}
-    <div class="space-y-3 text-sm text-secondary-300">
-      <p>
-        Se eliminara el tunnel
-        <strong class="text-error"> {selectedTunnel.name}</strong>.
-      </p>
-      <p class="text-secondary-500">Esta accion es irreversible.</p>
-      {#if formError}
-        <div class="rounded-lg border border-error/30 bg-error/10 px-3 py-2 text-sm text-error">{formError}</div>
-      {/if}
+    <div class="bg-amber-50 border border-amber-200 px-4 py-3 flex items-start gap-3">
+      <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" class="text-amber-600 shrink-0 mt-0.5">
+        <path d="m21.73 18-8-14a2 2 0 0 0-3.48 0l-8 14A2 2 0 0 0 4 21h16a2 2 0 0 0 1.73-3Z"/><line x1="12" y1="9" x2="12" y2="13"/><line x1="12" y1="17" x2="12.01" y2="17"/>
+      </svg>
+      <p class="text-sm text-amber-700">{warning}</p>
     </div>
   {/if}
-</Modal>
+
+  <!-- Stat -->
+  <div class="grid grid-cols-2 md:grid-cols-4 gap-4">
+    <div class="stat-card card">
+      <div class="stat-value">{totalTunnels}</div>
+      <div class="stat-label">Total Tunnels</div>
+    </div>
+  </div>
+
+  <!-- Table -->
+  <div class="card p-0 overflow-hidden">
+    {#if loading}
+      <div class="p-8 text-center text-gray-500 text-sm">Cargando tunnels...</div>
+    {:else if tunnels.length === 0}
+      <div class="p-8 text-center text-gray-500 text-sm">No hay tunnels registrados</div>
+    {:else}
+      <table class="table w-full">
+        <thead>
+          <tr>
+            <th>ID</th>
+            <th>NOMBRE</th>
+            <th>ESTADO</th>
+            <th>SUBDOMINIO</th>
+            <th>DOMINIO</th>
+            <th>CREADO</th>
+            <th>ACCIONES</th>
+          </tr>
+        </thead>
+        <tbody>
+          {#each tunnels as tunnel (tunnel.id)}
+            <tr>
+              <td class="font-mono text-xs text-gray-500">{tunnel.id.slice(0, 8)}</td>
+              <td class="text-sm font-medium">{tunnel.name}</td>
+              <td>
+                {#if tunnel.status === 'active' || tunnel.status === 'healthy'}
+                  <span class="badge-success">{tunnel.status}</span>
+                {:else if tunnel.status === 'inactive' || tunnel.status === 'down'}
+                  <span class="badge-error">{tunnel.status}</span>
+                {:else}
+                  <span class="badge-warning">{tunnel.status}</span>
+                {/if}
+              </td>
+              <td class="text-sm text-gray-600">{tunnel.deployment?.subdomain ?? '-'}</td>
+              <td class="text-sm text-gray-600">{tunnel.deployment?.domain ?? '-'}</td>
+              <td class="text-sm text-gray-500">{formatDate(tunnel.created_at)}</td>
+              <td>
+                <div class="flex items-center gap-2">
+                  <button class="btn-secondary btn-sm" onclick={() => handleRestart(tunnel.id)}>REINICIAR</button>
+                  <button class="btn-danger btn-sm" onclick={() => handleDelete(tunnel)}>ELIMINAR</button>
+                </div>
+              </td>
+            </tr>
+          {/each}
+        </tbody>
+      </table>
+    {/if}
+  </div>
+</div>

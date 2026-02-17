@@ -1,32 +1,30 @@
-import api from './client';
-import type { Role, RolesListResponse } from '../types';
+import { api } from './client';
 
-export interface RolePayload {
+export interface Role {
+  id: number;
   name: string;
   description?: string;
-  permissions?: string[];
+  permissions: string[];
+  is_system?: boolean;
+  created_at?: string;
+  updated_at?: string;
+}
+
+export interface RolesListResponse {
+  roles: Role[];
+  total: number;
 }
 
 export const rolesApi = {
-  async listRoles(): Promise<RolesListResponse> {
-    return api.get<RolesListResponse>('/api/roles');
+  list(): Promise<RolesListResponse> {
+    return api.get('/api/roles');
   },
 
-  async createRole(payload: RolePayload): Promise<{ success: boolean; role: Role }> {
-    return api.post('/api/roles', {
-      name: payload.name,
-      description: payload.description || '',
-      permissions: payload.permissions || [],
-    });
+  create(data: { name: string; description?: string; permissions: string[] }): Promise<Role> {
+    return api.post('/api/roles', data);
   },
 
-  async updateRole(roleId: number, payload: RolePayload): Promise<{ success: boolean; role: Role }> {
-    return api.put(`/api/roles/${roleId}`, {
-      name: payload.name,
-      description: payload.description || '',
-      permissions: payload.permissions || [],
-    });
+  update(id: number, data: { name?: string; description?: string; permissions?: string[] }): Promise<Role> {
+    return api.put(`/api/roles/${id}`, data);
   },
 };
-
-export default rolesApi;

@@ -1,20 +1,43 @@
-import api from './client';
-import type { LogsResponse, SystemStatusResponse } from '../types';
+import { api } from './client';
+
+export interface LogEntry {
+  line: string;
+  class: string;
+}
+
+export interface LogsResponse {
+  logs: LogEntry[];
+  total: number;
+  file?: string;
+  source?: string;
+  error?: string;
+}
+
+export interface SystemStatus {
+  postgresql: { status: string; latency_ms?: number | null; error?: string };
+  fastapi: { status: string; port: number };
+  lxc_105: { status: string; name: string };
+  disk: { usage_percent: number; free_gb: number };
+}
 
 export const logsApi = {
-  async getProvisioningLogs(lines = 100, level?: string): Promise<LogsResponse> {
+  getProvisioningLogs(lines = 100, level?: string): Promise<LogsResponse> {
     const params = new URLSearchParams({ lines: String(lines) });
     if (level) params.set('level', level);
-    return api.get<LogsResponse>(`/api/logs/provisioning?${params.toString()}`);
+    return api.get(`/api/logs/provisioning?${params}`);
   },
 
-  async getSystemLogs(lines = 50): Promise<LogsResponse> {
-    return api.get<LogsResponse>(`/api/logs/system?lines=${lines}`);
+  getAppLogs(lines = 100, level?: string): Promise<LogsResponse> {
+    const params = new URLSearchParams({ lines: String(lines) });
+    if (level) params.set('level', level);
+    return api.get(`/api/logs/app?${params}`);
   },
 
-  async getSystemStatus(): Promise<SystemStatusResponse> {
-    return api.get<SystemStatusResponse>('/api/logs/status');
+  getSystemLogs(lines = 50): Promise<LogsResponse> {
+    return api.get(`/api/logs/system?lines=${lines}`);
+  },
+
+  getSystemStatus(): Promise<SystemStatus> {
+    return api.get('/api/logs/status');
   },
 };
-
-export default logsApi;

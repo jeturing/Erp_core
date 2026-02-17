@@ -1,185 +1,112 @@
 <script lang="ts">
   import {
-    LayoutDashboard,
-    Users,
-    Globe,
-    Server,
-    CreditCard,
-    Settings,
-    LogOut,
-    ChevronLeft,
-    Menu,
-    Bell,
-    Search,
+    LayoutDashboard, Users, Globe, Server, CreditCard,
+    Settings, LogOut, Menu, X, FileText, Route, Shield,
     ExternalLink,
-    FileText,
-    Route,
-    Shield,
   } from 'lucide-svelte';
   import { auth } from '../stores';
 
   export let currentRoute: string = 'dashboard';
 
-  let sidebarCollapsed = false;
-  let mobileMenuOpen = false;
+  let mobileOpen = false;
 
-  const navItems = [
-    { id: 'dashboard', label: 'Dashboard', icon: LayoutDashboard, href: '#/dashboard' },
-    { id: 'tenants', label: 'Tenants', icon: Users, href: '#/tenants' },
-    { id: 'domains', label: 'Domains', icon: Globe, href: '#/domains' },
-    { id: 'infrastructure', label: 'Infrastructure', icon: Server, href: '#/infrastructure' },
-    { id: 'billing', label: 'Billing', icon: CreditCard, href: '#/billing' },
-    { id: 'settings', label: 'Settings', icon: Settings, href: '#/settings' },
-    { id: 'logs', label: 'Logs', icon: FileText, href: '#/logs' },
-    { id: 'tunnels', label: 'Tunnels', icon: Route, href: '#/tunnels' },
-    { id: 'roles', label: 'Roles', icon: Shield, href: '#/roles' },
-    { id: 'portal', label: 'Portal tenant', icon: ExternalLink, href: '#/portal' },
+  type NavItem = { id: string; label: string; icon: any; href: string };
+
+  const navItems: NavItem[] = [
+    { id: 'dashboard',      label: 'Dashboard',      icon: LayoutDashboard, href: '#/dashboard' },
+    { id: 'tenants',        label: 'Tenants',         icon: Users,           href: '#/tenants' },
+    { id: 'domains',        label: 'Domains',         icon: Globe,           href: '#/domains' },
+    { id: 'infrastructure', label: 'Infrastructure',  icon: Server,          href: '#/infrastructure' },
+    { id: 'billing',        label: 'Billing',         icon: CreditCard,      href: '#/billing' },
+    { id: 'settings',       label: 'Settings',        icon: Settings,        href: '#/settings' },
+    { id: 'logs',           label: 'Logs',            icon: FileText,        href: '#/logs' },
+    { id: 'tunnels',        label: 'Tunnels',         icon: Route,           href: '#/tunnels' },
+    { id: 'roles',          label: 'Roles',           icon: Shield,          href: '#/roles' },
+    { id: 'portal',         label: 'Portal Tenant',   icon: ExternalLink,    href: '#/portal' },
   ];
 
   function handleLogout() {
     auth.logout();
     window.location.hash = '#/login';
   }
-
-  function toggleSidebar() {
-    sidebarCollapsed = !sidebarCollapsed;
-  }
-
-  function closeMobileMenu() {
-    mobileMenuOpen = false;
-  }
 </script>
 
-<div class="min-h-screen flex bg-surface-dark">
-  {#if mobileMenuOpen}
-    <div
-      class="fixed inset-0 bg-black/50 z-40 lg:hidden"
-      on:click={closeMobileMenu}
-      on:keydown={(event) => event.key === 'Escape' && closeMobileMenu()}
-      role="button"
-      tabindex="0"
-      aria-label="Cerrar menu"
-    ></div>
+<div class="min-h-screen flex bg-bg-page">
+  {#if mobileOpen}
+    <button
+      type="button"
+      class="fixed inset-0 bg-black/50 z-40 lg:hidden cursor-default"
+      on:click={() => (mobileOpen = false)}
+      aria-label="Cerrar menú"
+    ></button>
   {/if}
 
-  <aside
-    class={`
-      fixed lg:static inset-y-0 left-0 z-50
-      bg-surface-card border-r border-surface-border
-      flex flex-col
-      transition-all duration-300
-      ${sidebarCollapsed ? 'w-20' : 'w-64'}
-      ${mobileMenuOpen ? 'translate-x-0' : '-translate-x-full lg:translate-x-0'}
-    `}
-  >
-    <div class="h-16 flex items-center justify-between px-4 border-b border-surface-border">
-      <a href="#/dashboard" class="flex items-center gap-3">
-        <div class="w-9 h-9 rounded-lg bg-accent-500 flex items-center justify-center flex-shrink-0">
-          <span class="text-primary-900 font-bold text-lg">J</span>
-        </div>
-        {#if !sidebarCollapsed}
-          <span class="text-xl font-bold text-white">Jeturing</span>
-        {/if}
-      </a>
-
-      <button
-        type="button"
-        class="hidden lg:flex p-1.5 rounded-lg text-secondary-400 hover:text-white hover:bg-surface-highlight transition-colors"
-        on:click={toggleSidebar}
-        aria-label={sidebarCollapsed ? 'Expandir sidebar' : 'Colapsar sidebar'}
-      >
-        <ChevronLeft size={20} class={`transition-transform ${sidebarCollapsed ? 'rotate-180' : ''}`} />
-      </button>
+  <!-- Sidebar -->
+  <aside class={`fixed lg:static inset-y-0 left-0 z-50 w-64 bg-charcoal flex flex-col transition-transform duration-300 ${mobileOpen ? 'translate-x-0' : '-translate-x-full lg:translate-x-0'}`}>
+    <!-- Logo -->
+    <div class="flex items-center gap-3 px-6 py-6 border-b border-border-dark">
+      <div class="w-8 h-8 bg-terracotta flex items-center justify-center flex-shrink-0">
+        <span class="text-text-light font-bold font-sans text-sm">S</span>
+      </div>
+      <span class="font-sans font-bold text-text-light tracking-wide text-sm uppercase">Sajet ERP</span>
     </div>
 
-    <nav class="flex-1 py-4 px-3 overflow-y-auto">
-      <ul class="space-y-1">
-        {#each navItems as item}
-          <li>
-            <a
-              href={item.href}
-              class={currentRoute === item.id ? 'sidebar-link-active' : 'sidebar-link'}
-              on:click={closeMobileMenu}
-              title={sidebarCollapsed ? item.label : ''}
-            >
-              <svelte:component this={item.icon} size={20} />
-              {#if !sidebarCollapsed}
-                <span>{item.label}</span>
-              {/if}
-            </a>
-          </li>
-        {/each}
-      </ul>
-
+    <!-- Nav -->
+    <nav class="flex-1 px-6 pt-2 overflow-y-auto">
+      {#each navItems as item}
+        <a
+          href={item.href}
+          class={currentRoute === item.id ? 'sidebar-link-active' : 'sidebar-link'}
+          on:click={() => (mobileOpen = false)}
+        >
+          <svelte:component this={item.icon} size={18} />
+          <span>{item.label}</span>
+        </a>
+      {/each}
     </nav>
 
-    <div class="p-3 border-t border-surface-border">
-      <div class={`flex items-center ${sidebarCollapsed ? 'justify-center' : 'gap-3'}`}>
-        <div class="w-9 h-9 rounded-full bg-primary-500/20 flex items-center justify-center flex-shrink-0">
-          <span class="text-primary-300 font-medium text-sm">{$auth.user?.username?.charAt(0).toUpperCase() || 'U'}</span>
-        </div>
-        {#if !sidebarCollapsed}
-          <div class="flex-1 min-w-0">
-            <p class="text-sm font-medium text-white truncate">{$auth.user?.username || 'Usuario'}</p>
-            <p class="text-xs text-secondary-500 truncate">{$auth.user?.email || 'sin-email'}</p>
+    <!-- User -->
+    <div class="px-6 py-5 border-t border-border-dark">
+      <div class="flex items-center justify-between gap-3">
+        <div class="flex items-center gap-3 min-w-0">
+          <div class="w-8 h-8 rounded-full bg-dark-subtle flex items-center justify-center flex-shrink-0">
+            <span class="text-gray-400 font-sans font-semibold text-xs">
+              {$auth.user?.username?.charAt(0).toUpperCase() || 'U'}
+            </span>
           </div>
-          <button
-            type="button"
-            class="p-1.5 rounded-lg text-secondary-400 hover:text-error hover:bg-error/10 transition-colors"
-            on:click={handleLogout}
-            title="Cerrar sesion"
-            aria-label="Cerrar sesion"
-          >
-            <LogOut size={18} />
-          </button>
-        {/if}
+          <div class="min-w-0">
+            <p class="text-sm font-semibold font-sans text-text-light truncate">{$auth.user?.username || 'Admin'}</p>
+            <p class="text-[11px] text-gray-500 truncate font-body">{$auth.user?.email || ''}</p>
+          </div>
+        </div>
+        <button type="button" class="p-1.5 text-gray-500 hover:text-error transition-colors flex-shrink-0" on:click={handleLogout} title="Cerrar sesión" aria-label="Cerrar sesión">
+          <LogOut size={16} />
+        </button>
       </div>
     </div>
   </aside>
 
+  <!-- Main content -->
   <div class="flex-1 flex flex-col min-w-0">
-    <header class="h-16 bg-surface-card border-b border-surface-border flex items-center justify-between px-4 lg:px-6">
-      <button
-        type="button"
-        class="lg:hidden p-2 rounded-lg text-secondary-400 hover:text-white hover:bg-surface-highlight transition-colors"
-        on:click={() => (mobileMenuOpen = true)}
-        aria-label="Abrir menu"
-      >
-        <Menu size={24} />
+    <!-- Header -->
+    <header class="h-16 bg-charcoal border-b border-border-dark flex items-center px-6 gap-4">
+      <button type="button" class="lg:hidden p-2 text-gray-400 hover:text-text-light" on:click={() => (mobileOpen = !mobileOpen)} aria-label="Menú">
+        {#if mobileOpen}<X size={22} />{:else}<Menu size={22} />{/if}
       </button>
 
-      <div class="hidden sm:flex flex-1 max-w-md mx-4">
-        <div class="relative w-full">
-          <Search size={18} class="absolute left-3 top-1/2 -translate-y-1/2 text-secondary-500" />
-          <input
-            type="search"
-            placeholder="Buscar tenants, dominios..."
-            class="w-full pl-10 pr-4 py-2 bg-surface-highlight border border-surface-border rounded-lg
-                   text-sm text-white placeholder-secondary-500
-                   focus:border-primary-500 focus:ring-2 focus:ring-primary-500/20 focus:outline-none"
-          />
-        </div>
-      </div>
+      <span class="hidden lg:block text-[11px] font-semibold uppercase tracking-widest text-gray-500 font-sans">
+        {navItems.find(n => n.id === currentRoute)?.label ?? currentRoute}
+      </span>
 
-      <div class="flex items-center gap-3">
-        <button
-          type="button"
-          class="relative p-2 rounded-lg text-secondary-400 hover:text-white hover:bg-surface-highlight transition-colors"
-          aria-label="Notificaciones"
-        >
-          <Bell size={20} />
-          <span class="absolute top-1.5 right-1.5 w-2 h-2 bg-accent-500 rounded-full"></span>
-        </button>
-
-        <div class="hidden sm:block h-6 w-px bg-surface-border"></div>
-
-        <a href="/docs" target="_blank" rel="noreferrer" class="hidden sm:block text-sm text-secondary-400 hover:text-white transition-colors">
+      <div class="ml-auto flex items-center gap-4">
+        <a href="/docs" target="_blank" rel="noreferrer" class="hidden sm:block text-[11px] uppercase tracking-widest text-gray-500 hover:text-text-light font-sans transition-colors">
           API Docs
         </a>
+        <a href="#/portal" class="btn-accent btn-sm">Portal</a>
       </div>
     </header>
 
-    <main class="flex-1 overflow-auto">
+    <main class="flex-1 overflow-auto bg-bg-page">
       <slot />
     </main>
   </div>

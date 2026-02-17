@@ -8,12 +8,6 @@ interface AuthState {
   error: string | null;
 }
 
-export interface AuthLoginResult {
-  success: boolean;
-  requiresTotp: boolean;
-  error?: string;
-}
-
 function createAuthStore() {
   const { subscribe, set, update } = writable<AuthState>({
     user: null,
@@ -33,33 +27,48 @@ function createAuthStore() {
       }
     },
 
-    login: async (credentials: LoginRequest): Promise<AuthLoginResult> => {
+    login: async (usernameOrEmail: string, password: string) => {
       update((state) => ({ ...state, isLoading: true, error: null }));
       try {
-        const result = credentials.totp_code ? await api.verifyTotp(credentials) : await api.login(credentials);
+        const result = await api.login({ username: usernameOrEmail, password });
         if (result.requires_totp) {
           update((state) => ({ ...state, isLoading: false, error: null }));
-          return {
-            success: false,
-            requiresTotp: true,
-          };
+          return { requires_totp: true };
         }
-
         const user = await api.get<User>('/api/auth/me');
         update((state) => ({ ...state, user, isLoading: false, error: null }));
-        return {
-          success: true,
-          requiresTotp: false,
-        };
+        return { success: true };
       } catch (err) {
         const message = err instanceof Error ? err.message : 'Error de autenticacion';
         update((state) => ({ ...state, error: message, isLoading: false }));
-        return {
-          success: false,
-          requiresTotp: false,
-          error: message,
-        };
+        return { error: message };
       }
+    },
+
+    loginWithTotp: async (usernameOrEmail: string, password: string, totpCode: string) => {
+      update((state) => ({ ...state, isLoading: true, error: null }));
+      try {
+        // Login with TOTP code included
+        const result = await api.post<{ access_token?: string; message?: string }>('/api/auth/login', {
+          email: usernameOrEmail,
+          password,
+          totp_code: totpCode,
+        });
+        if (result.access_token) {
+          api.setToken(result.access_token);
+        }
+        const user = await api.get<User>('/api/auth/me');
+        update((state) => ({ ...state, user, isLoading: false, error: null }));
+        return { success: true };
+      } catch (err) {
+        const message = err instanceof Error ? err.message : 'Codigo TOTP invalido';
+        update((state) => ({ ...state, error: message, isLoading: false }));
+        return { error: message };
+      }
+    },
+
+    setError: (message: string) => {
+      update((state) => ({ ...state, error: message }));
     },
 
     logout: async () => {

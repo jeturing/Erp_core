@@ -1,330 +1,256 @@
 <script lang="ts">
   import { onMount } from 'svelte';
-  import { Globe, CheckCircle2, Clock3, ShieldCheck } from 'lucide-svelte';
-  import { Badge, Button, Card, Input, Modal, StatCard } from '../lib/components';
-  import { addToast } from '../lib/stores';
-  import { domainStats, domainsStore, type CustomDomain } from '../lib/stores/domains';
+  import { domainsStore, domainStats } from '../lib/stores';
+  import { toasts } from '../lib/stores/toast';
   import { formatDate } from '../lib/utils/formatters';
+  import { Plus, Check, X, CheckCircle, XCircle } from 'lucide-svelte';
+  import type { Domain } from '../lib/types';
 
-  let showCreateModal = false;
-  let showDetailsModal = false;
-  let showDeleteModal = false;
-  let selectedDomain: CustomDomain | null = null;
 
-  let search = '';
+  let domains = $state<Domain[]>([]);
+  let showForm = $state(false);
+  let loading = $state(true);
+  let createInstructions = $state<{ step1?: string; record_type?: string; record_name?: string; record_value?: string; step2?: string } | null>(null);
 
-  let createLoading = false;
-  let createError = '';
-  let createInstructions: {
-    step1: string;
-    record_type: string;
-    record_name: string;
-    record_value: string;
-    step2: string;
-  } | null = null;
+  // Form fields
+  let formExternalDomain = $state('');
+  let formSubdomain = $state('');
+  let formNodeIp = $state('');
+  let formPort = $state(8069);
+  let formLoading = $state(false);
 
-  let createForm = {
-    external_domain: '',
-    customer_id: 1,
-  };
+  const unsubscribe = domainsStore.subscribe((state: any) => {
+    domains = state.items ?? [];
+    loading = state.loading ?? false;
+  });
 
   onMount(() => {
     domainsStore.load();
+    return unsubscribe;
   });
 
-  function statusBadge(status: string) {
-    if (status === 'verified') return 'success';
-    if (status === 'pending' || status === 'verifying') return 'warning';
-    if (status === 'failed' || status === 'expired') return 'error';
-    return 'secondary';
-  }
-
-  async function handleCreate() {
-    createError = '';
-    createLoading = true;
+  async function handleCreate(e: Event) {
+    e.preventDefault();
+    formLoading = true;
+    createInstructions = null;
     try {
-      const payload = {
-        external_domain: createForm.external_domain.trim(),
-        customer_id: Number(createForm.customer_id),
-      };
-      const result = await domainsStore.create(payload);
-      createInstructions = result.instructions || null;
-      addToast('Dominio registrado correctamente', 'success');
-      await domainsStore.load();
-    } catch (error) {
-      addToast(error instanceof Error ? error.message : 'No se pudo crear dominio', 'error');
+      const result = await domainsStore.create({
+        external_domain: formExternalDomain,
+        customer_id: 0,
+      });
+      toasts.success('Dominio agregado');
+      if (result?.instructions) {
+        createInstructions = result.instructions;
+      }
+      formExternalDomain = '';
+      formSubdomain = '';
+      formNodeIp = '';
+      formPort = 8069;
+    } catch (e: any) {
+      toasts.error(e?.message ?? 'Error al agregar dominio');
     } finally {
-      createLoading = false;
+      formLoading = false;
     }
   }
 
-  function openDetails(domain: CustomDomain) {
-    selectedDomain = domain;
-    showDetailsModal = true;
-  }
-
-  async function verifyDomain(domain: CustomDomain) {
+  async function handleVerify(id: number) {
     try {
-      const result = await domainsStore.verify(domain.id);
-      addToast(result.message || 'Dominio verificado', result.success ? 'success' : 'warning');
-      await domainsStore.load();
-    } catch (error) {
-      addToast(error instanceof Error ? error.message : 'No se pudo verificar dominio', 'error');
+      await domainsStore.verify(id);
+      toasts.success('Verificación iniciada');
+    } catch (e: any) {
+      toasts.error(e?.message ?? 'Error al verificar');
     }
   }
 
-  async function configureCloudflare(domain: CustomDomain) {
-    try {
-      const result = await domainsStore.configureCloudflare(domain.id);
-      addToast(result.message || 'Cloudflare configurado', result.success ? 'success' : 'warning');
-      await domainsStore.load();
-      await domainsStore.get(domain.id);
-    } catch (error) {
-      addToast(error instanceof Error ? error.message : 'No se pudo configurar Cloudflare', 'error');
-    }
-  }
-
-  async function toggleActive(domain: CustomDomain) {
+  async function handleToggleActive(domain: Domain) {
     try {
       if (domain.is_active) {
-        await domainsStore.deactivate(domain.id);
-        addToast('Dominio desactivado', 'success');
+        await domainsStore.deactivate(domain.id as number);
+        toasts.success('Dominio desactivado');
       } else {
-        await domainsStore.activate(domain.id);
-        addToast('Dominio activado', 'success');
+        await domainsStore.activate(domain.id as number);
+        toasts.success('Dominio activado');
       }
-      await domainsStore.load();
-      await domainsStore.get(domain.id);
-    } catch (error) {
-      addToast(error instanceof Error ? error.message : 'No se pudo cambiar estado', 'error');
+    } catch (e: any) {
+      toasts.error(e?.message ?? 'Error al cambiar estado');
     }
   }
 
-  function confirmDelete(domain: CustomDomain) {
-    selectedDomain = domain;
-    showDeleteModal = true;
-  }
-
-  async function handleDelete() {
-    if (!selectedDomain) return;
+  async function handleDelete(domain: Domain) {
+    if (!window.confirm(`¿Eliminar el dominio "${domain.external_domain}"?`)) return;
     try {
-      await domainsStore.delete(selectedDomain.id);
-      showDeleteModal = false;
-      addToast('Dominio eliminado correctamente', 'success');
-      selectedDomain = null;
-    } catch (error) {
-      addToast(error instanceof Error ? error.message : 'No se pudo eliminar dominio', 'error');
+      await domainsStore.delete(domain.id as number);
+      toasts.success('Dominio eliminado');
+    } catch (e: any) {
+      toasts.error(e?.message ?? 'Error al eliminar dominio');
     }
   }
-
-  function closeCreateModal() {
-    showCreateModal = false;
-    createError = '';
-    createInstructions = null;
-    createForm = {
-      external_domain: '',
-      customer_id: 1,
-    };
-  }
-
-  $: stats = $domainStats;
-  $: filteredDomains = $domainsStore.items.filter((domain) => {
-    const text = `${domain.external_domain} ${domain.sajet_full_domain}`.toLowerCase();
-    return text.includes(search.toLowerCase().trim());
-  });
 </script>
 
-<div class="p-6 lg:p-8 space-y-6">
-  <div class="flex flex-col md:flex-row md:items-center md:justify-between gap-4">
+<div class="space-y-6">
+  <!-- Header -->
+  <div class="flex items-center justify-between">
     <div>
-      <h1 class="text-2xl font-bold text-white">Domains</h1>
-      <p class="text-secondary-400 mt-1">Gestion de dominios personalizados y estado de verificacion DNS</p>
+      <h1 class="page-title">DOMAINS</h1>
+      <p class="page-subtitle">Gestión de dominios externos y subdominios</p>
     </div>
-    <Button on:click={() => (showCreateModal = true)}>+ Nuevo dominio</Button>
+    <button class="btn-accent px-4 py-2 flex items-center gap-2" onclick={() => showForm = !showForm}>
+      <Plus size={14} />
+      NUEVO DOMINIO
+    </button>
   </div>
 
-  <Card>
-    <div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-5 gap-3">
-      <StatCard value={stats.total} label="Total" icon={Globe} iconBg="bg-primary-500/10" iconColor="text-primary-300" />
-      <StatCard value={stats.active} label="Activos" icon={CheckCircle2} iconBg="bg-success/10" iconColor="text-success" />
-      <StatCard value={stats.pending} label="Pendientes" icon={Clock3} iconBg="bg-warning/10" iconColor="text-warning" />
-      <StatCard value={stats.verified} label="Verificados" icon={ShieldCheck} iconBg="bg-accent-500/10" iconColor="text-accent-500" />
-      <Input label="Buscar" placeholder="dominio o subdominio" bind:value={search} />
-    </div>
-  </Card>
+  <!-- Inline Add Form -->
+  {#if showForm}
+    <div class="card border-l-2 border-l-terracotta">
+      <h3 class="section-heading mb-5">AGREGAR DOMINIO</h3>
+      <form onsubmit={handleCreate} class="space-y-4">
+        <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
+          <div>
+            <label class="label" for="f-external">Dominio externo</label>
+            <input
+              id="f-external"
+              class="input w-full px-3 py-2"
+              type="text"
+              bind:value={formExternalDomain}
+              placeholder="cliente.com"
+              required
+            />
+          </div>
+          <div>
+            <label class="label" for="f-sub">Subdominio Sajet</label>
+            <div class="flex items-stretch">
+              <input
+                id="f-sub"
+                class="input flex-1 px-3 py-2 border-r-0"
+                type="text"
+                bind:value={formSubdomain}
+                placeholder="cliente"
+                required
+              />
+              <span class="bg-bg-card border border-border-light px-3 py-2 text-sm text-gray-500 whitespace-nowrap">.sajet.us</span>
+            </div>
+          </div>
+          <div>
+            <label class="label" for="f-ip">IP del nodo</label>
+            <input
+              id="f-ip"
+              class="input w-full px-3 py-2"
+              type="text"
+              bind:value={formNodeIp}
+              placeholder="192.168.1.100"
+              required
+            />
+          </div>
+          <div>
+            <label class="label" for="f-port">Puerto</label>
+            <input
+              id="f-port"
+              class="input w-full px-3 py-2"
+              type="number"
+              bind:value={formPort}
+              min="1"
+              max="65535"
+              required
+            />
+          </div>
+        </div>
+        <div class="flex gap-3 pt-2">
+          <button type="button" class="btn-secondary px-4 py-2" onclick={() => { showForm = false; createInstructions = null; }}>CANCELAR</button>
+          <button type="submit" class="btn-accent px-4 py-2 disabled:opacity-60" disabled={formLoading}>
+            {formLoading ? 'AGREGANDO...' : 'AGREGAR DOMINIO'}
+          </button>
+        </div>
+      </form>
 
-  <Card title="Listado de dominios" subtitle="/api/domains" padding="none">
-    <div class="overflow-x-auto">
-      <table class="table">
+      {#if createInstructions}
+        <div class="mt-4 bg-emerald-50 border border-emerald-200 p-4">
+          <p class="text-xs uppercase tracking-[0.08em] font-semibold text-emerald-700 mb-2">Registro CNAME requerido</p>
+          <pre class="font-mono text-xs text-emerald-800 bg-emerald-100 p-3 overflow-x-auto">{createInstructions ? `${createInstructions.step1 ?? ''}
+Tipo: ${createInstructions.record_type ?? ''} | Nombre: ${createInstructions.record_name ?? ''} | Valor: ${createInstructions.record_value ?? ''}
+${createInstructions.step2 ?? ''}` : ''}</pre>
+        </div>
+      {/if}
+    </div>
+  {/if}
+
+  <!-- Stats -->
+  <div class="grid grid-cols-3 gap-4">
+    <div class="stat-card card">
+      <div class="stat-value">{$domainStats.total}</div>
+      <div class="stat-label">Total</div>
+    </div>
+    <div class="stat-card card">
+      <div class="stat-value">{$domainStats.verified}</div>
+      <div class="stat-label">Verificados</div>
+    </div>
+    <div class="stat-card card">
+      <div class="stat-value">{$domainStats.pending}</div>
+      <div class="stat-label">Pendientes</div>
+    </div>
+  </div>
+
+  <!-- Table -->
+  <div class="card p-0 overflow-hidden">
+    {#if loading}
+      <div class="p-8 text-center text-gray-500 text-sm">Cargando dominios...</div>
+    {:else if domains.length === 0}
+      <div class="p-8 text-center text-gray-500 text-sm">No hay dominios registrados</div>
+    {:else}
+      <table class="table w-full">
         <thead>
           <tr>
-            <th>Dominio externo</th>
-            <th>Subdominio Sajet</th>
-            <th>Estado</th>
-            <th>Cloudflare</th>
-            <th>Activo</th>
-            <th>Acciones</th>
+            <th>DOMINIO EXTERNO</th>
+            <th>SUBDOMINIO SAJET</th>
+            <th>ESTADO</th>
+            <th>CF</th>
+            <th>ACTIVO</th>
+            <th>CREADO</th>
+            <th>ACCIONES</th>
           </tr>
         </thead>
         <tbody>
-          {#if $domainsStore.loading}
+          {#each domains as domain (domain.id)}
             <tr>
-              <td colspan="6" class="py-8 text-center text-secondary-500">Cargando...</td>
+              <td class="font-mono text-sm">{domain.external_domain}</td>
+              <td class="text-sm text-gray-600">{domain.sajet_full_domain ?? domain.sajet_subdomain + '.sajet.us'}</td>
+              <td>
+                {#if domain.verification_status === 'verified'}
+                  <span class="badge-success">Verificado</span>
+                {:else if domain.verification_status === 'pending'}
+                  <span class="badge-warning">Pendiente</span>
+                {:else}
+                  <span class="badge-error">{domain.verification_status}</span>
+                {/if}
+              </td>
+              <td>
+                {#if domain.cloudflare_configured}
+                  <Check size={16} class="text-emerald-500" />
+                {:else}
+                  <X size={16} class="text-gray-400" />
+                {/if}
+              </td>
+              <td>
+                {#if domain.is_active}
+                  <CheckCircle size={16} class="text-emerald-500" />
+                {:else}
+                  <XCircle size={16} class="text-gray-400" />
+                {/if}
+              </td>
+              <td class="text-sm text-gray-500">{formatDate(domain.created_at)}</td>
+              <td>
+                <div class="flex items-center gap-2 flex-wrap">
+                  <button class="btn-secondary btn-sm" onclick={() => handleVerify(domain.id as number)}>VERIFICAR</button>
+                  <button class="btn-secondary btn-sm" onclick={() => handleToggleActive(domain)}>
+                    {domain.is_active ? 'DESACTIVAR' : 'ACTIVAR'}
+                  </button>
+                  <button class="btn-danger btn-sm" onclick={() => handleDelete(domain)}>ELIMINAR</button>
+                </div>
+              </td>
             </tr>
-          {:else}
-            {#each filteredDomains as domain}
-              <tr>
-                <td>
-                  <p class="text-white font-medium">{domain.external_domain}</p>
-                  <p class="text-xs text-secondary-500">ID cliente: {domain.customer_id}</p>
-                </td>
-                <td class="font-mono text-xs text-secondary-300">{domain.sajet_full_domain}</td>
-                <td><Badge variant={statusBadge(domain.verification_status)}>{domain.verification_status}</Badge></td>
-                <td><Badge variant={domain.cloudflare_configured ? 'success' : 'secondary'}>{domain.cloudflare_configured ? 'si' : 'no'}</Badge></td>
-                <td><Badge variant={domain.is_active ? 'success' : 'secondary'}>{domain.is_active ? 'si' : 'no'}</Badge></td>
-                <td>
-                  <div class="flex flex-wrap gap-2">
-                    <Button size="sm" variant="secondary" on:click={() => openDetails(domain)}>Ver</Button>
-                    <Button size="sm" variant="secondary" on:click={() => verifyDomain(domain)}>Verificar</Button>
-                    <Button size="sm" variant="danger" on:click={() => confirmDelete(domain)}>Eliminar</Button>
-                  </div>
-                </td>
-              </tr>
-            {:else}
-              <tr>
-                <td colspan="6" class="py-8 text-center text-secondary-500">No hay dominios registrados</td>
-              </tr>
-            {/each}
-          {/if}
+          {/each}
         </tbody>
       </table>
-    </div>
-  </Card>
+    {/if}
+  </div>
 </div>
-
-<Modal
-  bind:isOpen={showCreateModal}
-  title="Registrar nuevo dominio"
-  confirmText={createInstructions ? 'Cerrar' : 'Registrar'}
-  on:close={closeCreateModal}
-  on:confirm={createInstructions ? closeCreateModal : handleCreate}
-  loading={createLoading}
-  size="lg"
->
-  {#if createInstructions}
-    <div class="space-y-4">
-      <div class="bg-success/10 border border-success/30 rounded-lg p-4 text-success text-sm">
-        Dominio registrado. Complete la configuracion DNS para validar.
-      </div>
-
-      <div class="rounded-lg border border-surface-border bg-surface-highlight p-4 text-sm text-secondary-200 space-y-2">
-        <p>{createInstructions.step1}</p>
-        <div class="font-mono text-xs rounded bg-surface-dark p-3">
-          <p>Tipo: {createInstructions.record_type}</p>
-          <p>Nombre: {createInstructions.record_name}</p>
-          <p>Valor: {createInstructions.record_value}</p>
-        </div>
-        <p>{createInstructions.step2}</p>
-      </div>
-    </div>
-  {:else}
-    <div class="space-y-4">
-      {#if createError}
-        <div class="rounded-lg border border-error/30 bg-error/10 px-3 py-2 text-sm text-error">{createError}</div>
-      {/if}
-
-      <Input label="Dominio externo" placeholder="www.miempresa.com" bind:value={createForm.external_domain} required />
-      <Input label="ID cliente" type="number" bind:value={createForm.customer_id} required />
-    </div>
-  {/if}
-</Modal>
-
-<Modal
-  bind:isOpen={showDetailsModal}
-  title="Detalles del dominio"
-  showFooter={false}
-  size="lg"
-  on:close={() => {
-    showDetailsModal = false;
-    selectedDomain = null;
-  }}
->
-  {#if selectedDomain}
-    <div class="space-y-4 text-sm">
-      <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
-        <div>
-          <p class="text-secondary-500 uppercase text-xs">Dominio externo</p>
-          <p class="font-mono text-primary-300 font-semibold">{selectedDomain.external_domain}</p>
-        </div>
-        <div>
-          <p class="text-secondary-500 uppercase text-xs">Subdominio Sajet</p>
-          <p class="font-mono text-secondary-200">{selectedDomain.sajet_full_domain}</p>
-        </div>
-      </div>
-
-      <div class="flex flex-wrap gap-3">
-        <Badge variant={statusBadge(selectedDomain.verification_status)}>{selectedDomain.verification_status}</Badge>
-        <Badge variant={selectedDomain.cloudflare_configured ? 'success' : 'secondary'}>
-          Cloudflare {selectedDomain.cloudflare_configured ? 'ok' : 'pendiente'}
-        </Badge>
-        <Badge variant={selectedDomain.is_active ? 'success' : 'secondary'}>
-          {selectedDomain.is_active ? 'Activo' : 'Inactivo'}
-        </Badge>
-      </div>
-
-      <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
-        <div>
-          <p class="text-secondary-500 uppercase text-xs">Creado</p>
-          <p class="text-secondary-200">{formatDate(selectedDomain.created_at)}</p>
-        </div>
-        <div>
-          <p class="text-secondary-500 uppercase text-xs">Actualizado</p>
-          <p class="text-secondary-200">{formatDate(selectedDomain.updated_at)}</p>
-        </div>
-      </div>
-
-      <div class="rounded-lg bg-surface-highlight border border-surface-border p-4">
-        <p class="text-secondary-500 mb-1">Destino</p>
-        <p class="font-mono text-secondary-200">http://{selectedDomain.target_node_ip}:{selectedDomain.target_port}</p>
-      </div>
-
-      {#if selectedDomain.verification_status !== 'verified'}
-        <div class="rounded-lg bg-info/10 border border-info/30 p-4">
-          <p class="text-info text-sm font-medium mb-2">Configuracion DNS esperada</p>
-          <p class="font-mono text-xs text-secondary-200">CNAME {selectedDomain.external_domain} -> {selectedDomain.sajet_full_domain}</p>
-        </div>
-      {/if}
-
-        <div class="flex flex-wrap gap-2 pt-2">
-        {#if !selectedDomain.cloudflare_configured}
-          <Button variant="secondary" on:click={() => configureCloudflare(selectedDomain!)}>Configurar Cloudflare</Button>
-        {/if}
-        {#if selectedDomain.verification_status !== 'verified'}
-          <Button variant="primary" on:click={() => verifyDomain(selectedDomain!)}>Verificar DNS</Button>
-        {/if}
-        <Button variant={selectedDomain.is_active ? 'ghost' : 'primary'} on:click={() => toggleActive(selectedDomain!)}>
-          {selectedDomain.is_active ? 'Desactivar' : 'Activar'}
-        </Button>
-      </div>
-    </div>
-  {/if}
-</Modal>
-
-<Modal
-  bind:isOpen={showDeleteModal}
-  title="Eliminar dominio"
-  confirmText="Eliminar"
-  confirmVariant="danger"
-  on:close={() => {
-    showDeleteModal = false;
-    selectedDomain = null;
-  }}
-  on:confirm={handleDelete}
->
-  {#if selectedDomain}
-    <div class="space-y-3 text-sm text-secondary-300">
-      <p>Se eliminara el dominio <strong class="text-error">{selectedDomain.external_domain}</strong> y su configuracion asociada.</p>
-      <p class="text-secondary-500">Esta accion no se puede deshacer.</p>
-    </div>
-  {/if}
-</Modal>

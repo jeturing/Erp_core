@@ -1,296 +1,358 @@
 <script lang="ts">
   import { onMount } from 'svelte';
-  import { Badge, Button, Card, Input, Modal, Spinner } from '../lib/components';
-  import { tenantsApi } from '../lib/api';
-  import { addToast } from '../lib/stores';
+  import { tenantsApi, api } from '../lib/api';
+  import { toasts } from '../lib/stores/toast';
+  import { formatDate } from '../lib/utils/formatters';
+  import { Plus, RefreshCw, Search } from 'lucide-svelte';
   import type { Tenant } from '../lib/types';
 
-  let tenants: Tenant[] = [];
-  let loading = true;
-  let error = '';
-  let search = '';
 
-  let showCreateModal = false;
-  let creating = false;
-  let createError = '';
-  let createForm = {
-    subdomain: '',
-    company_name: '',
-    admin_email: '',
-    admin_password: '',
-    plan: 'basic' as 'basic' | 'pro' | 'enterprise',
-  };
+  let tenants = $state<Tenant[]>([]);
+  let loading = $state(true);
+  let searchQuery = $state('');
+  let showForm = $state(false);
 
-  let showPasswordModal = false;
-  let passwordLoading = false;
-  let passwordError = '';
-  let passwordTenant: Tenant | null = null;
-  let newPassword = '';
+  // Form fields
+  let formNombre = $state('');
+  let formEmail = $state('');
+  let formSubdomain = $state('');
+  let formPlan = $state<'basic' | 'pro' | 'enterprise'>('basic');
+  let formPassword = $state('');
+  let formConfirmPassword = $state('');
+  let formLoading = $state(false);
 
-  let actionLoadingTenant = '';
+  // Per-row action state
+  let expandedPasswordRow = $state<string | null>(null);
+  let rowPassword = $state('');
+  let rowConfirmPassword = $state('');
+  let rowPasswordLoading = $state(false);
 
   async function loadTenants() {
     loading = true;
-    error = '';
     try {
-      const response = await tenantsApi.list();
-      tenants = response.items;
-    } catch (err) {
-      error = err instanceof Error ? err.message : 'No se pudo cargar tenants';
-      addToast(error, 'error');
+      const data = await tenantsApi.list();
+      tenants = data.items ?? [];
+    } catch (e: any) {
+      toasts.error(e?.message ?? 'Error al cargar tenants');
     } finally {
       loading = false;
     }
   }
 
-  onMount(async () => {
-    await loadTenants();
-  });
-
-  function statusVariant(status: string) {
-    if (status === 'active') return 'success';
-    if (status === 'provisioning' || status === 'pending') return 'warning';
-    if (status === 'suspended' || status === 'payment_failed') return 'error';
-    return 'secondary';
-  }
-
-  function planVariant(plan: string) {
-    if (plan === 'enterprise') return 'enterprise';
-    if (plan === 'pro') return 'pro';
-    return 'basic';
-  }
-
-  async function handleCreateTenant() {
-    createError = '';
-
-    if (!createForm.subdomain.trim()) {
-      createError = 'El subdominio es obligatorio';
+  async function handleCreate(e: Event) {
+    e.preventDefault();
+    if (formPassword !== formConfirmPassword) {
+      toasts.error('Las contraseñas no coinciden');
       return;
     }
-
-    creating = true;
+    formLoading = true;
     try {
       await tenantsApi.create({
-        subdomain: createForm.subdomain.trim(),
-        company_name: createForm.company_name.trim() || createForm.subdomain.trim(),
-        admin_email: createForm.admin_email.trim() || undefined,
-        admin_password: createForm.admin_password || undefined,
-        plan: createForm.plan,
-        use_fast_method: true,
+        subdomain: formSubdomain,
+        company_name: formNombre,
+        admin_email: formEmail,
+        admin_password: formPassword,
+        plan: formPlan,
       });
-
-      showCreateModal = false;
-      createForm = {
-        subdomain: '',
-        company_name: '',
-        admin_email: '',
-        admin_password: '',
-        plan: 'basic',
-      };
-      addToast('Tenant creado correctamente', 'success');
+      toasts.success('Tenant creado exitosamente');
+      showForm = false;
+      formNombre = '';
+      formEmail = '';
+      formSubdomain = '';
+      formPlan = 'basic';
+      formPassword = '';
+      formConfirmPassword = '';
       await loadTenants();
-    } catch (err) {
-      addToast(err instanceof Error ? err.message : 'No se pudo crear tenant', 'error');
+    } catch (e: any) {
+      toasts.error(e?.message ?? 'Error al crear tenant');
     } finally {
-      creating = false;
+      formLoading = false;
     }
   }
 
-  async function toggleSuspend(tenant: Tenant) {
-    actionLoadingTenant = tenant.subdomain;
-    try {
-      await tenantsApi.suspend({
-        subdomain: tenant.subdomain,
-        suspend: tenant.status === 'active',
-      });
-      addToast(tenant.status === 'active' ? 'Tenant suspendido' : 'Tenant reactivado', 'success');
-      await loadTenants();
-    } catch (err) {
-      addToast(err instanceof Error ? err.message : 'No se pudo cambiar estado', 'error');
-    } finally {
-      actionLoadingTenant = '';
-    }
-  }
-
-  function openPasswordModal(tenant: Tenant) {
-    passwordTenant = tenant;
-    newPassword = '';
-    passwordError = '';
-    showPasswordModal = true;
-  }
-
-  async function handleChangePassword() {
-    if (!passwordTenant) return;
-    if (newPassword.length < 6) {
-      passwordError = 'La nueva contraseña debe tener al menos 6 caracteres';
+  async function handleChangePassword(subdomain: string) {
+    if (rowPassword !== rowConfirmPassword) {
+      toasts.error('Las contraseñas no coinciden');
       return;
     }
-
-    passwordLoading = true;
-    passwordError = '';
-
+    if (!rowPassword) {
+      toasts.error('Ingresa una contraseña');
+      return;
+    }
+    rowPasswordLoading = true;
     try {
-      await tenantsApi.changePassword({
-        subdomain: passwordTenant.subdomain,
-        new_password: newPassword,
-      });
-      showPasswordModal = false;
-      passwordTenant = null;
-      newPassword = '';
-      addToast('Password actualizado correctamente', 'success');
-    } catch (err) {
-      addToast(err instanceof Error ? err.message : 'No se pudo cambiar la contraseña', 'error');
+      await tenantsApi.changePassword({ subdomain, new_password: rowPassword });
+      toasts.success('Contraseña actualizada');
+      expandedPasswordRow = null;
+      rowPassword = '';
+      rowConfirmPassword = '';
+    } catch (e: any) {
+      toasts.error(e?.message ?? 'Error al cambiar contraseña');
     } finally {
-      passwordLoading = false;
+      rowPasswordLoading = false;
     }
   }
 
-  $: filteredTenants = tenants.filter((tenant) => {
-    const target = `${tenant.company_name} ${tenant.email} ${tenant.subdomain}`.toLowerCase();
-    return target.includes(search.toLowerCase().trim());
-  });
+  async function handleSuspend(tenant: Tenant) {
+    const isActive = tenant.status === 'active';
+    const action = isActive ? 'suspender' : 'reactivar';
+    if (!window.confirm(`¿Deseas ${action} el tenant "${tenant.subdomain}"?`)) return;
+    try {
+      await tenantsApi.suspend({ subdomain: tenant.subdomain, suspend: isActive, server: tenant.server });
+      toasts.success(`Tenant ${isActive ? 'suspendido' : 'reactivado'}`);
+      await loadTenants();
+    } catch (e: any) {
+      toasts.error(e?.message ?? 'Error al actualizar estado');
+    }
+  }
+
+  async function handleDelete(tenant: Tenant) {
+    if (!window.confirm(`¿Eliminar permanentemente el tenant "${tenant.subdomain}"? Esta acción no se puede deshacer.`)) return;
+    try {
+      await api.delete(`/api/tenants/${tenant.subdomain}?confirm=true`);
+      toasts.success('Tenant eliminado');
+      await loadTenants();
+    } catch (e: any) {
+      toasts.error(e?.message ?? 'Error al eliminar tenant');
+    }
+  }
+
+  function togglePasswordRow(subdomain: string) {
+    if (expandedPasswordRow === subdomain) {
+      expandedPasswordRow = null;
+      rowPassword = '';
+      rowConfirmPassword = '';
+    } else {
+      expandedPasswordRow = subdomain;
+      rowPassword = '';
+      rowConfirmPassword = '';
+    }
+  }
+
+  let filteredTenants = $derived(
+    tenants.filter(t => {
+      if (!searchQuery) return true;
+      const q = searchQuery.toLowerCase();
+      return (
+        t.subdomain?.toLowerCase().includes(q) ||
+        t.email?.toLowerCase().includes(q) ||
+        t.company_name?.toLowerCase().includes(q)
+      );
+    })
+  );
+
+  let totalTenants = $derived(tenants.length);
+  let activeTenants = $derived(tenants.filter(t => t.status === 'active').length);
+
+  onMount(loadTenants);
 </script>
 
-<div class="p-6 lg:p-8 space-y-6">
-  <div class="flex flex-col md:flex-row gap-4 md:items-center md:justify-between">
+<div class="space-y-6">
+  <!-- Header -->
+  <div class="flex items-center justify-between">
     <div>
-      <h1 class="text-2xl font-bold text-white">Tenants</h1>
-      <p class="text-secondary-400 mt-1">Listado operativo de clientes/tenants y acciones de provisioning</p>
+      <h1 class="page-title">TENANTS</h1>
+      <p class="page-subtitle">Gestión de clientes y sus instancias</p>
     </div>
-
-    <Button variant="accent" on:click={() => (showCreateModal = true)}>Nuevo tenant</Button>
+    <button class="btn-accent px-4 py-2 flex items-center gap-2" onclick={() => showForm = !showForm}>
+      <Plus size={14} />
+      NUEVO TENANT
+    </button>
   </div>
 
-  <Card>
-    <div class="grid grid-cols-1 md:grid-cols-3 gap-3">
-      <Input label="Buscar" placeholder="empresa, email, subdominio" bind:value={search} />
-      <div class="rounded-lg bg-surface-highlight border border-surface-border p-4">
-        <p class="text-xs uppercase tracking-wider text-secondary-500">Total tenants</p>
-        <p class="text-2xl font-bold text-white mt-1">{tenants.length}</p>
-      </div>
-      <div class="rounded-lg bg-surface-highlight border border-surface-border p-4">
-        <p class="text-xs uppercase tracking-wider text-secondary-500">Activos</p>
-        <p class="text-2xl font-bold text-white mt-1">{tenants.filter((t) => t.status === 'active').length}</p>
-      </div>
+  <!-- Inline Add Form -->
+  {#if showForm}
+    <div class="card border-l-2 border-l-terracotta">
+      <h3 class="section-heading mb-5">NUEVO TENANT</h3>
+      <form onsubmit={handleCreate} class="space-y-4">
+        <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
+          <div>
+            <label class="label" for="f-nombre">Nombre empresa</label>
+            <input id="f-nombre" class="input w-full px-3 py-2" type="text" bind:value={formNombre} placeholder="Empresa S.A." required />
+          </div>
+          <div>
+            <label class="label" for="f-email">Email administrador</label>
+            <input id="f-email" class="input w-full px-3 py-2" type="email" bind:value={formEmail} placeholder="admin@empresa.com" required />
+          </div>
+          <div>
+            <label class="label" for="f-subdomain">Subdominio</label>
+            <div class="flex items-stretch">
+              <input
+                id="f-subdomain"
+                class="input flex-1 px-3 py-2 border-r-0"
+                type="text"
+                bind:value={formSubdomain}
+                placeholder="mi-empresa"
+                required
+                pattern="[a-z0-9\-]+"
+              />
+              <span class="bg-bg-card border border-border-light px-3 py-2 text-sm text-gray-500 whitespace-nowrap">.sajet.us</span>
+            </div>
+          </div>
+          <div>
+            <label class="label" for="f-plan">Plan</label>
+            <select id="f-plan" class="input w-full px-3 py-2" bind:value={formPlan}>
+              <option value="basic">Basic</option>
+              <option value="pro">Pro</option>
+              <option value="enterprise">Enterprise</option>
+            </select>
+          </div>
+          <div>
+            <label class="label" for="f-password">Contraseña</label>
+            <input id="f-password" class="input w-full px-3 py-2" type="password" bind:value={formPassword} placeholder="••••••••" required />
+          </div>
+          <div>
+            <label class="label" for="f-confirm">Confirmar contraseña</label>
+            <input id="f-confirm" class="input w-full px-3 py-2" type="password" bind:value={formConfirmPassword} placeholder="••••••••" required />
+          </div>
+        </div>
+        <div class="flex gap-3 pt-2">
+          <button type="button" class="btn-secondary px-4 py-2" onclick={() => showForm = false}>CANCELAR</button>
+          <button type="submit" class="btn-accent px-4 py-2 disabled:opacity-60" disabled={formLoading}>
+            {formLoading ? 'CREANDO...' : 'CREAR TENANT'}
+          </button>
+        </div>
+      </form>
     </div>
-  </Card>
+  {/if}
 
-  <Card title="Listado de tenants" subtitle="Endpoints: /api/tenants + /api/provisioning/tenant/*" padding="none">
+  <!-- Stats -->
+  <div class="grid grid-cols-2 md:grid-cols-4 gap-4">
+    <div class="stat-card card">
+      <div class="stat-value">{totalTenants}</div>
+      <div class="stat-label">Total Tenants</div>
+    </div>
+    <div class="stat-card card">
+      <div class="stat-value">{activeTenants}</div>
+      <div class="stat-label">Activos</div>
+    </div>
+  </div>
+
+  <!-- Search -->
+  <div class="relative">
+    <Search size={14} class="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400" />
+    <input
+      class="input w-full pl-9 pr-3 py-2"
+      type="text"
+      placeholder="Buscar por subdominio, email o empresa..."
+      bind:value={searchQuery}
+    />
+  </div>
+
+  <!-- Table -->
+  <div class="card p-0 overflow-hidden">
     {#if loading}
-      <div class="py-14 flex justify-center">
-        <Spinner size="lg" />
-      </div>
-    {:else if error}
-      <div class="p-6 text-error text-sm">{error}</div>
+      <div class="p-8 text-center text-gray-500 text-sm">Cargando tenants...</div>
+    {:else if filteredTenants.length === 0}
+      <div class="p-8 text-center text-gray-500 text-sm">No se encontraron tenants</div>
     {:else}
-      <div class="overflow-x-auto">
-        <table class="table">
-          <thead>
+      <table class="table w-full">
+        <thead>
+          <tr>
+            <th>TENANT</th>
+            <th>PLAN</th>
+            <th>ESTADO</th>
+            <th>SERVIDOR</th>
+            <th>CREADO</th>
+            <th>ACCIONES</th>
+          </tr>
+        </thead>
+        <tbody>
+          {#each filteredTenants as tenant (tenant.id)}
             <tr>
-              <th>Tenant</th>
-              <th>Plan</th>
-              <th>Estado</th>
-              <th>Servidor</th>
-              <th>Acciones</th>
+              <td>
+                <div class="font-medium text-text-primary text-sm">{tenant.company_name ?? '-'}</div>
+                <div class="text-xs text-gray-500">{tenant.email ?? '-'}</div>
+                <span class="badge-neutral text-[10px] mt-1 inline-block">{tenant.subdomain}.sajet.us</span>
+              </td>
+              <td>
+                {#if tenant.plan === 'enterprise'}
+                  <span class="badge-enterprise">{tenant.plan}</span>
+                {:else if tenant.plan === 'pro'}
+                  <span class="badge-pro">{tenant.plan}</span>
+                {:else}
+                  <span class="badge-basic">{tenant.plan ?? 'basic'}</span>
+                {/if}
+              </td>
+              <td>
+                {#if tenant.status === 'active'}
+                  <span class="badge-success">Activo</span>
+                {:else if tenant.status === 'suspended'}
+                  <span class="badge-warning">Suspendido</span>
+                {:else}
+                  <span class="badge-neutral">{tenant.status}</span>
+                {/if}
+              </td>
+              <td class="text-sm text-gray-600">{tenant.server ?? '-'}</td>
+              <td class="text-sm text-gray-500">{formatDate(tenant.created_at)}</td>
+              <td>
+                <div class="flex items-center gap-2 flex-wrap">
+                  <button
+                    class="btn-secondary btn-sm"
+                    onclick={() => togglePasswordRow(tenant.subdomain)}
+                  >
+                    CAMBIAR CLAVE
+                  </button>
+                  <button
+                    class={tenant.status === 'active' ? 'btn-danger btn-sm' : 'btn-secondary btn-sm'}
+                    onclick={() => handleSuspend(tenant)}
+                  >
+                    {tenant.status === 'active' ? 'SUSPENDER' : 'REACTIVAR'}
+                  </button>
+                  <button
+                    class="btn-danger btn-sm"
+                    onclick={() => handleDelete(tenant)}
+                  >
+                    ELIMINAR
+                  </button>
+                </div>
+              </td>
             </tr>
-          </thead>
-          <tbody>
-            {#each filteredTenants as tenant}
-              <tr>
-                <td>
-                  <div>
-                    <p class="font-medium text-white">{tenant.company_name || tenant.subdomain}</p>
-                    <p class="text-xs text-secondary-500">{tenant.email}</p>
-                    <p class="text-xs text-secondary-600">{tenant.subdomain}.sajet.us</p>
-                  </div>
-                </td>
-                <td>
-                  <Badge variant={planVariant(tenant.plan)}>{tenant.plan || 'basic'}</Badge>
-                </td>
-                <td>
-                  <Badge variant={statusVariant(tenant.status)} dot>{tenant.status}</Badge>
-                </td>
-                <td class="text-secondary-300">{tenant.server || '-'}</td>
-                <td>
-                  <div class="flex flex-wrap gap-2">
-                    <Button
-                      variant="secondary"
-                      size="sm"
-                      on:click={() => openPasswordModal(tenant)}
-                      disabled={actionLoadingTenant === tenant.subdomain}
-                    >
-                      Password
-                    </Button>
-                    <Button
-                      variant={tenant.status === 'active' ? 'danger' : 'primary'}
-                      size="sm"
-                      on:click={() => toggleSuspend(tenant)}
-                      disabled={actionLoadingTenant === tenant.subdomain}
-                    >
-                      {tenant.status === 'active' ? 'Suspender' : 'Reactivar'}
-                    </Button>
+            <!-- Inline password row -->
+            {#if expandedPasswordRow === tenant.subdomain}
+              <tr class="bg-bg-page">
+                <td colspan="6" class="py-4 px-6">
+                  <div class="flex items-end gap-4 flex-wrap">
+                    <div>
+                      <label class="label" for="rp-{tenant.subdomain}">Nueva contraseña</label>
+                      <input
+                        id="rp-{tenant.subdomain}"
+                        type="password"
+                        class="input px-3 py-2 w-48"
+                        placeholder="••••••••"
+                        bind:value={rowPassword}
+                      />
+                    </div>
+                    <div>
+                      <label class="label" for="rc-{tenant.subdomain}">Confirmar</label>
+                      <input
+                        id="rc-{tenant.subdomain}"
+                        type="password"
+                        class="input px-3 py-2 w-48"
+                        placeholder="••••••••"
+                        bind:value={rowConfirmPassword}
+                      />
+                    </div>
+                    <div class="flex gap-2">
+                      <button
+                        class="btn-secondary btn-sm"
+                        onclick={() => { expandedPasswordRow = null; rowPassword = ''; rowConfirmPassword = ''; }}
+                      >CANCELAR</button>
+                      <button
+                        class="btn-accent btn-sm disabled:opacity-60"
+                        disabled={rowPasswordLoading}
+                        onclick={() => handleChangePassword(tenant.subdomain)}
+                      >
+                        {rowPasswordLoading ? 'GUARDANDO...' : 'GUARDAR'}
+                      </button>
+                    </div>
                   </div>
                 </td>
               </tr>
-            {:else}
-              <tr>
-                <td colspan="5" class="text-center text-secondary-500 py-8">No hay tenants que coincidan con la búsqueda</td>
-              </tr>
-            {/each}
-          </tbody>
-        </table>
-      </div>
+            {/if}
+          {/each}
+        </tbody>
+      </table>
     {/if}
-  </Card>
+  </div>
 </div>
-
-<Modal
-  bind:isOpen={showCreateModal}
-  title="Crear tenant"
-  confirmText="Crear"
-  on:confirm={handleCreateTenant}
-  on:close={() => {
-    showCreateModal = false;
-    createError = '';
-  }}
-  loading={creating}
->
-  <div class="space-y-4">
-    {#if createError}
-      <div class="p-3 rounded-lg bg-error/10 border border-error/20 text-sm text-error">{createError}</div>
-    {/if}
-
-    <Input label="Subdominio" placeholder="miempresa" bind:value={createForm.subdomain} required />
-    <Input label="Empresa" placeholder="Mi Empresa SRL" bind:value={createForm.company_name} />
-    <Input label="Email admin" type="email" placeholder="admin@empresa.com" bind:value={createForm.admin_email} />
-    <Input label="Password admin" type="password" placeholder="******" bind:value={createForm.admin_password} />
-
-    <div class="space-y-1.5">
-      <label class="label" for="tenant-plan">Plan</label>
-      <select id="tenant-plan" bind:value={createForm.plan} class="input">
-        <option value="basic">Basic</option>
-        <option value="pro">Pro</option>
-        <option value="enterprise">Enterprise</option>
-      </select>
-    </div>
-  </div>
-</Modal>
-
-<Modal
-  bind:isOpen={showPasswordModal}
-  title={`Cambiar password: ${passwordTenant?.subdomain || ''}`}
-  confirmText="Actualizar"
-  on:confirm={handleChangePassword}
-  on:close={() => {
-    showPasswordModal = false;
-    passwordError = '';
-  }}
-  loading={passwordLoading}
->
-  <div class="space-y-4">
-    {#if passwordError}
-      <div class="p-3 rounded-lg bg-error/10 border border-error/20 text-sm text-error">{passwordError}</div>
-    {/if}
-    <Input label="Nueva contraseña" type="password" bind:value={newPassword} required />
-  </div>
-</Modal>

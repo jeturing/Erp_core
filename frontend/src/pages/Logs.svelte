@@ -1,181 +1,251 @@
 <script lang="ts">
-  import { onDestroy, onMount } from 'svelte';
-  import { Badge, Button, Card, Spinner } from '../lib/components';
+  import { onMount, onDestroy } from 'svelte';
   import { logsApi } from '../lib/api';
-  import type { LogEntry, SystemStatusResponse } from '../lib/types';
+  import { toasts } from '../lib/stores/toast';
+  import { RefreshCw } from 'lucide-svelte';
+  import type { SystemStatus, LogEntry } from '../lib/api/logs';
 
-  type LogsTab = 'provisioning' | 'system';
 
-  let activeTab: LogsTab = 'provisioning';
-  let loading = true;
-  let error = '';
-  let lines = 100;
-  let level = '';
-  let autoRefresh = false;
 
-  let provisioningLogs: LogEntry[] = [];
-  let systemLogs: LogEntry[] = [];
-  let status: SystemStatusResponse | null = null;
+  type LogTab = 'provisioning' | 'app' | 'sistema';
 
-  let refreshInterval: number | null = null;
+  let activeTab = $state<LogTab>('provisioning');
+  let logs = $state<LogEntry[]>([]);
+  let logsLoading = $state(false);
+  let lineCount = $state(100);
+  let levelFilter = $state('');
+  let autoRefresh = $state(false);
+  let systemStatus = $state<SystemStatus | null>(null);
+  let statusLoading = $state(false);
+  let refreshInterval: ReturnType<typeof setInterval> | null = null;
+  let logContainer: HTMLDivElement;
 
-  function statusVariant(value: string) {
-    if (['healthy', 'running', 'active'].includes(value)) return 'success';
-    if (['warning', 'unknown'].includes(value)) return 'warning';
-    if (['error', 'stopped'].includes(value)) return 'error';
-    return 'secondary';
+  async function loadLogs() {
+    logsLoading = true;
+    try {
+      let data: { logs: LogEntry[]; total: number; file?: string };
+      if (activeTab === 'provisioning') {
+        data = await logsApi.getProvisioningLogs(lineCount, levelFilter || undefined);
+      } else if (activeTab === 'app') {
+        data = await logsApi.getAppLogs(lineCount, levelFilter || undefined);
+      } else {
+        data = await logsApi.getSystemLogs(lineCount);
+      }
+      logs = data.logs ?? [];
+      // Auto-scroll to bottom
+      setTimeout(() => {
+        if (logContainer) logContainer.scrollTop = logContainer.scrollHeight;
+      }, 50);
+    } catch (e: any) {
+      toasts.error(e?.message ?? 'Error al cargar logs');
+    } finally {
+      logsLoading = false;
+    }
   }
 
-  function cleanupRefresh() {
-    if (refreshInterval) {
-      clearInterval(refreshInterval);
+  async function loadStatus() {
+    statusLoading = true;
+    try {
+      systemStatus = await logsApi.getSystemStatus();
+    } catch (e: any) {
+      // silently fail
+    } finally {
+      statusLoading = false;
+    }
+  }
+
+  function toggleAutoRefresh() {
+    autoRefresh = !autoRefresh;
+    if (autoRefresh) {
+      refreshInterval = setInterval(loadLogs, 10000);
+    } else {
+      if (refreshInterval) clearInterval(refreshInterval);
       refreshInterval = null;
     }
   }
 
-  function configureRefresh() {
-    cleanupRefresh();
-    if (!autoRefresh) return;
-    refreshInterval = window.setInterval(() => {
-      loadData(true);
-    }, 8000);
-  }
-
-  async function loadData(silent = false) {
-    if (!silent) {
-      loading = true;
-      error = '';
-    }
-
-    try {
-      const statusPromise = logsApi.getSystemStatus();
-      if (activeTab === 'provisioning') {
-        const result = await logsApi.getProvisioningLogs(lines, level || undefined);
-        provisioningLogs = result.logs || [];
-      } else {
-        const result = await logsApi.getSystemLogs(lines);
-        systemLogs = result.logs || [];
-      }
-      status = await statusPromise;
-    } catch (err) {
-      error = err instanceof Error ? err.message : 'No se pudieron cargar logs';
-    } finally {
-      loading = false;
-    }
-  }
-
-  function switchTab(tab: LogsTab) {
-    if (activeTab === tab) return;
+  function switchTab(tab: LogTab) {
     activeTab = tab;
-    loadData();
+    logs = [];
+    loadLogs();
   }
 
-  $: configureRefresh();
+  function statusColor(status: string | undefined): string {
+    if (!status) return 'bg-gray-400';
+    const s = status.toLowerCase();
+    if (s === 'ok' || s === 'healthy' || s === 'running') return 'bg-emerald-400';
+    if (s === 'unknown') return 'bg-yellow-400';
+    return 'bg-rose-400';
+  }
 
-  onMount(loadData);
-  onDestroy(cleanupRefresh);
+  function lineClass(cls: string | undefined): string {
+    if (!cls) return 'text-slate-400';
+    return cls;
+  }
+
+  onMount(() => {
+    loadLogs();
+    loadStatus();
+  });
+
+  onDestroy(() => {
+    if (refreshInterval) clearInterval(refreshInterval);
+  });
 </script>
 
-<div class="p-6 lg:p-8 space-y-6">
-  <div class="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
+<div class="space-y-6">
+  <!-- Header -->
+  <div class="flex items-center justify-between flex-wrap gap-3">
     <div>
-      <h1 class="text-2xl font-bold text-white">Logs</h1>
-      <p class="text-secondary-400 mt-1">Provisioning, sistema y estado operativo</p>
+      <h1 class="page-title">LOGS DEL SISTEMA</h1>
+      <p class="page-subtitle">Monitoreo y diagnóstico</p>
     </div>
-    <div class="flex items-center gap-2">
-      <Button variant="secondary" on:click={() => loadData()}>Actualizar</Button>
-      <Button variant={autoRefresh ? 'accent' : 'ghost'} on:click={() => (autoRefresh = !autoRefresh)}>
-        {autoRefresh ? 'Auto-refresh ON' : 'Auto-refresh OFF'}
-      </Button>
-    </div>
-  </div>
-
-  {#if error}
-    <Card><p class="text-sm text-error">{error}</p></Card>
-  {/if}
-
-  <div class="grid grid-cols-1 lg:grid-cols-4 gap-4">
-    <Card>
-      <p class="text-xs uppercase tracking-wider text-secondary-500">PostgreSQL</p>
-      <div class="mt-2">
-        <Badge variant={statusVariant(status?.postgresql.status || 'unknown')}>{status?.postgresql.status || 'unknown'}</Badge>
-      </div>
-      {#if status?.postgresql.latency_ms !== undefined}
-        <p class="text-xs text-secondary-400 mt-2">Latencia: {status.postgresql.latency_ms} ms</p>
-      {/if}
-    </Card>
-
-    <Card>
-      <p class="text-xs uppercase tracking-wider text-secondary-500">FastAPI</p>
-      <div class="mt-2">
-        <Badge variant={statusVariant(status?.fastapi.status || 'unknown')}>{status?.fastapi.status || 'unknown'}</Badge>
-      </div>
-      <p class="text-xs text-secondary-400 mt-2">Puerto: {status?.fastapi.port || '-'}</p>
-    </Card>
-
-    <Card>
-      <p class="text-xs uppercase tracking-wider text-secondary-500">LXC</p>
-      <div class="mt-2">
-        <Badge variant={statusVariant(status?.lxc_105.status || 'unknown')}>{status?.lxc_105.status || 'unknown'}</Badge>
-      </div>
-      <p class="text-xs text-secondary-400 mt-2">{status?.lxc_105.name || 'Container'}</p>
-    </Card>
-
-    <Card>
-      <p class="text-xs uppercase tracking-wider text-secondary-500">Disco /</p>
-      <p class="mt-2 text-2xl font-bold text-white">{status?.disk.usage_percent || 0}%</p>
-      <p class="text-xs text-secondary-400 mt-2">Libre: {status?.disk.free_gb || 0} GB</p>
-    </Card>
-  </div>
-
-  <Card title="Visor de logs" subtitle="/api/logs/*" padding="none">
-    <div class="border-b border-surface-border px-4 py-3 flex flex-wrap items-center gap-2">
-      <Button variant={activeTab === 'provisioning' ? 'primary' : 'ghost'} size="sm" on:click={() => switchTab('provisioning')}>
-        Provisioning
-      </Button>
-      <Button variant={activeTab === 'system' ? 'primary' : 'ghost'} size="sm" on:click={() => switchTab('system')}>
-        System
-      </Button>
-
-      <div class="ml-auto flex flex-wrap gap-2 items-center">
-        <label class="text-xs text-secondary-400" for="lines-select">Lineas</label>
-        <select id="lines-select" bind:value={lines} class="input w-auto min-w-24" on:change={() => loadData()}>
-          <option value={50}>50</option>
-          <option value={100}>100</option>
-          <option value={200}>200</option>
+    <div class="flex items-center gap-3 flex-wrap">
+      <div>
+        <select class="input px-3 py-2 text-sm" bind:value={lineCount} onchange={loadLogs}>
+          <option value={50}>50 líneas</option>
+          <option value={100}>100 líneas</option>
+          <option value={200}>200 líneas</option>
+          <option value={500}>500 líneas</option>
         </select>
-
-        {#if activeTab === 'provisioning'}
-          <label class="text-xs text-secondary-400" for="level-select">Nivel</label>
-          <select id="level-select" bind:value={level} class="input w-auto min-w-28" on:change={() => loadData()}>
+      </div>
+      {#if activeTab !== 'sistema'}
+        <div>
+          <select class="input px-3 py-2 text-sm" bind:value={levelFilter} onchange={loadLogs}>
             <option value="">Todos</option>
-            <option value="info">Info</option>
-            <option value="warning">Warning</option>
-            <option value="error">Error</option>
-            <option value="debug">Debug</option>
+            <option value="INFO">INFO</option>
+            <option value="WARNING">WARNING</option>
+            <option value="ERROR">ERROR</option>
           </select>
+        </div>
+      {/if}
+      <button
+        class="btn-sm {autoRefresh ? 'btn-accent' : 'btn-secondary'} px-3 py-2"
+        onclick={toggleAutoRefresh}
+      >
+        AUTO {autoRefresh ? 'ON' : 'OFF'}
+      </button>
+      <button class="btn-secondary btn-sm px-3 py-2 flex items-center gap-1.5" onclick={loadLogs} disabled={logsLoading}>
+        <RefreshCw size={13} class={logsLoading ? 'animate-spin' : ''} />
+        ACTUALIZAR
+      </button>
+    </div>
+  </div>
+
+  <!-- Content -->
+  <div class="grid grid-cols-1 lg:grid-cols-3 gap-6">
+    <!-- Logs panel (2/3) -->
+    <div class="lg:col-span-2 space-y-4">
+      <!-- Tabs -->
+      <div class="flex gap-1 bg-bg-card border border-border-light p-1 w-fit">
+        {#each [['provisioning', 'PROVISIONING'], ['app', 'APP'], ['sistema', 'SISTEMA']] as [tab, label]}
+          <button
+            type="button"
+            class="px-4 py-1.5 text-[11px] uppercase tracking-[0.08em] font-semibold transition-colors {activeTab === tab ? 'bg-charcoal text-white' : 'text-gray-500 hover:text-text-primary'}"
+            onclick={() => switchTab(tab as LogTab)}
+          >
+            {label}
+          </button>
+        {/each}
+      </div>
+
+      <!-- Log area -->
+      <div
+        bind:this={logContainer}
+        class="bg-[#1a1a1a] overflow-y-auto font-mono text-xs leading-5 p-4"
+        style="height:500px"
+      >
+        {#if logsLoading && logs.length === 0}
+          <span class="text-slate-500">Cargando logs...</span>
+        {:else if logs.length === 0}
+          <span class="text-slate-500">Sin logs disponibles</span>
+        {:else}
+          {#each logs as entry, i (i)}
+            <div class="{lineClass(entry.class)} whitespace-pre-wrap break-all">{entry.line}</div>
+          {/each}
         {/if}
       </div>
     </div>
 
-    {#if loading}
-      <div class="py-12 flex justify-center"><Spinner size="lg" /></div>
-    {:else}
-      <div class="max-h-[560px] overflow-auto p-4 bg-surface-dark">
-        {#if activeTab === 'provisioning'}
-          {#each provisioningLogs as entry}
-            <p class={`font-mono text-xs leading-relaxed ${entry.class}`}>{entry.line}</p>
-          {:else}
-            <p class="text-sm text-secondary-500 py-8 text-center">Sin logs de provisioning</p>
-          {/each}
+    <!-- System Status sidebar (1/3) -->
+    <div class="space-y-4">
+      <div class="card">
+        <h3 class="section-heading mb-4">ESTADO DEL SISTEMA</h3>
+        {#if statusLoading}
+          <p class="text-sm text-gray-500">Cargando...</p>
         {:else}
-          {#each systemLogs as entry}
-            <p class={`font-mono text-xs leading-relaxed ${entry.class}`}>{entry.line}</p>
-          {:else}
-            <p class="text-sm text-secondary-500 py-8 text-center">Sin logs de sistema</p>
-          {/each}
+          <div class="space-y-3">
+            <!-- PostgreSQL -->
+            <div class="flex items-start justify-between">
+              <div class="flex items-center gap-2">
+                <div class="w-2 h-2 rounded-full mt-0.5 {statusColor(systemStatus?.postgresql?.status)}"></div>
+                <div>
+                  <div class="text-xs font-semibold text-text-primary uppercase tracking-wide">PostgreSQL</div>
+                  <div class="text-[11px] text-gray-500">{systemStatus?.postgresql?.status ?? 'unknown'}</div>
+                </div>
+              </div>
+              {#if systemStatus?.postgresql?.latency_ms != null}
+                <span class="text-[11px] text-gray-400">{systemStatus.postgresql.latency_ms}ms</span>
+              {/if}
+            </div>
+
+            <!-- FastAPI -->
+            <div class="flex items-start justify-between">
+              <div class="flex items-center gap-2">
+                <div class="w-2 h-2 rounded-full mt-0.5 {statusColor(systemStatus?.fastapi?.status)}"></div>
+                <div>
+                  <div class="text-xs font-semibold text-text-primary uppercase tracking-wide">FastAPI</div>
+                  <div class="text-[11px] text-gray-500">{systemStatus?.fastapi?.status ?? 'unknown'}</div>
+                </div>
+              </div>
+              {#if systemStatus?.fastapi?.port != null}
+                <span class="text-[11px] text-gray-400">:{systemStatus.fastapi.port}</span>
+              {/if}
+            </div>
+
+            <!-- LXC 105 -->
+            <div class="flex items-start justify-between">
+              <div class="flex items-center gap-2">
+                <div class="w-2 h-2 rounded-full mt-0.5 {statusColor(systemStatus?.lxc_105?.status)}"></div>
+                <div>
+                  <div class="text-xs font-semibold text-text-primary uppercase tracking-wide">LXC 105</div>
+                  <div class="text-[11px] text-gray-500">{systemStatus?.lxc_105?.status ?? 'unknown'}</div>
+                </div>
+              </div>
+              {#if systemStatus?.lxc_105?.name}
+                <span class="text-[11px] text-gray-400">{systemStatus.lxc_105.name}</span>
+              {/if}
+            </div>
+
+            <!-- Disk -->
+            <div class="flex items-start justify-between">
+              <div class="flex items-center gap-2">
+                <div class="w-2 h-2 rounded-full mt-0.5 {
+                  systemStatus?.disk?.usage_percent != null
+                    ? systemStatus.disk.usage_percent > 85 ? 'bg-rose-400' : systemStatus.disk.usage_percent > 70 ? 'bg-yellow-400' : 'bg-emerald-400'
+                    : 'bg-gray-400'
+                }"></div>
+                <div>
+                  <div class="text-xs font-semibold text-text-primary uppercase tracking-wide">Disco</div>
+                  {#if systemStatus?.disk?.usage_percent != null}
+                    <div class="text-[11px] text-gray-500">{systemStatus.disk.usage_percent}% usado</div>
+                  {:else}
+                    <div class="text-[11px] text-gray-500">unknown</div>
+                  {/if}
+                </div>
+              </div>
+              {#if systemStatus?.disk?.free_gb != null}
+                <span class="text-[11px] text-gray-400">{systemStatus.disk.free_gb}GB libres</span>
+              {/if}
+            </div>
+          </div>
         {/if}
+
+        <button class="btn-secondary btn-sm w-full mt-4 flex items-center justify-center gap-1.5" onclick={loadStatus} disabled={statusLoading}>
+          <RefreshCw size={12} class={statusLoading ? 'animate-spin' : ''} />
+          ACTUALIZAR ESTADO
+        </button>
       </div>
-    {/if}
-  </Card>
+    </div>
+  </div>
 </div>
