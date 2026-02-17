@@ -1,0 +1,50 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<templates xml:space="preserve">
+    <t t-name="dynamic_odoo.Title.layout_custom" owl="1">
+        <title layout="custom">
+            <div class="title_widget" style="width: 100%; height: 100%">
+                <div class="container" style="height: 100%; background-color: white">
+
+                </div>
+            </div>
+        </title>
+    </t>
+    <t t-name="dynamic_odoo.Title.layout_1" owl="1">
+        <title layout="layout_1">
+            <div class="title_widget" style="width: 100%; height: 100%">
+                <div class="container" style="height: 100%">
+                    <div class="row" style="height: 100%">
+                        <div class="col col-5" style="background-color: red; display: flex">
+                            <i class="fa fa-plus" style="font-size: 100px; color: white; margin: auto"/>
+                        </div>
+                        <div class="col col-7" style="background-color: white">
+                            <a style="font-size: 3em; text-align: center; display: block; padding: 1em; padding-bottom: 0px;">
+                                <span is-data='true' type='sum'><t t-esc="getLabel('sum', false)" /></span>
+                            </a>
+                            <a style="font-size: 30px; text-align: center; display: block; color: green;"><span>This is Layout 1</span></a>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </title>
+    </t>
+    <t t-name="dynamic_odoo.Title.layout_2" owl="1">
+        <title layout="layout_2">
+            <div class="title_widget" style="width: 100%; height: 100%">
+                <div class="container" style="height: 100%">
+                    <div class="row" style="height: 100%">
+                        <div class="col col-5" style="background-image: repeating-linear-gradient(-45deg, white 0 1px, #f4a460 1px 20px); display: flex">
+                            <i class="fa fa-plus" style="font-size: 100px; color: white; margin: auto"/>
+                        </div>
+                        <div class="col col-7" style="background-color: white">
+                            <a style="font-size: 3em; text-align: center; display: block; padding: 1em; padding-bottom: 0px;">
+                                <span is-data='true' type='sum'><t t-esc="getLabel('sum', false)" /></span>
+                            </a>
+                            <a style="font-size: 30px; text-align: center; display: block; color: green;"><span>This is Layout 2</span></a>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </title>
+    </t>
+</templates>

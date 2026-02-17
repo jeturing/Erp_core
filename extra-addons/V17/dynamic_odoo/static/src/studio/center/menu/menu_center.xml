@@ -1,0 +1,50 @@
+<?xml version="1.0" encoding="UTF-8" ?>
+<templates xml:space="preserve">
+    <t t-name="dynamic_odoo.MenuCenter.MenuItem">
+        <div class="menu_item" t-att-id="menu.id">
+            <div class="menu_info">
+                <a class="new_menu" data-tooltip="Create new menu" t-on-click="() => newMenu.bind(this)(menu.id)"><i class="fa fa-plus" /></a>
+                <div class="info"><span><t t-esc="menu.name" /></span></div>
+                <div class="menu_action">
+                    <a class="menu_edit" data-tooltip="Edit menu" t-on-click="() => editMenu.bind(this)(menu.id)"><i class="fa fa-pencil" /></a>
+                    <a class="menu_delete" data-tooltip="Delete menu" t-on-click="() => deleteMenu.bind(this)(menu.id)"><i class="fa fa-trash" /></a>
+                </div>
+            </div>
+            <div class="menu_child" t-if="menu.childrenTree and menu.childrenTree.length">
+                <t t-call="dynamic_odoo.MenuCenter.WrapMenus"/>
+            </div>
+        </div>
+    </t>
+    <t t-name="dynamic_odoo.MenuCenter.WrapMenus">
+        <t t-foreach="menu.childrenTree" t-as="menu" t-key="Math.random()">
+            <t t-call="dynamic_odoo.MenuCenter.MenuItem"/>
+        </t>
+    </t>
+    <t t-name="dynamic_odoo.MenuCenter">
+         <Dialog contentClass="'menu_center'"  size="'md'" title="'Edit Menus'">
+             <div class="menu_center">
+                 <t t-set="menu" t-value="state.menus"/>
+                 <t t-call="dynamic_odoo.MenuCenter.MenuItem"/>
+             </div>
+         </Dialog>
+    </t>
+    <t t-name="dynamic_odoo.MenuCenterDialog">
+         <Dialog contentClass="'menu_creator'" size="'sm'" title="'Create Menu'">
+             <MenuCreator t-props="props"/>
+             <t t-set-slot="footer">
+                <button class="btn btn-primary" t-on-click="onCreate">
+                    Create
+                </button>
+            </t>
+         </Dialog>
+    </t>
+    <t t-name="dynamic_odoo.MenuCreator">
+        <div class="menu_creator">
+            <div class="menu_modifier">
+                <t t-foreach="state.views" t-as="fieldName" t-key="Math.random()">
+                    <Field t-props="getProps({...fields[fieldName], name: fieldName})"/>
+                </t>
+            </div>
+        </div>
+    </t>
+</templates>

@@ -1,0 +1,39 @@
+.selection_field {
+  .dropdown-toggle {
+    text-align: right;
+    padding-right: 5px;
+    padding-left: 0px;
+    min-height: 35px;
+
+    &:after {
+      vertical-align: baseline;
+    }
+  }
+
+  .item_val {
+    float: left;
+    margin-left: 7px;
+    margin-top: 2px;
+    width: 90%;
+    text-align: left;
+  }
+
+  ul {
+    min-width: 200px;
+    border-radius: 3px;
+    padding: 4px;
+    font-weight: 300;
+    font-size: 13px;
+    border: 2px solid #232933;
+
+    li {
+      padding: 3px 9px;
+
+      &.active, &:hover {
+        background: rgba(205, 205, 205, 0.6);
+        font-weight: 400;
+        cursor: pointer;
+      }
+    }
+  }
+}

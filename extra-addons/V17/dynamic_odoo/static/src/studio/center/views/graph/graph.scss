@@ -1,0 +1,13 @@
+.studio_graph_view {
+  height: 100%;
+  .o_graph_renderer > .gap-1 {
+    display: none !important;
+  }
+  .o_graph_canvas_container {
+    padding: 16px;
+  }
+  .o_graph_view {
+    height: 80%;
+    padding-bottom: 50px;
+  }
+}

@@ -1,0 +1,16 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<templates xml:space="preserve">
+
+    <t t-name="dynamic_odoo.GraphView">
+        <div t-att-class="props.className" t-ref="root">
+            <t t-if="model.data">
+                <t t-component="props.Renderer" model="model" buttonTemplate="props.buttonTemplate"/>
+            </t>
+            <t t-else="" t-call="web.NoContentHelper">
+                <t t-set="title">Invalid data</t>
+                <t t-set="description">Pie chart cannot mix positive and negative numbers. Try to change your domain to only display positive results</t>
+            </t>
+        </div>
+    </t>
+
+</templates>

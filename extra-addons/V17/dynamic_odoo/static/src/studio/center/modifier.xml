@@ -1,0 +1,87 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<templates xml:space="preserve">
+
+    <t t-name="dynamic_odoo.Modifier.TabField" owl="1">
+        <div class="tab_fields">
+            <div class="search_field">
+                <Field t-props="{type: 'char', props: {placeholder: 'Search field...', useKeyUp: true, update: this.onSearch.bind(this)}}"/>
+            </div>
+            <div class="fields_result st_scroll">
+                <t t-set="_fieldIcon" t-value="fieldIcons"/>
+                <t t-foreach="Object.keys(props.fields)" t-as="fieldName" t-key="fieldName">
+                    <t t-set="field" t-value="props.fields[fieldName]"/>
+                    <t t-if="!props.without_fields.includes(fieldName) and ((field.string || '').toLowerCase().includes(state.search) || !state.search)">
+                        <DragField t-props="{title: field.string, icon: _fieldIcon[field.type], name: fieldName}"/>
+                    </t>
+                </t>
+            </div>
+        </div>
+    </t>
+    <t t-name="dynamic_odoo.Modifier.TabComponents">
+        <div class="tab_components">
+            <div class="tags_component">
+                <h4>Tags</h4>
+                <div>
+                    <t t-foreach="Object.keys((props.components || {}))" t-as="comName" t-key="Math.random()">
+                        <t t-set="component" t-value="props.components[comName]"/>
+                        <t t-component="props.components[comName]" t-props="componentProps(component)"/>
+                    </t>
+                </div>
+            </div>
+        </div>
+    </t>
+    <t t-name="dynamic_odoo.Modifier.ComponentModifier" owl="1">
+        <div class="wrap_modifier" t-ref="root">
+            <div class="node_side">
+                <t t-set="tab_class" t-value="constructor.components.Tab ? 'has_tab ' : 'no_tab '"/>
+                <div t-att-class="tab_class + 'node_modifier st_scroll'">
+                    <t t-if="constructor.showNodeRoot or (props.viewInfo.archJson.nodeId != state.node.nodeId)">
+                        <t t-if="constructor.useStructure">
+                            <StructureNode
+                                    t-if="constructor.showNodeRoot or (props.viewInfo.archJson.nodeId != state.node.nodeId)"
+                                    t-props="structureNodeProps"/>
+                        </t>
+                        <t t-else="">
+                            <t t-set="_nodeModifier" t-value="nodeModifier"/>
+                            <t t-foreach="Object.keys(_nodeModifier.fields || {})" t-as="fieldName"
+                               t-key="fieldName + '_key_' + fieldName_index">
+                                <Field t-props="{..._nodeModifier.fields[fieldName], name: fieldName}"/>
+                            </t>
+                        </t>
+                    </t>
+                </div>
+                <div class="tab_modifier" t-if="constructor.components.Tab">
+                    <Tab nodeModifier="constructor.NodeModifier" viewInfo="props.viewInfo"
+                         reload="() => this.render(true)" bindSort="bindSort.bind(this)" node="state.node"/>
+                </div>
+            </div>
+            <div class="component_side">
+                <div class="component_viewer SORT_COMPONENT">
+                    <t t-if="constructor.ViewComponent">
+                        <t t-component="constructor.ViewComponent" t-props="viewComponentProps"/>
+                    </t>
+                    <t t-else="">
+                        <ViewComponent t-props="viewComponentProps"/>
+                    </t>
+                </div>
+            </div>
+        </div>
+    </t>
+    <t t-name="dynamic_odoo.ModifierDialog">
+         <Dialog contentClass="props.class || 'dashboard_card_center'" size="props.size || 'fs'"
+                 title="props.title || 'Modifier Dialog'">
+             <div class="modifier_dialog">
+                 <t t-component="props.Modifier || Modifier" t-key="state.key" setComponent="props.setComponent"
+                    viewInfo="props.viewInfo"/>
+             </div>
+             <t t-set-slot="footer">
+                 <div>
+                     <a class="a_action a_save" data-tooltip="Save changes"
+                        t-on-click.prevent="confirm"><i class="fa fa-save" /></a>
+                     <a class="a_action a_refresh" data-tooltip="Reset all changes"
+                        t-on-click.prevent="reset"><i class="fa fa-refresh" /></a>
+                 </div>
+            </t>
+         </Dialog>
+    </t>
+</templates>

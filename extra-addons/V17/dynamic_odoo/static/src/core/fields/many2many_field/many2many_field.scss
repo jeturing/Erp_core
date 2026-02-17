@@ -1,0 +1,46 @@
+.field_widget {
+  .many2many_field {
+    height: auto;
+    padding-left: 0px;
+    overflow: hidden;
+  }
+}
+.many2many_field {
+  //.wTags {
+  //  background-color: #f6f6f6;
+  //  padding: 4px 0px;
+  //  border-bottom: 1px solid #dbe1e8;
+  //
+  //  .iTags {
+  //    display: inline-block;
+  //    padding: 2px 5px 2px 8px;
+  //    border: 1px solid #737578;
+  //    box-shadow: none;
+  //    font-size: 12px;
+  //    border-radius: 25px;
+  //    background-color: white;
+  //    margin-bottom: 4px;
+  //    margin-left: 4px;
+  //
+  //    i {
+  //      margin-left: 4px;
+  //    }
+  //  }
+  //}
+
+  .o_field_tags {
+    background: transparent;
+    border: 0px;
+    width: 100%;
+    padding: 0px;
+
+    .o_input_dropdown {
+      width: 100%;
+    }
+
+    .o_input {
+      padding: 5px;
+      background: transparent;
+    }
+  }
+}

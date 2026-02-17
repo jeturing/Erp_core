@@ -1,0 +1,11 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<templates xml:space="preserve">
+
+    <t t-name="dynamic_odoo.Widget.ListString">
+        <div class="list_string" t-att-class="props.value.length > 1 ? 'multi_input' : ''">
+            <t t-foreach="props.value" t-as="string" t-key="Math.random()">
+                <CharField classes="'input_base'" value="string[1]" update="(value) => onUpdate.bind(this)(string_index, [string[0], value])" />
+            </t>
+        </div>
+    </t>
+</templates>

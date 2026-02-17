@@ -1,0 +1,176 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<templates xml:space="preserve">
+
+    <t t-name="dynamic_odoo.CssWidget.BorderStyle" owl="1">
+        <div class="border_style">
+            <t t-set="sideActive" t-value="this.sideInfo[state.side]"/>
+            <div>
+                <input type="number" t-on-change="(ev) => this.onChange('width', ev.target.value)"
+                       t-att-value="sideActive.width"
+                       min="1" max="100"/>
+            </div>
+            <div>
+                <select t-on-change="(ev) => this.onChange('unit', ev.target.value)">
+                    <t t-foreach="units" t-as="unit" t-key="Math.random() + '_' + unit_index">
+                        <t t-if="sideActive.unit == unit">
+                            <option t-att-value="unit" selected="selected"><t t-esc="unit" /></option>
+                        </t>
+                        <t t-else="">
+                            <option t-att-value="unit"><t t-esc="unit" /></option>
+                        </t>
+                    </t>
+                </select>
+            </div>
+            <div class="wBDStyle">
+                <select t-on-change="(ev) => this.onChange('style', ev.target.value)">
+                    <t t-foreach="style" t-as="_style" t-key="'style_' + _style_index">
+                        <t t-if="sideActive.style == _style.value">
+                            <option t-att-value="_style.value" selected="selected"><t t-esc="_style.label" /></option>
+                        </t>
+                        <t t-else="">
+                            <option t-att-value="_style.value"><t t-esc="_style.label" /></option>
+                        </t>
+                    </t>
+                </select>
+            </div>
+            <div class="wSide">
+                <t t-foreach="sides" t-as="side" t-key="'side' + side_index">
+                    <t t-set="sideData" t-value="this.sideInfo[side]"/>
+                    <span class="sp_wrap dropdown-toggle o-no-caret" data-bs-toggle="dropdown">
+                        <span class="sp_border" t-att-style="side + '-color:' + sideData.color">
+                            <span class="sp_wrap" t-on-click="() => this.state.side = side"></span>
+                        </span>
+                    </span>
+                    <ul class="dropdown-menu colorpicker-menu">
+                        <t t-component="ColorPalette" t-props="colorPaletteProps"/>
+                    </ul>
+                </t>
+            </div>
+        </div>
+    </t>
+    <t t-name="dynamic_odoo.CssWidget.units" owl="1">
+        <select class="sl_units" t-on-change="onChange">
+            <t t-foreach="units" t-as="unit" t-key="Math.random() + '_' + unit">
+                <t t-if="unit == state.value">
+                    <option selected="selected" t-att-value="unit"><t t-esc="unit" /></option>
+                </t>
+                <t t-else="">
+                    <option t-att-value="unit"><t t-esc="unit" /></option>
+                </t>
+            </t>
+        </select>
+    </t>
+    <t t-name="dynamic_odoo.CssWidget.FontSize" owl="1">
+        <div class="wFS" t-ref="wrap">
+            <div class="slider">
+                <div class="line"></div>
+                <div class="slideOver">
+                    <div class="lineOver"></div>
+                    <div class="dot" t-ref="dot"></div>
+                </div>
+            </div>
+            <div class="wFL">
+                <span><t t-esc="state.value" /></span>
+                <Units value="state.unit" onChange.bind="onChangeUnit"/>
+            </div>
+        </div>
+    </t>
+
+    <t t-name="dynamic_odoo.CssWidget.CssAttribute" owl="1">
+        <div class="w_com">
+            <t t-if="props.type == 'icon'">
+                <t t-set="clsActive" t-value="state.active ? 'com_icon active' : 'com_icon'"/>
+                <span t-att-class="props.classes ? props.classes + ' ' + clsActive : clsActive"
+                      t-on-click="onClickIcon">
+                    <t t-if="props.label"><t t-esc="props.label" /></t>
+                    <t t-elif="isSvg()"><t t-call="{{props.icon}}" /></t>
+                    <t t-elif="props.icon"><i t-att-class="'fa fa-' + props.icon"/></t>
+                </span>
+            </t>
+            <t t-elif="props.type == 'input'">
+                <span class="w_label" t-if="props.label"><t t-esc="props.label" /></span>
+                <div class="w_input">
+                    <input t-ref="input" t-att-value="state.value"/>
+                    <t t-if="props.useUnit">
+                        <Units value="state.unit" onChange.bind="onChangeUnit"/>
+                    </t>
+                </div>
+            </t>
+            <t t-elif="props.type == 'select'">
+                <div class="wComSelect">
+                    <select t-on-change="onSelect" t-att-title="props.label">
+                        <t t-foreach="props.options" t-as="option" t-key="props.name + '_' + option_index">
+                            <t t-if="option.value == state.value">
+                                <option selected="selected" t-att-value="option.value"><t t-esc="option.label" /></option>
+                            </t>
+                            <t t-else="">
+                                <option t-att-value="option.value"><t t-esc="option.label" /></option>
+                            </t>
+                        </t>
+                    </select>
+                </div>
+            </t>
+        </div>
+    </t>
+
+    <t t-name="dynamic_odoo.CssWidget.ChooseColor" owl="1">
+        <div class="w_com choose_color">
+            <div data-color-type="text">
+                <div class="btn color-button dropdown-toggle o-no-caret editor-ignore"
+                     data-bs-toggle="dropdown" tabindex="-1">
+                    <t t-if="props.label"><t t-esc="props.label" /></t>
+                    <t t-elif="isSvg()"><t t-call="{{props.icon}}" /></t>
+                    <t t-elif="props.icon"><i t-att-class="'fa fa-' + props.icon"/></t>
+                </div>
+                <ul class="dropdown-menu colorpicker-menu">
+                    <t t-component="ColorPalette" t-props="colorPaletteProps"/>
+                </ul>
+            </div>
+        </div>
+    </t>
+
+    <t t-name="dynamic_odoo.CssWidget" owl="1">
+        <div t-if="state.pinned" class="pinned" t-on-click="onPinned">
+            <i class="fa fa-cog"/>
+        </div>
+        <div t-if="!state.pinned" class="css_widget column" t-ref="drag_area">
+            <t t-set="setUp" t-value="onSetup()"/>
+            <div class="css_head">
+                <div class="pin">
+                    <i class="fa fa-thumb-tack" t-on-click="onPinned"/>
+                </div>
+                <div class="drag_area">
+                    <t t-call="Studio.icon.list"/>
+                </div>
+                <div class="close">
+                    <span t-on-click="onPinned">
+                        <t t-call="Studio.icon.close"/>
+                    </span>
+                </div>
+            </div>
+            <div class="css_content">
+                <t t-foreach="views" t-as="line" t-key="'line' + line_index">
+                    <div t-if="line.rows and line.rows.length"
+                         t-att-class="'css_line ' + (line.classes ? line.classes : '')">
+                        <t t-foreach="line.rows" t-as="group" t-key="'group' + group_index">
+                            <div t-att-class="'css_group ' + (group.classes || '')">
+                                <div class="g_title" t-if="group.title">
+                                    <label><t t-esc="group.title" /></label>
+                                </div>
+                                <div class="g_content">
+                                    <t t-foreach="group.views" t-as="view" t-key="'view' + view_index">
+                                        <div class="css_com">
+                                            <t t-component="style[view].widget" t-props="prepareStyleProps(view)"/>
+                                        </div>
+                                    </t>
+                                </div>
+                            </div>
+                        </t>
+                    </div>
+                </t>
+            </div>
+            <div class="css_foot"></div>
+        </div>
+    </t>
+
+</templates>

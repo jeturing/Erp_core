@@ -1,0 +1,37 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<templates xml:space="preserve">
+
+    <t t-name="dynamic_odoo.StudioCenter" owl="1">
+        <div class="studio_center" t-att-type="state.type">
+            <t t-set="currentCenter" t-value="center[state.type]"/>
+            <div class="center_head">
+                <div class="w_action">
+                    <a class="a_new_model" t-on-click="onNewModel"><i class="fa fa-plus" />Model</a>
+                    <a class="a_close" t-on-click="onCloseCenter">CLOSE</a>
+                </div>
+            </div>
+            <div class="center_con">
+                <t t-component="currentCenter.component" t-props="currentCenter.props || {}"/>
+            </div>
+            <div class="center_foot">
+                <t t-set="hasAction" t-value="currentCenter.save || currentCenter.reset"/>
+                <div t-att-class="hasAction ? 'w_center' : 'w_center only_one'">
+                    <t t-foreach="Object.keys(center)" t-as="centerName" t-key="'center_name_'+centerName">
+                        <t t-set="centerData" t-value="center[centerName]"/>
+                        <a t-att-class="state.type == centerName ? 'a_center active' : 'a_center'"
+                           t-on-click="() => state.type = centerName" t-att-data-tooltip="centerData.title">
+                            <i t-att-class="centerData?.icon"/>
+                        </a>
+                    </t>
+                </div>
+                <div t-if="hasAction" class="wrap_action">
+                    <a t-if="currentCenter.save" class="a_action a_save" data-tooltip="Save changes"
+                       t-on-click.prevent="onSave"><i class="fa fa-save" /></a>
+                    <a t-if="currentCenter.reset" class="a_action a_refresh" data-tooltip="Reset all changes"
+                       t-on-click.prevent="onReset"><i class="fa fa-refresh" /></a>
+                </div>
+
+            </div>
+        </div>
+    </t>
+</templates>

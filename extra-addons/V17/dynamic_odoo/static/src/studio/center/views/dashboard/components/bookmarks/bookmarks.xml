@@ -1,0 +1,22 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<templates xml:space="preserve">
+    <t t-name="dynamic_odoo.Bookmarks.Layout_1">
+        <bookmarks>
+            <bookmark link="https://google.com"/>
+            <bookmark link="https://youtube.com"/>
+        </bookmarks>
+    </t>
+    <t t-name="dynamic_odoo.StudioBookmarks" t-inherit="dynamic_odoo.Bookmarks"
+       t-inherit-mode="primary">
+        <xpath expr="//t[@t-foreach='state.bookmarks']" position="after">
+             <div class="add_bookmark bookmark">
+                <div class="logo">
+                    <img height="30" width="30" src="/dynamic_odoo/static/img/svg/ic_new_todo.svg"/>
+                </div>
+                 <div class="info">
+                    <InputAdd placeholder="'Create a new bookmark'" clear="true" update.bind="onCreate"/>
+                </div>
+            </div>
+        </xpath>
+    </t>
+</templates>

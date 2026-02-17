@@ -1,0 +1,257 @@
+
+	
+.rest_docs{
+	overflow: auto;
+	
+	
+
+	// .rest_doc_class{
+	// 	.row{
+	// 		.col-2{
+	// 			span{
+	// 				-webkit-text-fill-color: white;
+	// 			}
+	// 		}
+	// 	}
+	// }
+
+	#sidebar {
+		min-width: 250px;
+		max-width: 250px;
+		transition: all 0.3s;
+	}
+
+	#sidebar.active {
+		margin-left: -250px;
+	}
+
+
+	#content {
+		width: 100%;
+		padding: 20px;
+		min-height: 100vh;
+		transition: all 0.3s;
+	}
+
+	
+	
+	.dark_background{
+		
+		background-color: #1f1f1f; 
+		.tab-header{
+			span{
+				-webkit-text-fill-color: black;
+			}
+		}
+		.content-type-wrapper {
+			-webkit-text-fill-color: black;
+		}
+		.responses-wrapper{
+			h4{
+				-webkit-text-fill-color: black;       
+			}
+		}
+		.model-toggle{
+			
+			-webkit-text-fill-color: white !important;
+		}
+		table{
+			border: white;
+		}
+		select{
+			-webkit-text-fill-color: black;
+		}
+		p,li,strong,h1,h2,h3{
+			-webkit-text-fill-color: white; 
+		}
+		.bold-text{
+			-webkit-text-fill-color: white; 
+		}
+		.homespan{
+			-webkit-text-fill-color: white; 
+		}
+		td{
+			-webkit-text-fill-color: white;
+			p{
+				-webkit-text-fill-color: white;
+			}
+			input{
+				-webkit-text-fill-color: black;
+
+			}
+		}
+		pre{
+			background: rgb(51, 51, 51) !important;
+			-webkit-text-fill-color: white;
+		}
+		.info{
+			-webkit-text-fill-color: white;
+		}
+		.servers-title{
+			-webkit-text-fill-color: white !important;
+		}
+		
+		
+		.scheme-container{
+			
+			background-color: #1f1f1f; 
+		}
+		thead>tr:first-child{
+			border-right-color:black;
+		}
+		.servers{
+			.computed-url{
+				-webkit-text-fill-color: white !important;
+			}
+			h4{
+				-webkit-text-fill-color: white !important;
+			}
+			tr{
+				td:nth-child(1){
+					-webkit-text-fill-color: white !important;
+				}
+			}
+		}
+
+
+		.opblock-tag{
+			-webkit-text-fill-color: white !important;
+			a{
+				span{
+					-webkit-text-fill-color: white !important;
+				}
+			}
+		}
+
+		.model-example{
+			li{
+				
+				-webkit-text-fill-color: white !important;
+			}
+		}
+		.model-toggle{
+			-webkit-text-fill-color: white !important;
+			color: white !important;
+		}
+
+		.response-control-media-type__title{
+			-webkit-text-fill-color: white !important;
+		}
+
+		.opblock-summary-control{
+			span{
+				-webkit-text-fill-color: white !important;
+			}
+			-webkit-text-fill-color: white !important;
+		}
+
+		.opblock-description{
+			-webkit-text-fill-color: white !important;
+		}
+
+		.try-out__btn{
+			background-color: #1f1f1f;
+			-webkit-text-fill-color: white !important;
+		}
+
+		.try-out__btn.cancel{
+			background-color: #1f1f1f !important;
+			-webkit-text-fill-color: #ff6060 !important;
+		}
+		
+		.parameters-container{
+			.parameters-col_name{
+				-webkit-text-fill-color: white !important;
+				
+			}
+			.parameters-col_description{
+				p{
+					-webkit-text-fill-color: white !important;
+				}
+			}
+			thead {
+
+				.parameters-col_description{
+					p{
+						-webkit-text-fill-color: white !important;
+					}
+					-webkit-text-fill-color: white !important;
+				}
+			}
+
+		}
+
+		.responses-inner{
+			.response-col_status{
+				-webkit-text-fill-color: white !important;
+			}
+			.response-col_description{
+				p{
+
+					-webkit-text-fill-color: white !important;
+				}
+			}
+			thead {
+
+				.response-col_description{
+					p{
+						-webkit-text-fill-color: white !important;
+					}
+					-webkit-text-fill-color: white !important;
+				}
+			}
+		}
+
+		.models{
+			border: 2px solid white;
+			span{
+				-webkit-text-fill-color: white !important;
+			}
+			.model-container{
+				border: 2px solid white;
+			}
+		}
+
+ 
+	  }
+	
+	.information-container{
+		margin: 0 !important;
+		.info{
+			margin: 0 !important;
+		}
+		h1{
+			margin: 0 !important;
+
+		}
+	}
+
+
+	.rest_docs_standalone {
+		.info > .main > .link {
+			display: none;
+		}
+	}
+
+	.rest_docs_frame {
+		.information-container {
+			display: none;
+		}
+	}
+
+	@media (min-width: 768px) {
+		
+		#sidebar {
+			margin-left: -250px;
+		}
+		#sidebar.active {
+			margin-left: 0;
+			position: fixed;
+		}
+		#sidebarCollapse span {
+			display: none;
+		}
+	}
+	
+	
+}

@@ -1,0 +1,43 @@
+<?xml version="1.0" encoding="UTF-8" ?>
+<templates xml:space="preserve">
+    <t t-name="dynamic_odoo.DragComponent.Container" owl="1">
+        <div class="CON container">
+        </div>
+    </t>
+    <t t-name="dynamic_odoo.DragComponent.Grid" owl="1">
+        <div class="ROW row grid_component">
+            <div class="can_drag col-4"> </div>
+            <div class="can_drag col-8"> </div>
+        </div>
+    </t>
+    <t t-name="dynamic_odoo.DragComponent.Title" owl="1">
+        <h3>Hello World</h3>
+    </t>
+    <t t-name="dynamic_odoo.DragComponent.Icon" owl="1">
+        <span><i class="fa fa-hand-spock-o" style="font-size: 20px"/></span>
+    </t>
+    <t t-name="dynamic_odoo.DragComponent.Image" owl="1">
+        <div style="background-image:url(/dynamic_odoo/static/img/playlist_png.png); width: 100px; height: 50px"></div>
+    </t>
+    <t t-name="dynamic_odoo.DragComponent" owl="1">
+        <div t-att-class="props.readonly ? 'wrap_drag readonly' : 'wrap_drag SORT_COMPONENT'">
+            <div t-attf-class="drag_com #{props.useSlot ? 'use_slot' : ''}"
+                 t-att-data-tooltip="props.title || constructor.title">
+                <t t-if="props.useSlot">
+                    <t t-slot="default"/>
+                </t>
+                <t t-else="">
+                    <t t-if="state.matrix">
+                        <t t-esc="state.matrix"/>
+                    </t>
+                    <a class="item_com"><i t-if="props.icon or constructor.icon" t-att-class="props.icon or constructor.icon" />
+                        <t t-esc="props.title or constructor.title"/></a>
+                </t>
+            </div>
+        </div>
+    </t>
+    <t t-name="dynamic_odoo.DragComponent.Data" owl="1">
+        <span is-data="true" type="sum" style="font-size: 18px; color: green; font-weight: 700"><t t-esc="getLabel('sum', false)" /></span>
+    </t>
+
+</templates>

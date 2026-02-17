@@ -1,0 +1,13 @@
+.search_in_tree {
+  .field_widget {
+    & > input[type='text'], & > input[type='number'], & > select, .many2one_field input, & > .datetime_field input, .selection_field .input_base {
+      background: white;
+      height: 30px;
+      border-radius: 3px;
+    }
+  }
+
+  .selection_field .dropdown-toggle {
+    min-height: 30px;
+  }
+}

@@ -1,0 +1,27 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<templates xml:space="preserve">
+    <t t-name="dynamic_odoo.Countdown.Layout_1">
+        <countdown>
+            <div class="countdownWidget">
+                <div class="units-row">
+                    <div class="unit-wrapper">
+                        <div class="unit-value days"><t t-esc="Math.round(state.days)" /></div>
+                        <div class="unit-name"><span>Days</span></div>
+                    </div>
+                    <div class="unit-wrapper">
+                        <div class="unit-value hours"><t t-esc="Math.round(state.hours)" /></div>
+                        <div class="unit-name"><span>Hours</span></div>
+                    </div>
+                    <div class="unit-wrapper">
+                        <div class="unit-value minutes"><t t-esc="Math.round(state.minutes)" /></div>
+                        <div class="unit-name"><span>Minutes</span></div>
+                    </div>
+                    <div class="unit-wrapper">
+                        <div class="unit-value seconds"><t t-esc="Math.round(state.seconds)" /></div>
+                        <div class="unit-name"><span>seconds</span></div>
+                    </div>
+                </div>
+            </div>
+        </countdown>
+    </t>
+</templates>

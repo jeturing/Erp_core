@@ -1,0 +1,7 @@
+id,name,model_id:id,group_id:id,perm_read,perm_write,perm_create,perm_unlink
+access_view_studio_approval_rules,studio.approval.rules,model_studio_approval_rules,base.group_user,1,1,1,1
+access_view_studio_approval_details,studio.approval.details,model_studio_approval_details,base.group_user,1,1,1,1
+access_view_studio_template_center,studio.template.center,model_studio_template_center,base.group_user,1,1,1,1
+access_view_studio_view_center,studio.view.center,model_studio_view_center,base.group_user,1,1,1,1
+access_view_studio_studio_button,studio.button,model_studio_button,base.group_user,1,1,1,1
+access_view_ir_action_center,ir.actions.center,model_ir_actions_center,base.group_user,1,1,1,1

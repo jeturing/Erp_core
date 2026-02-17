@@ -1,0 +1,14 @@
+<?xml version="1.0" encoding="UTF-8" ?>
+<templates xml:space="preserve">
+
+    <t t-name="dynamic_odoo.EditMenu">
+        <a class="navEdit o_menu_sections_more" data-tooltip="Edit Menus" tabindex="0" t-on-click="onShowEdit">
+            <i class="fa fa-pencil" />
+        </a>
+    </t>
+    <t t-inherit="web.NavBar.SectionsMenu" t-inherit-mode="extension">
+         <xpath expr="//t[@t-if='currentAppSectionsExtra.length']" position="after">
+             <NavBarEdit />
+        </xpath>
+    </t>
+</templates>

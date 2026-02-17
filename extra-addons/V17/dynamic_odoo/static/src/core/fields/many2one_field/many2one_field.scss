@@ -1,0 +1,24 @@
+//.many2many_field {
+//ul {
+//  border-radius: 3px;
+//  padding: 4px;
+//  font-weight: 300;
+//  font-size: 13px;
+//  border: 2px solid #232933;
+//}
+.is_readonly {
+  line-height: 30px;
+}
+
+//}
+.many2one_field {
+  .o_field_many2one_selection {
+    position: relative;
+
+    .o_external_button {
+      position: absolute;
+      top: 3px;
+      right: 0px;
+    }
+  }
+}

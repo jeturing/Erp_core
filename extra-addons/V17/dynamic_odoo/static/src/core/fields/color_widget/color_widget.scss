@@ -1,0 +1,23 @@
+.choose_color_widget {
+  margin: 15px 0px;
+
+  a {
+    background: #f0f8fb;
+    border: 1px solid #cfd3d6;
+    border-radius: 4px;
+    padding-right: 15px;
+    font-weight: 100;
+    text-align: left;
+    line-height: 24px;
+
+    &:hover {
+      font-weight: 500;
+    }
+  }
+
+  i {
+    vertical-align: text-top;
+    font-size: 16px;
+    margin-right: 5px;
+  }
+}

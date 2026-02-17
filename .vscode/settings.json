@@ -1,4 +1,5 @@
 {
     "terminal.explorerKind": "both",
-    "terminal.integrated.allowMnemonics": true
+    "terminal.integrated.allowMnemonics": true,
+    "python.languageServer": "None"
 }

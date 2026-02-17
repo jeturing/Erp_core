@@ -1,0 +1,24 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<templates xml:space="preserve">
+    <t t-name="dynamic_odoo.Dashboard.Widget.Text" owl="1">
+        <div></div>
+    </t>
+    <t t-name="dynamic_odoo.Dashboard.Widget.Countdown" owl="1">
+        <div></div>
+    </t>
+    <t t-name="dynamic_odoo.Dashboard.Widget.Youtube" owl="1">
+        <div></div>
+    </t>
+    <t t-name="dynamic_odoo.Dashboard.Widget.TodoList" owl="1">
+        <div></div>
+    </t>
+    <t t-name="dynamic_odoo.Dashboard.Widget.BookMark" owl="1">
+        <div></div>
+    </t>
+    <t t-name="dynamic_odoo.Dashboard.Widget.Graph" owl="1">
+        <div></div>
+    </t>
+    <t t-name="dynamic_odoo.Dashboard.Widget.Pivot" owl="1">
+        <div></div>
+    </t>
+</templates>

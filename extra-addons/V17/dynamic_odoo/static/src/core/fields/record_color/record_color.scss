@@ -1,0 +1,66 @@
+.decoration_item {
+  position: relative;
+  padding: 5px 0px;
+
+  &[name] {
+    input {
+      border-left-width: 3px;
+    }
+  }
+
+  &[name="decoration-danger"] input {
+    border-left-color: #FF5722 !important;
+  }
+
+  &[name="decoration-warning"] input {
+    border-left-color: #FFC107 !important;
+  }
+
+  &[name="decoration-success"] input {
+    border-left-color: #8BC34A !important;
+  }
+
+  &[name="decoration-primary"] input {
+    border-left-color: #6e4eb4 !important;
+  }
+
+  &[name="decoration-info"] input {
+    border-left-color: #2196F3 !important;
+  }
+
+  &[name="decoration-muted"] input {
+    border-left-color: #dee2e6 !important;
+  }
+
+  &[name="decoration-bf"] input {
+    font-weight: bold;
+    border-left-color: #484e5b !important;
+  }
+
+  &[name="decoration-it"] input {
+    font-style: italic;
+    border-left-color: #484e5b !important;
+  }
+
+  .fa-pencil {
+    display: none;
+    position: absolute;
+    top: 15px;
+    right: 5px;
+
+    &:hover {
+      cursor: pointer;
+      color: #2196F3;
+    }
+  }
+
+  &:hover {
+    input, .fa-pencil {
+      cursor: pointer;
+    }
+
+    .fa-pencil {
+      display: block;
+    }
+  }
+}

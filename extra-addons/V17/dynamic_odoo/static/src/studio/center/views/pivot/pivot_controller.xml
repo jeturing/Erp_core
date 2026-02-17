@@ -1,0 +1,22 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<templates xml:space="preserve">
+
+    <t t-name="dynamic_odoo.PivotView" owl="1">
+        <div t-att-class="props.className" t-ref="root">
+            <t t-set="displayNoContent" t-value="
+            props.info.noContentHelp !== false and (
+            !(model.hasData() and model.metaData.activeMeasures.length) or
+            model.useSampleModel)"/>
+            <t t-if="displayNoContent">
+                <t t-if="props.info.noContentHelp" t-call="web.ActionHelper">
+                    <t t-set="noContentHelp" t-value="props.info.noContentHelp"/>
+                </t>
+                <t t-else="" t-call="web.NoContentHelper"/>
+            </t>
+            <t t-if="model.hasData() and model.metaData.activeMeasures.length">
+                <t t-component="props.Renderer" model="model" onCellClicked="cell => this.onOpenView(cell)"/>
+            </t>
+        </div>
+    </t>
+
+</templates>
