@@ -255,6 +255,9 @@ class CustomDomain(Base):
     cloudflare_configured = Column(Boolean, default=False)
     tunnel_ingress_configured = Column(Boolean, default=False)
     
+    # Configuración Nginx (PCT160 + CT105)
+    nginx_configured = Column(Boolean, default=False)
+    
     # SSL (manejado por Cloudflare automáticamente)
     ssl_status = Column(String(20), default="pending")  # pending, active, error
     

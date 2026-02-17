@@ -33,7 +33,8 @@ Este indice es la entrada oficial para documentacion del proyecto.
 - `docs/EJEMPLOS_USO.md`
 
 ## 5) Domains y Cloudflare
-- `docs/CUSTOM_DOMAINS_ARCHITECTURE.md`
+- `docs/CUSTOM_DOMAINS_ARCHITECTURE.md` - arquitectura completa dominios externos → Odoo multi-tenant
+- `docs/CUSTOM_DOMAINS_HOWTO.md` - guía paso a paso para agregar nuevos dominios externos
 - `docs/DNS_SETUP_GUIDE_CLIENTS.md`
 - `docs/CLOUDFLARE_INTEGRATION.md`
 - `docs/CLOUDFLARE_SETUP.md`
