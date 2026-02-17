@@ -56,6 +56,7 @@ class DomainResponse(BaseModel):
     verified_at: Optional[str]
     cloudflare_configured: bool
     tunnel_ingress_configured: bool
+    nginx_configured: bool = False
     ssl_status: Optional[str]
     is_active: bool
     is_primary: bool
@@ -259,6 +260,54 @@ async def deactivate_domain(
     return result
 
 
+@router.post("/{domain_id}/configure-nginx", response_model=dict)
+async def configure_nginx(
+    domain_id: int,
+    db: Session = Depends(get_db),
+    current_user: dict = Depends(get_current_admin)
+):
+    """
+    Configura (o reconfigura) nginx en PCT160 y CT105 para un dominio.
+    Útil para re-aplicar configuración si hubo un fallo previo.
+    El dominio debe estar activo.
+    """
+    manager = DomainManager(db)
+    result = manager.configure_nginx_manual(domain_id)
+
+    if not result["success"]:
+        raise HTTPException(status_code=400, detail=result.get("error", "Error configurando nginx"))
+
+    return result
+
+
+@router.get("/{domain_id}/nginx-status", response_model=dict)
+async def nginx_status(
+    domain_id: int,
+    db: Session = Depends(get_db),
+    current_user: dict = Depends(get_current_admin)
+):
+    """
+    Verifica si un dominio está configurado en nginx de ambos servidores.
+    """
+    from ..services.nginx_domain_configurator import NginxDomainConfigurator
+
+    manager = DomainManager(db)
+    domain = manager.get_domain(domain_id=domain_id)
+    if not domain:
+        raise HTTPException(status_code=404, detail="Dominio no encontrado")
+
+    configurator = NginxDomainConfigurator()
+    status = configurator.check_domain_configured(domain.external_domain)
+
+    return {
+        "domain": domain.external_domain,
+        "nginx_configured_db": domain.nginx_configured,
+        "pct160_configured": status["pct160"],
+        "ct105_configured": status["ct105"],
+        "in_sync": domain.nginx_configured == (status["pct160"] and status["ct105"]),
+    }
+
+
 # ==================== Bulk Operations ====================
 
 @router.post("/bulk/sync-cloudflare", response_model=dict)
@@ -295,6 +344,44 @@ async def bulk_sync_cloudflare(
                 "error": result.get("error", "Unknown error")
             })
     
+    return results
+
+
+@router.post("/bulk/sync-nginx", response_model=dict)
+async def bulk_sync_nginx(
+    db: Session = Depends(get_db),
+    current_user: dict = Depends(get_current_admin)
+):
+    """
+    Sincroniza configuración nginx para todos los dominios activos
+    que aún no tienen nginx_configured = true.
+    """
+    from ..models.database import CustomDomain
+
+    manager = DomainManager(db)
+    domains = db.query(CustomDomain).filter(
+        CustomDomain.is_active == True,
+        CustomDomain.nginx_configured == False
+    ).all()
+
+    results = {
+        "total": len(domains),
+        "configured": 0,
+        "failed": 0,
+        "errors": []
+    }
+
+    for domain in domains:
+        result = manager._configure_nginx_for_domain(domain)
+        if result.get("success"):
+            results["configured"] += 1
+        else:
+            results["failed"] += 1
+            results["errors"].append({
+                "domain": domain.external_domain,
+                "error": result.get("error", "Unknown error")
+            })
+
     return results
 
 

@@ -14,12 +14,16 @@ Flujo:
 import os
 import re
 import secrets
+import logging
 import httpx
 from typing import Optional, List, Dict, Any
 from datetime import datetime
 from sqlalchemy.orm import Session
 
 from ..models.database import CustomDomain, Customer, TenantDeployment, DomainVerificationStatus
+from .nginx_domain_configurator import NginxDomainConfigurator
+
+logger = logging.getLogger("domain_manager")
 
 
 # Cloudflare Configuration
@@ -221,6 +225,10 @@ class DomainManager:
         if domain.cloudflare_dns_record_id:
             self._delete_cloudflare_dns(domain.cloudflare_dns_record_id)
         
+        # Eliminar config nginx si estaba configurado
+        if domain.nginx_configured:
+            self._remove_nginx_for_domain(domain)
+        
         external = domain.external_domain
         self.db.delete(domain)
         self.db.commit()
@@ -392,7 +400,7 @@ class DomainManager:
             }
     
     def activate_domain(self, domain_id: int) -> Dict[str, Any]:
-        """Activa manualmente un dominio"""
+        """Activa manualmente un dominio y configura nginx automáticamente"""
         domain = self.get_domain(domain_id=domain_id)
         if not domain:
             return {"success": False, "error": "Dominio no encontrado"}
@@ -402,18 +410,32 @@ class DomainManager:
         domain.verified_at = datetime.utcnow()
         self.db.commit()
         
-        return {"success": True, "message": "Dominio activado"}
+        # ── Configurar nginx automáticamente ──
+        nginx_result = self._configure_nginx_for_domain(domain)
+        
+        return {
+            "success": True,
+            "message": "Dominio activado",
+            "nginx": nginx_result,
+        }
     
     def deactivate_domain(self, domain_id: int) -> Dict[str, Any]:
-        """Desactiva un dominio"""
+        """Desactiva un dominio y elimina su configuración nginx"""
         domain = self.get_domain(domain_id=domain_id)
         if not domain:
             return {"success": False, "error": "Dominio no encontrado"}
         
+        # ── Eliminar config nginx ──
+        nginx_result = self._remove_nginx_for_domain(domain)
+        
         domain.is_active = False
         self.db.commit()
         
-        return {"success": True, "message": "Dominio desactivado"}
+        return {
+            "success": True,
+            "message": "Dominio desactivado",
+            "nginx": nginx_result,
+        }
     
     # ==================== Helper Methods ====================
     
@@ -475,6 +497,86 @@ class DomainManager:
         
         return subdomain or "custom-domain"
     
+    # ==================== Nginx Integration ====================
+
+    def _resolve_tenant_info(self, domain: CustomDomain) -> Dict[str, str]:
+        """
+        Resuelve el nombre de BD y subdominio del tenant para un dominio.
+        Prioridad: TenantDeployment.database_name → domain.sajet_subdomain
+        """
+        tenant_db = domain.sajet_subdomain
+        tenant_subdomain = domain.sajet_subdomain
+
+        if domain.tenant_deployment_id:
+            deployment = self.db.query(TenantDeployment).filter(
+                TenantDeployment.id == domain.tenant_deployment_id
+            ).first()
+            if deployment:
+                if deployment.database_name:
+                    tenant_db = deployment.database_name
+                if deployment.subdomain:
+                    tenant_subdomain = deployment.subdomain
+
+        return {"tenant_db": tenant_db, "tenant_subdomain": tenant_subdomain}
+
+    def _configure_nginx_for_domain(self, domain: CustomDomain) -> Dict[str, Any]:
+        """Configura nginx en PCT160 y CT105 para un dominio."""
+        try:
+            info = self._resolve_tenant_info(domain)
+            node_ip = domain.target_node_ip or "10.10.10.100"
+
+            configurator = NginxDomainConfigurator()
+            result = configurator.configure_domain(
+                external_domain=domain.external_domain,
+                tenant_db=info["tenant_db"],
+                tenant_subdomain=info["tenant_subdomain"],
+                node_ip=node_ip,
+            )
+
+            if result["success"]:
+                domain.nginx_configured = True
+                self.db.commit()
+                logger.info(f"Nginx configurado para {domain.external_domain}")
+            else:
+                logger.error(f"Nginx falló para {domain.external_domain}: {result.get('error')}")
+
+            return result
+        except Exception as e:
+            logger.error(f"Error configurando nginx para {domain.external_domain}: {e}")
+            return {"success": False, "error": str(e)}
+
+    def _remove_nginx_for_domain(self, domain: CustomDomain) -> Dict[str, Any]:
+        """Elimina configuración nginx de PCT160 y CT105 para un dominio."""
+        try:
+            info = self._resolve_tenant_info(domain)
+
+            configurator = NginxDomainConfigurator()
+            result = configurator.remove_domain(
+                external_domain=domain.external_domain,
+                tenant_subdomain=info["tenant_subdomain"],
+            )
+
+            if result["success"]:
+                domain.nginx_configured = False
+                self.db.commit()
+                logger.info(f"Nginx eliminado para {domain.external_domain}")
+            else:
+                logger.error(f"Nginx remove falló para {domain.external_domain}: {result.get('error')}")
+
+            return result
+        except Exception as e:
+            logger.error(f"Error eliminando nginx para {domain.external_domain}: {e}")
+            return {"success": False, "error": str(e)}
+
+    def configure_nginx_manual(self, domain_id: int) -> Dict[str, Any]:
+        """Endpoint manual para (re)configurar nginx de un dominio."""
+        domain = self.get_domain(domain_id=domain_id)
+        if not domain:
+            return {"success": False, "error": "Dominio no encontrado"}
+        if not domain.is_active:
+            return {"success": False, "error": "El dominio debe estar activo"}
+        return self._configure_nginx_for_domain(domain)
+
     def _domain_to_dict(self, domain: CustomDomain) -> Dict[str, Any]:
         """Convierte un dominio a diccionario"""
         return {
@@ -489,6 +591,7 @@ class DomainManager:
             "verified_at": domain.verified_at.isoformat() if domain.verified_at else None,
             "cloudflare_configured": domain.cloudflare_configured,
             "tunnel_ingress_configured": domain.tunnel_ingress_configured,
+            "nginx_configured": domain.nginx_configured,
             "ssl_status": domain.ssl_status,
             "is_active": domain.is_active,
             "is_primary": domain.is_primary,
