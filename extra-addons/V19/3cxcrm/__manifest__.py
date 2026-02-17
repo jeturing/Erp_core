@@ -1,7 +1,7 @@
 {
     'name': '3CX CRM lookup',
-    'summary': '
-        lookup for incoming call from 3cx to odoo',
+    'summary': """
+        lookup for incoming call from 3cx to odoo""",
     'images': [
         'static/description/banner.png',
     ],

@@ -1,9 +1,9 @@
 {
     'name': 'MuK Colors',
     'summary': 'Customize your Odoo colors',
-    'description': '
+    'description': """
         This module gives you options to customize the theme colors.
-    ',
+    """,
     'version': '19.0.1.0.3',
     'category': 'Tools/UI',
     'license': 'LGPL-3',

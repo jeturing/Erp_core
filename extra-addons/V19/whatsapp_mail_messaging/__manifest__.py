@@ -3,10 +3,10 @@
     'version': '19.0.1.1.0',
     'category': 'Extra Tools',
     'summary': 'Whatsapp Odoo Integration, Odoo Whatsapp Connector, Odoo Whatsapp, Whatsapp Connector, Whatsapp Integration, Odoo17, Whatsapp, Odoo Apps',
-    'description': 'Added options for sending Whatsapp messages and emails in 
+    'description': """Added options for sending Whatsapp messages and emails in 
     the systray bar, sale order, invoices, website portal view and ability to 
     share access URLs for documents through the share option available in each
-    record using WhatsApp Web.',
+    record using WhatsApp Web.""",
     'author': 'Cybrosys Techno Solutions',
     'company': 'Cybrosys Techno Solutions',
     'maintainer': 'Cybrosys Techno Solutions',

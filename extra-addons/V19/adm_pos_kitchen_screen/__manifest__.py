@@ -2,11 +2,11 @@
     'name': 'Pos Kitchen Screen',
     'version': '19.0.0.1',
     'category': 'Tools',
-    'summary': '
+    'summary': """
         Point of sale Kitchen Screen | Pos Restaurant Screen | POS Bar Screen | POS Kitchen Screen
         | Point of sale bar screen | Odoo Kitchen Display | POS Kitchen display system | Point of sale restaurant screen 
         | vista de cocina en punto de venta | cocina en POS
-    ',
+    """,
     'author': 'Javier Fernández',
     'website': 'https://asdelmarketing.com',
     'license': 'OPL-1',

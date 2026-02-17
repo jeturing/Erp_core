@@ -3,9 +3,9 @@
     'version': '19.0.1.0.1',
     'category': 'Human Resources',
     'summary': 'Vacation Management,manages employee vacation',
-    'description': 'The 'Vacation Management System' is a robust platform
-     designed to streamline and optimize the management of employee 
-     vacations within an organization.',
+    'description': """The Vacation Management System is a robust platform
+     designed to streamline and optimize the management of employee
+     vacations within an organization.""",
     'live_test_url': 'https://youtu.be/Pf7zf-PkdfA',
     'author': 'Cybrosys Techno solutions,Open HRMS',
     'company': 'Cybrosys Techno Solutions',

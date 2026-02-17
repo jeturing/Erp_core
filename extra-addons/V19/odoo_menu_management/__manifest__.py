@@ -23,9 +23,9 @@
     ],
     'external_dependencies': {},
     'summary': 'The tool to efficiently hide and show menus for Odoo users, companies, and security groups. User-wise menus. Company-wise menus. Delete menus. Invisible menus. Hide submenu. Multi Company Hide Any Menu For Any User. Remove submenu. Hidden menus. Limited menus. Limited access to menus. Access rights to menus. Remove menus. Hide menu from users. Hide menu from companies. Hide menus for user groups. Hide menus for users. Hide menus for companies. Disable menus for users. Disable menus for companies.',
-    'description': 'For the full details look at static/description/index.html
+    'description': """For the full details look at static/description/index.html
 * Features * 
-#odootools_proprietary',
+#odootools_proprietary""",
     'images': [
         'static/description/main.png',
     ],

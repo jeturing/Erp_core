@@ -3,8 +3,8 @@
     'version': '19.0.1.1.3',
     'category': 'eCommerce,Point of Sale',
     'summary': 'Reserve tables in POS from website',
-    'description': 'This module enables to reserve tables in POS from website.
-     User will be able to select the floor, table, date and time.',
+    'description': """This module enables to reserve tables in POS from website.
+     User will be able to select the floor, table, date and time.""",
     'author': 'Cybrosys Techno Solutions',
     'company': 'Cybrosys Techno Solutions',
     'maintainer': 'Cybrosys Techno Solutions',

@@ -1,10 +1,10 @@
 {
     'name': 'MuK Backend Theme',
     'summary': 'Odoo Community Backend Theme',
-    'description': '
+    'description': """
         This module offers a mobile compatible design for Odoo Community. 
         Furthermore it allows the user to define some design preferences.
-    ',
+    """,
     'version': '19.0.1.2.1',
     'category': 'Themes/Backend',
     'license': 'LGPL-3',

@@ -2,12 +2,12 @@
     'name': 'Advance HR Attendance Dashboard',
     'version': '19.0.1.0.0',
     'category': 'Human Resources',
-    'summary': 'This module helps you to view leaves of employee based on
-     different leave types.',
-    'description': 'Advance HR Attendance Dashboard helps for 
+    'summary': """This module helps you to view leaves of employee based on
+     different leave types.""",
+    'description': """Advance HR Attendance Dashboard helps for 
      filtering attendance data,  finding specific employees attendance data,
      and for displaying attendance information, also we can print the
-     attendance in pdf format .',
+     attendance in pdf format .""",
     'author': 'Cybrosys Techno Solutions',
     'company': 'Cybrosys Techno Solutions',
     'maintainer': 'Cybrosys Techno Solutions',

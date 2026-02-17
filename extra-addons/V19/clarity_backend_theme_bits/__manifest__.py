@@ -2,7 +2,7 @@
     'name': 'Clarity Backend Theme for community',
     'version': '19.0.1.0.1',
     'author': 'Terabits Technolab',
-    'summary': '   
+    'summary': """   
         Clarity backend theme  
         Odoo Backend Theme, Odoo Community Backend Theme, Web backend Theme, Web Responsive Odoo Theme, New theme design, New design, Multi Level Menu,
         Web Responsive , Odoo Theme, Odoo Modern Theme, Odoo Modern Backend Theme Odoo, Advance Theme Backend Advanced, Left sidebar menu,
@@ -15,8 +15,8 @@
         Arc Backend Theme, Fully Functional Theme, Flexible Backend Theme, Fast Backend Theme, Advance Material Backend Theme, Customizable Backend Theme, 
         Attractive Theme for Backend, Elegant Backend Theme, Responsive Web Client, Backend UI, Mobile Responsive for Odoo Community, 
         Flexible Enterprise Theme, Enterprise Backend Theme
-    ',
-    'description': ' 
+    """,
+    'description': """ 
         Clarity backend theme
         Odoo Backend Theme, Odoo Community Backend Theme, Web backend Theme, Web Responsive Odoo Theme, New theme design, New design, Multi Level Menu,
         Web Responsive , Odoo Theme, Odoo Modern Theme, Odoo Modern Backend Theme Odoo, Advance Theme Backend Advanced, Left sidebar menu,
@@ -29,7 +29,7 @@
         Arc Backend Theme, Fully Functional Theme, Flexible Backend Theme, Fast Backend Theme, Advance Material Backend Theme, Customizable Backend Theme, 
         Attractive Theme for Backend, Elegant Backend Theme, Responsive Web Client, Backend UI, Mobile Responsive for Odoo Community, 
         Flexible Enterprise Theme, Enterprise Backend Theme
-    ',
+    """,
     'license': 'OPL-1',
     'category': 'Themes/Backend',
     'website': 'https://www.terabits.xyz',

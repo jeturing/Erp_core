@@ -3,9 +3,9 @@
     'version': '19.0.1.2.4',
     'category': 'Services',
     'summary': 'Hotel Management, Odoo Hotel Management, Hotel, Room Booking odoo, Amenities Odoo, Event management, Rooms, Events, Food, Booking, Odoo Hotel, Odoo17, Odoo Apps',
-    'description': 'The module helps you to manage rooms, amenities, 
+    'description': """The module helps you to manage rooms, amenities, 
      services, food, events and vehicles. End Users can book rooms and reserve 
-     foods from hotel.',
+     foods from hotel.""",
     'author': 'Cybrosys Techno Solutions',
     'company': 'Cybrosys Techno Solutions',
     'maintainer': 'Cybrosys Techno Solutions',

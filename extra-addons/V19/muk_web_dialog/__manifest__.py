@@ -1,10 +1,10 @@
 {
     'name': 'MuK Dialog',
     'summary': 'Adds options for the dialogs',
-    'description': '
+    'description': """
         This module adds an option to dialogs to expand it to full screen mode.
         Each user can the initial state of the dialogs in their preferences.
-    ',
+    """,
     'version': '19.0.1.0.0',
     'category': 'Tools/UI',
     'license': 'LGPL-3',

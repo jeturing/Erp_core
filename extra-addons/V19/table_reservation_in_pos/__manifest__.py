@@ -2,8 +2,8 @@
     'name': 'Table Reservation in POS',
     'version': '19.0.1.0.0',
     'category': 'Point of Sale',
-    'summary': 'The Table Reservation in Pos module is used to facilitate
-    the management of reservations',
+    'summary': """The Table Reservation in Pos module is used to facilitate
+    the management of reservations""",
     'description': 'The Table Reservation in Pos module is a comprehensive solution that combines reservation management with the functionality of a reserve table in POS system.',
     'author': 'Cybrosys Techno Solutions',
     'company': 'Cybrosys Techno Solutions',

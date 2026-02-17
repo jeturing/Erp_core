@@ -10,8 +10,8 @@
     'support': 'odoomates@gmail.com',
     'maintainer': 'Odoo Mates',
     'license': 'LGPL-3',
-    'description': 'Generic Wizard to Import Bank Statements In Odoo 17 Community Edition.
-(This module does include any CSV and XLSX type import format.)',
+    'description': """Generic Wizard to Import Bank Statements In Odoo 17 Community Edition.
+(This module does include any CSV and XLSX type import format.)""",
     'data': [
         'security/ir.model.access.csv',
         'wizard/journal_creation.xml',

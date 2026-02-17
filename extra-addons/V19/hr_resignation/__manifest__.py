@@ -3,8 +3,8 @@
     'version': '19.0.1.0.0',
     'category': 'Human Resources',
     'summary': 'Manages the resignation process of the employees',
-    'description': 'This module helps to create and 
-     approve/reject employee resignation requests',
+    'description': """This module helps to create and 
+     approve/reject employee resignation requests""",
     'author': 'Cybrosys Techno solutions,Open HRMS',
     'company': 'Cybrosys Techno Solutions',
     'maintainer': 'Cybrosys Techno Solutions',

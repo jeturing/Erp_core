@@ -6,13 +6,13 @@
     'author': 'Webkul Software Pvt. Ltd.',
     'license': 'Other proprietary',
     'website': 'https://store.webkul.com/Odoo-REST-API.html',
-    'description': 'Odoo Rest Api
+    'description': """Odoo Rest Api
 Add record to database
 Delete record to Database
 Modify data in Odoo database
 Use HTTP to modify data
 RESTful API in Odoo
-Use HTTP requests to fetch data in Odoo',
+Use HTTP requests to fetch data in Odoo""",
     'live_test_url': 'https://store.webkul.com/Odoo-REST-API.html#',
     'depends': [
         'base',

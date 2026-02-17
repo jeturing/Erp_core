@@ -2,11 +2,11 @@
     'name': 'Automatic Invoice And Post',
     'version': '19.0.1.0.1',
     'category': 'Sales,Warehouse,Accounting',
-    'summary': ' Auto Invoice Generation and Auto Sending of Invoice on 
-     Delivery validation.',
-    'description': 'This module generates and post invoice  while validating 
+    'summary': """ Auto Invoice Generation and Auto Sending of Invoice on 
+     Delivery validation.""",
+    'description': """This module generates and post invoice  while validating 
     the delivery and enable to send invoice to customer
-     on delivery validate .',
+     on delivery validate .""",
     'author': 'Cybrosys Techno Solutions',
     'company': 'Cybrosys Techno Solutions',
     'maintainer': 'Cybrosys Techno Solutions',

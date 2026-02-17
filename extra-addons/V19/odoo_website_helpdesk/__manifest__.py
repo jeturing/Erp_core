@@ -2,13 +2,13 @@
     'name': 'Website Helpdesk Support Ticket Management',
     'version': '19.0.1.0.0',
     'category': 'Website',
-    'summary': 'The website allows for the creation of tickets, which can 
+    'summary': """The website allows for the creation of tickets, which can 
     then be controlled from the backend. Furthermore, a bill that includes 
     the service charge can be generated for the ticket for odoo community 
-    Edition version 17.',
-    'description': 'A ticket can be created from the website and subsequently
+    Edition version 17.""",
+    'description': """A ticket can be created from the website and subsequently
      managed from the backend. Additionally, a bill can be generated for the
-     ticket, which includes the service cost.',
+     ticket, which includes the service cost.""",
     'author': 'Cybrosys Techno Solutions',
     'company': 'Cybrosys Techno Solutions',
     'maintainer': 'Cybrosys Techno Solutions',

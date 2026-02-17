@@ -2,11 +2,11 @@
     'name': 'Payment Approvals',
     'version': '19.0.1.0.0',
     'category': 'Accounting',
-    'summary': ' This modules Enables to use the approval feature in
-                    customer and vendor payments.',
-    'description': 'This modules enables approval feature in the payment.
+    'summary': """ This modules Enables to use the approval feature in
+                    customer and vendor payments.""",
+    'description': """This modules enables approval feature in the payment.
      as Approval stage .Approval feature can be applied based on the given 
-     amount. ',
+     amount. """,
     'author': ' Cybrosys Techno Solutions',
     'company': 'Cybrosys Techno Solutions',
     'maintainer': 'Cybrosys Techno Solutions',

@@ -1,10 +1,10 @@
 {
     'name': 'MuK Chatter',
     'summary': 'Adds options for the chatter',
-    'description': '
+    'description': """
         This module improves the design of the chatter and adds a user
         preference to set the position of the chatter in the form view.
-    ',
+    """,
     'version': '19.0.1.0.1',
     'category': 'Tools/UI',
     'license': 'LGPL-3',

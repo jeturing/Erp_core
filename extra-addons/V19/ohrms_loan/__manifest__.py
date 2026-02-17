@@ -3,8 +3,8 @@
     'version': '19.0.1.0.0',
     'category': 'Human Resources',
     'summary': 'Manage Employee Loan Requests',
-    'description': 'This module facilitates the creation and management of employee loan requests. 
-    The loan amount is automatically deducted from the salary',
+    'description': """This module facilitates the creation and management of employee loan requests. 
+    The loan amount is automatically deducted from the salary""",
     'author': 'Cybrosys Techno Solutions,Open HRMS',
     'company': 'Cybrosys Techno Solutions',
     'maintainer': 'Cybrosys Techno Solutions',

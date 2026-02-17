@@ -5,8 +5,8 @@
     'depends': [
         'account',
     ],
-    'description': 'Manage assets owned by a company or a person. 
-        Keeps track of depreciation's, and creates corresponding journal entries',
+    'description': """Manage assets owned by a company or a person.
+        Keeps track of depreciation, and creates corresponding journal entries""",
     'summary': 'Odoo 17 Assets Management',
     'category': 'Accounting',
     'website': 'https://www.odoomates.tech',

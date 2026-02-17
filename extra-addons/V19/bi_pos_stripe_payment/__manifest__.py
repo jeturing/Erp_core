@@ -3,11 +3,11 @@
     'version': '19.0.0.1',
     'category': 'Point of Sale',
     'summary': 'Point of sales stripe payment gateway for pos stripe payment gateway for Stripe Payment Acquirer for pos Stripe gateway for point of sale stripe payment Acquirer for pos stripe payment pay pos order from stripe payment pos order stripe payment for pos',
-    'description': '
+    'description': """
     
    This odoo app helps user to accept point of sales customer payment though stripe payment getway, user can pay point of sale order payment by stripe payment acquirer.
     
-    ',
+    """,
     'author': 'BrowseInfo',
     'website': 'https://www.browseinfo.com',
     'currency': 'EUR',

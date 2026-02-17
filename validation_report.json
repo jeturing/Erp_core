@@ -8,23 +8,23 @@
       "path": "extra-addons/V19/3cxcrm",
       "validation_results": {
         "manifest": {
-          "passed": 4,
-          "failed": 1,
+          "passed": 5,
+          "failed": 0,
           "checks": {
             "exists": true,
             "version_v19": true,
             "has_license": true,
             "has_depends": true,
-            "valid_syntax": false
+            "valid_syntax": true
           }
         },
         "python": {
-          "passed": 2,
-          "failed": 1,
+          "passed": 3,
+          "failed": 0,
           "checks": {
             "no_api_multi": true,
             "no_api_one": true,
-            "valid_syntax": false
+            "valid_syntax": true
           },
           "files_checked": 5
         },
@@ -45,36 +45,33 @@
           }
         }
       },
-      "issues": [
-        "❌ Error de sintaxis en manifest: unterminated string literal (detected at line 3) (__manifest__.py, line 3)",
-        "❌ 1 archivos con errores de sintaxis"
-      ],
+      "issues": [],
       "warnings": [],
-      "is_valid": false,
-      "score": 81.81818181818183
+      "is_valid": true,
+      "score": 100.0
     },
     {
       "module": "account_payment_approval",
       "path": "extra-addons/V19/account_payment_approval",
       "validation_results": {
         "manifest": {
-          "passed": 4,
-          "failed": 1,
+          "passed": 5,
+          "failed": 0,
           "checks": {
             "exists": true,
             "version_v19": true,
             "has_license": true,
             "has_depends": true,
-            "valid_syntax": false
+            "valid_syntax": true
           }
         },
         "python": {
-          "passed": 2,
-          "failed": 1,
+          "passed": 3,
+          "failed": 0,
           "checks": {
             "no_api_multi": true,
             "no_api_one": true,
-            "valid_syntax": false
+            "valid_syntax": true
           },
           "files_checked": 6
         },
@@ -95,13 +92,10 @@
           }
         }
       },
-      "issues": [
-        "❌ Error de sintaxis en manifest: unterminated string literal (detected at line 5) (__manifest__.py, line 5)",
-        "❌ 1 archivos con errores de sintaxis"
-      ],
+      "issues": [],
       "warnings": [],
-      "is_valid": false,
-      "score": 81.81818181818183
+      "is_valid": true,
+      "score": 100.0
     },
     {
       "module": "accounting_pdf_reports",
@@ -204,23 +198,23 @@
       "path": "extra-addons/V19/activity_dashboard_mngmnt",
       "validation_results": {
         "manifest": {
-          "passed": 4,
-          "failed": 1,
+          "passed": 5,
+          "failed": 0,
           "checks": {
             "exists": true,
             "version_v19": true,
             "has_license": true,
             "has_depends": true,
-            "valid_syntax": false
+            "valid_syntax": true
           }
         },
         "python": {
-          "passed": 2,
-          "failed": 1,
+          "passed": 3,
+          "failed": 0,
           "checks": {
             "no_api_multi": true,
             "no_api_one": true,
-            "valid_syntax": false
+            "valid_syntax": true
           },
           "files_checked": 5
         },
@@ -241,36 +235,33 @@
           }
         }
       },
-      "issues": [
-        "❌ Error de sintaxis en manifest: unterminated string literal (detected at line 6) (__manifest__.py, line 6)",
-        "❌ 1 archivos con errores de sintaxis"
-      ],
+      "issues": [],
       "warnings": [],
-      "is_valid": false,
-      "score": 81.81818181818183
+      "is_valid": true,
+      "score": 100.0
     },
     {
       "module": "adm_pos_kitchen_screen",
       "path": "extra-addons/V19/adm_pos_kitchen_screen",
       "validation_results": {
         "manifest": {
-          "passed": 4,
-          "failed": 1,
+          "passed": 5,
+          "failed": 0,
           "checks": {
             "exists": true,
             "version_v19": true,
             "has_license": true,
             "has_depends": true,
-            "valid_syntax": false
+            "valid_syntax": true
           }
         },
         "python": {
-          "passed": 2,
-          "failed": 1,
+          "passed": 3,
+          "failed": 0,
           "checks": {
             "no_api_multi": true,
             "no_api_one": true,
-            "valid_syntax": false
+            "valid_syntax": true
           },
           "files_checked": 9
         },
@@ -291,36 +282,33 @@
           }
         }
       },
-      "issues": [
-        "❌ Error de sintaxis en manifest: unterminated string literal (detected at line 5) (__manifest__.py, line 5)",
-        "❌ 1 archivos con errores de sintaxis"
-      ],
+      "issues": [],
       "warnings": [],
-      "is_valid": false,
-      "score": 81.81818181818183
+      "is_valid": true,
+      "score": 100.0
     },
     {
       "module": "advance_hr_attendance_dashboard",
       "path": "extra-addons/V19/advance_hr_attendance_dashboard",
       "validation_results": {
         "manifest": {
-          "passed": 4,
-          "failed": 1,
+          "passed": 5,
+          "failed": 0,
           "checks": {
             "exists": true,
             "version_v19": true,
             "has_license": true,
             "has_depends": true,
-            "valid_syntax": false
+            "valid_syntax": true
           }
         },
         "python": {
-          "passed": 2,
-          "failed": 1,
+          "passed": 3,
+          "failed": 0,
           "checks": {
             "no_api_multi": true,
             "no_api_one": true,
-            "valid_syntax": false
+            "valid_syntax": true
           },
           "files_checked": 8
         },
@@ -341,13 +329,10 @@
           }
         }
       },
-      "issues": [
-        "❌ Error de sintaxis en manifest: unterminated string literal (detected at line 5) (__manifest__.py, line 5)",
-        "❌ 1 archivos con errores de sintaxis"
-      ],
+      "issues": [],
       "warnings": [],
-      "is_valid": false,
-      "score": 81.81818181818183
+      "is_valid": true,
+      "score": 100.0
     },
     {
       "module": "advanced_chatter_view",
@@ -401,23 +386,23 @@
       "path": "extra-addons/V19/advanced_dynamic_dashboard",
       "validation_results": {
         "manifest": {
-          "passed": 4,
-          "failed": 1,
+          "passed": 5,
+          "failed": 0,
           "checks": {
             "exists": true,
             "version_v19": true,
             "has_license": true,
             "has_depends": true,
-            "valid_syntax": false
+            "valid_syntax": true
           }
         },
         "python": {
-          "passed": 2,
-          "failed": 1,
+          "passed": 3,
+          "failed": 0,
           "checks": {
             "no_api_multi": true,
             "no_api_one": true,
-            "valid_syntax": false
+            "valid_syntax": true
           },
           "files_checked": 11
         },
@@ -438,13 +423,10 @@
           }
         }
       },
-      "issues": [
-        "❌ Error de sintaxis en manifest: unterminated string literal (detected at line 6) (__manifest__.py, line 6)",
-        "❌ 1 archivos con errores de sintaxis"
-      ],
+      "issues": [],
       "warnings": [],
-      "is_valid": false,
-      "score": 81.81818181818183
+      "is_valid": true,
+      "score": 100.0
     },
     {
       "module": "advanced_fleet_rental",
@@ -545,23 +527,23 @@
       "path": "extra-addons/V19/automatic_invoice_and_post",
       "validation_results": {
         "manifest": {
-          "passed": 4,
-          "failed": 1,
+          "passed": 5,
+          "failed": 0,
           "checks": {
             "exists": true,
             "version_v19": true,
             "has_license": true,
             "has_depends": true,
-            "valid_syntax": false
+            "valid_syntax": true
           }
         },
         "python": {
-          "passed": 2,
-          "failed": 1,
+          "passed": 3,
+          "failed": 0,
           "checks": {
             "no_api_multi": true,
             "no_api_one": true,
-            "valid_syntax": false
+            "valid_syntax": true
           },
           "files_checked": 5
         },
@@ -582,13 +564,10 @@
           }
         }
       },
-      "issues": [
-        "❌ Error de sintaxis en manifest: unterminated string literal (detected at line 5) (__manifest__.py, line 5)",
-        "❌ 1 archivos con errores de sintaxis"
-      ],
+      "issues": [],
       "warnings": [],
-      "is_valid": false,
-      "score": 81.81818181818183
+      "is_valid": true,
+      "score": 100.0
     },
     {
       "module": "barcode_scanning_sale_purchase",
@@ -642,23 +621,23 @@
       "path": "extra-addons/V19/base_account_budget",
       "validation_results": {
         "manifest": {
-          "passed": 4,
-          "failed": 1,
+          "passed": 5,
+          "failed": 0,
           "checks": {
             "exists": true,
             "version_v19": true,
             "has_license": true,
             "has_depends": true,
-            "valid_syntax": false
+            "valid_syntax": true
           }
         },
         "python": {
-          "passed": 2,
-          "failed": 1,
+          "passed": 3,
+          "failed": 0,
           "checks": {
             "no_api_multi": true,
             "no_api_one": true,
-            "valid_syntax": false
+            "valid_syntax": true
           },
           "files_checked": 5
         },
@@ -679,36 +658,33 @@
           }
         }
       },
-      "issues": [
-        "❌ Error de sintaxis en manifest: unterminated string literal (detected at line 6) (__manifest__.py, line 6)",
-        "❌ 1 archivos con errores de sintaxis"
-      ],
+      "issues": [],
       "warnings": [],
-      "is_valid": false,
-      "score": 81.81818181818183
+      "is_valid": true,
+      "score": 100.0
     },
     {
       "module": "bi_pos_stripe_payment",
       "path": "extra-addons/V19/bi_pos_stripe_payment",
       "validation_results": {
         "manifest": {
-          "passed": 4,
-          "failed": 1,
+          "passed": 5,
+          "failed": 0,
           "checks": {
             "exists": true,
             "version_v19": true,
             "has_license": true,
             "has_depends": true,
-            "valid_syntax": false
+            "valid_syntax": true
           }
         },
         "python": {
-          "passed": 2,
-          "failed": 1,
+          "passed": 3,
+          "failed": 0,
           "checks": {
             "no_api_multi": true,
             "no_api_one": true,
-            "valid_syntax": false
+            "valid_syntax": true
           },
           "files_checked": 7
         },
@@ -729,38 +705,35 @@
           }
         }
       },
-      "issues": [
-        "❌ Error de sintaxis en manifest: unterminated string literal (detected at line 6) (__manifest__.py, line 6)",
-        "❌ 1 archivos con errores de sintaxis"
-      ],
+      "issues": [],
       "warnings": [
         "⚠️ 1 archivos XML con errores"
       ],
-      "is_valid": false,
-      "score": 72.72727272727273
+      "is_valid": true,
+      "score": 90.9090909090909
     },
     {
       "module": "clarity_backend_theme_bits",
       "path": "extra-addons/V19/clarity_backend_theme_bits",
       "validation_results": {
         "manifest": {
-          "passed": 4,
-          "failed": 1,
+          "passed": 5,
+          "failed": 0,
           "checks": {
             "exists": true,
             "version_v19": true,
             "has_license": true,
             "has_depends": true,
-            "valid_syntax": false
+            "valid_syntax": true
           }
         },
         "python": {
-          "passed": 2,
-          "failed": 1,
+          "passed": 3,
+          "failed": 0,
           "checks": {
             "no_api_multi": true,
             "no_api_one": true,
-            "valid_syntax": false
+            "valid_syntax": true
           },
           "files_checked": 4
         },
@@ -781,13 +754,10 @@
           }
         }
       },
-      "issues": [
-        "❌ Error de sintaxis en manifest: unterminated string literal (detected at line 5) (__manifest__.py, line 5)",
-        "❌ 1 archivos con errores de sintaxis"
-      ],
+      "issues": [],
       "warnings": [],
-      "is_valid": false,
-      "score": 80.0
+      "is_valid": true,
+      "score": 100.0
     },
     {
       "module": "document_management_system",
@@ -988,23 +958,23 @@
       "path": "extra-addons/V19/hotel_management_odoo",
       "validation_results": {
         "manifest": {
-          "passed": 4,
-          "failed": 1,
+          "passed": 5,
+          "failed": 0,
           "checks": {
             "exists": true,
             "version_v19": true,
             "has_license": true,
             "has_depends": true,
-            "valid_syntax": false
+            "valid_syntax": true
           }
         },
         "python": {
-          "passed": 2,
-          "failed": 1,
+          "passed": 3,
+          "failed": 0,
           "checks": {
             "no_api_multi": true,
             "no_api_one": true,
-            "valid_syntax": false
+            "valid_syntax": true
           },
           "files_checked": 25
         },
@@ -1025,13 +995,10 @@
           }
         }
       },
-      "issues": [
-        "❌ Error de sintaxis en manifest: unterminated string literal (detected at line 6) (__manifest__.py, line 6)",
-        "❌ 1 archivos con errores de sintaxis"
-      ],
+      "issues": [],
       "warnings": [],
-      "is_valid": false,
-      "score": 81.81818181818183
+      "is_valid": true,
+      "score": 100.0
     },
     {
       "module": "hr_employee_shift",
@@ -1179,23 +1146,23 @@
       "path": "extra-addons/V19/hr_leave_request_aliasing",
       "validation_results": {
         "manifest": {
-          "passed": 4,
-          "failed": 1,
+          "passed": 5,
+          "failed": 0,
           "checks": {
             "exists": true,
             "version_v19": true,
             "has_license": true,
             "has_depends": true,
-            "valid_syntax": false
+            "valid_syntax": true
           }
         },
         "python": {
-          "passed": 2,
-          "failed": 1,
+          "passed": 3,
+          "failed": 0,
           "checks": {
             "no_api_multi": true,
             "no_api_one": true,
-            "valid_syntax": false
+            "valid_syntax": true
           },
           "files_checked": 5
         },
@@ -1216,13 +1183,10 @@
           }
         }
       },
-      "issues": [
-        "❌ Error de sintaxis en manifest: unterminated string literal (detected at line 6) (__manifest__.py, line 6)",
-        "❌ 1 archivos con errores de sintaxis"
-      ],
+      "issues": [],
       "warnings": [],
-      "is_valid": false,
-      "score": 81.81818181818183
+      "is_valid": true,
+      "score": 100.0
     },
     {
       "module": "hr_multi_company",
@@ -1276,23 +1240,23 @@
       "path": "extra-addons/V19/hr_payroll_account_community",
       "validation_results": {
         "manifest": {
-          "passed": 4,
-          "failed": 1,
+          "passed": 5,
+          "failed": 0,
           "checks": {
             "exists": true,
             "version_v19": true,
             "has_license": true,
             "has_depends": true,
-            "valid_syntax": false
+            "valid_syntax": true
           }
         },
         "python": {
-          "passed": 2,
-          "failed": 1,
+          "passed": 3,
+          "failed": 0,
           "checks": {
             "no_api_multi": true,
             "no_api_one": true,
-            "valid_syntax": false
+            "valid_syntax": true
           },
           "files_checked": 12
         },
@@ -1313,13 +1277,10 @@
           }
         }
       },
-      "issues": [
-        "❌ Error de sintaxis en manifest: unterminated string literal (detected at line 6) (__manifest__.py, line 6)",
-        "❌ 1 archivos con errores de sintaxis"
-      ],
+      "issues": [],
       "warnings": [],
-      "is_valid": false,
-      "score": 81.81818181818183
+      "is_valid": true,
+      "score": 100.0
     },
     {
       "module": "hr_payroll_community",
@@ -1373,23 +1334,23 @@
       "path": "extra-addons/V19/hr_reminder",
       "validation_results": {
         "manifest": {
-          "passed": 4,
-          "failed": 1,
+          "passed": 5,
+          "failed": 0,
           "checks": {
             "exists": true,
             "version_v19": true,
             "has_license": true,
             "has_depends": true,
-            "valid_syntax": false
+            "valid_syntax": true
           }
         },
         "python": {
-          "passed": 2,
-          "failed": 1,
+          "passed": 3,
+          "failed": 0,
           "checks": {
             "no_api_multi": true,
             "no_api_one": true,
-            "valid_syntax": false
+            "valid_syntax": true
           },
           "files_checked": 6
         },
@@ -1410,36 +1371,33 @@
           }
         }
       },
-      "issues": [
-        "❌ Error de sintaxis en manifest: unterminated string literal (detected at line 6) (__manifest__.py, line 6)",
-        "❌ 1 archivos con errores de sintaxis"
-      ],
+      "issues": [],
       "warnings": [],
-      "is_valid": false,
-      "score": 81.81818181818183
+      "is_valid": true,
+      "score": 100.0
     },
     {
       "module": "hr_resignation",
       "path": "extra-addons/V19/hr_resignation",
       "validation_results": {
         "manifest": {
-          "passed": 4,
-          "failed": 1,
+          "passed": 5,
+          "failed": 0,
           "checks": {
             "exists": true,
             "version_v19": true,
             "has_license": true,
             "has_depends": true,
-            "valid_syntax": false
+            "valid_syntax": true
           }
         },
         "python": {
-          "passed": 2,
-          "failed": 1,
+          "passed": 3,
+          "failed": 0,
           "checks": {
             "no_api_multi": true,
             "no_api_one": true,
-            "valid_syntax": false
+            "valid_syntax": true
           },
           "files_checked": 5
         },
@@ -1460,13 +1418,10 @@
           }
         }
       },
-      "issues": [
-        "❌ Error de sintaxis en manifest: unterminated string literal (detected at line 6) (__manifest__.py, line 6)",
-        "❌ 1 archivos con errores de sintaxis"
-      ],
+      "issues": [],
       "warnings": [],
-      "is_valid": false,
-      "score": 81.81818181818183
+      "is_valid": true,
+      "score": 100.0
     },
     {
       "module": "hr_reward_warning",
@@ -1520,23 +1475,23 @@
       "path": "extra-addons/V19/hr_vacation_mngmt",
       "validation_results": {
         "manifest": {
-          "passed": 4,
-          "failed": 1,
+          "passed": 5,
+          "failed": 0,
           "checks": {
             "exists": true,
             "version_v19": true,
             "has_license": true,
             "has_depends": true,
-            "valid_syntax": false
+            "valid_syntax": true
           }
         },
         "python": {
-          "passed": 2,
-          "failed": 1,
+          "passed": 3,
+          "failed": 0,
           "checks": {
             "no_api_multi": true,
             "no_api_one": true,
-            "valid_syntax": false
+            "valid_syntax": true
           },
           "files_checked": 10
         },
@@ -1557,13 +1512,10 @@
           }
         }
       },
-      "issues": [
-        "❌ Error de sintaxis en manifest: unterminated string literal (detected at line 6) (__manifest__.py, line 6)",
-        "❌ 1 archivos con errores de sintaxis"
-      ],
+      "issues": [],
       "warnings": [],
-      "is_valid": false,
-      "score": 81.81818181818183
+      "is_valid": true,
+      "score": 100.0
     },
     {
       "module": "hrms_dashboard",
@@ -1809,23 +1761,23 @@
       "path": "extra-addons/V19/muk_web_appsbar",
       "validation_results": {
         "manifest": {
-          "passed": 4,
-          "failed": 1,
+          "passed": 5,
+          "failed": 0,
           "checks": {
             "exists": true,
             "version_v19": true,
             "has_license": true,
             "has_depends": true,
-            "valid_syntax": false
+            "valid_syntax": true
           }
         },
         "python": {
-          "passed": 2,
-          "failed": 1,
+          "passed": 3,
+          "failed": 0,
           "checks": {
             "no_api_multi": true,
             "no_api_one": true,
-            "valid_syntax": false
+            "valid_syntax": true
           },
           "files_checked": 7
         },
@@ -1846,36 +1798,33 @@
           }
         }
       },
-      "issues": [
-        "❌ Error de sintaxis en manifest: unterminated string literal (detected at line 4) (__manifest__.py, line 4)",
-        "❌ 1 archivos con errores de sintaxis"
-      ],
+      "issues": [],
       "warnings": [],
-      "is_valid": false,
-      "score": 81.81818181818183
+      "is_valid": true,
+      "score": 100.0
     },
     {
       "module": "muk_web_chatter",
       "path": "extra-addons/V19/muk_web_chatter",
       "validation_results": {
         "manifest": {
-          "passed": 4,
-          "failed": 1,
+          "passed": 5,
+          "failed": 0,
           "checks": {
             "exists": true,
             "version_v19": true,
             "has_license": true,
             "has_depends": true,
-            "valid_syntax": false
+            "valid_syntax": true
           }
         },
         "python": {
-          "passed": 2,
-          "failed": 1,
+          "passed": 3,
+          "failed": 0,
           "checks": {
             "no_api_multi": true,
             "no_api_one": true,
-            "valid_syntax": false
+            "valid_syntax": true
           },
           "files_checked": 5
         },
@@ -1896,36 +1845,33 @@
           }
         }
       },
-      "issues": [
-        "❌ Error de sintaxis en manifest: unterminated string literal (detected at line 4) (__manifest__.py, line 4)",
-        "❌ 1 archivos con errores de sintaxis"
-      ],
+      "issues": [],
       "warnings": [],
-      "is_valid": false,
-      "score": 81.81818181818183
+      "is_valid": true,
+      "score": 100.0
     },
     {
       "module": "muk_web_colors",
       "path": "extra-addons/V19/muk_web_colors",
       "validation_results": {
         "manifest": {
-          "passed": 4,
-          "failed": 1,
+          "passed": 5,
+          "failed": 0,
           "checks": {
             "exists": true,
             "version_v19": true,
             "has_license": true,
             "has_depends": true,
-            "valid_syntax": false
+            "valid_syntax": true
           }
         },
         "python": {
-          "passed": 2,
-          "failed": 1,
+          "passed": 3,
+          "failed": 0,
           "checks": {
             "no_api_multi": true,
             "no_api_one": true,
-            "valid_syntax": false
+            "valid_syntax": true
           },
           "files_checked": 7
         },
@@ -1946,36 +1892,33 @@
           }
         }
       },
-      "issues": [
-        "❌ Error de sintaxis en manifest: unterminated string literal (detected at line 4) (__manifest__.py, line 4)",
-        "❌ 1 archivos con errores de sintaxis"
-      ],
+      "issues": [],
       "warnings": [],
-      "is_valid": false,
-      "score": 81.81818181818183
+      "is_valid": true,
+      "score": 100.0
     },
     {
       "module": "muk_web_dialog",
       "path": "extra-addons/V19/muk_web_dialog",
       "validation_results": {
         "manifest": {
-          "passed": 4,
-          "failed": 1,
+          "passed": 5,
+          "failed": 0,
           "checks": {
             "exists": true,
             "version_v19": true,
             "has_license": true,
             "has_depends": true,
-            "valid_syntax": false
+            "valid_syntax": true
           }
         },
         "python": {
-          "passed": 2,
-          "failed": 1,
+          "passed": 3,
+          "failed": 0,
           "checks": {
             "no_api_multi": true,
             "no_api_one": true,
-            "valid_syntax": false
+            "valid_syntax": true
           },
           "files_checked": 5
         },
@@ -1996,36 +1939,33 @@
           }
         }
       },
-      "issues": [
-        "❌ Error de sintaxis en manifest: unterminated string literal (detected at line 4) (__manifest__.py, line 4)",
-        "❌ 1 archivos con errores de sintaxis"
-      ],
+      "issues": [],
       "warnings": [],
-      "is_valid": false,
-      "score": 81.81818181818183
+      "is_valid": true,
+      "score": 100.0
     },
     {
       "module": "muk_web_theme",
       "path": "extra-addons/V19/muk_web_theme",
       "validation_results": {
         "manifest": {
-          "passed": 4,
-          "failed": 1,
+          "passed": 5,
+          "failed": 0,
           "checks": {
             "exists": true,
             "version_v19": true,
             "has_license": true,
             "has_depends": true,
-            "valid_syntax": false
+            "valid_syntax": true
           }
         },
         "python": {
-          "passed": 2,
-          "failed": 1,
+          "passed": 3,
+          "failed": 0,
           "checks": {
             "no_api_multi": true,
             "no_api_one": true,
-            "valid_syntax": false
+            "valid_syntax": true
           },
           "files_checked": 6
         },
@@ -2046,36 +1986,33 @@
           }
         }
       },
-      "issues": [
-        "❌ Error de sintaxis en manifest: unterminated string literal (detected at line 4) (__manifest__.py, line 4)",
-        "❌ 1 archivos con errores de sintaxis"
-      ],
+      "issues": [],
       "warnings": [],
-      "is_valid": false,
-      "score": 81.81818181818183
+      "is_valid": true,
+      "score": 100.0
     },
     {
       "module": "odoo_menu_management",
       "path": "extra-addons/V19/odoo_menu_management",
       "validation_results": {
         "manifest": {
-          "passed": 4,
-          "failed": 1,
+          "passed": 5,
+          "failed": 0,
           "checks": {
             "exists": true,
             "version_v19": true,
             "has_license": true,
             "has_depends": true,
-            "valid_syntax": false
+            "valid_syntax": true
           }
         },
         "python": {
-          "passed": 2,
-          "failed": 1,
+          "passed": 3,
+          "failed": 0,
           "checks": {
             "no_api_multi": true,
             "no_api_one": true,
-            "valid_syntax": false
+            "valid_syntax": true
           },
           "files_checked": 7
         },
@@ -2096,36 +2033,33 @@
           }
         }
       },
-      "issues": [
-        "❌ Error de sintaxis en manifest: unterminated string literal (detected at line 26) (__manifest__.py, line 26)",
-        "❌ 1 archivos con errores de sintaxis"
-      ],
+      "issues": [],
       "warnings": [],
-      "is_valid": false,
-      "score": 81.81818181818183
+      "is_valid": true,
+      "score": 100.0
     },
     {
       "module": "odoo_rest",
       "path": "extra-addons/V19/odoo_rest",
       "validation_results": {
         "manifest": {
-          "passed": 3,
-          "failed": 2,
+          "passed": 4,
+          "failed": 1,
           "checks": {
             "exists": true,
             "version_v19": false,
             "has_license": true,
             "has_depends": true,
-            "valid_syntax": false
+            "valid_syntax": true
           }
         },
         "python": {
-          "passed": 2,
-          "failed": 1,
+          "passed": 3,
+          "failed": 0,
           "checks": {
             "no_api_multi": true,
             "no_api_one": true,
-            "valid_syntax": false
+            "valid_syntax": true
           },
           "files_checked": 13
         },
@@ -2146,38 +2080,35 @@
           }
         }
       },
-      "issues": [
-        "❌ Error de sintaxis en manifest: unterminated string literal (detected at line 9) (__manifest__.py, line 9)",
-        "❌ 1 archivos con errores de sintaxis"
-      ],
+      "issues": [],
       "warnings": [
         "⚠️ Versión es 1.2.3, esperado 19.0.x"
       ],
-      "is_valid": false,
-      "score": 72.72727272727273
+      "is_valid": true,
+      "score": 90.9090909090909
     },
     {
       "module": "odoo_website_helpdesk",
       "path": "extra-addons/V19/odoo_website_helpdesk",
       "validation_results": {
         "manifest": {
-          "passed": 4,
-          "failed": 1,
+          "passed": 5,
+          "failed": 0,
           "checks": {
             "exists": true,
             "version_v19": true,
             "has_license": true,
             "has_depends": true,
-            "valid_syntax": false
+            "valid_syntax": true
           }
         },
         "python": {
-          "passed": 2,
-          "failed": 1,
+          "passed": 3,
+          "failed": 0,
           "checks": {
             "no_api_multi": true,
             "no_api_one": true,
-            "valid_syntax": false
+            "valid_syntax": true
           },
           "files_checked": 23
         },
@@ -2198,13 +2129,10 @@
           }
         }
       },
-      "issues": [
-        "❌ Error de sintaxis en manifest: unterminated string literal (detected at line 5) (__manifest__.py, line 5)",
-        "❌ 1 archivos con errores de sintaxis"
-      ],
+      "issues": [],
       "warnings": [],
-      "is_valid": false,
-      "score": 81.81818181818183
+      "is_valid": true,
+      "score": 100.0
     },
     {
       "module": "oh_employee_creation_from_user",
@@ -2258,23 +2186,23 @@
       "path": "extra-addons/V19/oh_employee_documents_expiry",
       "validation_results": {
         "manifest": {
-          "passed": 4,
-          "failed": 1,
+          "passed": 5,
+          "failed": 0,
           "checks": {
             "exists": true,
             "version_v19": true,
             "has_license": true,
             "has_depends": true,
-            "valid_syntax": false
+            "valid_syntax": true
           }
         },
         "python": {
-          "passed": 2,
-          "failed": 1,
+          "passed": 3,
+          "failed": 0,
           "checks": {
             "no_api_multi": true,
             "no_api_one": true,
-            "valid_syntax": false
+            "valid_syntax": true
           },
           "files_checked": 8
         },
@@ -2295,36 +2223,33 @@
           }
         }
       },
-      "issues": [
-        "❌ Error de sintaxis en manifest: unterminated string literal (detected at line 6) (__manifest__.py, line 6)",
-        "❌ 1 archivos con errores de sintaxis"
-      ],
+      "issues": [],
       "warnings": [],
-      "is_valid": false,
-      "score": 81.81818181818183
+      "is_valid": true,
+      "score": 100.0
     },
     {
       "module": "ohrms_core",
       "path": "extra-addons/V19/ohrms_core",
       "validation_results": {
         "manifest": {
-          "passed": 4,
-          "failed": 1,
+          "passed": 5,
+          "failed": 0,
           "checks": {
             "exists": true,
             "version_v19": true,
             "has_license": true,
             "has_depends": true,
-            "valid_syntax": false
+            "valid_syntax": true
           }
         },
         "python": {
-          "passed": 2,
-          "failed": 1,
+          "passed": 3,
+          "failed": 0,
           "checks": {
             "no_api_multi": true,
             "no_api_one": true,
-            "valid_syntax": false
+            "valid_syntax": true
           },
           "files_checked": 6
         },
@@ -2345,36 +2270,33 @@
           }
         }
       },
-      "issues": [
-        "❌ Error de sintaxis en manifest: unterminated string literal (detected at line 6) (__manifest__.py, line 6)",
-        "❌ 1 archivos con errores de sintaxis"
-      ],
+      "issues": [],
       "warnings": [],
-      "is_valid": false,
-      "score": 81.81818181818183
+      "is_valid": true,
+      "score": 100.0
     },
     {
       "module": "ohrms_loan",
       "path": "extra-addons/V19/ohrms_loan",
       "validation_results": {
         "manifest": {
-          "passed": 4,
-          "failed": 1,
+          "passed": 5,
+          "failed": 0,
           "checks": {
             "exists": true,
             "version_v19": true,
             "has_license": true,
             "has_depends": true,
-            "valid_syntax": false
+            "valid_syntax": true
           }
         },
         "python": {
-          "passed": 2,
-          "failed": 1,
+          "passed": 3,
+          "failed": 0,
           "checks": {
             "no_api_multi": true,
             "no_api_one": true,
-            "valid_syntax": false
+            "valid_syntax": true
           },
           "files_checked": 7
         },
@@ -2395,13 +2317,10 @@
           }
         }
       },
-      "issues": [
-        "❌ Error de sintaxis en manifest: unterminated string literal (detected at line 6) (__manifest__.py, line 6)",
-        "❌ 1 archivos con errores de sintaxis"
-      ],
+      "issues": [],
       "warnings": [],
-      "is_valid": false,
-      "score": 81.81818181818183
+      "is_valid": true,
+      "score": 100.0
     },
     {
       "module": "ohrms_loan_accounting",
@@ -2551,23 +2470,23 @@
       "path": "extra-addons/V19/om_account_asset",
       "validation_results": {
         "manifest": {
-          "passed": 4,
-          "failed": 1,
+          "passed": 5,
+          "failed": 0,
           "checks": {
             "exists": true,
             "version_v19": true,
             "has_license": true,
             "has_depends": true,
-            "valid_syntax": false
+            "valid_syntax": true
           }
         },
         "python": {
-          "passed": 2,
-          "failed": 1,
+          "passed": 3,
+          "failed": 0,
           "checks": {
             "no_api_multi": true,
             "no_api_one": true,
-            "valid_syntax": false
+            "valid_syntax": true
           },
           "files_checked": 12
         },
@@ -2588,36 +2507,33 @@
           }
         }
       },
-      "issues": [
-        "❌ Error de sintaxis en manifest: unterminated string literal (detected at line 8) (__manifest__.py, line 8)",
-        "❌ 1 archivos con errores de sintaxis"
-      ],
+      "issues": [],
       "warnings": [],
-      "is_valid": false,
-      "score": 81.81818181818183
+      "is_valid": true,
+      "score": 100.0
     },
     {
       "module": "om_account_bank_statement_import",
       "path": "extra-addons/V19/om_account_bank_statement_import",
       "validation_results": {
         "manifest": {
-          "passed": 4,
-          "failed": 1,
+          "passed": 5,
+          "failed": 0,
           "checks": {
             "exists": true,
             "version_v19": true,
             "has_license": true,
             "has_depends": true,
-            "valid_syntax": false
+            "valid_syntax": true
           }
         },
         "python": {
-          "passed": 2,
-          "failed": 1,
+          "passed": 3,
+          "failed": 0,
           "checks": {
             "no_api_multi": true,
             "no_api_one": true,
-            "valid_syntax": false
+            "valid_syntax": true
           },
           "files_checked": 9
         },
@@ -2638,13 +2554,10 @@
           }
         }
       },
-      "issues": [
-        "❌ Error de sintaxis en manifest: unterminated string literal (detected at line 13) (__manifest__.py, line 13)",
-        "❌ 1 archivos con errores de sintaxis"
-      ],
+      "issues": [],
       "warnings": [],
-      "is_valid": false,
-      "score": 81.81818181818183
+      "is_valid": true,
+      "score": 100.0
     },
     {
       "module": "om_account_budget",
@@ -3129,23 +3042,23 @@
       "path": "extra-addons/V19/portal",
       "validation_results": {
         "manifest": {
-          "passed": 3,
-          "failed": 2,
+          "passed": 4,
+          "failed": 1,
           "checks": {
             "exists": true,
             "version_v19": false,
             "has_license": true,
             "has_depends": true,
-            "valid_syntax": false
+            "valid_syntax": true
           }
         },
         "python": {
-          "passed": 2,
-          "failed": 1,
+          "passed": 3,
+          "failed": 0,
           "checks": {
             "no_api_multi": true,
             "no_api_one": true,
-            "valid_syntax": false
+            "valid_syntax": true
           },
           "files_checked": 25
         },
@@ -3166,15 +3079,12 @@
           }
         }
       },
-      "issues": [
-        "❌ Error de sintaxis en manifest: unterminated string literal (detected at line 5) (__manifest__.py, line 5)",
-        "❌ 1 archivos con errores de sintaxis"
-      ],
+      "issues": [],
       "warnings": [
         "⚠️ No se encontró version"
       ],
-      "is_valid": false,
-      "score": 72.72727272727273
+      "is_valid": true,
+      "score": 90.9090909090909
     },
     {
       "module": "pos_kitchen_screen_odoo",
@@ -3326,23 +3236,23 @@
       "path": "extra-addons/V19/pos_takeaway",
       "validation_results": {
         "manifest": {
-          "passed": 4,
-          "failed": 1,
+          "passed": 5,
+          "failed": 0,
           "checks": {
             "exists": true,
             "version_v19": true,
             "has_license": true,
             "has_depends": true,
-            "valid_syntax": false
+            "valid_syntax": true
           }
         },
         "python": {
-          "passed": 2,
-          "failed": 1,
+          "passed": 3,
+          "failed": 0,
           "checks": {
             "no_api_multi": true,
             "no_api_one": true,
-            "valid_syntax": false
+            "valid_syntax": true
           },
           "files_checked": 6
         },
@@ -3363,13 +3273,10 @@
           }
         }
       },
-      "issues": [
-        "❌ Error de sintaxis en manifest: unterminated string literal (detected at line 6) (__manifest__.py, line 6)",
-        "❌ 1 archivos con errores de sintaxis"
-      ],
+      "issues": [],
       "warnings": [],
-      "is_valid": false,
-      "score": 81.81818181818183
+      "is_valid": true,
+      "score": 100.0
     },
     {
       "module": "pways_commission_mgmt",
@@ -3617,23 +3524,23 @@
       "path": "extra-addons/V19/table_reservation_in_pos",
       "validation_results": {
         "manifest": {
-          "passed": 4,
-          "failed": 1,
+          "passed": 5,
+          "failed": 0,
           "checks": {
             "exists": true,
             "version_v19": true,
             "has_license": true,
             "has_depends": true,
-            "valid_syntax": false
+            "valid_syntax": true
           }
         },
         "python": {
-          "passed": 2,
-          "failed": 1,
+          "passed": 3,
+          "failed": 0,
           "checks": {
             "no_api_multi": true,
             "no_api_one": true,
-            "valid_syntax": false
+            "valid_syntax": true
           },
           "files_checked": 7
         },
@@ -3654,36 +3561,33 @@
           }
         }
       },
-      "issues": [
-        "❌ Error de sintaxis en manifest: unterminated string literal (detected at line 5) (__manifest__.py, line 5)",
-        "❌ 1 archivos con errores de sintaxis"
-      ],
+      "issues": [],
       "warnings": [],
-      "is_valid": false,
-      "score": 81.81818181818183
+      "is_valid": true,
+      "score": 100.0
     },
     {
       "module": "table_reservation_on_website",
       "path": "extra-addons/V19/table_reservation_on_website",
       "validation_results": {
         "manifest": {
-          "passed": 4,
-          "failed": 1,
+          "passed": 5,
+          "failed": 0,
           "checks": {
             "exists": true,
             "version_v19": true,
             "has_license": true,
             "has_depends": true,
-            "valid_syntax": false
+            "valid_syntax": true
           }
         },
         "python": {
-          "passed": 2,
-          "failed": 1,
+          "passed": 3,
+          "failed": 0,
           "checks": {
             "no_api_multi": true,
             "no_api_one": true,
-            "valid_syntax": false
+            "valid_syntax": true
           },
           "files_checked": 13
         },
@@ -3704,13 +3608,10 @@
           }
         }
       },
-      "issues": [
-        "❌ Error de sintaxis en manifest: unterminated string literal (detected at line 6) (__manifest__.py, line 6)",
-        "❌ 1 archivos con errores de sintaxis"
-      ],
+      "issues": [],
       "warnings": [],
-      "is_valid": false,
-      "score": 81.81818181818183
+      "is_valid": true,
+      "score": 100.0
     },
     {
       "module": "theme_shopping",
@@ -3952,23 +3853,23 @@
       "path": "extra-addons/V19/vista_backend_theme",
       "validation_results": {
         "manifest": {
-          "passed": 4,
-          "failed": 1,
+          "passed": 5,
+          "failed": 0,
           "checks": {
             "exists": true,
             "version_v19": true,
             "has_license": true,
             "has_depends": true,
-            "valid_syntax": false
+            "valid_syntax": true
           }
         },
         "python": {
-          "passed": 2,
-          "failed": 1,
+          "passed": 3,
+          "failed": 0,
           "checks": {
             "no_api_multi": true,
             "no_api_one": true,
-            "valid_syntax": false
+            "valid_syntax": true
           },
           "files_checked": 5
         },
@@ -3989,13 +3890,10 @@
           }
         }
       },
-      "issues": [
-        "❌ Error de sintaxis en manifest: unterminated string literal (detected at line 6) (__manifest__.py, line 6)",
-        "❌ 1 archivos con errores de sintaxis"
-      ],
+      "issues": [],
       "warnings": [],
-      "is_valid": false,
-      "score": 80.0
+      "is_valid": true,
+      "score": 100.0
     },
     {
       "module": "web",
@@ -4098,23 +3996,23 @@
       "path": "extra-addons/V19/whatsapp_mail_messaging",
       "validation_results": {
         "manifest": {
-          "passed": 4,
-          "failed": 1,
+          "passed": 5,
+          "failed": 0,
           "checks": {
             "exists": true,
             "version_v19": true,
             "has_license": true,
             "has_depends": true,
-            "valid_syntax": false
+            "valid_syntax": true
           }
         },
         "python": {
-          "passed": 2,
-          "failed": 1,
+          "passed": 3,
+          "failed": 0,
           "checks": {
             "no_api_multi": true,
             "no_api_one": true,
-            "valid_syntax": false
+            "valid_syntax": true
           },
           "files_checked": 14
         },
@@ -4135,13 +4033,10 @@
           }
         }
       },
-      "issues": [
-        "❌ Error de sintaxis en manifest: unterminated string literal (detected at line 6) (__manifest__.py, line 6)",
-        "❌ 1 archivos con errores de sintaxis"
-      ],
+      "issues": [],
       "warnings": [],
-      "is_valid": false,
-      "score": 80.0
+      "is_valid": true,
+      "score": 100.0
     },
     {
       "module": "whatsapp_redirect",
@@ -4193,8 +4088,8 @@
   ],
   "summary": {
     "total_modules": 86,
-    "valid_modules": 51,
-    "invalid_modules": 35,
-    "average_score": 90.17970401691336
+    "valid_modules": 86,
+    "invalid_modules": 0,
+    "average_score": 97.64270613107823
   }
 }

@@ -3,8 +3,8 @@
     'version': '19.0.1.0.0',
     'category': 'Point of Sale',
     'summary': 'This module will add the options Dine-in and Take away in Odoo POS.',
-    'description': 'The POS user can make orders as Dine-in or Take
-                    away and it will create separate token for Take away orders.',
+    'description': """The POS user can make orders as Dine-in or Take
+                    away and it will create separate token for Take away orders.""",
     'author': 'Cybrosys Techno Solutions',
     'company': 'Cybrosys Techno Solutions',
     'maintainer': 'Cybrosys Techno Solutions',

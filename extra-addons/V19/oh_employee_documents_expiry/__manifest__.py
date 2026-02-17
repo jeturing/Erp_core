@@ -3,13 +3,13 @@
     'version': '19.0.1.0.0',
     'category': 'Human Resources',
     'summary': 'Manages Employee Documents With Expiry Notifications.',
-    'description': 'OH Addon: Manages Employee Related Documents with Expiry
+    'description': """OH Addon: Manages Employee Related Documents with Expiry
      Notifications. As such dates approach, the system is programmed to send
      automated alerts to relevant employees.These timely notifications are
      essential for ensuring that necessary actions can be taken to update 
      or renew documents before they lapse, thereby avoiding potential legal,
      regulatory, or operational complications that may arise from expired 
-     documentation.',
+     documentation.""",
     'live_test_url': 'https://youtu.be/4fe5tzAG8Ng',
     'author': 'Cybrosys Techno solutions,Open HRMS',
     'company': 'Cybrosys Techno Solutions',

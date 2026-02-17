@@ -3,9 +3,9 @@
     'version': '19.0.1.0.1',
     'category': 'Extra Tools',
     'summary': 'Dashboard for streamlined management of all activities.',
-    'description': 'Simplify activity management with a comprehensive 
+    'description': """Simplify activity management with a comprehensive 
      dashboard, offering centralized control and oversight for seamless 
-     organization-wide coordination and tracking.',
+     organization-wide coordination and tracking.""",
     'author': 'Cybrosys Techno solutions',
     'company': 'Cybrosys Techno Solutions',
     'maintainer': 'Cybrosys Techno Solutions',
