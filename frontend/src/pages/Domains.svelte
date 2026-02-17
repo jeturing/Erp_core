@@ -3,7 +3,7 @@
   import { domainsStore, domainStats } from '../lib/stores';
   import { toasts } from '../lib/stores/toast';
   import { formatDate } from '../lib/utils/formatters';
-  import { Plus, Check, X, CheckCircle, XCircle } from 'lucide-svelte';
+  import { Plus, Check, X, CircleCheck, CircleX } from 'lucide-svelte';
   import type { Domain } from '../lib/types';
 
 
@@ -232,9 +232,9 @@ ${createInstructions.step2 ?? ''}` : ''}</pre>
               </td>
               <td>
                 {#if domain.is_active}
-                  <CheckCircle size={16} class="text-emerald-500" />
+                  <CircleCheck size={16} class="text-emerald-500" />
                 {:else}
-                  <XCircle size={16} class="text-gray-400" />
+                  <CircleX size={16} class="text-gray-400" />
                 {/if}
               </td>
               <td class="text-sm text-gray-500">{formatDate(domain.created_at)}</td>

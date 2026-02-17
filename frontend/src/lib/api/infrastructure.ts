@@ -67,6 +67,6 @@ export const infrastructureApi = {
   },
 };
 
-export type { NodeSummary, ContainerItem, NodeMetrics, ContainerMetrics };
+export type { NodeSummary, ContainerItem };
 
 export default infrastructureApi;

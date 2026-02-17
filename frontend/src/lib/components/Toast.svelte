@@ -1,12 +1,12 @@
 <script lang="ts">
   import { fly } from 'svelte/transition';
   import { toasts } from '../stores/toast';
-  import { CheckCircle2, XCircle, AlertTriangle, Info, X } from 'lucide-svelte';
+  import { CircleCheckBig, CircleX, TriangleAlert, Info, X } from 'lucide-svelte';
 
   const icons = {
-    success: CheckCircle2,
-    error: XCircle,
-    warning: AlertTriangle,
+    success: CircleCheckBig,
+    error: CircleX,
+    warning: TriangleAlert,
     info: Info,
   };
 

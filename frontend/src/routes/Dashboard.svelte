@@ -3,7 +3,7 @@
   import { dashboard, auth } from '../lib/stores';
   import { tenantsApi } from '../lib/api';
   import { formatCurrency, formatDate, formatPercent } from '../lib/utils/formatters';
-  import { RefreshCw, AlertCircle, CheckCircle, AlertTriangle, XCircle } from 'lucide-svelte';
+  import { RefreshCw, CircleAlert, CircleCheck, TriangleAlert, CircleX } from 'lucide-svelte';
   import type { Tenant } from '../lib/types';
 
   let recentTenants: Tenant[] = [];
@@ -75,7 +75,7 @@
     </div>
   {:else if $dashboard.error}
     <div class="card flex items-center gap-3 text-error">
-      <AlertCircle size={20} />
+      <CircleAlert size={20} />
       <span class="font-body text-sm">{$dashboard.error}</span>
       <button class="btn-secondary btn-sm ml-auto" on:click={handleRefresh}>Reintentar</button>
     </div>
@@ -156,7 +156,7 @@
             <div class="flex items-center justify-between px-6 py-3.5">
               <span class="text-sm font-body text-text-secondary">{item.label}</span>
               <div class="flex items-center gap-2">
-                <CheckCircle size={14} class="text-success" />
+                <CircleCheck size={14} class="text-success" />
                 <span class="text-[11px] font-semibold uppercase tracking-widest text-success font-sans">OK</span>
               </div>
             </div>

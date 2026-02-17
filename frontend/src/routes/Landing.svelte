@@ -1,7 +1,7 @@
 <script lang="ts">
   import {
-    Zap, Shield, BarChart2, Globe, Headphones, Users,
-    CheckCircle, ArrowRight, Star
+    Zap, Shield, ChartColumn, Globe, Headphones, Users,
+    CircleCheck, ArrowRight, Star
   } from 'lucide-svelte';
 
   let email = '';
@@ -26,7 +26,7 @@
       desc: 'Backups automáticos, SSL incluido, y datos encriptados. Tu información siempre protegida.',
     },
     {
-      icon: BarChart2,
+      icon: ChartColumn,
       title: 'Escalabilidad Total',
       desc: 'Crece sin límites. Desde startups hasta corporaciones, Sajet se adapta a tu ritmo.',
     },
@@ -93,7 +93,7 @@
       <!-- Nav links -->
       <div class="hidden md:flex items-center gap-8">
         {#each navLinks as link}
-          <a href="#" class="text-sm text-gray-400 hover:text-white transition-colors">{link}</a>
+          <button type="button" class="text-sm text-gray-400 hover:text-white transition-colors bg-transparent border-none cursor-pointer p-0">{link}</button>
         {/each}
       </div>
 
@@ -254,9 +254,9 @@
 
       <p class="text-xs text-gray-500 mt-4">
         Al registrarte, aceptas nuestros
-        <a href="#" class="text-[#4ade80] hover:underline">Términos de Servicio</a>
+        <a href="/terms" class="text-[#4ade80] hover:underline">Términos de Servicio</a>
         y
-        <a href="#" class="text-[#4ade80] hover:underline">Política de Privacidad</a>.
+        <a href="/privacy" class="text-[#4ade80] hover:underline">Política de Privacidad</a>.
       </p>
     </div>
   </section>
@@ -279,17 +279,17 @@
         <!-- Nav links -->
         <div class="flex flex-wrap justify-center gap-6">
           {#each navLinks as link}
-            <a href="#" class="text-xs text-gray-500 hover:text-gray-300 transition-colors">{link}</a>
+            <button type="button" class="text-xs text-gray-500 hover:text-gray-300 transition-colors bg-transparent border-none cursor-pointer p-0">{link}</button>
           {/each}
-          <a href="#" class="text-xs text-gray-500 hover:text-gray-300 transition-colors">Privacidad</a>
-          <a href="#" class="text-xs text-gray-500 hover:text-gray-300 transition-colors">Términos</a>
+          <a href="/privacy" class="text-xs text-gray-500 hover:text-gray-300 transition-colors">Privacidad</a>
+          <a href="/terms" class="text-xs text-gray-500 hover:text-gray-300 transition-colors">Términos</a>
         </div>
 
         <!-- Social -->
         <div class="flex items-center gap-4">
-          <a href="#" class="text-gray-500 hover:text-white transition-colors text-xs">Twitter</a>
-          <a href="#" class="text-gray-500 hover:text-white transition-colors text-xs">LinkedIn</a>
-          <a href="#" class="text-gray-500 hover:text-white transition-colors text-xs">GitHub</a>
+          <a href="https://twitter.com/sajet" target="_blank" rel="noopener noreferrer" class="text-gray-500 hover:text-white transition-colors text-xs">Twitter</a>
+          <a href="https://linkedin.com/company/sajet" target="_blank" rel="noopener noreferrer" class="text-gray-500 hover:text-white transition-colors text-xs">LinkedIn</a>
+          <a href="https://github.com/jeturing" target="_blank" rel="noopener noreferrer" class="text-gray-500 hover:text-white transition-colors text-xs">GitHub</a>
         </div>
       </div>
 

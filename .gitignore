@@ -66,3 +66,6 @@ Cloudflare/.cf_credentials
 
 # Generated SPA build output
 static/spa/
+
+# Claude worktrees
+.claude/

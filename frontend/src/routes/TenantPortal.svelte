@@ -2,7 +2,7 @@
   import { onMount } from 'svelte';
   import {
     ExternalLink, Download, LogOut, Package, Users, Headphones,
-    LayoutGrid, BarChart2, FileText, UserCircle, BookOpen,
+    LayoutGrid, ChartColumn, FileText, CircleUser, BookOpen,
     Building2
   } from 'lucide-svelte';
   import { auth, currentUser } from '../lib/stores';
@@ -17,12 +17,12 @@
   let billing: TenantPortalBilling | null = null;
 
   const installedApps = [
-    { label: 'CRM', icon: UserCircle, color: 'text-blue-500' },
+    { label: 'CRM', icon: CircleUser, color: 'text-blue-500' },
     { label: 'Inventario', icon: Package, color: 'text-emerald-500' },
     { label: 'Facturación', icon: FileText, color: 'text-amber-500' },
     { label: 'RRHH', icon: Users, color: 'text-purple-500' },
     { label: 'Contabilidad', icon: BookOpen, color: 'text-rose-500' },
-    { label: 'Ventas', icon: BarChart2, color: 'text-indigo-500' },
+    { label: 'Ventas', icon: ChartColumn, color: 'text-indigo-500' },
   ];
 
   const planFeatures: Record<string, string[]> = {
