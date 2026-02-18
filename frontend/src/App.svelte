@@ -17,6 +17,10 @@
   import Roles from './pages/Roles.svelte';
   import Plans from './pages/Plans.svelte';
   import Clients from './pages/Clients.svelte';
+  import Partners from './pages/Partners.svelte';
+  import Leads from './pages/Leads.svelte';
+  import Commissions from './pages/Commissions.svelte';
+  import Quotations from './pages/Quotations.svelte';
   import { Spinner } from './lib/components';
   import Toast from './lib/components/Toast.svelte';
 
@@ -35,6 +39,10 @@
     | 'roles'
     | 'plans'
     | 'clients'
+    | 'partners'
+    | 'leads'
+    | 'commissions'
+    | 'quotations'
     | 'signup'
     | 'notfound';
 
@@ -100,6 +108,10 @@
       case 'roles':
       case 'plans':
       case 'clients':
+      case 'partners':
+      case 'leads':
+      case 'commissions':
+      case 'quotations':
         currentPage = route as AppPage;
         break;
       default:
@@ -171,6 +183,14 @@
       <Plans />
     {:else if currentPage === 'clients'}
       <Clients />
+    {:else if currentPage === 'partners'}
+      <Partners />
+    {:else if currentPage === 'leads'}
+      <Leads />
+    {:else if currentPage === 'commissions'}
+      <Commissions />
+    {:else if currentPage === 'quotations'}
+      <Quotations />
     {:else}
       <div class="p-6">
         <h1 class="page-title">404 - Página no encontrada</h1>

@@ -2,7 +2,8 @@
   import {
     LayoutDashboard, Users, Globe, Server, CreditCard,
     Settings, LogOut, Menu, X, FileText, Route, Shield,
-    ExternalLink, Package, UserCheck,
+    ExternalLink, Package, UserCheck, Handshake, Target,
+    Percent, FileSpreadsheet,
   } from 'lucide-svelte';
   import { auth } from '../stores';
 
@@ -20,6 +21,10 @@
     { id: 'billing',        label: 'Billing',         icon: CreditCard,      href: '#/billing' },
     { id: 'plans',          label: 'Planes',          icon: Package,         href: '#/plans' },
     { id: 'clients',        label: 'Clientes',        icon: UserCheck,       href: '#/clients' },
+    { id: 'partners',       label: 'Partners',        icon: Handshake,       href: '#/partners' },
+    { id: 'leads',          label: 'Leads',           icon: Target,          href: '#/leads' },
+    { id: 'commissions',    label: 'Comisiones',      icon: Percent,         href: '#/commissions' },
+    { id: 'quotations',     label: 'Cotizaciones',    icon: FileSpreadsheet, href: '#/quotations' },
     { id: 'settings',       label: 'Settings',        icon: Settings,        href: '#/settings' },
     { id: 'logs',           label: 'Logs',            icon: FileText,        href: '#/logs' },
     { id: 'tunnels',        label: 'Tunnels',         icon: Route,           href: '#/tunnels' },

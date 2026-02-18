@@ -348,11 +348,15 @@ def create_access_token(username: str, role: str, user_id: int = None, tenant_id
 
 
 def verify_token_with_role(token: str, required_role: str = None) -> dict:
-    """Verifica un token JWT y retorna los datos del usuario."""
+    """Verifica un token JWT y retorna los datos del usuario.
+    El rol 'admin' tiene acceso universal a todos los endpoints."""
     try:
         payload = jwt.decode(token, JWT_SECRET_KEY, algorithms=[JWT_ALGORITHM])
 
-        if required_role and payload.get("role") != required_role:
+        user_role = payload.get("role")
+
+        # Admin tiene acceso universal — puede actuar en cualquier contexto
+        if required_role and user_role != required_role and user_role != "admin":
             raise HTTPException(
                 status_code=status.HTTP_403_FORBIDDEN,
                 detail=f"Acceso denegado: se requiere rol {required_role}",

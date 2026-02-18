@@ -168,6 +168,7 @@ class Plan(Base):
     price_per_user = Column(Float, default=0, nullable=False)    # Precio por usuario adicional
     included_users = Column(Integer, default=1, nullable=False)  # Usuarios incluidos en base_price
     max_users = Column(Integer, default=0)                       # 0 = ilimitado
+    max_domains = Column(Integer, default=0)                     # 0 = sin dominios custom, -1 = ilimitado
     currency = Column(String(3), default="USD")
     stripe_price_id = Column(String(100))                        # Price ID de Stripe (recurrente)
     stripe_product_id = Column(String(100))                      # Product ID de Stripe
@@ -234,6 +235,11 @@ class Partner(Base):
     margin_cap = Column(Float, default=30.0)             # Máx % margen sobre precio base (cláusula 8.7)
     status = Column(Enum(PartnerStatus), default=PartnerStatus.pending)
     portal_access = Column(Boolean, default=True)
+
+    # Stripe Connect Express
+    stripe_account_id = Column(String(100))              # acct_XXXX — Stripe Connected Account ID
+    stripe_onboarding_complete = Column(Boolean, default=False)  # KYC completado
+    stripe_charges_enabled = Column(Boolean, default=False)      # Puede recibir pagos
 
     # Contrato
     contract_signed_at = Column(DateTime)
