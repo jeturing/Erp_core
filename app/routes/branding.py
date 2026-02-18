@@ -1,0 +1,209 @@
+"""
+Branding Routes — Épica 10: Partner White-Label Branding Profiles
+- POST /api/branding/profiles       → Crear perfil de branding
+- GET  /api/branding/profiles       → Lista perfiles
+- GET  /api/branding/profiles/{id}  → Detalle
+- PUT  /api/branding/profiles/{id}  → Actualizar
+- GET  /api/branding/resolve/{domain} → Resolver branding por dominio
+"""
+from fastapi import APIRouter, HTTPException, Depends
+from pydantic import BaseModel
+from typing import Optional
+from sqlalchemy.orm import Session
+import logging
+
+from ..models.database import PartnerBrandingProfile, Partner, get_db
+
+router = APIRouter(prefix="/api/branding", tags=["Branding"])
+logger = logging.getLogger(__name__)
+
+
+class CreateBrandingProfile(BaseModel):
+    partner_id: int
+    brand_name: str
+    logo_url: Optional[str] = None
+    favicon_url: Optional[str] = None
+    primary_color: str = "#1a73e8"
+    secondary_color: str = "#ffffff"
+    custom_css: Optional[str] = None
+    custom_domain: Optional[str] = None
+    support_email: Optional[str] = None
+    support_url: Optional[str] = None
+    terms_url: Optional[str] = None
+    privacy_url: Optional[str] = None
+
+
+class UpdateBrandingProfile(BaseModel):
+    brand_name: Optional[str] = None
+    logo_url: Optional[str] = None
+    favicon_url: Optional[str] = None
+    primary_color: Optional[str] = None
+    secondary_color: Optional[str] = None
+    custom_css: Optional[str] = None
+    custom_domain: Optional[str] = None
+    support_email: Optional[str] = None
+    support_url: Optional[str] = None
+    terms_url: Optional[str] = None
+    privacy_url: Optional[str] = None
+    is_active: Optional[bool] = None
+
+
+@router.post("/profiles")
+def create_branding_profile(
+    payload: CreateBrandingProfile,
+    db: Session = Depends(get_db),
+):
+    """Crear perfil de branding para un partner."""
+    partner = db.query(Partner).filter(Partner.id == payload.partner_id).first()
+    if not partner:
+        raise HTTPException(404, "Partner not found")
+
+    existing = db.query(PartnerBrandingProfile).filter(
+        PartnerBrandingProfile.partner_id == payload.partner_id
+    ).first()
+    if existing:
+        raise HTTPException(409, f"Partner already has branding profile: id={existing.id}")
+
+    profile = PartnerBrandingProfile(
+        partner_id=payload.partner_id,
+        brand_name=payload.brand_name,
+        logo_url=payload.logo_url,
+        favicon_url=payload.favicon_url,
+        primary_color=payload.primary_color,
+        secondary_color=payload.secondary_color,
+        custom_css=payload.custom_css,
+        custom_domain=payload.custom_domain,
+        support_email=payload.support_email,
+        support_url=payload.support_url,
+        terms_url=payload.terms_url,
+        privacy_url=payload.privacy_url,
+        is_active=True,
+    )
+    db.add(profile)
+    db.commit()
+    db.refresh(profile)
+
+    return {
+        "id": profile.id,
+        "partner_id": profile.partner_id,
+        "brand_name": profile.brand_name,
+        "is_active": profile.is_active,
+    }
+
+
+@router.get("/profiles")
+def list_branding_profiles(
+    partner_id: Optional[int] = None,
+    active_only: bool = True,
+    db: Session = Depends(get_db),
+):
+    q = db.query(PartnerBrandingProfile)
+    if partner_id:
+        q = q.filter(PartnerBrandingProfile.partner_id == partner_id)
+    if active_only:
+        q = q.filter(PartnerBrandingProfile.is_active == True)
+
+    profiles = q.all()
+    return {
+        "total": len(profiles),
+        "profiles": [
+            {
+                "id": p.id,
+                "partner_id": p.partner_id,
+                "brand_name": p.brand_name,
+                "logo_url": p.logo_url,
+                "primary_color": p.primary_color,
+                "custom_domain": p.custom_domain,
+                "is_active": p.is_active,
+            }
+            for p in profiles
+        ],
+    }
+
+
+@router.get("/profiles/{profile_id}")
+def get_branding_profile(profile_id: int, db: Session = Depends(get_db)):
+    p = db.query(PartnerBrandingProfile).filter(PartnerBrandingProfile.id == profile_id).first()
+    if not p:
+        raise HTTPException(404, "Branding profile not found")
+    return {
+        "id": p.id,
+        "partner_id": p.partner_id,
+        "brand_name": p.brand_name,
+        "logo_url": p.logo_url,
+        "favicon_url": p.favicon_url,
+        "primary_color": p.primary_color,
+        "secondary_color": p.secondary_color,
+        "custom_css": p.custom_css,
+        "custom_domain": p.custom_domain,
+        "support_email": p.support_email,
+        "support_url": p.support_url,
+        "terms_url": p.terms_url,
+        "privacy_url": p.privacy_url,
+        "is_active": p.is_active,
+    }
+
+
+@router.put("/profiles/{profile_id}")
+def update_branding_profile(
+    profile_id: int,
+    payload: UpdateBrandingProfile,
+    db: Session = Depends(get_db),
+):
+    p = db.query(PartnerBrandingProfile).filter(PartnerBrandingProfile.id == profile_id).first()
+    if not p:
+        raise HTTPException(404, "Branding profile not found")
+
+    update_data = payload.dict(exclude_unset=True)
+    for key, value in update_data.items():
+        setattr(p, key, value)
+
+    db.commit()
+    db.refresh(p)
+
+    return {
+        "id": p.id,
+        "brand_name": p.brand_name,
+        "is_active": p.is_active,
+        "updated": list(update_data.keys()),
+    }
+
+
+@router.get("/resolve/{domain}")
+def resolve_branding_by_domain(domain: str, db: Session = Depends(get_db)):
+    """
+    Resuelve el perfil de branding por dominio personalizado.
+    El frontend usa esto para renderizar white-label.
+    """
+    profile = db.query(PartnerBrandingProfile).filter(
+        PartnerBrandingProfile.custom_domain == domain,
+        PartnerBrandingProfile.is_active == True,
+    ).first()
+
+    if not profile:
+        # Retornar defaults de Jeturing
+        return {
+            "brand_name": "Sajet",
+            "logo_url": "/static/logo.svg",
+            "favicon_url": "/static/favicon.ico",
+            "primary_color": "#1a73e8",
+            "secondary_color": "#ffffff",
+            "custom_css": None,
+            "support_email": "support@sajet.us",
+            "is_white_label": False,
+        }
+
+    return {
+        "brand_name": profile.brand_name,
+        "logo_url": profile.logo_url,
+        "favicon_url": profile.favicon_url,
+        "primary_color": profile.primary_color,
+        "secondary_color": profile.secondary_color,
+        "custom_css": profile.custom_css,
+        "support_email": profile.support_email,
+        "support_url": profile.support_url,
+        "terms_url": profile.terms_url,
+        "privacy_url": profile.privacy_url,
+        "is_white_label": True,
+        "partner_id": profile.partner_id,
+    }

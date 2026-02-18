@@ -14,6 +14,7 @@ load_dotenv()
 
 # Import routers
 from .routes import auth, dashboard, tenants, onboarding, roles, tenant_portal, secure_auth, nodes, tunnels, provisioning, settings, billing, logs, domains, plans, customers, partners, leads, commissions, quotations, stripe_connect, suspension
+from .routes import blueprints, seats, invoices, settlements, reconciliation, work_orders, branding, audit
 
 # Import security middleware
 from .security.middleware import SecurityMiddleware, WAFMiddleware
@@ -106,6 +107,16 @@ app.include_router(commissions.router)  # Comisiones 50/50
 app.include_router(quotations.router)  # Cotizaciones y catálogo de servicios
 app.include_router(stripe_connect.router)  # Stripe Connect Express para partners
 app.include_router(suspension.router)  # Páginas y API de suspensión de tenants
+
+# ── Épicas SaaS Billing & Partner ──
+app.include_router(blueprints.router)       # Catálogo de módulos y paquetes
+app.include_router(seats.router)            # Seat events, HWM, Stripe qty sync
+app.include_router(invoices.router)         # Facturas, intercompany
+app.include_router(settlements.router)      # Settlement 50/50 partner ↔ Jeturing
+app.include_router(reconciliation.router)   # Stripe ↔ DB reconciliation
+app.include_router(work_orders.router)      # Órdenes de trabajo con gating
+app.include_router(branding.router)         # White-label partner branding
+app.include_router(audit.router)            # Audit events persistentes
 
 
 @app.get("/health")
