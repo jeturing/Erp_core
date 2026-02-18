@@ -1,9 +1,11 @@
 import { writable } from 'svelte/store';
 import { dashboardApi } from '../api/dashboard';
 import type { DashboardMetrics } from '../types';
+import type { ReportsOverview } from '../api/dashboard';
 
 interface DashboardState {
   data: DashboardMetrics | null;
+  report: ReportsOverview | null;
   isLoading: boolean;
   error: string | null;
   lastUpdated: Date | null;
@@ -12,6 +14,7 @@ interface DashboardState {
 function createDashboardStore() {
   const { subscribe, set, update } = writable<DashboardState>({
     data: null,
+    report: null,
     isLoading: false,
     error: null,
     lastUpdated: null,
@@ -20,10 +23,14 @@ function createDashboardStore() {
   let refreshInterval: number | null = null;
 
   const refreshData = async () => {
-    const data = await dashboardApi.getMetrics();
+    const [data, report] = await Promise.all([
+      dashboardApi.getMetrics(),
+      dashboardApi.getOverview().catch(() => null),
+    ]);
     update((state) => ({
       ...state,
       data,
+      report: report ?? state.report,
       lastUpdated: new Date(),
     }));
   };
@@ -73,6 +80,7 @@ function createDashboardStore() {
     reset: () => {
       set({
         data: null,
+        report: null,
         isLoading: false,
         error: null,
         lastUpdated: null,

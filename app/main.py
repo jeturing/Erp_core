@@ -19,6 +19,7 @@ validate_required()
 # Import routers
 from .routes import auth, dashboard, tenants, onboarding, roles, tenant_portal, secure_auth, nodes, tunnels, provisioning, settings, billing, logs, domains, plans, customers, partners, leads, commissions, quotations, stripe_connect, suspension
 from .routes import blueprints, seats, invoices, settlements, reconciliation, work_orders, branding, audit
+from .routes import reports
 
 # Import security middleware
 from .security.middleware import SecurityMiddleware, WAFMiddleware
@@ -116,6 +117,7 @@ app.include_router(reconciliation.router)   # Stripe ↔ DB reconciliation
 app.include_router(work_orders.router)      # Órdenes de trabajo con gating
 app.include_router(branding.router)         # White-label partner branding
 app.include_router(audit.router)            # Audit events persistentes
+app.include_router(reports.router)          # Reportes consolidados / analytics
 
 
 @app.get("/health")
