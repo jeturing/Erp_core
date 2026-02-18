@@ -260,6 +260,52 @@ npm run dev
 | `DELETE` | `/api/tenants/{subdomain}` | Eliminar tenant + cleanup |
 | `GET` | `/api/tenants/servers` | Servidores Odoo disponibles |
 
+#### Flujo de creación de tenant (template en PCT105)
+
+```text
+[Usuario en browser]
+            |
+            | Click en "NUEVO TENANT"
+            v
+[Frontend SPA en 10.10.10.20]
+    frontend/src/pages/Tenants.svelte
+            |
+            | tenantsApi.create(payload)
+            | POST /api/tenants
+            v
+[FastAPI en 10.10.10.20]
+    app/routes/tenants.py -> create_tenant()
+            |
+            | use_fast_method=true
+            v
+[Odoo DB Manager]
+    app/services/odoo_database_manager.py
+    create_tenant_from_template()
+            |
+            | 1) valida subdomain
+            | 2) verifica BD destino no exista
+            | 3) verifica template_tenant exista
+            | 4) CREATE DATABASE <subdomain> WITH TEMPLATE <template_tenant>
+            | 5) post-config (web.base.url, company_name, database.uuid)
+            v
+[PCT105: PostgreSQL/Odoo]
+    Se crea la nueva BD del tenant
+            |
+            v
+[FastAPI en 10.10.10.20]
+    Registra customer/subscription en BD local
+    Responde success al frontend
+            |
+            v
+[Frontend SPA]
+    Toast "Tenant creado"
+    Refresca listado con GET /api/tenants
+```
+
+Notas operativas:
+- Si Odoo no devuelve bases de datos en `/web/database/list`, el backend usa fallback directo a PostgreSQL y fallback local de `customers/subscriptions` para no dejar la vista vacía.
+- El template por defecto en provisioning está configurado como `template_tenant`.
+
 ### Billing (`/api/billing`)
 
 | Método | Endpoint | Descripción |

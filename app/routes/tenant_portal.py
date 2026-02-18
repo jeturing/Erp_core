@@ -32,6 +32,20 @@ def get_current_tenant(request: Request, access_token: str = Cookie(None)):
         )
     
     token_data = verify_token_with_role(token, required_role="tenant")
+
+    # Compatibilidad: tokens antiguos o incompletos pueden venir sin tenant_id.
+    # En ese caso, intentar resolver por email (claim sub).
+    if not token_data.get("tenant_id"):
+        username = token_data.get("sub")
+        if username and "@" in username:
+            db = SessionLocal()
+            try:
+                customer = db.query(Customer).filter(Customer.email == username).first()
+                if customer:
+                    token_data["tenant_id"] = customer.id
+            finally:
+                db.close()
+
     return token_data
 
 
@@ -59,6 +73,12 @@ async def get_tenant_info(request: Request, access_token: str = Cookie(None)):
     """Obtiene información del tenant actual."""
     token_data = get_current_tenant(request, access_token)
     tenant_id = token_data.get("tenant_id")
+
+    if not tenant_id:
+        raise HTTPException(
+            status_code=403,
+            detail="Portal disponible solo para usuarios tenant con contexto válido"
+        )
     
     db = SessionLocal()
     try:
@@ -97,6 +117,12 @@ async def get_tenant_billing(request: Request, access_token: str = Cookie(None))
     """Obtiene información de facturación del tenant."""
     token_data = get_current_tenant(request, access_token)
     tenant_id = token_data.get("tenant_id")
+
+    if not tenant_id:
+        raise HTTPException(
+            status_code=403,
+            detail="Portal disponible solo para usuarios tenant con contexto válido"
+        )
     
     db = SessionLocal()
     try:
@@ -154,6 +180,12 @@ async def update_payment_method(request: Request, access_token: str = Cookie(Non
     """Crea una sesión de Stripe para actualizar el método de pago."""
     token_data = get_current_tenant(request, access_token)
     tenant_id = token_data.get("tenant_id")
+
+    if not tenant_id:
+        raise HTTPException(
+            status_code=403,
+            detail="Portal disponible solo para usuarios tenant con contexto válido"
+        )
     
     db = SessionLocal()
     try:
@@ -182,6 +214,12 @@ async def cancel_subscription(request: Request, access_token: str = Cookie(None)
     """Cancela la suscripción del tenant."""
     token_data = get_current_tenant(request, access_token)
     tenant_id = token_data.get("tenant_id")
+
+    if not tenant_id:
+        raise HTTPException(
+            status_code=403,
+            detail="Portal disponible solo para usuarios tenant con contexto válido"
+        )
     
     db = SessionLocal()
     try:

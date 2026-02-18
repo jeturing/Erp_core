@@ -26,5 +26,8 @@
   },
   "dependencies": {
     "lucide-svelte": "^0.563.0"
+  },
+  "overrides": {
+    "cookie": "^0.7.0"
   }
 }

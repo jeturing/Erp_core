@@ -90,6 +90,32 @@ export const billingApi = {
   async recalculateAll(): Promise<{ message: string; admin_accounts: number; details: any[] }> {
     return api.post('/api/customers/recalculate-all', {});
   },
+
+  async createStripeCustomer(id: number): Promise<{
+    success: boolean;
+    already_exists: boolean;
+    stripe_customer_id?: string;
+    message: string;
+  }> {
+    return api.post(`/api/customers/${id}/create-stripe-customer`, {});
+  },
+
+  async sendCredentials(id: number): Promise<{
+    success: boolean;
+    message: string;
+    email_to?: string;
+  }> {
+    return api.post(`/api/customers/${id}/send-credentials`, {});
+  },
+
+  async resetPassword(id: number): Promise<{
+    success: boolean;
+    password_reset: boolean;
+    email_sent: boolean;
+    message: string;
+  }> {
+    return api.post(`/api/customers/${id}/reset-password`, {});
+  },
 };
 
 export default billingApi;

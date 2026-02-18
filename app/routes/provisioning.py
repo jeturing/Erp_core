@@ -49,7 +49,7 @@ class TenantProvisionRequest(BaseModel):
     admin_password: str = Field(default="admin", min_length=4)
     domain: str = Field(default="sajet.us")
     server: str = Field(default="primary")
-    template_db: str = Field(default="tcs")
+    template_db: str = Field(default="template_tenant")
     language: str = Field(default="es_DO")
 
 

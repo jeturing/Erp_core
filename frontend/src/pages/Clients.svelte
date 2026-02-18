@@ -1,6 +1,6 @@
 <script lang="ts">
   import { onMount } from 'svelte';
-  import { Users, DollarSign, Shield, Edit3, Minus, Plus, RefreshCw, Search, UserCheck, UserX } from 'lucide-svelte';
+  import { Users, DollarSign, Shield, Edit3, Minus, Plus, RefreshCw, Search, CreditCard, Mail, KeyRound } from 'lucide-svelte';
   import { billingApi } from '../lib/api/billing';
   import type { CustomerItem, Plan } from '../lib/types';
 
@@ -10,6 +10,7 @@
   let error = $state('');
   let searchQuery = $state('');
   let recalculating = $state(false);
+  let customerActionLoading = $state<number | null>(null);
 
   // Summary
   let summary = $state({ total_users: 0, total_mrr: 0, admin_accounts: 0, billable_accounts: 0 });
@@ -112,6 +113,44 @@
       alert(e.message || 'Error recalculando');
     } finally {
       recalculating = false;
+    }
+  }
+
+  async function createStripeCustomer(customer: CustomerItem) {
+    customerActionLoading = customer.id;
+    try {
+      const result = await billingApi.createStripeCustomer(customer.id);
+      alert(result.message || 'Stripe Customer procesado');
+      await loadData();
+    } catch (e: any) {
+      alert(e.message || 'Error creando Stripe Customer');
+    } finally {
+      customerActionLoading = null;
+    }
+  }
+
+  async function sendCredentials(customer: CustomerItem) {
+    customerActionLoading = customer.id;
+    try {
+      const result = await billingApi.sendCredentials(customer.id);
+      alert(result.message || 'Credenciales enviadas');
+    } catch (e: any) {
+      alert(e.message || 'Error enviando credenciales');
+    } finally {
+      customerActionLoading = null;
+    }
+  }
+
+  async function resetPassword(customer: CustomerItem) {
+    if (!confirm(`¿Resetear contraseña de ${customer.company_name}?`)) return;
+    customerActionLoading = customer.id;
+    try {
+      const result = await billingApi.resetPassword(customer.id);
+      alert(result.message || 'Contraseña reseteada');
+    } catch (e: any) {
+      alert(e.message || 'Error reseteando contraseña');
+    } finally {
+      customerActionLoading = null;
     }
   }
 
@@ -265,9 +304,40 @@
                 {/if}
               </td>
               <td class="text-right">
-                <button class="btn-secondary btn-sm" onclick={() => openEdit(customer)} title="Editar cliente">
-                  <Edit3 size={14} />
-                </button>
+                <div class="flex justify-end gap-2">
+                  <button
+                    class="btn-secondary btn-sm"
+                    onclick={() => createStripeCustomer(customer)}
+                    title={customer.stripe_customer_id ? 'Stripe Customer ya existe' : 'Crear Stripe Customer'}
+                    disabled={customerActionLoading === customer.id || !!customer.stripe_customer_id || customer.is_admin_account}
+                  >
+                    <CreditCard size={14} />
+                  </button>
+                  <button
+                    class="btn-secondary btn-sm"
+                    onclick={() => sendCredentials(customer)}
+                    title="Enviar credenciales"
+                    disabled={customerActionLoading === customer.id}
+                  >
+                    <Mail size={14} />
+                  </button>
+                  <button
+                    class="btn-secondary btn-sm"
+                    onclick={() => resetPassword(customer)}
+                    title="Reset password"
+                    disabled={customerActionLoading === customer.id}
+                  >
+                    <KeyRound size={14} />
+                  </button>
+                  <button
+                    class="btn-secondary btn-sm"
+                    onclick={() => openEdit(customer)}
+                    title="Editar cliente"
+                    disabled={customerActionLoading === customer.id}
+                  >
+                    <Edit3 size={14} />
+                  </button>
+                </div>
               </td>
             </tr>
           {/each}

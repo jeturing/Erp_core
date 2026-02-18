@@ -21,6 +21,8 @@ from ..services.odoo_database_manager import (
 from .auth import verify_token
 import httpx
 import logging
+import psycopg
+import os
 
 router = APIRouter(prefix="/api/tenants", tags=["Tenants"])
 logger = logging.getLogger(__name__)
@@ -58,10 +60,14 @@ async def get_all_tenants_from_servers():
             continue
         
         databases = server_info.get("databases", [])
+        if not databases:
+            # Fallback: leer directamente PostgreSQL del nodo Odoo.
+            # Esto cubre escenarios donde /web/database/list retorna vacío.
+            databases = _list_databases_via_postgres(server_info.get("id"))
         
         for db_name in databases:
             # Saltar BDs del sistema
-            if db_name in ['postgres', 'template0', 'template1']:
+            if db_name in ['postgres', 'template0', 'template1', 'template_tenant']:
                 continue
             
             # Buscar en BD local si existe info del tenant
@@ -114,6 +120,93 @@ async def get_all_tenants_from_servers():
                 db.close()
     
     return all_tenants
+
+
+def _list_databases_via_postgres(server_id: Optional[str]) -> List[str]:
+    """Lista bases de datos conectando directo a PostgreSQL del servidor Odoo."""
+    if not server_id:
+        return []
+
+    server = ODOO_SERVERS.get(server_id)
+    if not server:
+        return []
+
+    db_user = os.getenv("ODOO_DB_USER", "Jeturing")
+    db_password = os.getenv("ODOO_DB_PASSWORD", "123Abcd.")
+    db_port = int(os.getenv("ODOO_DB_PORT", "5432"))
+
+    try:
+        with psycopg.connect(
+            host=server.ip,
+            port=db_port,
+            dbname="postgres",
+            user=db_user,
+            password=db_password,
+            connect_timeout=5,
+        ) as conn:
+            with conn.cursor() as cur:
+                cur.execute(
+                    """
+                    SELECT datname
+                    FROM pg_database
+                    WHERE datistemplate = false
+                    ORDER BY datname
+                    """
+                )
+                rows = cur.fetchall()
+                dbs = [row[0] for row in rows if row and row[0]]
+                logger.info(f"PostgreSQL fallback: {len(dbs)} BDs detectadas en {server.id}")
+                return dbs
+    except Exception as e:
+        logger.warning(f"No se pudo listar BDs via PostgreSQL en {server.id}: {e}")
+        return []
+
+
+async def get_all_tenants_from_local_db():
+    """Obtiene tenants desde la BD local como fallback cuando Odoo no responde."""
+    items = []
+    db = SessionLocal()
+    try:
+        customers = db.query(Customer).order_by(Customer.created_at.desc()).all()
+        status_map = {
+            SubscriptionStatus.active: "active",
+            SubscriptionStatus.pending: "provisioning",
+            SubscriptionStatus.past_due: "payment_failed",
+            SubscriptionStatus.cancelled: "suspended",
+        }
+
+        for customer in customers:
+            # Prioridad: suscripción activa, si no la más reciente
+            sub = db.query(Subscription).filter(
+                Subscription.customer_id == customer.id,
+                Subscription.status == SubscriptionStatus.active
+            ).first()
+
+            if not sub:
+                sub = db.query(Subscription).filter(
+                    Subscription.customer_id == customer.id
+                ).order_by(Subscription.created_at.desc()).first()
+
+            plan_name = (sub.plan_name if sub and sub.plan_name else (customer.plan.value if customer.plan else "basic"))
+            status_value = status_map.get(sub.status, "active") if sub else "active"
+
+            items.append({
+                "id": customer.id,
+                "company_name": customer.company_name,
+                "email": customer.email,
+                "subdomain": customer.subdomain,
+                "plan": plan_name,
+                "status": status_value,
+                "tunnel_active": status_value == "active",
+                "server": None,
+                "server_id": None,
+                "created_at": customer.created_at.isoformat() + "Z" if customer.created_at else None,
+                "url": f"https://{customer.subdomain}.sajet.us",
+            })
+    finally:
+        db.close()
+
+    return items
 
 
 # =====================================================
@@ -177,10 +270,23 @@ async def list_tenants(authorization: Optional[str] = Header(None)):
     
     try:
         items = await get_all_tenants_from_servers()
+        if not items:
+            logger.warning("No se detectaron tenants desde Odoo; usando fallback de BD local")
+            items = await get_all_tenants_from_local_db()
+        else:
+            # Merge de seguridad: incluir tenants locales faltantes
+            local_items = await get_all_tenants_from_local_db()
+            by_subdomain = {item.get("subdomain"): item for item in items}
+            for local_item in local_items:
+                sub = local_item.get("subdomain")
+                if sub and sub not in by_subdomain:
+                    items.append(local_item)
+
         return {"items": items, "total": len(items)}
     except Exception as e:
         logger.error(f"Error listando tenants: {e}")
-        return {"items": [], "total": 0, "error": str(e)}
+        fallback_items = await get_all_tenants_from_local_db()
+        return {"items": fallback_items, "total": len(fallback_items), "error": str(e)}
 
 
 @router.post("")
@@ -362,6 +468,8 @@ async def get_tenant_details(
     
     try:
         all_tenants = await get_all_tenants_from_servers()
+        if not all_tenants:
+            all_tenants = await get_all_tenants_from_local_db()
         
         for tenant in all_tenants:
             if tenant.get("subdomain") == subdomain:
