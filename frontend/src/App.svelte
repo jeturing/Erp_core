@@ -29,6 +29,7 @@
   import WorkOrders from './pages/WorkOrders.svelte';
   import Audit from './pages/Audit.svelte';
   import Branding from './pages/Branding.svelte';
+  import ServiceCatalog from './pages/ServiceCatalog.svelte';
   import { Spinner } from './lib/components';
   import Toast from './lib/components/Toast.svelte';
 
@@ -59,6 +60,7 @@
     | 'workorders'
     | 'audit'
     | 'branding'
+    | 'catalog'
     | 'signup'
     | 'notfound';
 
@@ -136,6 +138,7 @@
       case 'workorders':
       case 'audit':
       case 'branding':
+      case 'catalog':
         currentPage = route as AppPage;
         break;
       default:
@@ -231,6 +234,8 @@
       <Audit />
     {:else if currentPage === 'branding'}
       <Branding />
+    {:else if currentPage === 'catalog'}
+      <ServiceCatalog />
     {:else}
       <div class="p-6">
         <h1 class="page-title">404 - Página no encontrada</h1>

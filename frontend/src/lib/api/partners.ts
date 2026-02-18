@@ -10,6 +10,8 @@ import type {
   QuotationItem,
   CatalogResponse,
   ServiceCatalogItemType,
+  PlanCatalogLinksResponse,
+  PlanCatalogLinkType,
 } from '../types';
 
 export const partnersApi = {
@@ -156,9 +158,12 @@ export const partnersApi = {
   },
 
   // ── Service Catalog ──
-  async getCatalog(category?: string): Promise<CatalogResponse> {
-    const params = category ? `?category=${category}` : '';
-    return api.get<CatalogResponse>(`/api/catalog${params}`);
+  async getCatalog(category?: string, includeInactive = false): Promise<CatalogResponse> {
+    const params = new URLSearchParams();
+    if (category) params.set('category', category);
+    if (includeInactive) params.set('include_inactive', 'true');
+    const qs = params.toString();
+    return api.get<CatalogResponse>(`/api/catalog${qs ? '?' + qs : ''}`);
   },
 
   async createCatalogItem(data: Partial<ServiceCatalogItemType>): Promise<{ message: string; item: ServiceCatalogItemType }> {
@@ -171,6 +176,42 @@ export const partnersApi = {
 
   async deleteCatalogItem(id: number): Promise<{ message: string }> {
     return api.delete(`/api/catalog/${id}`);
+  },
+
+  async reactivateCatalogItem(id: number): Promise<{ message: string; item: ServiceCatalogItemType }> {
+    return api.put(`/api/catalog/${id}/reactivate`, {});
+  },
+
+  // ── Plan ↔ Catalog Links ──
+  async getPlanCatalogLinks(planId?: number): Promise<PlanCatalogLinksResponse> {
+    const params = planId ? `?plan_id=${planId}` : '';
+    return api.get(`/api/catalog/plan-links${params}`);
+  },
+
+  async createPlanCatalogLink(data: {
+    plan_id: number;
+    catalog_item_id: number;
+    included_quantity?: number;
+    is_included?: boolean;
+    discount_percent?: number;
+    notes?: string;
+  }): Promise<{ message: string; link: PlanCatalogLinkType }> {
+    return api.post('/api/catalog/plan-links', data);
+  },
+
+  async updatePlanCatalogLink(linkId: number, data: {
+    plan_id: number;
+    catalog_item_id: number;
+    included_quantity?: number;
+    is_included?: boolean;
+    discount_percent?: number;
+    notes?: string;
+  }): Promise<{ message: string; link: PlanCatalogLinkType }> {
+    return api.put(`/api/catalog/plan-links/${linkId}`, data);
+  },
+
+  async deletePlanCatalogLink(linkId: number): Promise<{ message: string }> {
+    return api.delete(`/api/catalog/plan-links/${linkId}`);
   },
 };
 

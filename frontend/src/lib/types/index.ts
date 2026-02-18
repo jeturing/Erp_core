@@ -645,6 +645,14 @@ export interface ServiceCatalogItemType {
   is_active: boolean;
   sort_order: number;
   created_at: string | null;
+  linked_plans?: Array<{
+    link_id: number;
+    plan_id: number;
+    plan_name: string | null;
+    included_quantity: number;
+    is_included: boolean;
+    discount_percent: number;
+  }>;
 }
 
 export interface CatalogResponse {
@@ -652,6 +660,27 @@ export interface CatalogResponse {
   total: number;
   by_category: Record<string, ServiceCatalogItemType[]>;
   categories: Array<{ value: string; label: string }>;
+}
+
+// ── Plan ↔ Catalog Link Types ──
+
+export interface PlanCatalogLinkType {
+  id: number;
+  plan_id: number;
+  catalog_item_id: number;
+  included_quantity: number;
+  is_included: boolean;
+  discount_percent: number;
+  notes: string | null;
+  catalog_item: ServiceCatalogItemType | null;
+  plan_name: string | null;
+  created_at: string | null;
+}
+
+export interface PlanCatalogLinksResponse {
+  links: PlanCatalogLinkType[];
+  total: number;
+  by_plan: Record<number, { plan_name: string; items: PlanCatalogLinkType[] }>;
 }
 
 // ── Blueprint / Module Package Types (Épica 2) ──

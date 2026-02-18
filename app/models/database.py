@@ -1019,6 +1019,31 @@ class AuditEventRecord(Base):
     )
 
 
+class PlanCatalogLink(Base):
+    """
+    Vínculo N:N entre Plan y ServiceCatalogItem.
+    Permite asignar items del catálogo de servicios a cada plan
+    para que el admin vea qué servicios incluye cada plan.
+    """
+    __tablename__ = "plan_catalog_links"
+
+    id = Column(Integer, primary_key=True, index=True)
+    plan_id = Column(Integer, ForeignKey("plans.id", ondelete="CASCADE"), nullable=False)
+    catalog_item_id = Column(Integer, ForeignKey("service_catalog.id", ondelete="CASCADE"), nullable=False)
+    included_quantity = Column(Integer, default=1)         # Cantidad incluida en el plan
+    is_included = Column(Boolean, default=True)            # True = incluido, False = addon con descuento
+    discount_percent = Column(Float, default=0)            # Descuento sobre precio_catalogo para este plan
+    notes = Column(String(300), nullable=True)
+    created_at = Column(DateTime, default=datetime.utcnow)
+
+    __table_args__ = (
+        UniqueConstraint("plan_id", "catalog_item_id", name="uq_plan_catalog"),
+    )
+
+    plan = relationship("Plan", backref="catalog_links")
+    catalog_item = relationship("ServiceCatalogItem", backref="plan_links")
+
+
 class PartnerBrandingProfile(Base):
     """
     Perfil de white-label/branding de un partner.

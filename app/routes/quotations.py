@@ -10,7 +10,8 @@ from fastapi import APIRouter, Cookie, HTTPException, Request
 from pydantic import BaseModel
 
 from ..models.database import (
-    Quotation, ServiceCatalogItem, Partner, Customer, SessionLocal,
+    Quotation, ServiceCatalogItem, Partner, Customer, Plan,
+    PlanCatalogLink, SessionLocal,
     QuotationStatus, ServiceCategory,
 )
 from .roles import _require_admin
@@ -64,6 +65,15 @@ class CatalogItemCreate(BaseModel):
     requires_service_id: Optional[int] = None
     min_quantity: int = 1
     sort_order: int = 0
+
+
+class PlanCatalogLinkCreate(BaseModel):
+    plan_id: int
+    catalog_item_id: int
+    included_quantity: int = 1
+    is_included: bool = True
+    discount_percent: float = 0
+    notes: Optional[str] = None
 
 
 def _quotation_to_dict(q: Quotation) -> dict:
@@ -140,12 +150,15 @@ async def list_catalog(
     request: Request,
     access_token: Optional[str] = Cookie(None),
     category: Optional[str] = None,
+    include_inactive: bool = False,
 ):
     """Catálogo de servicios/productos con precios."""
     _require_admin(request, access_token)
     db = SessionLocal()
     try:
-        q = db.query(ServiceCatalogItem).filter(ServiceCatalogItem.is_active == True)
+        q = db.query(ServiceCatalogItem)
+        if not include_inactive:
+            q = q.filter(ServiceCatalogItem.is_active == True)
         if category:
             try:
                 q = q.filter(ServiceCatalogItem.category == ServiceCategory(category))
@@ -159,10 +172,39 @@ async def list_catalog(
             cat = item.category.value if item.category else "other"
             if cat not in by_category:
                 by_category[cat] = []
-            by_category[cat].append(_catalog_to_dict(item))
+            d = _catalog_to_dict(item)
+            # Incluir planes vinculados
+            d["linked_plans"] = [
+                {
+                    "link_id": lnk.id,
+                    "plan_id": lnk.plan_id,
+                    "plan_name": lnk.plan.display_name if lnk.plan else None,
+                    "included_quantity": lnk.included_quantity,
+                    "is_included": lnk.is_included,
+                    "discount_percent": lnk.discount_percent,
+                }
+                for lnk in (item.plan_links or [])
+            ]
+            by_category[cat].append(d)
+
+        all_items = []
+        for item in items:
+            d = _catalog_to_dict(item)
+            d["linked_plans"] = [
+                {
+                    "link_id": lnk.id,
+                    "plan_id": lnk.plan_id,
+                    "plan_name": lnk.plan.display_name if lnk.plan else None,
+                    "included_quantity": lnk.included_quantity,
+                    "is_included": lnk.is_included,
+                    "discount_percent": lnk.discount_percent,
+                }
+                for lnk in (item.plan_links or [])
+            ]
+            all_items.append(d)
 
         return {
-            "items": [_catalog_to_dict(i) for i in items],
+            "items": all_items,
             "total": len(items),
             "by_category": by_category,
             "categories": [{"value": c.value, "label": c.value.replace("_", " ").title()} for c in ServiceCategory],
@@ -248,6 +290,177 @@ async def delete_catalog_item(
         item.is_active = False
         db.commit()
         return {"message": "Servicio desactivado"}
+    finally:
+        db.close()
+
+
+@router.put("/api/catalog/{item_id}/reactivate")
+async def reactivate_catalog_item(
+    item_id: int,
+    request: Request,
+    access_token: Optional[str] = Cookie(None),
+):
+    """Reactiva un item del catálogo previamente desactivado."""
+    _require_admin(request, access_token)
+    db = SessionLocal()
+    try:
+        item = db.query(ServiceCatalogItem).filter(ServiceCatalogItem.id == item_id).first()
+        if not item:
+            raise HTTPException(status_code=404, detail="Servicio no encontrado")
+        item.is_active = True
+        db.commit()
+        return {"message": "Servicio reactivado", "item": _catalog_to_dict(item)}
+    finally:
+        db.close()
+
+
+# ═══════════════════════════════════════════
+# PLAN ↔ CATALOG LINK ENDPOINTS
+# ═══════════════════════════════════════════
+
+def _link_to_dict(link: PlanCatalogLink) -> dict:
+    return {
+        "id": link.id,
+        "plan_id": link.plan_id,
+        "catalog_item_id": link.catalog_item_id,
+        "included_quantity": link.included_quantity,
+        "is_included": link.is_included,
+        "discount_percent": link.discount_percent,
+        "notes": link.notes,
+        "catalog_item": _catalog_to_dict(link.catalog_item) if link.catalog_item else None,
+        "plan_name": link.plan.display_name if link.plan else None,
+        "created_at": link.created_at.isoformat() if link.created_at else None,
+    }
+
+
+@router.get("/api/catalog/plan-links")
+async def list_plan_catalog_links(
+    request: Request,
+    access_token: Optional[str] = Cookie(None),
+    plan_id: Optional[int] = None,
+):
+    """Lista vínculos plan↔catálogo. Filtra por plan_id si se pasa."""
+    _require_admin(request, access_token)
+    db = SessionLocal()
+    try:
+        q = db.query(PlanCatalogLink)
+        if plan_id:
+            q = q.filter(PlanCatalogLink.plan_id == plan_id)
+        links = q.all()
+
+        # Agrupar por plan
+        by_plan = {}
+        for lnk in links:
+            pname = lnk.plan.display_name if lnk.plan else f"Plan #{lnk.plan_id}"
+            if lnk.plan_id not in by_plan:
+                by_plan[lnk.plan_id] = {"plan_name": pname, "items": []}
+            by_plan[lnk.plan_id]["items"].append(_link_to_dict(lnk))
+
+        return {
+            "links": [_link_to_dict(l) for l in links],
+            "total": len(links),
+            "by_plan": by_plan,
+        }
+    finally:
+        db.close()
+
+
+@router.post("/api/catalog/plan-links")
+async def create_plan_catalog_link(
+    payload: PlanCatalogLinkCreate,
+    request: Request,
+    access_token: Optional[str] = Cookie(None),
+):
+    """Vincula un item del catálogo a un plan."""
+    _require_admin(request, access_token)
+    db = SessionLocal()
+    try:
+        # Validar plan
+        plan = db.query(Plan).filter(Plan.id == payload.plan_id).first()
+        if not plan:
+            raise HTTPException(status_code=404, detail="Plan no encontrado")
+
+        # Validar catalog item
+        item = db.query(ServiceCatalogItem).filter(ServiceCatalogItem.id == payload.catalog_item_id).first()
+        if not item:
+            raise HTTPException(status_code=404, detail="Servicio del catálogo no encontrado")
+
+        # Check duplicado
+        existing = db.query(PlanCatalogLink).filter(
+            PlanCatalogLink.plan_id == payload.plan_id,
+            PlanCatalogLink.catalog_item_id == payload.catalog_item_id,
+        ).first()
+        if existing:
+            raise HTTPException(status_code=409, detail="Este servicio ya está vinculado a este plan")
+
+        link = PlanCatalogLink(
+            plan_id=payload.plan_id,
+            catalog_item_id=payload.catalog_item_id,
+            included_quantity=payload.included_quantity,
+            is_included=payload.is_included,
+            discount_percent=payload.discount_percent,
+            notes=payload.notes,
+        )
+        db.add(link)
+        db.commit()
+        db.refresh(link)
+
+        return {
+            "message": f"Servicio '{item.name}' vinculado al plan '{plan.display_name}'",
+            "link": _link_to_dict(link),
+        }
+    except HTTPException:
+        raise
+    except Exception as e:
+        db.rollback()
+        raise HTTPException(status_code=500, detail=str(e))
+    finally:
+        db.close()
+
+
+@router.put("/api/catalog/plan-links/{link_id}")
+async def update_plan_catalog_link(
+    link_id: int,
+    payload: PlanCatalogLinkCreate,
+    request: Request,
+    access_token: Optional[str] = Cookie(None),
+):
+    """Actualiza un vínculo plan↔catálogo."""
+    _require_admin(request, access_token)
+    db = SessionLocal()
+    try:
+        link = db.query(PlanCatalogLink).filter(PlanCatalogLink.id == link_id).first()
+        if not link:
+            raise HTTPException(status_code=404, detail="Vínculo no encontrado")
+
+        link.included_quantity = payload.included_quantity
+        link.is_included = payload.is_included
+        link.discount_percent = payload.discount_percent
+        link.notes = payload.notes
+        db.commit()
+        db.refresh(link)
+
+        return {"message": "Vínculo actualizado", "link": _link_to_dict(link)}
+    finally:
+        db.close()
+
+
+@router.delete("/api/catalog/plan-links/{link_id}")
+async def delete_plan_catalog_link(
+    link_id: int,
+    request: Request,
+    access_token: Optional[str] = Cookie(None),
+):
+    """Elimina un vínculo plan↔catálogo."""
+    _require_admin(request, access_token)
+    db = SessionLocal()
+    try:
+        link = db.query(PlanCatalogLink).filter(PlanCatalogLink.id == link_id).first()
+        if not link:
+            raise HTTPException(status_code=404, detail="Vínculo no encontrado")
+        db.delete(link)
+        db.commit()
+        return {"message": "Vínculo eliminado"}
     finally:
         db.close()
 

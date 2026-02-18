@@ -5,6 +5,7 @@
     ExternalLink, Package, UserCheck, Handshake, Target,
     Percent, FileSpreadsheet, Boxes, UsersRound, Receipt,
     Scale, GitCompareArrows, ClipboardList, ShieldCheck, Palette,
+    ShoppingBag,
   } from 'lucide-svelte';
   import { auth } from '../stores';
 
@@ -25,7 +26,8 @@
     { id: 'partners',       label: 'Partners',        icon: Handshake,       href: '#/partners' },
     { id: 'leads',          label: 'Leads',           icon: Target,          href: '#/leads' },
     { id: 'commissions',    label: 'Comisiones',      icon: Percent,         href: '#/commissions' },
-    { id: 'quotations',     label: 'Cotizaciones',    icon: FileSpreadsheet, href: '#/quotations' },    { id: 'blueprints',      label: 'Blueprints',       icon: Boxes,           href: '#/blueprints' },
+    { id: 'quotations',     label: 'Cotizaciones',    icon: FileSpreadsheet, href: '#/quotations' },
+    { id: 'catalog',        label: 'Catálogo',        icon: ShoppingBag,     href: '#/catalog' },    { id: 'blueprints',      label: 'Blueprints',       icon: Boxes,           href: '#/blueprints' },
     { id: 'seats',           label: 'Seats',            icon: UsersRound,      href: '#/seats' },
     { id: 'invoices',        label: 'Facturas',         icon: Receipt,         href: '#/invoices' },
     { id: 'settlements',     label: 'Liquidaciones',    icon: Scale,           href: '#/settlements' },
