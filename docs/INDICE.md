@@ -32,6 +32,19 @@ Este indice es la entrada oficial para documentacion del proyecto.
 - `docs/PROVISIONER_REFACTOR.md`
 - `docs/EJEMPLOS_USO.md`
 
+## 4.1) Flujos detallados por elemento
+- `docs/flujos/README.md` (indice general)
+- `docs/flujos/01-auth-login-jwt/README.md`
+- `docs/flujos/02-tenants-listado-y-gestion/README.md`
+- `docs/flujos/03-provisioning-template-pct105/README.md`
+- `docs/flujos/04-billing-stripe/README.md`
+- `docs/flujos/05-dominios-cloudflare/README.md`
+- `docs/flujos/06-infraestructura-proxmox/README.md`
+- `docs/flujos/07-tenant-portal/README.md`
+- `docs/flujos/08-clientes-stripe-email/README.md`
+- `docs/flujos/09-ecosistema-partners/README.md`
+- `docs/flujos/10-deploy-operacion-pct160/README.md`
+
 ## 5) Domains y Cloudflare
 - `docs/CUSTOM_DOMAINS_ARCHITECTURE.md` - arquitectura completa dominios externos → Odoo multi-tenant
 - `docs/CUSTOM_DOMAINS_HOWTO.md` - guía paso a paso para agregar nuevos dominios externos
