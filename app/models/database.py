@@ -1,4 +1,4 @@
-from sqlalchemy import create_engine, Column, Integer, String, DateTime, Boolean, Text, Enum, Float, ForeignKey
+from sqlalchemy import create_engine, Column, Integer, String, DateTime, Boolean, Text, Enum, Float, ForeignKey, JSON, UniqueConstraint, Index
 from sqlalchemy.ext.declarative import declarative_base
 from sqlalchemy.orm import sessionmaker, relationship
 from datetime import datetime
@@ -8,12 +8,16 @@ import os
 Base = declarative_base()
 
 
-# ===== ENUMS =====
+# ═══════════════════════════════════════════════════════
+# ENUMS — Épica 1: BillingMode + Tenant Origin Rules
+# ═══════════════════════════════════════════════════════
+
 class SubscriptionStatus(enum.Enum):
     pending = "pending"
     active = "active"
     cancelled = "cancelled"
     past_due = "past_due"
+    suspended = "suspended"
 
 
 class NodeStatus(enum.Enum):
@@ -61,12 +65,50 @@ class BillingScenario(enum.Enum):
     partner_collects = "partner_collects"     # Escenario B: Partner cobra con NCF local
 
 
+# ─── NUEVOS ENUMS (Épica 1) ───
+
+class BillingMode(enum.Enum):
+    """Modo de facturación de la suscripción — decide quién cobra y quién paga."""
+    JETURING_DIRECT_SUBSCRIPTION = "jeturing_direct_subscription"  # Cliente paga directo a Jeturing vía Stripe
+    PARTNER_DIRECT = "partner_direct"                              # Escenario A: Jeturing cobra, partner gana 50%
+    PARTNER_PAYS_FOR_CLIENT = "partner_pays_for_client"            # Escenario B: Partner cobra a su cliente y paga a Jeturing
+    LEGACY_IMPORTED = "legacy_imported"                            # Tenant migrado / legacy — solo reconciliación, DB readonly
+
+
+class InvoiceIssuer(enum.Enum):
+    """Quién emite la factura fiscal."""
+    JETURING = "jeturing"     # Factura de Jeturing SRL con EIN/RNC Jeturing
+    PARTNER = "partner"       # Factura del partner con su NCF local
+
+
+class CollectorType(enum.Enum):
+    """Quién procesa el cobro del dinero."""
+    STRIPE_DIRECT = "stripe_direct"           # Stripe cobra directo (Jeturing es merchant)
+    STRIPE_CONNECT = "stripe_connect"         # Stripe cobra a través de Stripe Connect (partner)
+    PARTNER_EXTERNAL = "partner_external"     # Partner cobra externamente y paga a Jeturing
+
+
+class PayerType(enum.Enum):
+    """Quién es el pagador en la suscripción."""
+    CLIENT = "client"       # El cliente final paga
+    PARTNER = "partner"     # El partner paga por su cliente
+
+
 class LeadStatus(enum.Enum):
+    """Pipeline extendido: desde prospecto hasta tenant activo."""
     new = "new"
     contacted = "contacted"
     qualified = "qualified"
+    in_qualification = "in_qualification"       # Partner calificando al prospecto
     proposal = "proposal"
     won = "won"
+    tenant_requested = "tenant_requested"       # Cliente/Partner solicitó tenant
+    provisioning_running = "provisioning_running"  # Provisionando en PCT105
+    tenant_ready = "tenant_ready"               # Tenant listo — dispara factura
+    invoiced = "invoiced"                       # Primera factura emitida
+    active = "active"                           # En operación normal
+    suspended = "suspended"                     # Suspendido por impago
+    closed = "closed"                           # Cerrado definitivamente
     lost = "lost"
     invalid = "invalid"
 
@@ -96,6 +138,50 @@ class ServiceCategory(enum.Enum):
     soc = "soc"
     cloud_devops = "cloud_devops"
     payments_pos = "payments_pos"
+
+
+class SeatEventType(enum.Enum):
+    """Tipos de evento de asientos/usuarios."""
+    USER_CREATED = "user_created"       # Usuario creado en Odoo
+    USER_DEACTIVATED = "user_deactivated"
+    USER_REACTIVATED = "user_reactivated"
+    FIRST_LOGIN = "first_login"         # Primer login = billable (Épica 4)
+    HWM_SNAPSHOT = "hwm_snapshot"       # Snapshot diario de high-water mark
+
+
+class InvoiceStatus(enum.Enum):
+    draft = "draft"
+    issued = "issued"
+    paid = "paid"
+    overdue = "overdue"
+    void = "void"
+    credited = "credited"
+
+
+class InvoiceType(enum.Enum):
+    """Tipo de factura."""
+    SUBSCRIPTION = "subscription"
+    SETUP = "setup"
+    ADDON = "addon"
+    INTERCOMPANY = "intercompany"       # Factura intercompany Partner→Jeturing (Esc B)
+    CREDIT_NOTE = "credit_note"
+
+
+class SettlementStatus(enum.Enum):
+    draft = "draft"
+    pending_approval = "pending_approval"
+    approved = "approved"
+    transferred = "transferred"
+    disputed = "disputed"
+
+
+class WorkOrderStatus(enum.Enum):
+    requested = "requested"
+    approved = "approved"
+    in_progress = "in_progress"
+    completed = "completed"
+    rejected = "rejected"
+    cancelled = "cancelled"
 
 
 class Customer(Base):
@@ -136,11 +222,25 @@ class Subscription(Base):
     currency = Column(String(3), default="USD")
     current_period_start = Column(DateTime)
     current_period_end = Column(DateTime)
+
+    # ─── Épica 1: Billing Mode + Origin Rules ───
+    billing_mode = Column(Enum(BillingMode), default=BillingMode.JETURING_DIRECT_SUBSCRIPTION, nullable=True)
+    invoice_issuer = Column(Enum(InvoiceIssuer), default=InvoiceIssuer.JETURING, nullable=True)
+    collector = Column(Enum(CollectorType), default=CollectorType.STRIPE_DIRECT, nullable=True)
+    payer_type = Column(Enum(PayerType), default=PayerType.CLIENT, nullable=True)
+    owner_partner_id = Column(Integer, ForeignKey("partners.id"), nullable=True)  # Partner que trajo este cliente
+    package_id = Column(Integer, ForeignKey("module_packages.id"), nullable=True)  # Épica 2: Paquete de módulos
+
     created_at = Column(DateTime, default=datetime.utcnow)
     updated_at = Column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
     
     # Relaciones
     customer = relationship("Customer", back_populates="subscriptions")
+    owner_partner = relationship("Partner", foreign_keys=[owner_partner_id])
+    package = relationship("ModulePackage", foreign_keys=[package_id])
+    seat_events = relationship("SeatEvent", back_populates="subscription", cascade="all, delete-orphan")
+    seat_high_waters = relationship("SeatHighWater", back_populates="subscription", cascade="all, delete-orphan")
+    invoices = relationship("Invoice", back_populates="subscription")
 
 class StripeEvent(Base):
     __tablename__ = "stripe_events"
@@ -584,6 +684,363 @@ class SystemConfig(Base):
     
     def __repr__(self):
         return f"<SystemConfig {self.key}={self.value if not self.is_secret else '***'}>"
+
+
+# ═══════════════════════════════════════════════════════
+# ÉPICA 2: Module Catalog & Packages (Blueprints)
+# ═══════════════════════════════════════════════════════
+
+class ModuleCatalog(Base):
+    """
+    Catálogo de módulos Odoo disponibles.
+    Cada registro es un módulo instalable (ej: jeturing_finance_core).
+    """
+    __tablename__ = "module_catalog"
+
+    id = Column(Integer, primary_key=True, index=True)
+    technical_name = Column(String(150), unique=True, nullable=False, index=True)  # ej: jeturing_finance_core
+    display_name = Column(String(200), nullable=False)
+    description = Column(Text)
+    category = Column(String(100))                         # ej: "Finanzas", "CRM", "Inventario"
+    version = Column(String(20), default="17.0.1.0")
+    is_core = Column(Boolean, default=False)               # Viene siempre incluido (base)
+    partner_allowed = Column(Boolean, default=True)        # Disponible para partners (Épica 5A: allowlist)
+    price_monthly = Column(Float, default=0)               # Precio adicional mensual USD
+    requires_module_id = Column(Integer, ForeignKey("module_catalog.id"), nullable=True)
+    is_active = Column(Boolean, default=True)
+    sort_order = Column(Integer, default=0)
+    created_at = Column(DateTime, default=datetime.utcnow)
+    updated_at = Column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
+
+    # Relaciones
+    requires = relationship("ModuleCatalog", remote_side=[id])
+
+
+class ModulePackage(Base):
+    """
+    Paquete de módulos (Blueprint) — configurable.
+    Ejemplo: "Pack Financiero", "Pack Retail", "Pack Completo".
+    """
+    __tablename__ = "module_packages"
+
+    id = Column(Integer, primary_key=True, index=True)
+    name = Column(String(150), unique=True, nullable=False)
+    display_name = Column(String(200), nullable=False)
+    description = Column(Text)
+    plan_type = Column(Enum(PlanType), nullable=True)      # Si está atado a un plan específico
+    base_price_monthly = Column(Float, default=0)          # Precio base del paquete
+    is_default = Column(Boolean, default=False)            # Paquete por defecto para plan
+    is_active = Column(Boolean, default=True)
+    # JSON array de technical_names de módulos incluidos
+    module_list = Column(JSON, default=list)               # ["jeturing_finance_core", "account", ...]
+    created_at = Column(DateTime, default=datetime.utcnow)
+    updated_at = Column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
+
+
+class ModulePackageItem(Base):
+    """Relación N:N entre ModulePackage y ModuleCatalog."""
+    __tablename__ = "module_package_items"
+
+    id = Column(Integer, primary_key=True, index=True)
+    package_id = Column(Integer, ForeignKey("module_packages.id", ondelete="CASCADE"), nullable=False)
+    module_id = Column(Integer, ForeignKey("module_catalog.id", ondelete="CASCADE"), nullable=False)
+    is_optional = Column(Boolean, default=False)           # Si es opcional dentro del paquete
+    created_at = Column(DateTime, default=datetime.utcnow)
+
+    __table_args__ = (UniqueConstraint("package_id", "module_id", name="uq_package_module"),)
+
+    package = relationship("ModulePackage", backref="items")
+    module = relationship("ModuleCatalog")
+
+
+# ═══════════════════════════════════════════════════════
+# ÉPICA 3 & 4: Seats — High-Water Mark + Partner Metered
+# ═══════════════════════════════════════════════════════
+
+class SeatEvent(Base):
+    """
+    Evento de asiento/usuario en un tenant.
+    Registra cada creación, desactivación, reactivación y primer login.
+    Épica 3 = Direct (HWM→Stripe qty), Épica 4 = Partner (first_login + grace 8h).
+    """
+    __tablename__ = "seat_events"
+
+    id = Column(Integer, primary_key=True, index=True)
+    subscription_id = Column(Integer, ForeignKey("subscriptions.id"), nullable=False)
+    event_type = Column(Enum(SeatEventType), nullable=False)
+    odoo_user_id = Column(Integer, nullable=True)          # res.users ID en Odoo
+    odoo_login = Column(String(150), nullable=True)
+    user_count_after = Column(Integer, nullable=False)     # Total active users después del evento
+    is_billable = Column(Boolean, default=False)           # True si genera cobro
+    grace_expires_at = Column(DateTime, nullable=True)     # Épica 4: gracia 8h desde first_login
+    source = Column(String(50), default="webhook")         # webhook, api, cron, manual
+    metadata_json = Column(JSON, nullable=True)            # Datos adicionales
+    created_at = Column(DateTime, default=datetime.utcnow, index=True)
+
+    # Relaciones
+    subscription = relationship("Subscription", back_populates="seat_events")
+
+
+class SeatHighWater(Base):
+    """
+    Snapshot diario del high-water mark de usuarios activos.
+    Se usa para actualizar Stripe quantity en modo Direct (Épica 3).
+    """
+    __tablename__ = "seat_high_water"
+
+    id = Column(Integer, primary_key=True, index=True)
+    subscription_id = Column(Integer, ForeignKey("subscriptions.id"), nullable=False)
+    period_date = Column(DateTime, nullable=False)         # Fecha del período (día)
+    hwm_count = Column(Integer, nullable=False)            # Máximo de usuarios activos ese día
+    stripe_qty_updated = Column(Boolean, default=False)    # Si ya se actualizó Stripe
+    stripe_qty_updated_at = Column(DateTime, nullable=True)
+    created_at = Column(DateTime, default=datetime.utcnow)
+
+    __table_args__ = (
+        UniqueConstraint("subscription_id", "period_date", name="uq_sub_period"),
+        Index("ix_seat_hwm_sub_date", "subscription_id", "period_date"),
+    )
+
+    subscription = relationship("Subscription", back_populates="seat_high_waters")
+
+
+# ═══════════════════════════════════════════════════════
+# ÉPICA 5: Invoices — emitidas en TENANT_READY
+# ═══════════════════════════════════════════════════════
+
+class Invoice(Base):
+    """
+    Factura interna (no fiscal, espejo de Stripe).
+    Se crea automáticamente cuando Lead alcanza tenant_ready.
+    Incluye subscription + setup. Intercompany en Escenario B.
+    """
+    __tablename__ = "invoices"
+
+    id = Column(Integer, primary_key=True, index=True)
+    invoice_number = Column(String(30), unique=True, nullable=False)  # INV-2026-0001
+    subscription_id = Column(Integer, ForeignKey("subscriptions.id"), nullable=True)
+    customer_id = Column(Integer, ForeignKey("customers.id"), nullable=False)
+    partner_id = Column(Integer, ForeignKey("partners.id"), nullable=True)
+
+    # Tipo y modo
+    invoice_type = Column(Enum(InvoiceType), default=InvoiceType.SUBSCRIPTION)
+    billing_mode = Column(Enum(BillingMode), nullable=True)
+    issuer = Column(Enum(InvoiceIssuer), default=InvoiceIssuer.JETURING)
+
+    # Montos
+    subtotal = Column(Float, default=0)
+    tax_amount = Column(Float, default=0)
+    total = Column(Float, default=0)
+    currency = Column(String(3), default="USD")
+    lines_json = Column(JSON, default=list)                # [{description, qty, unit_price, subtotal}]
+
+    # Stripe reference
+    stripe_invoice_id = Column(String(100), nullable=True)
+    stripe_payment_intent_id = Column(String(100), nullable=True)
+
+    # Estado
+    status = Column(Enum(InvoiceStatus), default=InvoiceStatus.draft)
+    issued_at = Column(DateTime, nullable=True)
+    paid_at = Column(DateTime, nullable=True)
+    due_date = Column(DateTime, nullable=True)
+    notes = Column(Text, nullable=True)
+
+    created_at = Column(DateTime, default=datetime.utcnow)
+    updated_at = Column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
+
+    # Relaciones
+    subscription = relationship("Subscription", back_populates="invoices")
+    customer = relationship("Customer")
+    partner = relationship("Partner")
+
+
+# ═══════════════════════════════════════════════════════
+# ÉPICA 6: Settlements — 50/50 + offsets
+# ═══════════════════════════════════════════════════════
+
+class SettlementPeriod(Base):
+    """
+    Período de liquidación mensual entre Jeturing y un Partner.
+    Agrupa todas las líneas del mes para un 50/50 split.
+    """
+    __tablename__ = "settlement_periods"
+
+    id = Column(Integer, primary_key=True, index=True)
+    partner_id = Column(Integer, ForeignKey("partners.id"), nullable=False)
+    period_start = Column(DateTime, nullable=False)
+    period_end = Column(DateTime, nullable=False)
+    gross_revenue = Column(Float, default=0)
+    net_revenue = Column(Float, default=0)                 # Gross - fees - refunds - chargebacks
+    jeturing_share = Column(Float, default=0)              # 50%
+    partner_share = Column(Float, default=0)               # 50%
+    offset_amount = Column(Float, default=0)               # Créditos/débitos previos
+    final_partner_payout = Column(Float, default=0)        # partner_share - offset
+    status = Column(Enum(SettlementStatus), default=SettlementStatus.draft)
+    approved_by = Column(String(100), nullable=True)
+    transfer_reference = Column(String(200), nullable=True)
+    transferred_at = Column(DateTime, nullable=True)
+    notes = Column(Text, nullable=True)
+    created_at = Column(DateTime, default=datetime.utcnow)
+    updated_at = Column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
+
+    __table_args__ = (
+        UniqueConstraint("partner_id", "period_start", name="uq_partner_period"),
+    )
+
+    partner = relationship("Partner")
+    lines = relationship("SettlementLine", back_populates="settlement", cascade="all, delete-orphan")
+
+
+class SettlementLine(Base):
+    """Línea individual de un settlement (una suscripción en un período)."""
+    __tablename__ = "settlement_lines"
+
+    id = Column(Integer, primary_key=True, index=True)
+    settlement_id = Column(Integer, ForeignKey("settlement_periods.id", ondelete="CASCADE"), nullable=False)
+    subscription_id = Column(Integer, ForeignKey("subscriptions.id"), nullable=True)
+    invoice_id = Column(Integer, ForeignKey("invoices.id"), nullable=True)
+    description = Column(String(300), nullable=False)
+    gross_amount = Column(Float, default=0)
+    stripe_fee = Column(Float, default=0)
+    refunds = Column(Float, default=0)
+    chargebacks = Column(Float, default=0)
+    net_amount = Column(Float, default=0)
+    jeturing_amount = Column(Float, default=0)
+    partner_amount = Column(Float, default=0)
+    created_at = Column(DateTime, default=datetime.utcnow)
+
+    settlement = relationship("SettlementPeriod", back_populates="lines")
+
+
+# ═══════════════════════════════════════════════════════
+# ÉPICA 7: Stripe Reconciliation + Infra Assets
+# ═══════════════════════════════════════════════════════
+
+class InfraAsset(Base):
+    """
+    Activo de infraestructura (LXC, DNS, dominio, etc.) asociado a facturación.
+    Permite reconciliar qué se cobra vs qué recursos consume.
+    """
+    __tablename__ = "infra_assets"
+
+    id = Column(Integer, primary_key=True, index=True)
+    subscription_id = Column(Integer, ForeignKey("subscriptions.id"), nullable=True)
+    asset_type = Column(String(50), nullable=False)        # "lxc", "domain", "backup", "addon"
+    asset_reference = Column(String(200), nullable=False)  # vmid, domain name, etc.
+    monthly_cost = Column(Float, default=0)                # Costo mensual de este asset
+    is_billable = Column(Boolean, default=True)
+    metadata_json = Column(JSON, nullable=True)
+    created_at = Column(DateTime, default=datetime.utcnow)
+    updated_at = Column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
+
+    subscription = relationship("Subscription")
+
+
+class ReconciliationRun(Base):
+    """Registro de cada corrida de reconciliación Stripe vs BD local."""
+    __tablename__ = "reconciliation_runs"
+
+    id = Column(Integer, primary_key=True, index=True)
+    period_start = Column(DateTime, nullable=False)
+    period_end = Column(DateTime, nullable=False)
+    stripe_total = Column(Float, default=0)
+    local_total = Column(Float, default=0)
+    discrepancy = Column(Float, default=0)
+    discrepancy_details = Column(JSON, nullable=True)      # [{sub_id, expected, actual, diff}]
+    status = Column(String(20), default="completed")       # completed, discrepancy_found
+    run_by = Column(String(100), default="cron")
+    created_at = Column(DateTime, default=datetime.utcnow)
+
+
+# ═══════════════════════════════════════════════════════
+# ÉPICA 9: Work Orders
+# ═══════════════════════════════════════════════════════
+
+class WorkOrder(Base):
+    """
+    Orden de trabajo — gating de operaciones costosas/irreversibles.
+    Ej: upgrade de plan, migración, instalación de módulo adicional.
+    """
+    __tablename__ = "work_orders"
+
+    id = Column(Integer, primary_key=True, index=True)
+    order_number = Column(String(30), unique=True, nullable=False)  # WO-2026-0001
+    subscription_id = Column(Integer, ForeignKey("subscriptions.id"), nullable=True)
+    customer_id = Column(Integer, ForeignKey("customers.id"), nullable=True)
+    partner_id = Column(Integer, ForeignKey("partners.id"), nullable=True)
+
+    # Tipo y descripción
+    work_type = Column(String(100), nullable=False)        # plan_upgrade, module_install, migration, etc.
+    description = Column(Text, nullable=False)
+    parameters_json = Column(JSON, nullable=True)          # Parámetros de la operación
+
+    # Estado
+    status = Column(Enum(WorkOrderStatus), default=WorkOrderStatus.requested)
+    requested_by = Column(String(150), nullable=False)
+    approved_by = Column(String(150), nullable=True)
+    completed_by = Column(String(150), nullable=True)
+    requested_at = Column(DateTime, default=datetime.utcnow)
+    approved_at = Column(DateTime, nullable=True)
+    completed_at = Column(DateTime, nullable=True)
+    result_json = Column(JSON, nullable=True)              # Resultado de la ejecución
+    notes = Column(Text, nullable=True)
+
+    created_at = Column(DateTime, default=datetime.utcnow)
+    updated_at = Column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
+
+
+# ═══════════════════════════════════════════════════════
+# ÉPICA 10: Audit Persistente + White-label Branding
+# ═══════════════════════════════════════════════════════
+
+class AuditEventRecord(Base):
+    """
+    Evento de auditoría persistido en PostgreSQL.
+    Reemplaza el AuditLogStore en memoria.
+    """
+    __tablename__ = "audit_events"
+
+    id = Column(Integer, primary_key=True, index=True)
+    event_type = Column(String(50), nullable=False, index=True)
+    actor_id = Column(Integer, nullable=True)              # user_id del actor
+    actor_username = Column(String(150), nullable=True)
+    actor_role = Column(String(50), nullable=True)
+    ip_address = Column(String(45), nullable=True)
+    user_agent = Column(String(500), nullable=True)
+    resource = Column(String(200), nullable=True)
+    action = Column(String(100), nullable=True)
+    status = Column(String(20), default="success")         # success, failure, blocked
+    details = Column(JSON, nullable=True)
+    created_at = Column(DateTime, default=datetime.utcnow, index=True)
+
+    __table_args__ = (
+        Index("ix_audit_type_created", "event_type", "created_at"),
+        Index("ix_audit_actor_created", "actor_username", "created_at"),
+    )
+
+
+class PartnerBrandingProfile(Base):
+    """
+    Perfil de white-label/branding de un partner.
+    Define colores, logo, nombre para la interfaz del cliente final.
+    """
+    __tablename__ = "partner_branding_profiles"
+
+    id = Column(Integer, primary_key=True, index=True)
+    partner_id = Column(Integer, ForeignKey("partners.id"), unique=True, nullable=False)
+    brand_name = Column(String(200), nullable=True)        # Nombre mostrado en vez de "Sajet"
+    logo_url = Column(String(500), nullable=True)
+    favicon_url = Column(String(500), nullable=True)
+    primary_color = Column(String(7), default="#4F46E5")   # Hex color
+    secondary_color = Column(String(7), default="#7C3AED")
+    support_email = Column(String(200), nullable=True)
+    support_url = Column(String(500), nullable=True)
+    custom_css = Column(Text, nullable=True)               # CSS adicional
+    is_active = Column(Boolean, default=True)
+    created_at = Column(DateTime, default=datetime.utcnow)
+    updated_at = Column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
+
+    partner = relationship("Partner", backref="branding_profile")
 
 
 # ===== HELPER FUNCTIONS PARA CONFIGURACIÓN =====
