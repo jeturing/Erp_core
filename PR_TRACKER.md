@@ -22,7 +22,7 @@
 | 5 | Invoices (TENANT_READY + intercompany) | ✅ completado | 2026-02-18 | routes/invoices.py (4 endpoints) |
 | 6 | Settlement 50/50 + offsets | ✅ completado | 2026-02-18 | routes/settlements.py (4 endpoints) |
 | 7 | Stripe Reconciliation + Assets | ✅ completado | 2026-02-18 | routes/reconciliation.py, services/stripe_reconciliation.py |
-| 8 | Domains temprano + no bloqueante | ⬜ pendiente | — | routes/domains.py (update) |
+| 8 | Domains temprano + no bloqueante | ✅ completado | 2026-02-18 | routes/domains.py (early-verify), routes/onboarding.py (billing_mode) |
 | 9 | Work Orders + gating | ✅ completado | 2026-02-18 | routes/work_orders.py (4 endpoints) |
 | 10 | Auditoría persistente + White-label | ✅ completado | 2026-02-18 | routes/audit.py, routes/branding.py (8 endpoints) |
 | T | Tests Unitarios | ⬜ pendiente | — | tests/ |
@@ -37,6 +37,7 @@
 | 7059d92 | epic-0: Alembic setup + tracker + .env.test | 8 files |
 | bcc8b12 | feat: Blueprints, Invoices, Seats, Settlements routes + migration + models | 7 files, 2453 insertions |
 | e738a4f | feat(epic1): Reconciliation, Work Orders, Branding, Audit + register routers | 6 files, 816 insertions |
+| e966501 | feat(epic8): Early domain verify + billing_mode routing in onboarding | 2 files, 260 insertions |
 
 ## Resumen de Endpoints Nuevos (34 total)
 - `/api/blueprints/*` — 7 endpoints (Catálogo módulos + paquetes CRUD)
