@@ -28,6 +28,162 @@ ADMIN_PASSWORD = os.getenv("ADMIN_PASSWORD", "admin123")
 
 BASE_DIR = os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
+# ── Catálogo maestro de permisos agrupados por módulo ──
+PERMISSION_CATALOG: Dict[str, Dict[str, Any]] = {
+    "dashboard": {
+        "label": "Dashboard",
+        "icon": "LayoutDashboard",
+        "permissions": {
+            "dashboard:read": "Ver métricas y resumen general",
+        },
+    },
+    "tenants": {
+        "label": "Tenants",
+        "icon": "Building2",
+        "permissions": {
+            "tenants:read": "Ver lista de tenants",
+            "tenants:write": "Crear y editar tenants",
+            "tenants:delete": "Eliminar tenants",
+            "tenants:assign": "Asignar tenants a usuarios/roles",
+        },
+    },
+    "customers": {
+        "label": "Clientes",
+        "icon": "UserCheck",
+        "permissions": {
+            "customers:read": "Ver lista de clientes",
+            "customers:write": "Editar datos de clientes",
+            "customers:users": "Gestionar usuarios por cliente",
+        },
+    },
+    "billing": {
+        "label": "Facturación",
+        "icon": "CreditCard",
+        "permissions": {
+            "billing:read": "Ver métricas de facturación",
+            "billing:write": "Editar suscripciones y montos",
+            "billing:self": "Ver solo su propia facturación",
+        },
+    },
+    "plans": {
+        "label": "Planes",
+        "icon": "Package",
+        "permissions": {
+            "plans:read": "Ver planes disponibles",
+            "plans:write": "Crear y editar planes",
+            "plans:delete": "Eliminar planes",
+        },
+    },
+    "domains": {
+        "label": "Dominios",
+        "icon": "Globe",
+        "permissions": {
+            "domains:read": "Ver dominios configurados",
+            "domains:write": "Gestionar dominios y DNS",
+            "domains:self": "Ver solo sus propios dominios",
+        },
+    },
+    "nodes": {
+        "label": "Infraestructura",
+        "icon": "Server",
+        "permissions": {
+            "nodes:read": "Ver nodos y servidores",
+            "nodes:write": "Gestionar nodos",
+            "provisioning:execute": "Ejecutar aprovisionamiento",
+        },
+    },
+    "tunnels": {
+        "label": "Túneles",
+        "icon": "Network",
+        "permissions": {
+            "tunnels:read": "Ver túneles Cloudflare",
+            "tunnels:write": "Gestionar túneles",
+        },
+    },
+    "settings": {
+        "label": "Configuración",
+        "icon": "Settings",
+        "permissions": {
+            "settings:read": "Ver configuraciones del sistema",
+            "settings:write": "Modificar configuraciones",
+        },
+    },
+    "logs": {
+        "label": "Logs",
+        "icon": "FileText",
+        "permissions": {
+            "logs:read": "Ver logs del sistema",
+        },
+    },
+    "roles": {
+        "label": "Roles",
+        "icon": "Shield",
+        "permissions": {
+            "roles:read": "Ver roles definidos",
+            "roles:write": "Crear y editar roles",
+            "roles:delete": "Eliminar roles",
+        },
+    },
+    "portal": {
+        "label": "Portal Tenant",
+        "icon": "ExternalLink",
+        "permissions": {
+            "portal:read": "Acceso al portal de cliente",
+        },
+    },
+    "partners": {
+        "label": "Partners",
+        "icon": "Handshake",
+        "permissions": {
+            "partners:read": "Ver socios comerciales",
+            "partners:write": "Crear y editar partners",
+            "partners:delete": "Desactivar partners",
+        },
+    },
+    "leads": {
+        "label": "Leads",
+        "icon": "Target",
+        "permissions": {
+            "leads:read": "Ver pipeline de prospectos",
+            "leads:write": "Crear y editar leads",
+            "leads:delete": "Eliminar leads",
+        },
+    },
+    "commissions": {
+        "label": "Comisiones",
+        "icon": "Percent",
+        "permissions": {
+            "commissions:read": "Ver comisiones",
+            "commissions:write": "Crear y aprobar comisiones",
+            "commissions:pay": "Marcar comisiones como pagadas",
+        },
+    },
+    "quotations": {
+        "label": "Cotizaciones",
+        "icon": "FileSpreadsheet",
+        "permissions": {
+            "quotations:read": "Ver cotizaciones",
+            "quotations:write": "Crear y editar cotizaciones",
+            "quotations:send": "Enviar cotizaciones",
+            "quotations:delete": "Eliminar cotizaciones",
+        },
+    },
+    "catalog": {
+        "label": "Catálogo",
+        "icon": "ShoppingBag",
+        "permissions": {
+            "catalog:read": "Ver catálogo de servicios",
+            "catalog:write": "Editar catálogo y precios",
+        },
+    },
+}
+
+# Lista plana de todos los permisos válidos
+ALL_PERMISSIONS = []
+for module_data in PERMISSION_CATALOG.values():
+    ALL_PERMISSIONS.extend(module_data["permissions"].keys())
+ALL_PERMISSIONS.append("*")  # wildcard admin
+
 DEFAULT_ROLES: List[Dict[str, Any]] = [
     {
         "id": 1,
@@ -36,30 +192,62 @@ DEFAULT_ROLES: List[Dict[str, Any]] = [
         "permissions": ["*"],
         "system": True,
         "updated_at": None,
+        "color": "#e74c3c",
+        "assigned_tenants": [],
     },
     {
         "id": 2,
         "name": "operator",
-        "description": "Operacion diaria de tenants y dominios",
-        "permissions": ["tenants:read", "tenants:write", "domains:read", "domains:write", "nodes:read", "billing:read"],
+        "description": "Operación diaria de tenants, clientes y dominios",
+        "permissions": [
+            "dashboard:read", "tenants:read", "tenants:write", "tenants:assign",
+            "customers:read", "customers:write", "customers:users",
+            "domains:read", "domains:write", "nodes:read", "billing:read",
+            "plans:read", "tunnels:read", "logs:read",
+        ],
         "system": True,
         "updated_at": None,
+        "color": "#f39c12",
+        "assigned_tenants": [],
     },
     {
         "id": 3,
         "name": "viewer",
-        "description": "Solo lectura",
-        "permissions": ["dashboard:read", "tenants:read", "domains:read", "billing:read", "logs:read"],
+        "description": "Solo lectura de datos y métricas",
+        "permissions": [
+            "dashboard:read", "tenants:read", "customers:read",
+            "domains:read", "billing:read", "plans:read", "logs:read",
+        ],
         "system": True,
         "updated_at": None,
+        "color": "#3498db",
+        "assigned_tenants": [],
     },
     {
         "id": 4,
         "name": "tenant",
-        "description": "Portal de cliente",
+        "description": "Portal de cliente – acceso limitado a su cuenta",
         "permissions": ["portal:read", "billing:self", "domains:self"],
         "system": True,
         "updated_at": None,
+        "color": "#2ecc71",
+        "assigned_tenants": [],
+    },
+    {
+        "id": 5,
+        "name": "partner",
+        "description": "Socio comercial – gestión de leads, comisiones y cotizaciones propias",
+        "permissions": [
+            "dashboard:read", "partners:read",
+            "leads:read", "leads:write",
+            "commissions:read",
+            "quotations:read", "quotations:write", "quotations:send",
+            "catalog:read", "billing:self",
+        ],
+        "system": True,
+        "updated_at": None,
+        "color": "#8e44ad",
+        "assigned_tenants": [],
     },
 ]
 
@@ -84,6 +272,65 @@ class RolePayload(BaseModel):
     name: str
     description: str = ""
     permissions: List[str] = []
+    color: str = "#6b7280"
+    assigned_tenants: List[int] = []
+
+
+# ── Plantillas predefinidas para nuevos roles ──
+ROLE_PRESETS: Dict[str, Dict[str, Any]] = {
+    "account_manager": {
+        "name": "Account Manager",
+        "description": "Gestiona clientes, suscripciones y facturación",
+        "permissions": [
+            "dashboard:read", "customers:read", "customers:write", "customers:users",
+            "billing:read", "billing:write", "plans:read", "tenants:read",
+        ],
+        "color": "#9b59b6",
+    },
+    "support": {
+        "name": "Soporte",
+        "description": "Soporte técnico – lectura + gestión de tenants",
+        "permissions": [
+            "dashboard:read", "tenants:read", "tenants:write",
+            "domains:read", "domains:write", "nodes:read",
+            "tunnels:read", "logs:read", "customers:read",
+        ],
+        "color": "#1abc9c",
+    },
+    "billing_only": {
+        "name": "Facturación",
+        "description": "Solo acceso a facturación y planes",
+        "permissions": [
+            "billing:read", "billing:write", "plans:read", "plans:write",
+            "customers:read", "customers:write",
+        ],
+        "color": "#e67e22",
+    },
+    "readonly": {
+        "name": "Auditor",
+        "description": "Lectura completa para auditoría",
+        "permissions": [
+            "dashboard:read", "tenants:read", "customers:read",
+            "billing:read", "plans:read", "domains:read",
+            "nodes:read", "tunnels:read", "settings:read", "logs:read", "roles:read",
+            "partners:read", "leads:read", "commissions:read", "quotations:read", "catalog:read",
+        ],
+        "color": "#95a5a6",
+    },
+    "partner_manager": {
+        "name": "Gestor de Partners",
+        "description": "Administra partners, leads, comisiones y cotizaciones",
+        "permissions": [
+            "dashboard:read", "partners:read", "partners:write",
+            "leads:read", "leads:write", "leads:delete",
+            "commissions:read", "commissions:write", "commissions:pay",
+            "quotations:read", "quotations:write", "quotations:send",
+            "catalog:read", "catalog:write",
+            "customers:read", "billing:read",
+        ],
+        "color": "#8e44ad",
+    },
+}
 
 
 def create_access_token(username: str, role: str, user_id: int = None, tenant_id: int = None) -> str:
@@ -145,6 +392,10 @@ def _normalize_role(raw: Dict[str, Any], fallback_id: int) -> Dict[str, Any]:
     if not isinstance(permissions, list):
         permissions = [str(permissions)]
 
+    assigned_tenants = raw.get("assigned_tenants") or []
+    if not isinstance(assigned_tenants, list):
+        assigned_tenants = []
+
     return {
         "id": int(raw.get("id", fallback_id)),
         "name": str(raw.get("name", f"role-{fallback_id}")).strip(),
@@ -152,6 +403,8 @@ def _normalize_role(raw: Dict[str, Any], fallback_id: int) -> Dict[str, Any]:
         "permissions": [str(item).strip() for item in permissions if str(item).strip()],
         "system": bool(raw.get("system", False)),
         "updated_at": raw.get("updated_at"),
+        "color": raw.get("color", "#6b7280"),
+        "assigned_tenants": [int(t) for t in assigned_tenants if str(t).isdigit()],
     }
 
 
@@ -254,6 +507,8 @@ async def create_role(payload: RolePayload, request: Request, access_token: Opti
             "permissions": [perm.strip() for perm in payload.permissions if perm.strip()],
             "system": False,
             "updated_at": datetime.utcnow().isoformat(),
+            "color": payload.color or "#6b7280",
+            "assigned_tenants": payload.assigned_tenants or [],
         }
         roles.append(new_role)
 
@@ -293,6 +548,8 @@ async def update_role(role_id: int, payload: RolePayload, request: Request, acce
         target["description"] = payload.description.strip()
         target["permissions"] = [perm.strip() for perm in payload.permissions if perm.strip()]
         target["updated_at"] = datetime.utcnow().isoformat()
+        target["color"] = payload.color or target.get("color", "#6b7280")
+        target["assigned_tenants"] = payload.assigned_tenants if payload.assigned_tenants is not None else target.get("assigned_tenants", [])
 
         _save_roles(db, roles, updated_by=auth_data.get("sub", "admin"))
         return {"success": True, "role": target}
@@ -302,3 +559,64 @@ async def update_role(role_id: int, payload: RolePayload, request: Request, acce
 
 # DEPRECATED ENDPOINTS REMOVED:
 # - /api/login/unified -> Use /api/auth/login instead (secure_auth.py)
+
+
+@router.get("/api/roles/permissions-catalog")
+async def permissions_catalog(request: Request, access_token: Optional[str] = Cookie(None)):
+    """Catálogo completo de permisos agrupados por módulo."""
+    _require_admin(request, access_token)
+    return {"modules": PERMISSION_CATALOG}
+
+
+@router.get("/api/roles/presets")
+async def role_presets(request: Request, access_token: Optional[str] = Cookie(None)):
+    """Plantillas predefinidas para crear roles rápidamente."""
+    _require_admin(request, access_token)
+    return {"presets": ROLE_PRESETS}
+
+
+@router.get("/api/roles/available-tenants")
+async def available_tenants(request: Request, access_token: Optional[str] = Cookie(None)):
+    """Lista de tenants disponibles para asignar a roles."""
+    _require_admin(request, access_token)
+    from ..models.database import TenantDeployment, Subscription
+    db = SessionLocal()
+    try:
+        deployments = db.query(TenantDeployment).all()
+        tenants = []
+        for d in deployments:
+            # TenantDeployment → Subscription → Customer
+            sub = db.query(Subscription).filter(Subscription.id == d.subscription_id).first()
+            customer = None
+            if sub:
+                customer = db.query(Customer).filter(Customer.id == sub.customer_id).first()
+            tenants.append({
+                "id": d.id,
+                "tenant_name": d.subdomain or f"tenant-{d.id}",
+                "domain": d.tunnel_url or d.direct_url or "—",
+                "customer_name": customer.company_name if customer else "—",
+                "customer_id": sub.customer_id if sub else None,
+            })
+        return {"tenants": tenants, "total": len(tenants)}
+    finally:
+        db.close()
+
+
+@router.delete("/api/roles/{role_id}")
+async def delete_role(role_id: int, request: Request, access_token: Optional[str] = Cookie(None)):
+    """Elimina un rol personalizado (los roles de sistema no pueden eliminarse)."""
+    auth_data = _require_admin(request, access_token)
+    db = SessionLocal()
+    try:
+        roles = _load_roles(db)
+        target = next((role for role in roles if int(role["id"]) == role_id), None)
+        if not target:
+            raise HTTPException(status_code=404, detail="Rol no encontrado")
+        if target.get("system"):
+            raise HTTPException(status_code=403, detail="No se puede eliminar un rol de sistema")
+
+        roles = [role for role in roles if int(role["id"]) != role_id]
+        _save_roles(db, roles, updated_by=auth_data.get("sub", "admin"))
+        return {"success": True, "message": f"Rol '{target['name']}' eliminado"}
+    finally:
+        db.close()

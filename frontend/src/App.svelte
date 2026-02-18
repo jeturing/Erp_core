@@ -15,6 +15,8 @@
   import Logs from './pages/Logs.svelte';
   import Tunnels from './pages/Tunnels.svelte';
   import Roles from './pages/Roles.svelte';
+  import Plans from './pages/Plans.svelte';
+  import Clients from './pages/Clients.svelte';
   import { Spinner } from './lib/components';
   import Toast from './lib/components/Toast.svelte';
 
@@ -31,6 +33,8 @@
     | 'logs'
     | 'tunnels'
     | 'roles'
+    | 'plans'
+    | 'clients'
     | 'signup'
     | 'notfound';
 
@@ -94,6 +98,8 @@
       case 'logs':
       case 'tunnels':
       case 'roles':
+      case 'plans':
+      case 'clients':
         currentPage = route as AppPage;
         break;
       default:
@@ -161,6 +167,10 @@
       <Tunnels />
     {:else if currentPage === 'roles'}
       <Roles />
+    {:else if currentPage === 'plans'}
+      <Plans />
+    {:else if currentPage === 'clients'}
+      <Clients />
     {:else}
       <div class="p-6">
         <h1 class="page-title">404 - Página no encontrada</h1>

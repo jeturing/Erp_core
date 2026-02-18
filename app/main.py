@@ -13,7 +13,7 @@ from dotenv import load_dotenv
 load_dotenv()
 
 # Import routers
-from .routes import auth, dashboard, tenants, onboarding, roles, tenant_portal, secure_auth, nodes, tunnels, provisioning, settings, billing, logs, domains
+from .routes import auth, dashboard, tenants, onboarding, roles, tenant_portal, secure_auth, nodes, tunnels, provisioning, settings, billing, logs, domains, plans, customers, partners, leads, commissions, quotations
 
 # Import security middleware
 from .security.middleware import SecurityMiddleware, WAFMiddleware
@@ -98,6 +98,12 @@ app.include_router(settings.router)  # Configuración administrable
 app.include_router(billing.router)  # Facturación y métricas de pagos
 app.include_router(logs.router)  # Logs del sistema en tiempo real
 app.include_router(domains.router)  # Gestión de dominios personalizados
+app.include_router(plans.router)  # CRUD de planes y precios
+app.include_router(customers.router)  # Gestión de clientes y facturación
+app.include_router(partners.router)  # Gestión de socios comerciales
+app.include_router(leads.router)  # Pipeline de prospectos por partner
+app.include_router(commissions.router)  # Comisiones 50/50
+app.include_router(quotations.router)  # Cotizaciones y catálogo de servicios
 
 
 @app.get("/health")

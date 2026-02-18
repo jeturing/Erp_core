@@ -2,7 +2,7 @@
   import {
     LayoutDashboard, Users, Globe, Server, CreditCard,
     Settings, LogOut, Menu, X, FileText, Route, Shield,
-    ExternalLink,
+    ExternalLink, Package, UserCheck,
   } from 'lucide-svelte';
   import { auth } from '../stores';
 
@@ -18,6 +18,8 @@
     { id: 'domains',        label: 'Domains',         icon: Globe,           href: '#/domains' },
     { id: 'infrastructure', label: 'Infrastructure',  icon: Server,          href: '#/infrastructure' },
     { id: 'billing',        label: 'Billing',         icon: CreditCard,      href: '#/billing' },
+    { id: 'plans',          label: 'Planes',          icon: Package,         href: '#/plans' },
+    { id: 'clients',        label: 'Clientes',        icon: UserCheck,       href: '#/clients' },
     { id: 'settings',       label: 'Settings',        icon: Settings,        href: '#/settings' },
     { id: 'logs',           label: 'Logs',            icon: FileText,        href: '#/logs' },
     { id: 'tunnels',        label: 'Tunnels',         icon: Route,           href: '#/tunnels' },

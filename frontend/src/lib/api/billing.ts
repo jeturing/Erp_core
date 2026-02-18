@@ -3,6 +3,11 @@ import type {
   BillingInvoicesResponse,
   BillingMetrics,
   StripeEventsResponse,
+  PlansResponse,
+  Plan,
+  PlanCalculation,
+  CustomersResponse,
+  CustomerItem,
 } from '../types';
 
 export interface BillingComparison {
@@ -17,6 +22,7 @@ export interface BillingComparison {
 }
 
 export const billingApi = {
+  // Billing
   async getMetrics(): Promise<BillingMetrics> {
     return api.get<BillingMetrics>('/api/billing/metrics');
   },
@@ -31,6 +37,58 @@ export const billingApi = {
 
   async getStripeEvents(limit = 20): Promise<StripeEventsResponse> {
     return api.get<StripeEventsResponse>(`/api/billing/stripe-events?limit=${limit}`);
+  },
+
+  // Plans CRUD
+  async getPlans(includeInactive = false): Promise<PlansResponse> {
+    return api.get<PlansResponse>(`/api/plans?include_inactive=${includeInactive}`);
+  },
+
+  async createPlan(data: Partial<Plan>): Promise<{ message: string; plan: { id: number; name: string } }> {
+    return api.post('/api/plans', data);
+  },
+
+  async updatePlan(id: number, data: Partial<Plan>): Promise<{ message: string }> {
+    return api.put(`/api/plans/${id}`, data);
+  },
+
+  async deletePlan(id: number): Promise<{ message: string }> {
+    return api.delete(`/api/plans/${id}`);
+  },
+
+  async calculatePrice(planName: string, userCount: number): Promise<PlanCalculation> {
+    return api.post<PlanCalculation>('/api/plans/calculate', { plan_name: planName, user_count: userCount });
+  },
+
+  // Customers Management
+  async getCustomers(): Promise<CustomersResponse> {
+    return api.get<CustomersResponse>('/api/customers');
+  },
+
+  async updateCustomer(id: number, data: {
+    company_name?: string;
+    user_count?: number;
+    is_admin_account?: boolean;
+    plan_name?: string;
+    stripe_customer_id?: string;
+  }): Promise<{ message: string; changes: string[] }> {
+    return api.put(`/api/customers/${id}`, data);
+  },
+
+  async updateUserCount(id: number, userCount: number): Promise<{
+    customer_id: number;
+    old_user_count: number;
+    new_user_count: number;
+    plan?: string;
+    old_monthly?: number;
+    new_monthly?: number;
+    difference?: number;
+  }> {
+    return api.put(`/api/customers/${id}/users`, { user_count: userCount });
+  },
+
+  async recalculateAll(): Promise<{ message: string; admin_accounts: number; details: any[] }> {
+    return api.post('/api/customers/recalculate-all', {});
   },
 };
 

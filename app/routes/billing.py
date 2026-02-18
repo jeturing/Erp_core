@@ -6,7 +6,7 @@ from typing import Dict, Any, List, Optional
 from datetime import datetime, timedelta
 from ..models.database import (
     Customer, Subscription, SubscriptionStatus, 
-    StripeEvent, SessionLocal
+    StripeEvent, Plan, SessionLocal
 )
 from .roles import verify_token_with_role
 import logging
@@ -14,12 +14,35 @@ import logging
 router = APIRouter(prefix="/api/billing", tags=["Billing"])
 logger = logging.getLogger(__name__)
 
-# Precios por plan (USD)
-PLAN_PRICES = {
-    "basic": 29,
-    "pro": 49,
-    "enterprise": 99
-}
+
+def _get_plan_prices(db) -> dict:
+    """Obtiene precios de planes desde la BD. Fallback a defaults si no hay planes."""
+    plans = db.query(Plan).filter(Plan.is_active == True).all()
+    if plans:
+        return {p.name: p.base_price for p in plans}
+    return {"basic": 29, "pro": 49, "enterprise": 99}
+
+
+def _get_plan_price_for_sub(db, sub) -> float:
+    """Obtiene precio para una suscripción.
+    Prioridad: monthly_amount de la BD > cálculo dinámico desde Plan > fallback."""
+    # Check if customer is admin account
+    customer = db.query(Customer).filter(Customer.id == sub.customer_id).first()
+    if customer and customer.is_admin_account:
+        return 0  # Admin account exento
+    
+    # Si monthly_amount está definido en BD, usarlo como fuente de verdad
+    if sub.monthly_amount and sub.monthly_amount > 0:
+        return sub.monthly_amount
+    
+    # Si no, calcular desde Plan
+    plan = db.query(Plan).filter(Plan.name == sub.plan_name, Plan.is_active == True).first()
+    if plan:
+        user_count = sub.user_count or 1
+        return plan.calculate_monthly(user_count)
+    # Fallback
+    fallback = {"basic": 29, "pro": 49, "enterprise": 99}
+    return fallback.get(sub.plan_name or "basic", 29)
 
 
 def _verify_admin(token: str):
@@ -65,23 +88,26 @@ async def get_billing_metrics(
             Subscription.updated_at >= datetime.utcnow() - timedelta(days=30)
         ).count()
         
-        # Calcular MRR por plan
-        plan_counts = {"basic": 0, "pro": 0, "enterprise": 0}
-        plan_revenue = {"basic": 0, "pro": 0, "enterprise": 0}
+        # Calcular MRR por plan (dinámico desde BD)
+        plan_prices = _get_plan_prices(db)
+        plan_names = list(set(list(plan_prices.keys()) + ["basic", "pro", "enterprise"]))
+        plan_counts = {p: 0 for p in plan_names}
+        plan_revenue = {p: 0 for p in plan_names}
         total_mrr = 0
+        total_users = 0
         
         for sub in active_subs:
             plan = sub.plan_name or "basic"
-            price = PLAN_PRICES.get(plan, 29)
+            price = _get_plan_price_for_sub(db, sub)
             plan_counts[plan] = plan_counts.get(plan, 0) + 1
             plan_revenue[plan] = plan_revenue.get(plan, 0) + price
             total_mrr += price
+            total_users += (sub.user_count or 1)
         
         # Calcular pendiente de cobro
         pending_amount = 0
         for sub in pending_subs:
-            plan = sub.plan_name or "basic"
-            pending_amount += PLAN_PRICES.get(plan, 29)
+            pending_amount += _get_plan_price_for_sub(db, sub)
         
         # Calcular churn rate
         total_subs_30d_ago = len(active_subs) + cancelled_30d
@@ -109,7 +135,8 @@ async def get_billing_metrics(
             },
             "total_active": len(active_subs),
             "total_pending": len(pending_subs),
-            "cancelled_30d": cancelled_30d
+            "cancelled_30d": cancelled_30d,
+            "total_users": total_users
         }
     except Exception as e:
         logger.error(f"Error obteniendo métricas de billing: {e}")
@@ -128,6 +155,104 @@ async def get_billing_metrics(
             "total_active": 0,
             "total_pending": 0,
             "cancelled_30d": 0
+        }
+    finally:
+        db.close()
+
+
+@router.get("/comparison")
+async def get_billing_comparison(
+    request: Request,
+    access_token: str = Cookie(None)
+) -> Dict[str, Any]:
+    """
+    Comparación mes actual vs mes anterior para el dashboard de billing.
+    
+    Retorna:
+    - MRR actual vs anterior
+    - Revenue actual vs anterior
+    - Nuevos clientes vs perdidos
+    """
+    token = access_token
+    if token is None:
+        auth_header = request.headers.get("Authorization", "")
+        if auth_header.startswith("Bearer "):
+            token = auth_header[7:]
+    
+    if token:
+        _verify_admin(token)
+    
+    db = SessionLocal()
+    try:
+        now = datetime.utcnow()
+        current_month_start = now.replace(day=1, hour=0, minute=0, second=0, microsecond=0)
+        previous_month_start = (current_month_start - timedelta(days=1)).replace(day=1)
+        
+        # Suscripciones activas actuales
+        current_active = db.query(Subscription).filter(
+            Subscription.status == SubscriptionStatus.active
+        ).all()
+        
+        # Nuevos clientes este mes
+        new_customers = db.query(Customer).filter(
+            Customer.created_at >= current_month_start
+        ).count()
+        
+        # Cancelaciones este mes
+        lost_customers = db.query(Subscription).filter(
+            Subscription.status == SubscriptionStatus.cancelled,
+            Subscription.updated_at >= current_month_start
+        ).count()
+        
+        # Calcular MRR actual (dinámico con user_count)
+        current_mrr = 0
+        for sub in current_active:
+            current_mrr += _get_plan_price_for_sub(db, sub)
+        
+        # Estimación mes anterior
+        plan_prices = _get_plan_prices(db)
+        avg_price = sum(plan_prices.values()) / len(plan_prices) if plan_prices else 29
+        previous_mrr = current_mrr
+        for _ in range(lost_customers):
+            previous_mrr += avg_price
+        for _ in range(new_customers):
+            previous_mrr -= avg_price
+        previous_mrr = max(0, previous_mrr)
+        
+        # Nombres de meses en español
+        month_names = {
+            1: "Enero", 2: "Febrero", 3: "Marzo", 4: "Abril",
+            5: "Mayo", 6: "Junio", 7: "Julio", 8: "Agosto",
+            9: "Septiembre", 10: "Octubre", 11: "Noviembre", 12: "Diciembre"
+        }
+        
+        current_month_name = f"{month_names[now.month]} {now.year}"
+        prev_month = previous_month_start.month
+        prev_year = previous_month_start.year
+        previous_month_name = f"{month_names[prev_month]} {prev_year}"
+        
+        return {
+            "current_month": current_month_name,
+            "previous_month": previous_month_name,
+            "current_mrr": current_mrr,
+            "previous_mrr": previous_mrr,
+            "current_revenue": current_mrr,
+            "previous_revenue": previous_mrr,
+            "new_customers": new_customers,
+            "lost_customers": lost_customers
+        }
+    except Exception as e:
+        logger.error(f"Error obteniendo comparación de billing: {e}")
+        now = datetime.utcnow()
+        return {
+            "current_month": f"Febrero {now.year}",
+            "previous_month": f"Enero {now.year}",
+            "current_mrr": 0,
+            "previous_mrr": 0,
+            "current_revenue": 0,
+            "previous_revenue": 0,
+            "new_customers": 0,
+            "lost_customers": 0
         }
     finally:
         db.close()
@@ -176,7 +301,8 @@ async def get_invoices(
         for sub in subscriptions:
             customer = sub.customer
             plan = sub.plan_name or "basic"
-            price = PLAN_PRICES.get(plan, 29)
+            price = _get_plan_price_for_sub(db, sub)
+            user_count = sub.user_count or 1
             
             # Determinar estado de pago
             payment_status = "paid" if sub.status == SubscriptionStatus.active else \
@@ -190,7 +316,9 @@ async def get_invoices(
                 "email": customer.email,
                 "subdomain": customer.subdomain,
                 "plan": plan,
-                "amount": price,
+                "amount": round(price, 2),
+                "user_count": user_count,
+                "is_admin_account": customer.is_admin_account or False,
                 "currency": "USD",
                 "status": payment_status,
                 "stripe_subscription_id": sub.stripe_subscription_id,

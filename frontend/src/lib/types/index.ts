@@ -74,10 +74,9 @@ export interface BillingMetrics {
   total_active: number;
   total_pending: number;
   cancelled_30d: number;
+  total_users?: number;
   plan_distribution: {
-    basic: { count: number; revenue: number };
-    pro: { count: number; revenue: number };
-    enterprise: { count: number; revenue: number };
+    [key: string]: { count: number; revenue: number };
   };
 }
 
@@ -89,11 +88,95 @@ export interface BillingInvoice {
   subdomain: string;
   plan: string;
   amount: number;
+  user_count?: number;
+  is_admin_account?: boolean;
   currency: string;
   status: 'paid' | 'pending' | 'failed' | 'cancelled' | string;
   stripe_subscription_id?: string | null;
   created_at?: string | null;
   updated_at?: string | null;
+}
+
+// Plans Management
+export interface Plan {
+  id: number;
+  name: string;
+  display_name: string;
+  description?: string;
+  base_price: number;
+  price_per_user: number;
+  included_users: number;
+  max_users: number;
+  currency: string;
+  stripe_price_id?: string | null;
+  stripe_product_id?: string | null;
+  features: string[];
+  is_active: boolean;
+  sort_order: number;
+  active_subscribers: number;
+  created_at?: string | null;
+  updated_at?: string | null;
+}
+
+export interface PlansResponse {
+  items: Plan[];
+  total: number;
+}
+
+export interface PlanCalculation {
+  plan: string;
+  user_count: number;
+  included_users: number;
+  extra_users: number;
+  base_price: number;
+  extra_cost: number;
+  monthly_total: number;
+  currency: string;
+}
+
+// Customer Management
+export interface CustomerItem {
+  id: number;
+  company_name: string;
+  email: string;
+  full_name: string;
+  subdomain: string;
+  user_count: number;
+  is_admin_account: boolean;
+  stripe_customer_id?: string | null;
+  subscription: {
+    id: number;
+    plan_name: string;
+    status: string;
+    monthly_amount: number;
+    calculated_amount: number;
+    user_count: number;
+    start_date?: string | null;
+  } | null;
+  plan: {
+    name: string;
+    display_name: string;
+    base_price: number;
+    price_per_user: number;
+    included_users: number;
+  } | null;
+  deployment: {
+    subdomain: string;
+    database_name?: string;
+    tunnel_active?: boolean;
+  } | null;
+  created_at?: string | null;
+}
+
+export interface CustomersResponse {
+  items: CustomerItem[];
+  total: number;
+  summary: {
+    total_users: number;
+    total_mrr: number;
+    admin_accounts: number;
+    billable_accounts: number;
+  };
 }
 
 export interface BillingInvoicesResponse {
@@ -401,4 +484,172 @@ export interface OdooSettingsResponse {
   };
   source: string;
   editable_via: string;
+}
+
+// ── Partner Ecosystem Types ──
+
+export type PartnerStatusType = 'pending' | 'active' | 'suspended' | 'terminated';
+export type LeadStatusType = 'new' | 'contacted' | 'qualified' | 'proposal' | 'won' | 'lost' | 'invalid';
+export type CommissionStatusType = 'pending' | 'approved' | 'paid' | 'disputed' | 'offset';
+export type QuotationStatusType = 'draft' | 'sent' | 'accepted' | 'rejected' | 'expired' | 'invoiced';
+
+export interface PartnerItem {
+  id: number;
+  customer_id: number | null;
+  company_name: string;
+  legal_name: string | null;
+  tax_id: string | null;
+  contact_name: string | null;
+  contact_email: string;
+  phone: string | null;
+  country: string | null;
+  address: string | null;
+  billing_scenario: 'jeturing_collects' | 'partner_collects';
+  commission_rate: number;
+  margin_cap: number;
+  status: PartnerStatusType;
+  portal_access: boolean;
+  contract_signed_at: string | null;
+  contract_reference: string | null;
+  notes: string | null;
+  leads_count: number;
+  created_at: string | null;
+  updated_at: string | null;
+}
+
+export interface PartnersResponse {
+  items: PartnerItem[];
+  total: number;
+  summary: {
+    active: number;
+    pending: number;
+    total_leads: number;
+  };
+}
+
+export interface LeadItem {
+  id: number;
+  partner_id: number;
+  partner_name: string;
+  company_name: string;
+  contact_name: string | null;
+  contact_email: string | null;
+  phone: string | null;
+  country: string | null;
+  status: LeadStatusType;
+  notes: string | null;
+  estimated_monthly_value: number;
+  converted_customer_id: number | null;
+  converted_at: string | null;
+  lost_reason: string | null;
+  registered_at: string | null;
+  updated_at: string | null;
+}
+
+export interface LeadsResponse {
+  items: LeadItem[];
+  total: number;
+  pipeline: Record<string, number>;
+  total_estimated_value: number;
+}
+
+export interface CommissionItem {
+  id: number;
+  partner_id: number;
+  partner_name: string;
+  subscription_id: number | null;
+  lead_id: number | null;
+  period_start: string | null;
+  period_end: string | null;
+  gross_revenue: number;
+  net_revenue: number;
+  deductions: Record<string, number>;
+  partner_amount: number;
+  jeturing_amount: number;
+  status: CommissionStatusType;
+  paid_at: string | null;
+  payment_reference: string | null;
+  notes: string | null;
+  created_at: string | null;
+}
+
+export interface CommissionsResponse {
+  items: CommissionItem[];
+  total: number;
+  summary: {
+    total_partner_amount: number;
+    total_jeturing_amount: number;
+    total_pending_payout: number;
+    total_gross: number;
+  };
+}
+
+export interface QuotationLineItem {
+  service_id?: number | null;
+  name: string;
+  unit: string;
+  quantity: number;
+  unit_price: number;
+  subtotal: number;
+}
+
+export interface QuotationItem {
+  id: number;
+  quote_number: string;
+  created_by_partner_id: number | null;
+  created_by_admin: boolean;
+  partner_name: string | null;
+  customer_id: number | null;
+  prospect_name: string | null;
+  prospect_email: string | null;
+  prospect_company: string | null;
+  prospect_phone: string | null;
+  lines: QuotationLineItem[];
+  subtotal: number;
+  partner_margin: number;
+  total_monthly: number;
+  currency: string;
+  status: QuotationStatusType;
+  valid_until: string | null;
+  notes: string | null;
+  terms: string | null;
+  sent_at: string | null;
+  accepted_at: string | null;
+  rejected_at: string | null;
+  created_at: string | null;
+  updated_at: string | null;
+}
+
+export interface QuotationsResponse {
+  items: QuotationItem[];
+  total: number;
+  summary: {
+    total_value: number;
+    draft: number;
+    sent: number;
+    accepted: number;
+  };
+}
+
+export interface ServiceCatalogItemType {
+  id: number;
+  category: string;
+  name: string;
+  description: string | null;
+  unit: string;
+  price_monthly: number;
+  price_max: number | null;
+  is_addon: boolean;
+  requires_service_id: number | null;
+  min_quantity: number;
+  is_active: boolean;
+  sort_order: number;
+  created_at: string | null;
+}
+
+export interface CatalogResponse {
+  items: ServiceCatalogItemType[];
+  total: number;
+  by_category: Record<string, ServiceCatalogItemType[]>;
+  categories: Array<{ value: string; label: string }>;
 }

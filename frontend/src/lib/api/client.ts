@@ -6,6 +6,7 @@ const API_BASE_URL = import.meta.env.VITE_API_URL || '';
 class ApiClient {
   private baseUrl: string;
   private token: string | null = null;
+  private refreshing: Promise<boolean> | null = null;
 
   constructor(baseUrl: string) {
     this.baseUrl = baseUrl;
@@ -37,7 +38,36 @@ class ApiClient {
     return Boolean(this.token);
   }
 
-  private async request<T>(endpoint: string, options: RequestInit = {}): Promise<T> {
+  /**
+   * Intenta renovar el access token usando el refresh token (cookie httpOnly).
+   * Retorna true si se renovó exitosamente.
+   */
+  private async tryRefresh(): Promise<boolean> {
+    try {
+      const res = await fetch(`${this.baseUrl}/api/auth/refresh`, {
+        method: 'POST',
+        credentials: 'include',
+        headers: { 'Content-Type': 'application/json' },
+      });
+      return res.ok;
+    } catch {
+      return false;
+    }
+  }
+
+  /**
+   * Singleton refresh: evita múltiples refreshes simultáneos.
+   */
+  private async ensureRefresh(): Promise<boolean> {
+    if (!this.refreshing) {
+      this.refreshing = this.tryRefresh().finally(() => {
+        this.refreshing = null;
+      });
+    }
+    return this.refreshing;
+  }
+
+  private async request<T>(endpoint: string, options: RequestInit = {}, _isRetry = false): Promise<T> {
     const headers: HeadersInit = {
       'Content-Type': 'application/json',
       ...options.headers,
@@ -52,6 +82,18 @@ class ApiClient {
       headers,
       credentials: 'include',
     });
+
+    if (response.status === 401 && !_isRetry) {
+      // Intentar auto-refresh antes de declarar sesión expirada
+      const refreshed = await this.ensureRefresh();
+      if (refreshed) {
+        // Reintentar el request original (una sola vez)
+        return this.request<T>(endpoint, options, true);
+      }
+      // Refresh falló → sesión realmente expirada
+      this.setToken(null);
+      throw new Error('Sesion expirada');
+    }
 
     if (response.status === 401) {
       this.setToken(null);

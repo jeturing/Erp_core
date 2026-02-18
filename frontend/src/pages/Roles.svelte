@@ -1,103 +1,219 @@
 <script lang="ts">
   import { onMount } from 'svelte';
   import { rolesApi } from '../lib/api';
+  import type { Role, PermissionModule, RolePreset, AvailableTenant } from '../lib/api/roles';
   import { toasts } from '../lib/stores/toast';
-  import { formatDate } from '../lib/utils/formatters';
-  import { Lock, Plus } from 'lucide-svelte';
+  import {
+    Shield, Plus, Trash2, Edit3, X, ChevronDown, ChevronUp,
+    Copy, Lock, Building2, Users, Check, Sparkles, ToggleLeft, ToggleRight
+  } from 'lucide-svelte';
 
-  interface Role {
-    id: string | number;
-    name: string;
-    description?: string;
-    permissions: string[];
-    is_system?: boolean;
-    created_at?: string;
-  }
-
+  // ── State ──
   let roles = $state<Role[]>([]);
+  let permCatalog = $state<Record<string, PermissionModule>>({});
+  let presets = $state<Record<string, RolePreset>>({});
+  let availableTenants = $state<AvailableTenant[]>([]);
   let loading = $state(true);
-  let showAddForm = $state(false);
 
-  // Add form
-  let addName = $state('');
-  let addDescription = $state('');
-  let addPermissions = $state('');
-  let addLoading = $state(false);
+  // ── Modal state ──
+  let showModal = $state(false);
+  let modalMode = $state<'create' | 'edit'>('create');
+  let saving = $state(false);
 
-  // Edit state - inline per row
-  let editingRoleId = $state<string | number | null>(null);
-  let editName = $state('');
-  let editDescription = $state('');
-  let editPermissions = $state('');
-  let editLoading = $state(false);
+  // ── Form fields ──
+  let formName = $state('');
+  let formDescription = $state('');
+  let formColor = $state('#6b7280');
+  let formPermissions = $state<Set<string>>(new Set());
+  let formTenants = $state<Set<number>>(new Set());
+  let editingRoleId = $state<number | null>(null);
 
-  async function loadRoles() {
+  // ── UI toggles ──
+  let expandedModules = $state<Set<string>>(new Set());
+  let showPresets = $state(false);
+  let confirmDeleteId = $state<number | null>(null);
+  let showTenantPicker = $state(false);
+
+  // ── Derived ──
+  let sortedModules = $derived(Object.entries(permCatalog));
+  let totalPermsAvailable = $derived(
+    Object.values(permCatalog).reduce((sum, m) => sum + Object.keys(m.permissions).length, 0)
+  );
+
+  const COLORS = [
+    '#e74c3c', '#e67e22', '#f1c40f', '#2ecc71', '#1abc9c',
+    '#3498db', '#9b59b6', '#e91e63', '#00bcd4', '#795548',
+    '#607d8b', '#6b7280',
+  ];
+
+  // ── Load data ──
+  async function loadAll() {
     loading = true;
     try {
-      const data = await rolesApi.list();
-      roles = data.roles ?? [];
+      const [rolesRes, catalogRes, presetsRes, tenantsRes] = await Promise.all([
+        rolesApi.list(),
+        rolesApi.getPermissionsCatalog(),
+        rolesApi.getPresets(),
+        rolesApi.getAvailableTenants(),
+      ]);
+      roles = rolesRes.items ?? [];
+      permCatalog = catalogRes.modules ?? {};
+      presets = presetsRes.presets ?? {};
+      availableTenants = tenantsRes.tenants ?? [];
     } catch (e: any) {
-      toasts.error(e?.message ?? 'Error al cargar roles');
+      toasts.error(e?.message ?? 'Error al cargar datos');
     } finally {
       loading = false;
     }
   }
 
-  async function handleCreate(e: Event) {
-    e.preventDefault();
-    addLoading = true;
-    try {
-      const permissions = addPermissions
-        .split('\n')
-        .map(p => p.trim())
-        .filter(Boolean);
-      await rolesApi.create({ name: addName, description: addDescription, permissions });
-      toasts.success('Rol creado');
-      showAddForm = false;
-      addName = '';
-      addDescription = '';
-      addPermissions = '';
-      await loadRoles();
-    } catch (e: any) {
-      toasts.error(e?.message ?? 'Error al crear rol');
-    } finally {
-      addLoading = false;
-    }
-  }
-
-  function startEdit(role: Role) {
-    editingRoleId = role.id;
-    editName = role.name;
-    editDescription = role.description ?? '';
-    editPermissions = (role.permissions ?? []).join('\n');
-  }
-
-  function cancelEdit() {
+  // ── Modal helpers ──
+  function openCreate() {
+    modalMode = 'create';
     editingRoleId = null;
-    editName = '';
-    editDescription = '';
-    editPermissions = '';
+    formName = '';
+    formDescription = '';
+    formColor = '#6b7280';
+    formPermissions = new Set();
+    formTenants = new Set();
+    expandedModules = new Set();
+    showPresets = true;
+    showTenantPicker = false;
+    showModal = true;
   }
 
-  async function handleUpdate(id: string | number) {
-    editLoading = true;
+  function openEdit(role: Role) {
+    modalMode = 'edit';
+    editingRoleId = role.id;
+    formName = role.name;
+    formDescription = role.description ?? '';
+    formColor = role.color ?? '#6b7280';
+    formPermissions = new Set(role.permissions ?? []);
+    formTenants = new Set(role.assigned_tenants ?? []);
+    expandedModules = new Set();
+    showPresets = false;
+    showTenantPicker = false;
+    showModal = true;
+  }
+
+  function closeModal() {
+    showModal = false;
+    editingRoleId = null;
+  }
+
+  // ── Permission toggle helpers ──
+  function togglePerm(perm: string) {
+    const next = new Set(formPermissions);
+    if (next.has(perm)) next.delete(perm);
+    else next.add(perm);
+    formPermissions = next;
+  }
+
+  function toggleModule(moduleKey: string) {
+    const mod = permCatalog[moduleKey];
+    if (!mod) return;
+    const modPerms = Object.keys(mod.permissions);
+    const allOn = modPerms.every(p => formPermissions.has(p));
+    const next = new Set(formPermissions);
+    if (allOn) {
+      modPerms.forEach(p => next.delete(p));
+    } else {
+      modPerms.forEach(p => next.add(p));
+    }
+    formPermissions = next;
+  }
+
+  function toggleExpandModule(key: string) {
+    const next = new Set(expandedModules);
+    if (next.has(key)) next.delete(key);
+    else next.add(key);
+    expandedModules = next;
+  }
+
+  function moduleStatus(moduleKey: string): 'all' | 'partial' | 'none' {
+    const mod = permCatalog[moduleKey];
+    if (!mod) return 'none';
+    const modPerms = Object.keys(mod.permissions);
+    const count = modPerms.filter(p => formPermissions.has(p)).length;
+    if (count === 0) return 'none';
+    if (count === modPerms.length) return 'all';
+    return 'partial';
+  }
+
+  function applyPreset(key: string) {
+    const preset = presets[key];
+    if (!preset) return;
+    formName = preset.name;
+    formDescription = preset.description;
+    formColor = preset.color;
+    formPermissions = new Set(preset.permissions);
+    showPresets = false;
+    toasts.success(`Plantilla "${preset.name}" aplicada`);
+  }
+
+  // ── Tenant helpers ──
+  function toggleTenant(id: number) {
+    const next = new Set(formTenants);
+    if (next.has(id)) next.delete(id);
+    else next.add(id);
+    formTenants = next;
+  }
+
+  // ── CRUD ──
+  async function handleSave() {
+    if (!formName.trim()) {
+      toasts.error('El nombre del rol es obligatorio');
+      return;
+    }
+    saving = true;
     try {
-      const permissions = editPermissions
-        .split('\n')
-        .map(p => p.trim())
-        .filter(Boolean);
-      await rolesApi.update(id as number, { name: editName, description: editDescription, permissions });
-      toasts.success('Rol actualizado');
-      cancelEdit();
-      await loadRoles();
+      const payload = {
+        name: formName.trim(),
+        description: formDescription.trim(),
+        permissions: Array.from(formPermissions),
+        color: formColor,
+        assigned_tenants: Array.from(formTenants),
+      };
+      if (modalMode === 'create') {
+        await rolesApi.create(payload);
+        toasts.success(`Rol "${formName}" creado`);
+      } else if (editingRoleId !== null) {
+        await rolesApi.update(editingRoleId, payload);
+        toasts.success(`Rol "${formName}" actualizado`);
+      }
+      closeModal();
+      await loadAll();
     } catch (e: any) {
-      toasts.error(e?.message ?? 'Error al actualizar rol');
+      toasts.error(e?.message ?? 'Error al guardar');
     } finally {
-      editLoading = false;
+      saving = false;
     }
   }
 
-  onMount(loadRoles);
+  async function handleDelete(roleId: number) {
+    try {
+      await rolesApi.delete(roleId);
+      toasts.success('Rol eliminado');
+      confirmDeleteId = null;
+      await loadAll();
+    } catch (e: any) {
+      toasts.error(e?.message ?? 'Error al eliminar');
+    }
+  }
+
+  function permCount(role: Role): string {
+    if (role.permissions?.includes('*')) return 'Todos';
+    return `${role.permissions?.length ?? 0}`;
+  }
+
+  function tenantNames(role: Role): string[] {
+    if (!role.assigned_tenants?.length) return [];
+    return role.assigned_tenants
+      .map(id => availableTenants.find(t => t.id === id)?.tenant_name ?? `#${id}`)
+      ;
+  }
+
+  onMount(loadAll);
 </script>
 
 <div class="space-y-6">
@@ -105,144 +221,380 @@
   <div class="flex items-center justify-between">
     <div>
       <h1 class="page-title">GESTIÓN DE ROLES</h1>
-      <p class="page-subtitle">Control de permisos y acceso</p>
+      <p class="page-subtitle">Control de permisos, acceso y asignación de tenants</p>
     </div>
-    <button class="btn-accent px-4 py-2 flex items-center gap-2" onclick={() => showAddForm = !showAddForm}>
+    <button class="btn-accent px-4 py-2 flex items-center gap-2" onclick={openCreate}>
       <Plus size={14} />
       NUEVO ROL
     </button>
   </div>
 
-  <!-- Inline Add Form -->
-  {#if showAddForm}
-    <div class="card border-l-2 border-l-terracotta">
-      <h3 class="section-heading mb-5">NUEVO ROL</h3>
-      <form onsubmit={handleCreate} class="space-y-4">
-        <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
-          <div>
-            <label class="label" for="f-name">Nombre</label>
-            <input id="f-name" class="input w-full px-3 py-2" type="text" bind:value={addName} placeholder="editor" required />
+  <!-- Stats -->
+  <div class="grid grid-cols-2 md:grid-cols-4 gap-4">
+    <div class="stat-card">
+      <div class="text-xs text-gray-400 uppercase tracking-wide">Roles</div>
+      <div class="text-2xl font-bold mt-1">{roles.length}</div>
+    </div>
+    <div class="stat-card">
+      <div class="text-xs text-gray-400 uppercase tracking-wide">Sistema</div>
+      <div class="text-2xl font-bold mt-1">{roles.filter(r => r.system).length}</div>
+    </div>
+    <div class="stat-card">
+      <div class="text-xs text-gray-400 uppercase tracking-wide">Custom</div>
+      <div class="text-2xl font-bold mt-1">{roles.filter(r => !r.system).length}</div>
+    </div>
+    <div class="stat-card">
+      <div class="text-xs text-gray-400 uppercase tracking-wide">Permisos Disp.</div>
+      <div class="text-2xl font-bold mt-1">{totalPermsAvailable}</div>
+    </div>
+  </div>
+
+  <!-- Roles Grid -->
+  {#if loading}
+    <div class="card p-12 text-center text-gray-500">Cargando roles...</div>
+  {:else if roles.length === 0}
+    <div class="card p-12 text-center text-gray-500">No hay roles definidos</div>
+  {:else}
+    <div class="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-4">
+      {#each roles as role (role.id)}
+        {@const assignedNames = tenantNames(role)}
+        <div class="card relative overflow-hidden group">
+          <!-- Color bar top -->
+          <div class="absolute top-0 left-0 right-0 h-1" style="background:{role.color ?? '#6b7280'}"></div>
+
+          <div class="pt-3">
+            <!-- Header -->
+            <div class="flex items-start justify-between mb-3">
+              <div class="flex items-center gap-2.5">
+                <div class="w-9 h-9 rounded-lg flex items-center justify-center text-white font-bold text-sm" style="background:{role.color ?? '#6b7280'}">
+                  {role.name.charAt(0).toUpperCase()}
+                </div>
+                <div>
+                  <h3 class="font-semibold text-sm">{role.name}</h3>
+                  {#if role.system}
+                    <span class="inline-flex items-center gap-1 text-[10px] text-gray-400">
+                      <Lock size={9} /> Sistema
+                    </span>
+                  {:else}
+                    <span class="text-[10px] text-gray-500">Personalizado</span>
+                  {/if}
+                </div>
+              </div>
+              {#if !role.system}
+                <div class="flex gap-1 opacity-0 group-hover:opacity-100 transition-opacity">
+                  <button class="p-1.5 rounded hover:bg-white/5 text-gray-400 hover:text-white transition-colors" onclick={() => openEdit(role)} title="Editar">
+                    <Edit3 size={13} />
+                  </button>
+                  {#if confirmDeleteId === role.id}
+                    <button class="p-1.5 rounded bg-red-600/20 text-red-400 hover:bg-red-600/40 transition-colors" onclick={() => handleDelete(role.id)} title="Confirmar eliminar">
+                      <Check size={13} />
+                    </button>
+                    <button class="p-1.5 rounded hover:bg-white/5 text-gray-400" onclick={() => confirmDeleteId = null}>
+                      <X size={13} />
+                    </button>
+                  {:else}
+                    <button class="p-1.5 rounded hover:bg-white/5 text-gray-400 hover:text-red-400 transition-colors" onclick={() => confirmDeleteId = role.id} title="Eliminar">
+                      <Trash2 size={13} />
+                    </button>
+                  {/if}
+                </div>
+              {/if}
+            </div>
+
+            <!-- Description -->
+            <p class="text-xs text-gray-400 mb-3 line-clamp-2">{role.description || 'Sin descripción'}</p>
+
+            <!-- Permissions count -->
+            <div class="flex items-center gap-2 mb-2">
+              <Shield size={12} class="text-gray-500" />
+              <span class="text-xs text-gray-400">
+                {#if role.permissions?.includes('*')}
+                  <span class="text-amber-400 font-medium">Todos los permisos</span>
+                {:else}
+                  <span class="font-medium text-white">{role.permissions?.length ?? 0}</span> permisos
+                {/if}
+              </span>
+            </div>
+
+            <!-- Permission badges -->
+            {#if !role.permissions?.includes('*')}
+              <div class="flex flex-wrap gap-1 mb-3">
+                {#each (role.permissions ?? []).slice(0, 5) as perm}
+                  <span class="inline-block px-1.5 py-0.5 rounded text-[9px] font-mono bg-white/5 text-gray-300">{perm}</span>
+                {/each}
+                {#if (role.permissions ?? []).length > 5}
+                  <span class="inline-block px-1.5 py-0.5 rounded text-[9px] bg-white/5 text-gray-500">+{(role.permissions ?? []).length - 5}</span>
+                {/if}
+              </div>
+            {/if}
+
+            <!-- Assigned Tenants -->
+            {#if assignedNames.length > 0}
+              <div class="border-t border-white/5 pt-2 mt-2">
+                <div class="flex items-center gap-1.5 mb-1">
+                  <Building2 size={11} class="text-gray-500" />
+                  <span class="text-[10px] text-gray-500 uppercase tracking-wide">Tenants asignados</span>
+                </div>
+                <div class="flex flex-wrap gap-1">
+                  {#each assignedNames.slice(0, 3) as tn}
+                    <span class="badge-neutral text-[9px]">{tn}</span>
+                  {/each}
+                  {#if assignedNames.length > 3}
+                    <span class="text-[9px] text-gray-500">+{assignedNames.length - 3}</span>
+                  {/if}
+                </div>
+              </div>
+            {/if}
           </div>
-          <div>
-            <label class="label" for="f-desc">Descripción</label>
-            <input id="f-desc" class="input w-full px-3 py-2" type="text" bind:value={addDescription} placeholder="Descripción del rol" />
-          </div>
         </div>
-        <div>
-          <label class="label" for="f-perms">Permisos (uno por línea)</label>
-          <textarea
-            id="f-perms"
-            class="input w-full px-3 py-2 font-mono text-xs"
-            rows="5"
-            bind:value={addPermissions}
-            placeholder="tenants:read&#10;tenants:write&#10;billing:read"
-          ></textarea>
-        </div>
-        <div class="flex gap-3 pt-2">
-          <button type="button" class="btn-secondary px-4 py-2" onclick={() => showAddForm = false}>CANCELAR</button>
-          <button type="submit" class="btn-accent px-4 py-2 disabled:opacity-60" disabled={addLoading}>
-            {addLoading ? 'GUARDANDO...' : 'GUARDAR'}
-          </button>
-        </div>
-      </form>
+      {/each}
     </div>
   {/if}
-
-  <!-- Table -->
-  <div class="card p-0 overflow-hidden">
-    {#if loading}
-      <div class="p-8 text-center text-gray-500 text-sm">Cargando roles...</div>
-    {:else if roles.length === 0}
-      <div class="p-8 text-center text-gray-500 text-sm">No hay roles definidos</div>
-    {:else}
-      <table class="table w-full">
-        <thead>
-          <tr>
-            <th>NOMBRE</th>
-            <th>DESCRIPCIÓN</th>
-            <th>PERMISOS</th>
-            <th>TIPO</th>
-            <th>CREADO</th>
-            <th>ACCIONES</th>
-          </tr>
-        </thead>
-        <tbody>
-          {#each roles as role (role.id)}
-            <tr>
-              <td>
-                <div class="flex items-center gap-2">
-                  {#if role.is_system}
-                    <Lock size={12} class="text-gray-400 shrink-0" />
-                  {/if}
-                  <span class="font-medium text-sm">{role.name}</span>
-                </div>
-              </td>
-              <td class="text-sm text-gray-500">{role.description ?? '-'}</td>
-              <td>
-                <div class="flex flex-wrap gap-1">
-                  {#each (role.permissions ?? []).slice(0, 3) as perm}
-                    <span class="badge-neutral text-[10px]">{perm}</span>
-                  {/each}
-                  {#if (role.permissions ?? []).length > 3}
-                    <span class="text-xs text-gray-400">+{(role.permissions ?? []).length - 3} más</span>
-                  {/if}
-                </div>
-              </td>
-              <td>
-                {#if role.is_system}
-                  <span class="badge-info">Sistema</span>
-                {:else}
-                  <span class="badge-neutral">Custom</span>
-                {/if}
-              </td>
-              <td class="text-sm text-gray-500">{role.created_at ? formatDate(role.created_at) : '-'}</td>
-              <td>
-                {#if !role.is_system}
-                  <button class="btn-secondary btn-sm" onclick={() => startEdit(role)}>EDITAR</button>
-                {/if}
-              </td>
-            </tr>
-            <!-- Inline edit row -->
-            {#if editingRoleId === role.id}
-              <tr class="bg-bg-page">
-                <td colspan="6" class="py-4 px-6">
-                  <div class="space-y-4">
-                    <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
-                      <div>
-                        <label class="label" for="e-name-{role.id}">Nombre</label>
-                        <input id="e-name-{role.id}" class="input w-full px-3 py-2" type="text" bind:value={editName} required />
-                      </div>
-                      <div>
-                        <label class="label" for="e-desc-{role.id}">Descripción</label>
-                        <input id="e-desc-{role.id}" class="input w-full px-3 py-2" type="text" bind:value={editDescription} />
-                      </div>
-                    </div>
-                    <div>
-                      <label class="label" for="e-perms-{role.id}">Permisos (uno por línea)</label>
-                      <textarea
-                        id="e-perms-{role.id}"
-                        class="input w-full px-3 py-2 font-mono text-xs"
-                        rows="5"
-                        bind:value={editPermissions}
-                      ></textarea>
-                    </div>
-                    <div class="flex gap-3">
-                      <button class="btn-secondary btn-sm" onclick={cancelEdit}>CANCELAR</button>
-                      <button
-                        class="btn-accent btn-sm disabled:opacity-60"
-                        disabled={editLoading}
-                        onclick={() => handleUpdate(role.id)}
-                      >
-                        {editLoading ? 'GUARDANDO...' : 'GUARDAR'}
-                      </button>
-                    </div>
-                  </div>
-                </td>
-              </tr>
-            {/if}
-          {/each}
-        </tbody>
-      </table>
-    {/if}
-  </div>
 </div>
+
+<!-- ═══════════════════════════════════════════ -->
+<!-- MODAL: Crear / Editar Rol                   -->
+<!-- ═══════════════════════════════════════════ -->
+{#if showModal}
+  <div class="fixed inset-0 z-50 flex items-start justify-center pt-8 pb-8 overflow-y-auto" role="dialog">
+    <!-- Backdrop -->
+    <div class="fixed inset-0 bg-black/60 backdrop-blur-sm" onclick={closeModal}></div>
+
+    <!-- Modal content -->
+    <div class="relative bg-[#1a1714] border border-white/10 rounded-xl w-full max-w-3xl mx-4 shadow-2xl">
+      <!-- Header -->
+      <div class="flex items-center justify-between px-6 py-4 border-b border-white/10">
+        <div class="flex items-center gap-3">
+          <div class="w-8 h-8 rounded-lg flex items-center justify-center text-white font-bold text-sm" style="background:{formColor}">
+            {formName ? formName.charAt(0).toUpperCase() : 'R'}
+          </div>
+          <h2 class="text-lg font-semibold">{modalMode === 'create' ? 'Nuevo Rol' : 'Editar Rol'}</h2>
+        </div>
+        <button class="p-1.5 rounded hover:bg-white/10 text-gray-400" onclick={closeModal}>
+          <X size={18} />
+        </button>
+      </div>
+
+      <div class="p-6 space-y-6 max-h-[calc(100vh-12rem)] overflow-y-auto">
+
+        <!-- ── Presets (solo en create) ── -->
+        {#if modalMode === 'create'}
+          <div>
+            <button
+              class="flex items-center gap-2 text-xs text-gray-400 hover:text-white transition-colors mb-3"
+              onclick={() => showPresets = !showPresets}
+            >
+              <Sparkles size={13} />
+              <span>Usar plantilla predefinida</span>
+              {#if showPresets}<ChevronUp size={13} />{:else}<ChevronDown size={13} />{/if}
+            </button>
+            {#if showPresets}
+              <div class="grid grid-cols-2 gap-2">
+                {#each Object.entries(presets) as [key, preset]}
+                  <button
+                    class="text-left p-3 rounded-lg border border-white/10 hover:border-white/20 hover:bg-white/5 transition-all group/preset"
+                    onclick={() => applyPreset(key)}
+                  >
+                    <div class="flex items-center gap-2 mb-1">
+                      <div class="w-3 h-3 rounded-full" style="background:{preset.color}"></div>
+                      <span class="text-sm font-medium group-hover/preset:text-white transition-colors">{preset.name}</span>
+                    </div>
+                    <p class="text-[10px] text-gray-500 line-clamp-1">{preset.description}</p>
+                    <div class="text-[9px] text-gray-600 mt-1">{preset.permissions.length} permisos</div>
+                  </button>
+                {/each}
+              </div>
+            {/if}
+          </div>
+        {/if}
+
+        <!-- ── Basic info ── -->
+        <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
+          <div>
+            <label class="label" for="role-name">Nombre del rol *</label>
+            <input
+              id="role-name"
+              class="input w-full px-3 py-2"
+              type="text"
+              bind:value={formName}
+              placeholder="ej: account_manager"
+              required
+            />
+          </div>
+          <div>
+            <label class="label" for="role-desc">Descripción</label>
+            <input
+              id="role-desc"
+              class="input w-full px-3 py-2"
+              type="text"
+              bind:value={formDescription}
+              placeholder="¿Qué puede hacer este rol?"
+            />
+          </div>
+        </div>
+
+        <!-- ── Color picker ── -->
+        <div>
+          <label class="label mb-2">Color del rol</label>
+          <div class="flex gap-2 flex-wrap">
+            {#each COLORS as c}
+              <button
+                class="w-7 h-7 rounded-lg border-2 transition-all hover:scale-110"
+                style="background:{c}; border-color:{formColor === c ? 'white' : 'transparent'}"
+                onclick={() => formColor = c}
+              ></button>
+            {/each}
+          </div>
+        </div>
+
+        <!-- ── Permissions by module ── -->
+        <div>
+          <div class="flex items-center justify-between mb-3">
+            <label class="label">Permisos ({formPermissions.size} seleccionados)</label>
+            <div class="flex gap-2">
+              <button
+                class="text-[10px] text-gray-400 hover:text-white px-2 py-0.5 rounded border border-white/10 hover:border-white/20 transition-colors"
+                onclick={() => {
+                  const all = new Set<string>();
+                  Object.values(permCatalog).forEach(m => Object.keys(m.permissions).forEach(p => all.add(p)));
+                  formPermissions = all;
+                }}
+              >
+                Seleccionar todo
+              </button>
+              <button
+                class="text-[10px] text-gray-400 hover:text-white px-2 py-0.5 rounded border border-white/10 hover:border-white/20 transition-colors"
+                onclick={() => formPermissions = new Set()}
+              >
+                Limpiar
+              </button>
+            </div>
+          </div>
+
+          <div class="space-y-1">
+            {#each sortedModules as [moduleKey, mod]}
+              {@const status = moduleStatus(moduleKey)}
+              {@const isExpanded = expandedModules.has(moduleKey)}
+              {@const modPerms = Object.entries(mod.permissions)}
+              {@const activeCount = modPerms.filter(([p]) => formPermissions.has(p)).length}
+
+              <div class="rounded-lg border border-white/5 overflow-hidden">
+                <!-- Module header -->
+                <div class="flex items-center justify-between px-3 py-2.5 bg-white/[0.02] cursor-pointer hover:bg-white/[0.04] transition-colors"
+                     role="button" tabindex="0"
+                     onclick={() => toggleExpandModule(moduleKey)}
+                     onkeydown={(e) => e.key === 'Enter' && toggleExpandModule(moduleKey)}
+                >
+                  <div class="flex items-center gap-2.5">
+                    {#if isExpanded}<ChevronUp size={13} class="text-gray-500" />{:else}<ChevronDown size={13} class="text-gray-500" />{/if}
+                    <span class="text-sm font-medium">{mod.label}</span>
+                    <span class="text-[10px] px-1.5 py-0.5 rounded-full {status === 'all' ? 'bg-green-500/20 text-green-400' : status === 'partial' ? 'bg-amber-500/20 text-amber-400' : 'bg-white/5 text-gray-500'}">
+                      {activeCount}/{modPerms.length}
+                    </span>
+                  </div>
+                  <!-- Module-level toggle -->
+                  <button
+                    class="p-1 rounded hover:bg-white/10 transition-colors"
+                    onclick={(e: MouseEvent) => { e.stopPropagation(); toggleModule(moduleKey); }}
+                    title={status === 'all' ? 'Desactivar todos' : 'Activar todos'}
+                  >
+                    {#if status === 'all'}
+                      <ToggleRight size={20} class="text-green-400" />
+                    {:else}
+                      <ToggleLeft size={20} class="text-gray-500" />
+                    {/if}
+                  </button>
+                </div>
+
+                <!-- Permission rows (expanded) -->
+                {#if isExpanded}
+                  <div class="border-t border-white/5">
+                    {#each modPerms as [permKey, permDesc], i}
+                      {@const active = formPermissions.has(permKey)}
+                      <div
+                        class="flex items-center justify-between px-4 py-2 {i > 0 ? 'border-t border-white/[0.03]' : ''} hover:bg-white/[0.02] transition-colors cursor-pointer"
+                        role="button" tabindex="0"
+                        onclick={() => togglePerm(permKey)}
+                        onkeydown={(e) => e.key === 'Enter' && togglePerm(permKey)}
+                      >
+                        <div class="flex-1 min-w-0">
+                          <div class="text-xs font-mono {active ? 'text-white' : 'text-gray-500'} transition-colors">{permKey}</div>
+                          <div class="text-[10px] text-gray-500 truncate">{permDesc}</div>
+                        </div>
+                        <div class="ml-3 shrink-0">
+                          {#if active}
+                            <div class="w-8 h-[18px] rounded-full bg-green-500/30 flex items-center justify-end px-0.5">
+                              <div class="w-3.5 h-3.5 rounded-full bg-green-400"></div>
+                            </div>
+                          {:else}
+                            <div class="w-8 h-[18px] rounded-full bg-white/10 flex items-center px-0.5">
+                              <div class="w-3.5 h-3.5 rounded-full bg-gray-600"></div>
+                            </div>
+                          {/if}
+                        </div>
+                      </div>
+                    {/each}
+                  </div>
+                {/if}
+              </div>
+            {/each}
+          </div>
+        </div>
+
+        <!-- ── Tenant assignment ── -->
+        <div>
+          <button
+            class="flex items-center gap-2 text-xs text-gray-400 hover:text-white transition-colors mb-3"
+            onclick={() => showTenantPicker = !showTenantPicker}
+          >
+            <Building2 size={13} />
+            <span>Asignar tenants al rol ({formTenants.size} seleccionados)</span>
+            {#if showTenantPicker}<ChevronUp size={13} />{:else}<ChevronDown size={13} />{/if}
+          </button>
+          {#if showTenantPicker}
+            {#if availableTenants.length === 0}
+              <p class="text-xs text-gray-500">No hay tenants disponibles</p>
+            {:else}
+              <div class="grid grid-cols-1 sm:grid-cols-2 gap-2">
+                {#each availableTenants as tenant}
+                  {@const selected = formTenants.has(tenant.id)}
+                  <button
+                    class="flex items-center gap-3 p-2.5 rounded-lg border text-left transition-all
+                      {selected ? 'border-green-500/40 bg-green-500/10' : 'border-white/10 hover:border-white/20 hover:bg-white/5'}"
+                    onclick={() => toggleTenant(tenant.id)}
+                  >
+                    <div class="w-7 h-7 rounded-md flex items-center justify-center shrink-0 {selected ? 'bg-green-500/30 text-green-400' : 'bg-white/5 text-gray-500'}">
+                      {#if selected}<Check size={14} />{:else}<Building2 size={14} />{/if}
+                    </div>
+                    <div class="min-w-0">
+                      <div class="text-xs font-medium truncate {selected ? 'text-white' : 'text-gray-300'}">{tenant.tenant_name}</div>
+                      <div class="text-[10px] text-gray-500 truncate">{tenant.customer_name} • {tenant.domain || '—'}</div>
+                    </div>
+                  </button>
+                {/each}
+              </div>
+            {/if}
+          {/if}
+        </div>
+
+      </div>
+
+      <!-- Footer -->
+      <div class="flex items-center justify-end gap-3 px-6 py-4 border-t border-white/10">
+        <button class="btn-secondary px-5 py-2" onclick={closeModal}>CANCELAR</button>
+        <button
+          class="btn-accent px-5 py-2 flex items-center gap-2 disabled:opacity-50"
+          disabled={saving || !formName.trim()}
+          onclick={handleSave}
+        >
+          {#if saving}
+            <span class="animate-spin">⟳</span> GUARDANDO...
+          {:else}
+            <Check size={14} />
+            {modalMode === 'create' ? 'CREAR ROL' : 'GUARDAR CAMBIOS'}
+          {/if}
+        </button>
+      </div>
+    </div>
+  </div>
+{/if}

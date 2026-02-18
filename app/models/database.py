@@ -49,6 +49,55 @@ class CustomerStatus(enum.Enum):
     suspended = "suspended"
 
 
+class PartnerStatus(enum.Enum):
+    pending = "pending"
+    active = "active"
+    suspended = "suspended"
+    terminated = "terminated"
+
+
+class BillingScenario(enum.Enum):
+    jeturing_collects = "jeturing_collects"   # Escenario A: Jeturing cobra al cliente final
+    partner_collects = "partner_collects"     # Escenario B: Partner cobra con NCF local
+
+
+class LeadStatus(enum.Enum):
+    new = "new"
+    contacted = "contacted"
+    qualified = "qualified"
+    proposal = "proposal"
+    won = "won"
+    lost = "lost"
+    invalid = "invalid"
+
+
+class CommissionStatus(enum.Enum):
+    pending = "pending"
+    approved = "approved"
+    paid = "paid"
+    disputed = "disputed"
+    offset = "offset"
+
+
+class QuotationStatus(enum.Enum):
+    draft = "draft"
+    sent = "sent"
+    accepted = "accepted"
+    rejected = "rejected"
+    expired = "expired"
+    invoiced = "invoiced"
+
+
+class ServiceCategory(enum.Enum):
+    saas_platform = "saas_platform"
+    saas_support = "saas_support"
+    core_financiero = "core_financiero"
+    vciso = "vciso"
+    soc = "soc"
+    cloud_devops = "cloud_devops"
+    payments_pos = "payments_pos"
+
+
 class Customer(Base):
     __tablename__ = "customers"
     
@@ -63,6 +112,8 @@ class Customer(Base):
     status = Column(Enum(CustomerStatus), default=CustomerStatus.active)
     phone = Column(String(50))
     notes = Column(Text)
+    user_count = Column(Integer, default=1)              # Usuarios Odoo del tenant
+    is_admin_account = Column(Boolean, default=False)    # True = admin@sajet.us (no se cobra)
     created_at = Column(DateTime, default=datetime.utcnow)
     updated_at = Column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
     
@@ -80,7 +131,8 @@ class Subscription(Base):
     plan_name = Column(String, nullable=False)
     status = Column(Enum(SubscriptionStatus), default=SubscriptionStatus.pending)
     tenant_provisioned = Column(Boolean, default=False)
-    monthly_amount = Column(Float, default=0)
+    user_count = Column(Integer, default=1)              # Usuarios facturables
+    monthly_amount = Column(Float, default=0)            # Monto calculado: base + (extra_users * price_per_user)
     currency = Column(String(3), default="USD")
     current_period_start = Column(DateTime)
     current_period_end = Column(DateTime)
@@ -99,6 +151,204 @@ class StripeEvent(Base):
     payload = Column(Text, nullable=False)
     processed = Column(Boolean, default=False)
     created_at = Column(DateTime, default=datetime.utcnow)
+
+
+class Plan(Base):
+    """
+    Planes configurables desde el admin.
+    El precio final se calcula: base_price + (price_per_user * user_count)
+    """
+    __tablename__ = "plans"
+    
+    id = Column(Integer, primary_key=True, index=True)
+    name = Column(String(50), unique=True, nullable=False)       # basic, pro, enterprise
+    display_name = Column(String(100), nullable=False)           # "Plan Básico"
+    description = Column(Text)
+    base_price = Column(Float, default=0, nullable=False)        # Precio base mensual USD
+    price_per_user = Column(Float, default=0, nullable=False)    # Precio por usuario adicional
+    included_users = Column(Integer, default=1, nullable=False)  # Usuarios incluidos en base_price
+    max_users = Column(Integer, default=0)                       # 0 = ilimitado
+    currency = Column(String(3), default="USD")
+    stripe_price_id = Column(String(100))                        # Price ID de Stripe (recurrente)
+    stripe_product_id = Column(String(100))                      # Product ID de Stripe
+    features = Column(Text)                                      # JSON con features del plan
+    is_active = Column(Boolean, default=True)
+    sort_order = Column(Integer, default=0)                      # Orden de visualización
+    created_at = Column(DateTime, default=datetime.utcnow)
+    updated_at = Column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
+    
+    def calculate_monthly(self, user_count: int) -> float:
+        """Calcula precio mensual según cantidad de usuarios."""
+        extra = max(0, user_count - self.included_users)
+        return self.base_price + (extra * self.price_per_user)
+    
+    def __repr__(self):
+        return f"<Plan {self.name}: ${self.base_price} + ${self.price_per_user}/user>"
+
+
+# ===== SERVICE CATALOG =====
+
+class ServiceCatalogItem(Base):
+    """Catálogo de servicios/productos cotizables — tabla de precios oficial"""
+    __tablename__ = "service_catalog"
+
+    id = Column(Integer, primary_key=True, index=True)
+    category = Column(Enum(ServiceCategory), nullable=False)
+    name = Column(String(150), nullable=False)
+    description = Column(Text)
+    unit = Column(String(50), nullable=False)            # "Por servidor", "Por usuario", "Por cuenta", "Por bloque"
+    price_monthly = Column(Float, nullable=False)        # Precio mensual USD
+    price_max = Column(Float)                            # Para rangos (ej: 350–650)
+    is_addon = Column(Boolean, default=False)            # SOC requiere vCISO
+    requires_service_id = Column(Integer, ForeignKey("service_catalog.id"))  # Dependencia
+    min_quantity = Column(Integer, default=1)
+    is_active = Column(Boolean, default=True)
+    sort_order = Column(Integer, default=0)
+    created_at = Column(DateTime, default=datetime.utcnow)
+    updated_at = Column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
+
+
+# ===== PARTNER / SOCIO MODEL =====
+
+class Partner(Base):
+    """
+    Socio comercial — Acuerdo Global de Partnership (No Exclusivo).
+    Modelo 50/50 sobre Ingresos Netos. Puede tener Escenario A o B de cobro.
+    """
+    __tablename__ = "partners"
+
+    id = Column(Integer, primary_key=True, index=True)
+    customer_id = Column(Integer, ForeignKey("customers.id"), unique=True)  # Cuenta de login del partner
+    company_name = Column(String(200), nullable=False)
+    legal_name = Column(String(200))
+    tax_id = Column(String(50))                          # EIN/RNC/Tax ID
+    contact_name = Column(String(150))
+    contact_email = Column(String(150), nullable=False)
+    phone = Column(String(50))
+    country = Column(String(100))
+    address = Column(Text)
+
+    # Comercial
+    billing_scenario = Column(Enum(BillingScenario), default=BillingScenario.jeturing_collects)
+    commission_rate = Column(Float, default=50.0)        # % del partner (contrato: 50%)
+    margin_cap = Column(Float, default=30.0)             # Máx % margen sobre precio base (cláusula 8.7)
+    status = Column(Enum(PartnerStatus), default=PartnerStatus.pending)
+    portal_access = Column(Boolean, default=True)
+
+    # Contrato
+    contract_signed_at = Column(DateTime)
+    contract_reference = Column(String(100))             # Nro de contrato
+
+    notes = Column(Text)
+    created_at = Column(DateTime, default=datetime.utcnow)
+    updated_at = Column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
+
+    # Relaciones
+    customer = relationship("Customer", backref="partner_profile")
+    leads = relationship("Lead", back_populates="partner", cascade="all, delete-orphan")
+    commissions = relationship("Commission", back_populates="partner")
+
+
+class Lead(Base):
+    """
+    Prospecto registrado por un partner — Cláusula 7 del contrato.
+    Debe registrarse en el Portal de Socios antes del cierre comercial.
+    """
+    __tablename__ = "leads"
+
+    id = Column(Integer, primary_key=True, index=True)
+    partner_id = Column(Integer, ForeignKey("partners.id"), nullable=False)
+    company_name = Column(String(200), nullable=False)
+    contact_name = Column(String(150))
+    contact_email = Column(String(150))
+    phone = Column(String(50))
+    country = Column(String(100))
+    status = Column(Enum(LeadStatus), default=LeadStatus.new)
+    notes = Column(Text)
+    estimated_monthly_value = Column(Float, default=0)   # Valor estimado mensual
+    converted_customer_id = Column(Integer, ForeignKey("customers.id"))  # Si se convierte
+    converted_at = Column(DateTime)
+    lost_reason = Column(String(200))
+    registered_at = Column(DateTime, default=datetime.utcnow)
+    updated_at = Column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
+
+    # Relaciones
+    partner = relationship("Partner", back_populates="leads")
+    converted_customer = relationship("Customer", foreign_keys=[converted_customer_id])
+
+
+class Commission(Base):
+    """
+    Comisiones — Cláusula 8: Split 50/50 sobre Ingresos Netos.
+    Calculadas mensualmente sobre montos efectivamente cobrados.
+    """
+    __tablename__ = "commissions"
+
+    id = Column(Integer, primary_key=True, index=True)
+    partner_id = Column(Integer, ForeignKey("partners.id"), nullable=False)
+    subscription_id = Column(Integer, ForeignKey("subscriptions.id"))
+    lead_id = Column(Integer, ForeignKey("leads.id"))
+    period_start = Column(DateTime, nullable=False)
+    period_end = Column(DateTime, nullable=False)
+    gross_revenue = Column(Float, default=0)             # Monto bruto cobrado
+    net_revenue = Column(Float, default=0)               # Ingresos Netos (§1.8)
+    deductions_json = Column(Text)                       # JSON: {fees, refunds, chargebacks, taxes}
+    partner_amount = Column(Float, default=0)            # 50% para partner
+    jeturing_amount = Column(Float, default=0)           # 50% para Jeturing
+    status = Column(Enum(CommissionStatus), default=CommissionStatus.pending)
+    paid_at = Column(DateTime)
+    payment_reference = Column(String(100))
+    notes = Column(Text)
+    created_at = Column(DateTime, default=datetime.utcnow)
+
+    # Relaciones
+    partner = relationship("Partner", back_populates="commissions")
+    subscription = relationship("Subscription")
+    lead = relationship("Lead")
+
+
+class Quotation(Base):
+    """
+    Cotizaciones enviables a clientes/prospectos.
+    Pueden ser creadas por admin o por partner (con margen ≤ 30% cap).
+    """
+    __tablename__ = "quotations"
+
+    id = Column(Integer, primary_key=True, index=True)
+    quote_number = Column(String(20), unique=True, nullable=False)  # QT-2026-0001
+    created_by_partner_id = Column(Integer, ForeignKey("partners.id"))
+    created_by_admin = Column(Boolean, default=False)
+
+    # Destinatario
+    customer_id = Column(Integer, ForeignKey("customers.id"))       # Cliente existente
+    prospect_name = Column(String(200))                             # O prospecto nuevo
+    prospect_email = Column(String(150))
+    prospect_company = Column(String(200))
+    prospect_phone = Column(String(50))
+
+    # Líneas de cotización almacenadas como JSON
+    lines_json = Column(Text)  # [{service_id, name, unit, qty, unit_price, subtotal}]
+    subtotal = Column(Float, default=0)
+    partner_margin = Column(Float, default=0)            # Margen del partner (≤30% base)
+    total_monthly = Column(Float, default=0)
+    currency = Column(String(3), default="USD")
+
+    # Estado
+    status = Column(Enum(QuotationStatus), default=QuotationStatus.draft)
+    valid_until = Column(DateTime)
+    notes = Column(Text)
+    terms = Column(Text)                                 # Términos/condiciones adicionales
+
+    # Tracking
+    sent_at = Column(DateTime)
+    accepted_at = Column(DateTime)
+    rejected_at = Column(DateTime)
+    created_at = Column(DateTime, default=datetime.utcnow)
+    updated_at = Column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
+
+    # Relaciones
+    partner = relationship("Partner")
+    customer = relationship("Customer")
 
 
 # ===== MULTI-PROXMOX MODELS =====
@@ -405,8 +655,15 @@ def get_all_configs(category: str = None) -> list:
 
 # Database connection - PCT 160 (SRV-Sajet)
 # Uses psycopg3 (postgresql+psycopg://) driver
+# Intentar usar PostgreSQL, fallback a SQLite si no está disponible
 _raw_url = os.getenv("DATABASE_URL", "postgresql://jeturing:321Abcd@10.10.10.20:5432/erp_core_db")
-DATABASE_URL = _raw_url.replace("postgresql://", "postgresql+psycopg://", 1) if _raw_url.startswith("postgresql://") and "+psycopg" not in _raw_url else _raw_url
+_psycopg_url = _raw_url.replace("postgresql://", "postgresql+psycopg://", 1) if _raw_url.startswith("postgresql://") and "+psycopg" not in _raw_url else _raw_url
+
+# Usar SQLite como fallback si SQLALCHEMY_DATABASE_URL está definida
+if os.getenv("ENABLE_SQLITE_FALLBACK") == "true" and os.getenv("SQLALCHEMY_DATABASE_URL"):
+    DATABASE_URL = os.getenv("SQLALCHEMY_DATABASE_URL")
+else:
+    DATABASE_URL = _psycopg_url
 
 # Lazy engine initialization - avoids import-time DB connection (helps testing)
 _engine = None

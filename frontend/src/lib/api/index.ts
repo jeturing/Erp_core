@@ -8,3 +8,4 @@ export { portalApi } from './portal';
 export { logsApi } from './logs';
 export { tunnelsApi } from './tunnels';
 export { rolesApi } from './roles';
+export { partnersApi } from './partners';

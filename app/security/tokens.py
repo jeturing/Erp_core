@@ -15,7 +15,7 @@ logger = logging.getLogger(__name__)
 JWT_SECRET_KEY = os.getenv("JWT_SECRET_KEY", "your-secret-key-change-in-production")
 JWT_REFRESH_SECRET_KEY = os.getenv("JWT_REFRESH_SECRET_KEY", JWT_SECRET_KEY + "-refresh")
 JWT_ALGORITHM = "HS256"
-ACCESS_TOKEN_EXPIRE_MINUTES = int(os.getenv("ACCESS_TOKEN_EXPIRE_MINUTES", "15"))
+ACCESS_TOKEN_EXPIRE_MINUTES = int(os.getenv("ACCESS_TOKEN_EXPIRE_MINUTES", "60"))
 REFRESH_TOKEN_EXPIRE_DAYS = int(os.getenv("REFRESH_TOKEN_EXPIRE_DAYS", "7"))
 
 # Cookie security configuration
@@ -261,9 +261,9 @@ class RefreshTokenManager:
             value=token,
             httponly=True,
             secure=USE_SECURE_COOKIES,
-            samesite="strict",  # Más restrictivo para refresh tokens
+            samesite="lax",
             max_age=max_age,
-            path="/api/auth/refresh"  # Solo accesible en endpoint de refresh
+            path="/api/auth"  # Accesible en endpoints de auth (refresh, logout)
         )
     
     @classmethod
@@ -271,10 +271,10 @@ class RefreshTokenManager:
         """Elimina la cookie del refresh token."""
         response.delete_cookie(
             key="refresh_token",
-            path="/api/auth/refresh",
+            path="/api/auth",
             httponly=True,
             secure=USE_SECURE_COOKIES,
-            samesite="strict"
+            samesite="lax"
         )
     
     @classmethod
