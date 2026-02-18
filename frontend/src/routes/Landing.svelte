@@ -295,7 +295,7 @@
 
       <div class="border-t border-white/5 pt-6 text-center">
         <p class="text-xs text-gray-600">
-          &copy; {new Date().getFullYear()} Sajet ERP. Todos los derechos reservados. Hecho con amor en México.
+          &copy; {new Date().getFullYear()} Sajet ERP. Todos los derechos reservados. Hecho con amor en USA.
         </p>
       </div>
     </div>
