@@ -28,7 +28,8 @@ def _background_domain_verify(domain_id: int, db_url: str):
     from sqlalchemy.orm import sessionmaker
     from ..models.database import CustomDomain
 
-    url = db_url or os.getenv("DATABASE_URL", "postgresql+psycopg2://jeturing:321Abcd@10.10.10.20:5432/erp_core_db")
+    from ..config import DATABASE_URL as _cfg_db_url
+    url = db_url or _cfg_db_url
     engine = create_engine(url)
     SessionLocal = sessionmaker(bind=engine)
     db = SessionLocal()
@@ -428,8 +429,8 @@ async def early_domain_verification(
 
     # Lanzar verificación en background (no bloqueante)
     if domain_id:
-        db_url = os.getenv("DATABASE_URL", "postgresql+psycopg2://jeturing:321Abcd@10.10.10.20:5432/erp_core_db")
-        background_tasks.add_task(_background_domain_verify, domain_id, db_url)
+        from ..config import DATABASE_URL as _cfg_db_url
+        background_tasks.add_task(_background_domain_verify, domain_id, _cfg_db_url)
 
     return {
         "success": True,

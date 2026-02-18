@@ -34,22 +34,19 @@ def _get_config(key: str, default: str) -> str:
         return os.getenv(key, default)
 
 
-# Credenciales Odoo (editables desde /admin/settings)
-DEFAULT_ADMIN_LOGIN = os.getenv("ODOO_DEFAULT_ADMIN_LOGIN", "admin@sajet.us")
-DEFAULT_ADMIN_PASSWORD = os.getenv("ODOO_DEFAULT_ADMIN_PASSWORD", "321Abcd.")
-DEFAULT_MASTER_PASSWORD = os.getenv("ODOO_MASTER_PASSWORD", "admin")
-
-# Credenciales PostgreSQL
-DEFAULT_DB_USER = os.getenv("ODOO_DB_USER", "Jeturing")
-DEFAULT_DB_PASSWORD = os.getenv("ODOO_DB_PASSWORD", "123Abcd.")
-
-# Configuración de idioma/país
-DEFAULT_LANG = os.getenv("ODOO_DEFAULT_LANG", "es_DO")
-DEFAULT_COUNTRY = os.getenv("ODOO_DEFAULT_COUNTRY", "DO")
-
-# Dominio y template
-BASE_DOMAIN = os.getenv("ODOO_BASE_DOMAIN", "sajet.us")
-TEMPLATE_DB = os.getenv("ODOO_TEMPLATE_DB", "template_tenant")
+# Credenciales Odoo — from centralized config (no hardcoded fallbacks)
+from ..config import (
+    ODOO_DEFAULT_ADMIN_LOGIN as DEFAULT_ADMIN_LOGIN,
+    ODOO_DEFAULT_ADMIN_PASSWORD as DEFAULT_ADMIN_PASSWORD,
+    ODOO_MASTER_PASSWORD as DEFAULT_MASTER_PASSWORD,
+    ODOO_DB_USER as DEFAULT_DB_USER,
+    ODOO_DB_PASSWORD as DEFAULT_DB_PASSWORD,
+    ODOO_DEFAULT_LANG as DEFAULT_LANG,
+    ODOO_DEFAULT_COUNTRY as DEFAULT_COUNTRY,
+    ODOO_BASE_DOMAIN as BASE_DOMAIN,
+    ODOO_TEMPLATE_DB as TEMPLATE_DB,
+    ODOO_PRIMARY_IP, ODOO_PRIMARY_PCT_ID, ODOO_PRIMARY_PORT,
+)
 
 
 def get_odoo_config() -> Dict[str, Any]:
@@ -105,9 +102,9 @@ ODOO_SERVERS: Dict[str, OdooServer] = {
     "pct-105": OdooServer(
         id="pct-105",
         name="Servidor Principal (PCT 105)",
-        pct_id=105,
-        ip="10.10.10.100",
-        port=8069,
+        pct_id=ODOO_PRIMARY_PCT_ID,
+        ip=ODOO_PRIMARY_IP,
+        port=ODOO_PRIMARY_PORT,
         max_databases=50,
         priority=10,
         region="primary"
@@ -294,7 +291,7 @@ class OdooDatabaseManager:
             UPDATE ir_config_parameter SET value = '{db_name}.{BASE_DOMAIN}' WHERE key = 'mail.catchall.domain';
             """
             
-            cmd = f'''pct exec {self.server.pct_id} -- bash -c 'export PGPASSWORD="123Abcd."; psql -h 127.0.0.1 -U Jeturing -d {db_name} -c "{sql_commands}"' '''
+            cmd = f'''pct exec {self.server.pct_id} -- bash -c 'export PGPASSWORD="{DEFAULT_DB_PASSWORD}"; psql -h 127.0.0.1 -U {DEFAULT_DB_USER} -d {db_name} -c "{sql_commands}"' '''
             
             result = subprocess.run(cmd, shell=True, capture_output=True, text=True, timeout=30)
             
@@ -399,7 +396,7 @@ class OdooDatabaseManager:
             UPDATE ir_config_parameter SET value = '{base_url}' WHERE key = 'web.base.url';
             """
             
-            cmd = f'''pct exec {self.server.pct_id} -- bash -c 'export PGPASSWORD="123Abcd."; psql -h 127.0.0.1 -U Jeturing -d {db_name} -c "{sql_commands}"' '''
+            cmd = f'''pct exec {self.server.pct_id} -- bash -c 'export PGPASSWORD="{DEFAULT_DB_PASSWORD}"; psql -h 127.0.0.1 -U {DEFAULT_DB_USER} -d {db_name} -c "{sql_commands}"' '''
             
             result = subprocess.run(cmd, shell=True, capture_output=True, text=True, timeout=30)
             
@@ -455,7 +452,7 @@ class OdooDatabaseManager:
                 (SELECT count(*) FROM res_company) as companies
             """
             
-            cmd = f'''pct exec {self.server.pct_id} -- bash -c 'export PGPASSWORD="123Abcd."; psql -h 127.0.0.1 -U Jeturing -d {db_name} -t -A -F"," -c "{sql}"' '''
+            cmd = f'''pct exec {self.server.pct_id} -- bash -c 'export PGPASSWORD="{DEFAULT_DB_PASSWORD}"; psql -h 127.0.0.1 -U {DEFAULT_DB_USER} -d {db_name} -t -A -F"," -c "{sql}"' '''
             
             result = subprocess.run(cmd, shell=True, capture_output=True, text=True, timeout=30)
             
@@ -836,8 +833,8 @@ async def create_tenant_api(
         subdomain: Nombre del tenant
         company_name: Nombre de la empresa
         server_id: ID del servidor (opcional)
-        admin_login: Email admin (default: admin@sajet.us)
-        admin_password: Password admin (default: 321Abcd.)
+        admin_login: Email admin (from env ODOO_DEFAULT_ADMIN_LOGIN)
+        admin_password: Password admin (from env ODOO_DEFAULT_ADMIN_PASSWORD)
         use_fast_method: Si usar SQL directo (más rápido) vs HTTP API
     
     Returns:

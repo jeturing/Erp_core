@@ -9,13 +9,17 @@ import secrets
 import hashlib
 import logging
 
+from ..config import (
+    JWT_SECRET_KEY,
+    JWT_REFRESH_SECRET_KEY,
+    JWT_ALGORITHM,
+    JWT_ACCESS_TOKEN_EXPIRE_MINUTES,
+)
+
 logger = logging.getLogger(__name__)
 
-# JWT Configuration
-JWT_SECRET_KEY = os.getenv("JWT_SECRET_KEY", "your-secret-key-change-in-production")
-JWT_REFRESH_SECRET_KEY = os.getenv("JWT_REFRESH_SECRET_KEY", JWT_SECRET_KEY + "-refresh")
-JWT_ALGORITHM = "HS256"
-ACCESS_TOKEN_EXPIRE_MINUTES = int(os.getenv("ACCESS_TOKEN_EXPIRE_MINUTES", "60"))
+# Token expiry config
+ACCESS_TOKEN_EXPIRE_MINUTES = JWT_ACCESS_TOKEN_EXPIRE_MINUTES
 REFRESH_TOKEN_EXPIRE_DAYS = int(os.getenv("REFRESH_TOKEN_EXPIRE_DAYS", "7"))
 
 # Cookie security configuration

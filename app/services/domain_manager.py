@@ -523,7 +523,8 @@ class DomainManager:
         """Configura nginx en PCT160 y CT105 para un dominio."""
         try:
             info = self._resolve_tenant_info(domain)
-            node_ip = domain.target_node_ip or "10.10.10.100"
+            from ..config import ODOO_PRIMARY_IP
+            node_ip = domain.target_node_ip or ODOO_PRIMARY_IP
 
             configurator = NginxDomainConfigurator()
             result = configurator.configure_domain(

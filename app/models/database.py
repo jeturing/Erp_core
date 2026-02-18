@@ -1116,17 +1116,14 @@ def get_all_configs(category: str = None) -> list:
     finally:
         db.close()
 
-# Database connection - PCT 160 (SRV-Sajet)
-# Uses psycopg3 (postgresql+psycopg://) driver
-# Intentar usar PostgreSQL, fallback a SQLite si no está disponible
-_raw_url = os.getenv("DATABASE_URL", "postgresql://jeturing:321Abcd@10.10.10.20:5432/erp_core_db")
-_psycopg_url = _raw_url.replace("postgresql://", "postgresql+psycopg://", 1) if _raw_url.startswith("postgresql://") and "+psycopg" not in _raw_url else _raw_url
+# Database connection — uses centralized config (no hardcoded credentials)
+from ..config import DATABASE_URL as _CONFIG_DB_URL
 
-# Usar SQLite como fallback si SQLALCHEMY_DATABASE_URL está definida
+# Allow SQLALCHEMY_DATABASE_URL override for testing
 if os.getenv("ENABLE_SQLITE_FALLBACK") == "true" and os.getenv("SQLALCHEMY_DATABASE_URL"):
     DATABASE_URL = os.getenv("SQLALCHEMY_DATABASE_URL")
 else:
-    DATABASE_URL = _psycopg_url
+    DATABASE_URL = _CONFIG_DB_URL
 
 # Lazy engine initialization - avoids import-time DB connection (helps testing)
 _engine = None

@@ -24,10 +24,10 @@ import logging
 import psycopg
 import os
 
+from ..config import PROVISIONING_API_KEY, ODOO_DB_USER, ODOO_DB_PASSWORD
+
 router = APIRouter(prefix="/api/tenants", tags=["Tenants"])
 logger = logging.getLogger(__name__)
-
-PROVISIONING_API_KEY = "prov-key-2026-secure"
 
 
 # DTOs
@@ -131,8 +131,8 @@ def _list_databases_via_postgres(server_id: Optional[str]) -> List[str]:
     if not server:
         return []
 
-    db_user = os.getenv("ODOO_DB_USER", "Jeturing")
-    db_password = os.getenv("ODOO_DB_PASSWORD", "123Abcd.")
+    db_user = ODOO_DB_USER
+    db_password = ODOO_DB_PASSWORD
     db_port = int(os.getenv("ODOO_DB_PORT", "5432"))
 
     try:
@@ -298,7 +298,7 @@ async def create_tenant(
     Crear un nuevo tenant (base de datos Odoo).
     
     - Si no se especifica server_id, se selecciona automáticamente el mejor servidor
-    - Credenciales por defecto: admin@sajet.us / 321Abcd.
+    - Credenciales por defecto: configuradas en variables de entorno
     - Por defecto usa método SQL rápido (duplica template_tenant)
     """
     # Validar token

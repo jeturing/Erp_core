@@ -14,17 +14,13 @@ from pydantic import BaseModel
 from ..models.database import Customer, SessionLocal, SystemConfig
 from ..services.spa_shell import render_spa_shell
 
+from ..config import JWT_SECRET_KEY, JWT_ALGORITHM, ADMIN_USERNAME, ADMIN_PASSWORD
+
 router = APIRouter(tags=["Roles"])
 
 # JWT Configuration
-JWT_SECRET_KEY = os.getenv("JWT_SECRET_KEY", "your-secret-key-change-in-production")
-JWT_ALGORITHM = "HS256"
 JWT_EXPIRATION_HOURS = 24
 ROLES_CONFIG_KEY = "SPA_ROLES_JSON"
-
-# Admin credentials
-ADMIN_USERNAME = os.getenv("ADMIN_USERNAME", "admin")
-ADMIN_PASSWORD = os.getenv("ADMIN_PASSWORD", "admin123")
 
 BASE_DIR = os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 

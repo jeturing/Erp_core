@@ -12,6 +12,10 @@ import os
 from dotenv import load_dotenv
 load_dotenv()
 
+# Validate required env vars at startup
+from .config import validate_required, ENVIRONMENT, FORCE_HTTPS, ENABLE_WAF, APP_URL
+validate_required()
+
 # Import routers
 from .routes import auth, dashboard, tenants, onboarding, roles, tenant_portal, secure_auth, nodes, tunnels, provisioning, settings, billing, logs, domains, plans, customers, partners, leads, commissions, quotations, stripe_connect, suspension
 from .routes import blueprints, seats, invoices, settlements, reconciliation, work_orders, branding, audit
@@ -21,11 +25,6 @@ from .security.middleware import SecurityMiddleware, WAFMiddleware
 
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
-
-# Environment configuration
-ENVIRONMENT = os.getenv("ENVIRONMENT", "development")
-FORCE_HTTPS = os.getenv("FORCE_HTTPS", "false").lower() == "true"
-ENABLE_WAF = os.getenv("ENABLE_WAF", "true").lower() == "true"
 
 # Base directory for static files
 BASE_DIR = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))

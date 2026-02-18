@@ -28,6 +28,9 @@ env/
 
 # Environment variables (contiene secretos)
 .env
+.env.test
+.env.local
+.env.production
 
 # Logs
 logs/*.log

@@ -25,12 +25,12 @@ import re
 import shlex
 from typing import Dict, Any, Optional, List, Tuple
 
+from ..config import CT105_IP, CT105_NGINX_PORT
+
 logger = logging.getLogger("nginx_configurator")
 
-# ── Constantes ────────────────────────────────────────────────────────────────
-CT105_IP = "10.10.10.100"
+# ── Constantes ────────────────────────────────────────────────────────────────────
 CT105_SSH = f"root@{CT105_IP}"
-CT105_NGINX_PORT = 8080  # Puerto nginx en CT105 para dominios externos
 
 PCT160_ERP_CONF = "/etc/nginx/sites-available/erp"
 PCT160_HTTP_MAP = "/etc/nginx/conf.d/odoo_http_routes.map"
@@ -231,7 +231,7 @@ class NginxDomainConfigurator:
             external_domain: dominio del cliente (ej: impulse-max.com)
             tenant_db: nombre de la BD en Odoo (ej: techeels)
             tenant_subdomain: subdominio de sajet.us (ej: techeels)
-            node_ip: IP del nodo Odoo (default 10.10.10.100)
+            node_ip: IP del nodo Odoo (from env ODOO_PRIMARY_IP)
         """
         logger.info(f"Configurando nginx para {external_domain} → {tenant_db}")
         backups: Dict[str, str] = {}

@@ -12,34 +12,30 @@ import logging
 import subprocess
 import hashlib
 
+from ..config import (
+    ODOO_PRIMARY_IP, ODOO_PRIMARY_API_PORT, ODOO_BASE_DOMAIN,
+    CLOUDFLARE_TUNNEL_ID, CLOUDFLARE_API_TOKEN, CLOUDFLARE_ZONES,
+    PROVISIONING_API_KEY, ODOO_DEFAULT_ADMIN_PASSWORD,
+)
+
 logger = logging.getLogger(__name__)
 
 router = APIRouter(prefix="/api/provisioning", tags=["Provisioning"])
 
-# Configuración de servidores Odoo - cada uno con su API local en puerto 8070
+# Configuración de servidores Odoo — from env via config.py
 ODOO_SERVERS = {
     "primary": {
         "name": "SRV-Odoo-server",
-        "ip": "10.10.10.100",
-        "api_port": 8070,  # Puerto de la API local
-        "domain": "sajet.us",
-        "tunnel_id": "da2bc763-a93b-41f5-9a22-1731403127e3"
+        "ip": ODOO_PRIMARY_IP,
+        "api_port": ODOO_PRIMARY_API_PORT,
+        "domain": ODOO_BASE_DOMAIN,
+        "tunnel_id": CLOUDFLARE_TUNNEL_ID,
     }
 }
 
-# Configuración Cloudflare
-CF_API_TOKEN = os.getenv("CLOUDFLARE_API_TOKEN", "_PQbnJMV_8WjjyloFsswy20u1L8DQtgX-oruh0Qu")
-CF_ZONES = {
-    "sajet.us": "4a83b88793ac3688486ace69b6ae80f9",
-    "jeturing.com": "0004e8b57924141f4758f3b3ba02dd9e",
-    "gmfcllc.com": "67515031fb2b16a5daf3cb09da010c02",
-    "lslogistic.net": "d5d4702bbcd7e6751bb1d4e090ae9433",
-    "aysautorepair.com": "5d152d21ef579da1025bafab212a9d6c",
-    "esecure.do": "ce7d0136b71576ffd9dbb00cbde568f6"
-}
-
-# API Key interna para autenticación
-PROVISIONING_API_KEY = os.getenv("PROVISIONING_API_KEY", "prov-key-2026-secure")
+# Cloudflare zones — from env via config.py
+CF_API_TOKEN = CLOUDFLARE_API_TOKEN
+CF_ZONES = CLOUDFLARE_ZONES
 
 
 # DTOs

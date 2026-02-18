@@ -303,25 +303,32 @@ async def initialize_default_configs(
     """
     require_admin(authorization, access_token)
     
+    from ..config import (
+        ODOO_DEFAULT_ADMIN_LOGIN, ODOO_DEFAULT_ADMIN_PASSWORD,
+        ODOO_MASTER_PASSWORD, ODOO_DB_USER, ODOO_DB_PASSWORD,
+        ODOO_DEFAULT_LANG, ODOO_DEFAULT_COUNTRY, ODOO_BASE_DOMAIN,
+        ODOO_TEMPLATE_DB,
+    )
+
     defaults = [
         # Odoo
-        ("ODOO_DEFAULT_ADMIN_LOGIN", os.getenv("ODOO_DEFAULT_ADMIN_LOGIN", "admin@sajet.us"), 
+        ("ODOO_DEFAULT_ADMIN_LOGIN", ODOO_DEFAULT_ADMIN_LOGIN,
          "Email admin por defecto para nuevos tenants", "odoo", False),
-        ("ODOO_DEFAULT_ADMIN_PASSWORD", os.getenv("ODOO_DEFAULT_ADMIN_PASSWORD", "321Abcd."), 
+        ("ODOO_DEFAULT_ADMIN_PASSWORD", ODOO_DEFAULT_ADMIN_PASSWORD,
          "Password admin por defecto", "odoo", True),
-        ("ODOO_MASTER_PASSWORD", os.getenv("ODOO_MASTER_PASSWORD", "admin"), 
+        ("ODOO_MASTER_PASSWORD", ODOO_MASTER_PASSWORD,
          "Master password de Odoo", "odoo", True),
-        ("ODOO_DB_USER", os.getenv("ODOO_DB_USER", "Jeturing"), 
+        ("ODOO_DB_USER", ODOO_DB_USER,
          "Usuario PostgreSQL del servidor Odoo", "odoo", False),
-        ("ODOO_DB_PASSWORD", os.getenv("ODOO_DB_PASSWORD", "123Abcd."), 
+        ("ODOO_DB_PASSWORD", ODOO_DB_PASSWORD,
          "Password PostgreSQL", "odoo", True),
-        ("ODOO_DEFAULT_LANG", os.getenv("ODOO_DEFAULT_LANG", "es_DO"), 
+        ("ODOO_DEFAULT_LANG", ODOO_DEFAULT_LANG,
          "Idioma por defecto (es_DO, es_MX, en_US)", "odoo", False),
-        ("ODOO_DEFAULT_COUNTRY", os.getenv("ODOO_DEFAULT_COUNTRY", "DO"), 
+        ("ODOO_DEFAULT_COUNTRY", ODOO_DEFAULT_COUNTRY, 
          "País por defecto (DO, MX, US)", "odoo", False),
-        ("ODOO_BASE_DOMAIN", os.getenv("ODOO_BASE_DOMAIN", "sajet.us"), 
+        ("ODOO_BASE_DOMAIN", ODOO_BASE_DOMAIN,
          "Dominio base para URLs de tenants", "odoo", False),
-        ("ODOO_TEMPLATE_DB", os.getenv("ODOO_TEMPLATE_DB", "template_tenant"), 
+        ("ODOO_TEMPLATE_DB", ODOO_TEMPLATE_DB, 
          "BD template para duplicar al crear tenants", "odoo", False),
         
         # General

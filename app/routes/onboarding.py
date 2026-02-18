@@ -21,9 +21,8 @@ import logging
 router = APIRouter(tags=["Onboarding"])
 
 # Stripe configuration
-stripe.api_key = os.getenv("STRIPE_SECRET_KEY", "sk_test_dummy_key_replace_with_real_key")
-STRIPE_WEBHOOK_SECRET = os.getenv("STRIPE_WEBHOOK_SECRET", "whsec_dummy_secret")
-APP_URL = os.getenv("APP_URL", "http://localhost:4443")
+from ..config import STRIPE_SECRET_KEY, STRIPE_WEBHOOK_SECRET, APP_URL
+stripe.api_key = STRIPE_SECRET_KEY
 
 logger = logging.getLogger(__name__)
 

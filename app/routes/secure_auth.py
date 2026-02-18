@@ -13,6 +13,8 @@ from ..security.middleware import RateLimiter
 from ..security.audit import AuditLogger, AuditEvent
 from ..security.totp import TOTPManager
 
+from ..config import ADMIN_USERNAME, ADMIN_PASSWORD
+
 router = APIRouter(prefix="/api/auth", tags=["Secure Authentication"])
 
 # Rate limiter instance (compartida)
@@ -21,10 +23,6 @@ login_rate_limiter = RateLimiter(
     window_seconds=300,  # en 5 minutos
     block_duration_seconds=900  # bloqueo de 15 minutos
 )
-
-# Admin credentials
-ADMIN_USERNAME = os.getenv("ADMIN_USERNAME", "admin")
-ADMIN_PASSWORD = os.getenv("ADMIN_PASSWORD", "admin123")
 
 
 # DTOs
