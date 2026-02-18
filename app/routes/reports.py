@@ -122,26 +122,33 @@ async def get_overview(request: Request, access_token: str = Cookie(None)) -> Di
         # ── 4. LEADS PIPELINE ──
         total_leads = db.query(Lead).count()
         leads_pipeline: Dict[str, int] = {}
-        lead_statuses = db.query(
-            Lead.status, func.count(Lead.id)
-        ).group_by(Lead.status).all()
-        for status, count in lead_statuses:
-            leads_pipeline[status.value if hasattr(status, 'value') else str(status)] = count
+        try:
+            lead_statuses = db.query(
+                Lead.status, func.count(Lead.id)
+            ).group_by(Lead.status).all()
+            for st, count in lead_statuses:
+                leads_pipeline[st.value if hasattr(st, 'value') else str(st)] = count
+        except Exception:
+            pass
 
-        pipeline_value = db.query(
-            func.coalesce(func.sum(Lead.estimated_monthly_value), 0)
-        ).filter(
-            Lead.status.in_([
-                LeadStatus.new, LeadStatus.contacted,
-                LeadStatus.qualified, LeadStatus.proposal_sent,
-                LeadStatus.negotiation
-            ])
-        ).scalar() or 0
+        active_lead_statuses = ("new", "contacted", "qualified", "in_qualification", "proposal")
+        try:
+            pipeline_value = db.query(
+                func.coalesce(func.sum(Lead.estimated_monthly_value), 0)
+            ).filter(
+                Lead.status.in_([
+                    LeadStatus.new, LeadStatus.contacted,
+                    LeadStatus.qualified, LeadStatus.in_qualification,
+                    LeadStatus.proposal
+                ])
+            ).scalar() or 0
+        except Exception:
+            pipeline_value = 0
 
         leads_won = leads_pipeline.get("won", 0)
         leads_active = sum(
             v for k, v in leads_pipeline.items()
-            if k in ("new", "contacted", "qualified", "proposal_sent", "negotiation")
+            if k in active_lead_statuses
         )
 
         # ── 5. COMMISSIONS ──
@@ -156,7 +163,7 @@ async def get_overview(request: Request, access_token: str = Cookie(None)) -> Di
 
         # ── 6. INFRASTRUCTURE ──
         nodes = db.query(ProxmoxNode).all()
-        containers = db.query(LxcContainer).all()
+        containers = db.query(LXCContainer).all()
         total_nodes = len(nodes)
         online_nodes = sum(1 for n in nodes if n.status == NodeStatus.online)
         total_containers = len(containers)
@@ -164,15 +171,15 @@ async def get_overview(request: Request, access_token: str = Cookie(None)) -> Di
             1 for c in containers if c.status == ContainerStatus.running
         )
 
-        # Cluster aggregate
-        cluster_cpu_total = sum(n.cpu_total or 0 for n in nodes)
-        cluster_cpu_used = sum(n.cpu_used or 0 for n in nodes)
-        cluster_ram_total = sum(n.ram_total or 0 for n in nodes)
-        cluster_ram_used = sum(n.ram_used or 0 for n in nodes)
-        cluster_disk_total = sum(n.disk_total or 0 for n in nodes)
-        cluster_disk_used = sum(n.disk_used or 0 for n in nodes)
+        # Cluster aggregate — use real model field names
+        cluster_cpu_total = sum(n.total_cpu_cores or 0 for n in nodes)
+        cluster_cpu_used_pct = sum(n.used_cpu_percent or 0 for n in nodes)
+        cluster_ram_total = sum(n.total_ram_gb or 0 for n in nodes)
+        cluster_ram_used = sum(n.used_ram_gb or 0 for n in nodes)
+        cluster_disk_total = sum(n.total_storage_gb or 0 for n in nodes)
+        cluster_disk_used = sum(n.used_storage_gb or 0 for n in nodes)
 
-        cpu_pct = round(cluster_cpu_used / cluster_cpu_total * 100, 1) if cluster_cpu_total else 0
+        cpu_pct = round(cluster_cpu_used_pct / total_nodes, 1) if total_nodes else 0
         ram_pct = round(cluster_ram_used / cluster_ram_total * 100, 1) if cluster_ram_total else 0
         disk_pct = round(cluster_disk_used / cluster_disk_total * 100, 1) if cluster_disk_total else 0
 
@@ -391,7 +398,7 @@ async def get_overview(request: Request, access_token: str = Cookie(None)) -> Di
                 "nodes_online": online_nodes,
                 "containers_total": total_containers,
                 "containers_running": running_containers,
-                "cpu": {"used": cluster_cpu_used, "total": cluster_cpu_total, "percent": cpu_pct},
+                "cpu": {"used": cluster_cpu_used_pct, "total": cluster_cpu_total, "percent": cpu_pct},
                 "ram": {"used": round(cluster_ram_used, 1), "total": round(cluster_ram_total, 1), "percent": ram_pct},
                 "disk": {"used": round(cluster_disk_used, 1), "total": round(cluster_disk_total, 1), "percent": disk_pct},
             },
