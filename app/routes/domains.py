@@ -1,18 +1,52 @@
 """
 Domains API Routes
 Endpoints para gestión de dominios personalizados de clientes.
+Épica 8: Verificación temprana desde TENANT_REQUESTED, no bloqueante.
 """
 
-from fastapi import APIRouter, Depends, HTTPException, Query, Cookie
+from fastapi import APIRouter, Depends, HTTPException, Query, Cookie, BackgroundTasks
 from pydantic import BaseModel, Field
 from typing import Optional, List
 from sqlalchemy.orm import Session
+import logging
 
 from ..models.database import get_db
 from ..services.domain_manager import DomainManager
 from .roles import verify_token_with_role
 
 router = APIRouter(prefix="/api/domains", tags=["domains"])
+logger = logging.getLogger(__name__)
+
+
+def _background_domain_verify(domain_id: int, db_url: str):
+    """
+    Épica 8 — Background task: verificación temprana de dominio.
+    Se ejecuta async, no bloquea el flujo de onboarding.
+    """
+    import os
+    from sqlalchemy import create_engine
+    from sqlalchemy.orm import sessionmaker
+    from ..models.database import CustomDomain
+
+    url = db_url or os.getenv("DATABASE_URL", "postgresql+psycopg2://jeturing:321Abcd@10.10.10.20:5432/erp_core_db")
+    engine = create_engine(url)
+    SessionLocal = sessionmaker(bind=engine)
+    db = SessionLocal()
+    try:
+        domain = db.query(CustomDomain).filter(CustomDomain.id == domain_id).first()
+        if not domain:
+            logger.warning(f"Background verify: domain {domain_id} not found")
+            return
+        manager = DomainManager(db)
+        import asyncio
+        loop = asyncio.new_event_loop()
+        result = loop.run_until_complete(manager.verify_domain(domain_id))
+        loop.close()
+        logger.info(f"Background verify domain {domain.external_domain}: {result.get('verification_status', 'unknown')}")
+    except Exception as e:
+        logger.error(f"Background verify domain {domain_id} failed: {e}")
+    finally:
+        db.close()
 
 
 def _check_domain_limit(db: Session, customer_id: int):
@@ -350,6 +384,63 @@ async def nginx_status(
         "pct160_configured": status["pct160"],
         "ct105_configured": status["ct105"],
         "in_sync": domain.nginx_configured == (status["pct160"] and status["ct105"]),
+    }
+
+
+# ==================== Épica 8: Early Domain Verification ====================
+
+class EarlyDomainRequest(BaseModel):
+    external_domain: str = Field(..., description="Dominio que el cliente quiere usar")
+    customer_id: int
+    tenant_deployment_id: Optional[int] = None
+
+
+@router.post("/early-verify", response_model=dict)
+async def early_domain_verification(
+    data: EarlyDomainRequest,
+    background_tasks: BackgroundTasks,
+    db: Session = Depends(get_db),
+):
+    """
+    Épica 8 — Inicia verificación de dominio en TENANT_REQUESTED.
+    NO bloquea el flujo de onboarding.
+    
+    1. Registra el dominio custom inmediatamente
+    2. Lanza verificación DNS en background
+    3. Retorna instrucciones CNAME al frontend para que el cliente
+       pueda ir configurando mientras el tenant se provisiona
+    """
+    import os
+
+    # Crear dominio sin requerir suscripción activa (early)
+    manager = DomainManager(db)
+    result = manager.create_domain(
+        external_domain=data.external_domain,
+        customer_id=data.customer_id,
+        tenant_deployment_id=data.tenant_deployment_id,
+        created_by="early_verification"
+    )
+
+    if not result.get("success"):
+        raise HTTPException(status_code=400, detail=result.get("error", "Error creating domain"))
+
+    domain_id = result.get("domain", {}).get("id")
+
+    # Lanzar verificación en background (no bloqueante)
+    if domain_id:
+        db_url = os.getenv("DATABASE_URL", "postgresql+psycopg2://jeturing:321Abcd@10.10.10.20:5432/erp_core_db")
+        background_tasks.add_task(_background_domain_verify, domain_id, db_url)
+
+    return {
+        "success": True,
+        "message": "Dominio registrado. Verificación DNS iniciada en background.",
+        "domain": result.get("domain"),
+        "instructions": {
+            "step_1": f"Crear CNAME: {data.external_domain} → {result.get('domain', {}).get('sajet_full_domain', 'N/A')}",
+            "step_2": "La verificación se completará automáticamente cuando el DNS propague",
+            "note": "El flujo de onboarding NO se bloquea por la verificación del dominio",
+        },
+        "non_blocking": True,
     }
 
 

@@ -1,13 +1,19 @@
 """
 Onboarding Routes - Customer registration and Stripe integration
+Includes billing_mode routing: Direct, Partner A, Partner B (Escenario B)
 """
 from fastapi import APIRouter, HTTPException, Request, Form, BackgroundTasks
 from fastapi.responses import HTMLResponse, RedirectResponse, JSONResponse
 from pydantic import BaseModel
+from typing import Optional
 import stripe
 import os
 from datetime import datetime
-from ..models.database import Customer, Subscription, StripeEvent, SubscriptionStatus, SessionLocal
+from ..models.database import (
+    Customer, Subscription, StripeEvent, SubscriptionStatus, SessionLocal,
+    BillingMode, InvoiceIssuer, CollectorType, PayerType,
+    Partner, Plan, Lead, LeadStatus,
+)
 from ..services.odoo_provisioner import provision_tenant
 from ..services.spa_shell import render_spa_shell
 import logging
@@ -29,6 +35,8 @@ class CheckoutRequest(BaseModel):
     company_name: str
     subdomain: str
     plan: str
+    partner_code: Optional[str] = None      # Si viene de un partner
+    custom_domain: Optional[str] = None      # Épica 8: dominio temprano
 
 
 @router.get("/", response_class=HTMLResponse)
@@ -50,40 +58,138 @@ async def onboarding_alias(request: Request, plan: str = "pro"):
 
 
 @router.post("/api/checkout")
-async def create_checkout_session(payload: CheckoutRequest):
-    """Crea un customer en BD y redirige a Stripe Checkout."""
+async def create_checkout_session(payload: CheckoutRequest, background_tasks: BackgroundTasks):
+    """
+    Crea un customer en BD y redirige a Stripe Checkout.
+    Routing por billing_mode:
+    - Sin partner_code → JETURING_DIRECT_SUBSCRIPTION (Jeturing cobra)
+    - Con partner_code escenario A → PARTNER_DIRECT (Partner cobra con Stripe Connect)
+    - Con partner_code escenario B → PARTNER_PAYS_FOR_CLIENT (Partner paga, Jeturing emite intercompany)
+    """
     db = SessionLocal()
     try:
-        # Crear customer en BD
+        # ── Resolver partner si viene partner_code ──
+        partner = None
+        billing_mode = BillingMode.JETURING_DIRECT_SUBSCRIPTION
+        invoice_issuer = InvoiceIssuer.JETURING
+        collector = CollectorType.STRIPE_DIRECT
+        payer_type = PayerType.END_CUSTOMER
+
+        if payload.partner_code:
+            partner = db.query(Partner).filter(
+                Partner.partner_code == payload.partner_code,
+                Partner.is_active == True,
+            ).first()
+            if not partner:
+                raise HTTPException(404, f"Partner code '{payload.partner_code}' not found or inactive")
+
+            # Determinar billing mode según configuración del partner
+            if partner.billing_scenario == "B":
+                billing_mode = BillingMode.PARTNER_PAYS_FOR_CLIENT
+                invoice_issuer = InvoiceIssuer.JETURING
+                collector = CollectorType.PARTNER_COLLECTS
+                payer_type = PayerType.PARTNER
+            else:
+                # Escenario A (default partner)
+                billing_mode = BillingMode.PARTNER_DIRECT
+                invoice_issuer = InvoiceIssuer.PARTNER
+                collector = CollectorType.STRIPE_CONNECT
+                payer_type = PayerType.END_CUSTOMER
+
+        # ── Resolver plan desde DB ──
+        plan = db.query(Plan).filter(
+            Plan.name == payload.plan,
+            Plan.is_active == True,
+        ).first()
+
+        if not plan:
+            # Fallback: usar price_map legacy
+            price_map = {
+                "basic": "price_1234_basic",
+                "pro": "price_1234_pro",
+                "enterprise": "price_1234_enterprise",
+            }
+            price_id = price_map.get(payload.plan, "price_1234_basic")
+            monthly_amount = 0
+        else:
+            price_id = plan.stripe_price_id or f"price_{plan.name}"
+            monthly_amount = plan.monthly_price or 0
+
+        # ── Crear customer en BD ──
         customer = Customer(
             email=payload.email,
             full_name=payload.full_name,
             company_name=payload.company_name,
-            subdomain=payload.subdomain
+            subdomain=payload.subdomain,
         )
         db.add(customer)
+        db.flush()
+
+        # ── Crear Lead en pipeline ──
+        lead = Lead(
+            customer_id=customer.id,
+            partner_id=partner.id if partner else None,
+            company_name=payload.company_name,
+            contact_email=payload.email,
+            contact_name=payload.full_name,
+            plan_interest=payload.plan,
+            status=LeadStatus.new,
+            source="onboarding_checkout",
+            notes=f"billing_mode={billing_mode.value}",
+        )
+        db.add(lead)
+        db.flush()
+
+        # ── Épica 8: Early domain verification (no bloqueante) ──
+        if payload.custom_domain:
+            try:
+                from ..services.domain_manager import DomainManager
+                domain_mgr = DomainManager(db)
+                domain_result = domain_mgr.create_domain(
+                    external_domain=payload.custom_domain,
+                    customer_id=customer.id,
+                    created_by="onboarding_early",
+                )
+                logger.info(f"Early domain registered: {payload.custom_domain} → {domain_result.get('success')}")
+            except Exception as e:
+                logger.warning(f"Early domain registration failed (non-blocking): {e}")
+
         db.commit()
         db.refresh(customer)
 
-        # Crear Stripe checkout session
-        price_map = {
-            "basic": "price_1234_basic",
-            "pro": "price_1234_pro",
-            "enterprise": "price_1234_enterprise",
+        # ── Crear Stripe Checkout Session ──
+        checkout_params = {
+            "payment_method_types": ["card"],
+            "line_items": [{"price": price_id, "quantity": 1}],
+            "mode": "subscription",
+            "success_url": f"{APP_URL}/success?session_id={{CHECKOUT_SESSION_ID}}",
+            "cancel_url": f"{APP_URL}/signup",
+            "client_reference_id": str(customer.id),
+            "customer_email": payload.email,
+            "metadata": {
+                "billing_mode": billing_mode.value,
+                "partner_id": str(partner.id) if partner else "",
+                "lead_id": str(lead.id),
+                "plan": payload.plan,
+            },
         }
-        price_id = price_map.get(payload.plan, "price_1234_basic")
 
-        session = stripe.checkout.Session.create(
-            payment_method_types=["card"],
-            line_items=[{"price": price_id, "quantity": 1}],
-            mode="subscription",
-            success_url=f"{APP_URL}/success?session_id={{CHECKOUT_SESSION_ID}}",
-            cancel_url=f"{APP_URL}/signup",
-            client_reference_id=str(customer.id),
-            customer_email=payload.email,
-        )
+        # Escenario A con Stripe Connect: application_fee_percent 50%
+        if billing_mode == BillingMode.PARTNER_DIRECT and partner and partner.stripe_account_id:
+            checkout_params["subscription_data"] = {
+                "application_fee_percent": 50,
+            }
+            checkout_params["stripe_account"] = partner.stripe_account_id
 
-        return {"checkout_url": session.url}
+        session = stripe.checkout.Session.create(**checkout_params)
+
+        return {
+            "checkout_url": session.url,
+            "billing_mode": billing_mode.value,
+            "partner": partner.company_name if partner else None,
+        }
+    except HTTPException:
+        raise
     except Exception as e:
         logger.error(f"Error creating checkout session: {e}")
         raise HTTPException(status_code=500, detail="Error al crear sesión de pago")
@@ -122,21 +228,57 @@ async def stripe_webhook(request: Request, background_tasks: BackgroundTasks):
             session = event["data"]["object"]
             customer_id = int(session.get("client_reference_id"))
             stripe_subscription_id = session.get("subscription")
+            metadata = session.get("metadata", {})
+
+            # Extraer billing_mode de metadata
+            bm_str = metadata.get("billing_mode", "jeturing_direct_subscription")
+            try:
+                billing_mode = BillingMode(bm_str)
+            except ValueError:
+                billing_mode = BillingMode.JETURING_DIRECT_SUBSCRIPTION
+
+            partner_id = int(metadata.get("partner_id")) if metadata.get("partner_id") else None
+            plan_name = metadata.get("plan", "enterprise")
 
             # Obtener customer
             customer = db.query(Customer).filter_by(id=customer_id).first()
             if customer:
-                # Crear suscripción
+                # Crear suscripción con billing_mode
                 subscription = Subscription(
                     customer_id=customer.id,
                     stripe_subscription_id=stripe_subscription_id,
                     stripe_checkout_session_id=session["id"],
-                    plan_name="enterprise",  # TODO: obtener plan real
-                    status=SubscriptionStatus.pending
+                    plan_name=plan_name,
+                    status=SubscriptionStatus.pending,
+                    billing_mode=billing_mode,
+                    owner_partner_id=partner_id,
                 )
+
+                # Configurar campos de billing según modo
+                if billing_mode == BillingMode.JETURING_DIRECT_SUBSCRIPTION:
+                    subscription.invoice_issuer = InvoiceIssuer.JETURING
+                    subscription.collector = CollectorType.STRIPE_DIRECT
+                    subscription.payer_type = PayerType.END_CUSTOMER
+                elif billing_mode == BillingMode.PARTNER_DIRECT:
+                    subscription.invoice_issuer = InvoiceIssuer.PARTNER
+                    subscription.collector = CollectorType.STRIPE_CONNECT
+                    subscription.payer_type = PayerType.END_CUSTOMER
+                elif billing_mode == BillingMode.PARTNER_PAYS_FOR_CLIENT:
+                    subscription.invoice_issuer = InvoiceIssuer.JETURING
+                    subscription.collector = CollectorType.PARTNER_COLLECTS
+                    subscription.payer_type = PayerType.PARTNER
+
                 db.add(subscription)
                 db.commit()
-                db.refresh(subscription)  # Obtener el ID asignado
+                db.refresh(subscription)
+
+                # Actualizar lead status
+                lead_id = metadata.get("lead_id")
+                if lead_id:
+                    lead = db.query(Lead).filter(Lead.id == int(lead_id)).first()
+                    if lead:
+                        lead.status = LeadStatus.tenant_ready
+                        db.commit()
 
                 # Provisionar tenant en background con subscription_id
                 background_tasks.add_task(
