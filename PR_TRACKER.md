@@ -25,6 +25,7 @@
 | 8 | Domains temprano + no bloqueante | ✅ completado | 2026-02-18 | routes/domains.py (early-verify), routes/onboarding.py (billing_mode) |
 | 9 | Work Orders + gating | ✅ completado | 2026-02-18 | routes/work_orders.py (4 endpoints) |
 | 10 | Auditoría persistente + White-label | ✅ completado | 2026-02-18 | routes/audit.py, routes/branding.py (8 endpoints) |
+| S | Security: Centralizar credenciales | ✅ completado | 2026-02-18 | app/config.py, .env.example, 17 archivos limpiados |
 | T | Tests Unitarios | ⬜ pendiente | — | tests/ |
 | D | Merge + Deploy | ⬜ pendiente | — | — |
 
@@ -38,6 +39,8 @@
 | bcc8b12 | feat: Blueprints, Invoices, Seats, Settlements routes + migration + models | 7 files, 2453 insertions |
 | e738a4f | feat(epic1): Reconciliation, Work Orders, Branding, Audit + register routers | 6 files, 816 insertions |
 | e966501 | feat(epic8): Early domain verify + billing_mode routing in onboarding | 2 files, 260 insertions |
+| 0a590c6 | docs: Update tracker — all 11 épicas completed | 1 file |
+| f3e71b6 | security: Centralize ALL credentials in config.py, remove from 17 files | 19 files, 292 ins / 119 del |
 
 ## Resumen de Endpoints Nuevos (34 total)
 - `/api/blueprints/*` — 7 endpoints (Catálogo módulos + paquetes CRUD)
