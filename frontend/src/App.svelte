@@ -21,6 +21,14 @@
   import Leads from './pages/Leads.svelte';
   import Commissions from './pages/Commissions.svelte';
   import Quotations from './pages/Quotations.svelte';
+  import Blueprints from './pages/Blueprints.svelte';
+  import Seats from './pages/Seats.svelte';
+  import Invoices from './pages/Invoices.svelte';
+  import Settlements from './pages/Settlements.svelte';
+  import Reconciliation from './pages/Reconciliation.svelte';
+  import WorkOrders from './pages/WorkOrders.svelte';
+  import Audit from './pages/Audit.svelte';
+  import Branding from './pages/Branding.svelte';
   import { Spinner } from './lib/components';
   import Toast from './lib/components/Toast.svelte';
 
@@ -43,6 +51,14 @@
     | 'leads'
     | 'commissions'
     | 'quotations'
+    | 'blueprints'
+    | 'seats'
+    | 'invoices'
+    | 'settlements'
+    | 'reconciliation'
+    | 'workorders'
+    | 'audit'
+    | 'branding'
     | 'signup'
     | 'notfound';
 
@@ -112,6 +128,14 @@
       case 'leads':
       case 'commissions':
       case 'quotations':
+      case 'blueprints':
+      case 'seats':
+      case 'invoices':
+      case 'settlements':
+      case 'reconciliation':
+      case 'workorders':
+      case 'audit':
+      case 'branding':
         currentPage = route as AppPage;
         break;
       default:
@@ -191,6 +215,22 @@
       <Commissions />
     {:else if currentPage === 'quotations'}
       <Quotations />
+    {:else if currentPage === 'blueprints'}
+      <Blueprints />
+    {:else if currentPage === 'seats'}
+      <Seats />
+    {:else if currentPage === 'invoices'}
+      <Invoices />
+    {:else if currentPage === 'settlements'}
+      <Settlements />
+    {:else if currentPage === 'reconciliation'}
+      <Reconciliation />
+    {:else if currentPage === 'workorders'}
+      <WorkOrders />
+    {:else if currentPage === 'audit'}
+      <Audit />
+    {:else if currentPage === 'branding'}
+      <Branding />
     {:else}
       <div class="p-6">
         <h1 class="page-title">404 - Página no encontrada</h1>

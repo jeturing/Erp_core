@@ -653,3 +653,267 @@ export interface CatalogResponse {
   by_category: Record<string, ServiceCatalogItemType[]>;
   categories: Array<{ value: string; label: string }>;
 }
+
+// ── Blueprint / Module Package Types (Épica 2) ──
+
+export interface BlueprintModule {
+  id: number;
+  technical_name: string;
+  display_name: string;
+  description: string | null;
+  category: string | null;
+  version: string | null;
+  is_core: boolean;
+  partner_allowed: boolean;
+  price_monthly: number;
+  requires_module_id: number | null;
+  is_active: boolean;
+  sort_order: number;
+  created_at: string | null;
+}
+
+export interface BlueprintModulesResponse {
+  items: BlueprintModule[];
+  total: number;
+}
+
+export interface BlueprintPackage {
+  id: number;
+  name: string;
+  display_name: string;
+  description: string | null;
+  plan_type: string | null;
+  base_price_monthly: number;
+  is_default: boolean;
+  is_active: boolean;
+  module_list: string | null;
+  modules: BlueprintModule[];
+  created_at: string | null;
+}
+
+export interface BlueprintPackagesResponse {
+  items: BlueprintPackage[];
+  total: number;
+}
+
+// ── Seat Types (Épicas 3-4) ──
+
+export type SeatEventType = 'USER_CREATED' | 'USER_DEACTIVATED' | 'USER_REACTIVATED' | 'FIRST_LOGIN' | 'HWM_SNAPSHOT';
+
+export interface SeatEvent {
+  id: number;
+  subscription_id: number;
+  event_type: SeatEventType;
+  odoo_user_id: number | null;
+  odoo_login: string | null;
+  user_count_after: number;
+  is_billable: boolean;
+  grace_expires_at: string | null;
+  source: string | null;
+  metadata_json: string | null;
+  created_at: string | null;
+}
+
+export interface SeatHWMRecord {
+  id: number;
+  subscription_id: number;
+  period_date: string;
+  hwm_count: number;
+  stripe_qty_updated: boolean;
+  stripe_qty_updated_at: string | null;
+}
+
+export interface SeatEventsResponse {
+  items: SeatEvent[];
+  total: number;
+}
+
+export interface SeatHWMResponse {
+  items: SeatHWMRecord[];
+  total: number;
+}
+
+export interface SeatSummaryResponse {
+  subscription_id: number;
+  current_count: number;
+  hwm_count: number;
+  grace_count: number;
+  billable_count: number;
+  last_event: SeatEvent | null;
+  period: string;
+}
+
+// ── Invoice Types (Épica 5) ──
+
+export type InvoiceStatus = 'draft' | 'issued' | 'paid' | 'overdue' | 'void' | 'credited';
+export type InvoiceType = 'SUBSCRIPTION' | 'SETUP' | 'ADDON' | 'INTERCOMPANY' | 'CREDIT_NOTE';
+
+export interface InvoiceItem {
+  id: number;
+  invoice_number: string;
+  subscription_id: number | null;
+  customer_id: number | null;
+  partner_id: number | null;
+  invoice_type: InvoiceType;
+  billing_mode: string | null;
+  issuer: string | null;
+  subtotal: number;
+  tax_amount: number;
+  total: number;
+  currency: string;
+  lines_json: string | null;
+  stripe_invoice_id: string | null;
+  stripe_payment_intent_id: string | null;
+  status: InvoiceStatus;
+  issued_at: string | null;
+  paid_at: string | null;
+  due_date: string | null;
+  notes: string | null;
+  created_at: string | null;
+}
+
+export interface InvoicesListResponse {
+  items: InvoiceItem[];
+  total: number;
+}
+
+// ── Settlement Types (Épica 6) ──
+
+export type SettlementStatus = 'draft' | 'pending_approval' | 'approved' | 'transferred' | 'disputed';
+
+export interface SettlementPeriod {
+  id: number;
+  partner_id: number;
+  period_start: string;
+  period_end: string;
+  gross_revenue: number;
+  net_revenue: number;
+  jeturing_share: number;
+  partner_share: number;
+  offset_amount: number;
+  final_partner_payout: number;
+  status: SettlementStatus;
+  approved_by: string | null;
+  transfer_reference: string | null;
+  transferred_at: string | null;
+  notes: string | null;
+  created_at: string | null;
+}
+
+export interface SettlementLine {
+  id: number;
+  settlement_id: number;
+  subscription_id: number | null;
+  invoice_id: number | null;
+  description: string | null;
+  gross_amount: number;
+  stripe_fee: number;
+  refunds: number;
+  chargebacks: number;
+  net_amount: number;
+  jeturing_amount: number;
+  partner_amount: number;
+}
+
+export interface SettlementsListResponse {
+  items: SettlementPeriod[];
+  total: number;
+}
+
+export interface SettlementDetailResponse extends SettlementPeriod {
+  lines: SettlementLine[];
+}
+
+// ── Reconciliation Types (Épica 7) ──
+
+export interface ReconciliationRun {
+  id: number;
+  period_start: string;
+  period_end: string;
+  stripe_total: number;
+  local_total: number;
+  discrepancy: number;
+  discrepancy_details: Record<string, unknown> | null;
+  status: string;
+  run_by: string | null;
+  created_at: string | null;
+}
+
+export interface ReconciliationListResponse {
+  items: ReconciliationRun[];
+  total: number;
+}
+
+// ── Work Order Types (Épica 9) ──
+
+export type WorkOrderStatus = 'requested' | 'approved' | 'in_progress' | 'completed' | 'rejected' | 'cancelled';
+
+export interface WorkOrderItem {
+  id: number;
+  order_number: string;
+  subscription_id: number | null;
+  customer_id: number | null;
+  partner_id: number | null;
+  work_type: string;
+  description: string;
+  parameters_json: string | null;
+  status: WorkOrderStatus;
+  requested_by: string | null;
+  approved_by: string | null;
+  completed_by: string | null;
+  requested_at: string | null;
+  approved_at: string | null;
+  completed_at: string | null;
+  result_json: string | null;
+  notes: string | null;
+  created_at: string | null;
+}
+
+export interface WorkOrdersListResponse {
+  items: WorkOrderItem[];
+  total: number;
+}
+
+// ── Audit Types (Épica 10) ──
+
+export interface AuditEvent {
+  id: number;
+  event_type: string;
+  actor_id: number | null;
+  actor_username: string | null;
+  actor_role: string | null;
+  ip_address: string | null;
+  user_agent: string | null;
+  resource: string | null;
+  action: string | null;
+  status: string | null;
+  details: Record<string, unknown> | null;
+  created_at: string | null;
+}
+
+export interface AuditEventsResponse {
+  items: AuditEvent[];
+  total: number;
+}
+
+// ── Branding Types (Épica 10) ──
+
+export interface BrandingProfile {
+  id: number;
+  partner_id: number;
+  brand_name: string;
+  logo_url: string | null;
+  favicon_url: string | null;
+  primary_color: string | null;
+  secondary_color: string | null;
+  support_email: string | null;
+  support_url: string | null;
+  custom_css: string | null;
+  is_active: boolean;
+  created_at: string | null;
+}
+
+export interface BrandingProfilesResponse {
+  items: BrandingProfile[];
+  total: number;
+}

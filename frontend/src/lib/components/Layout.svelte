@@ -3,7 +3,8 @@
     LayoutDashboard, Users, Globe, Server, CreditCard,
     Settings, LogOut, Menu, X, FileText, Route, Shield,
     ExternalLink, Package, UserCheck, Handshake, Target,
-    Percent, FileSpreadsheet,
+    Percent, FileSpreadsheet, Boxes, UsersRound, Receipt,
+    Scale, GitCompareArrows, ClipboardList, ShieldCheck, Palette,
   } from 'lucide-svelte';
   import { auth } from '../stores';
 
@@ -24,8 +25,14 @@
     { id: 'partners',       label: 'Partners',        icon: Handshake,       href: '#/partners' },
     { id: 'leads',          label: 'Leads',           icon: Target,          href: '#/leads' },
     { id: 'commissions',    label: 'Comisiones',      icon: Percent,         href: '#/commissions' },
-    { id: 'quotations',     label: 'Cotizaciones',    icon: FileSpreadsheet, href: '#/quotations' },
-    { id: 'settings',       label: 'Settings',        icon: Settings,        href: '#/settings' },
+    { id: 'quotations',     label: 'Cotizaciones',    icon: FileSpreadsheet, href: '#/quotations' },    { id: 'blueprints',      label: 'Blueprints',       icon: Boxes,           href: '#/blueprints' },
+    { id: 'seats',           label: 'Seats',            icon: UsersRound,      href: '#/seats' },
+    { id: 'invoices',        label: 'Facturas',         icon: Receipt,         href: '#/invoices' },
+    { id: 'settlements',     label: 'Liquidaciones',    icon: Scale,           href: '#/settlements' },
+    { id: 'reconciliation',  label: 'Conciliación',     icon: GitCompareArrows, href: '#/reconciliation' },
+    { id: 'workorders',      label: 'Work Orders',      icon: ClipboardList,   href: '#/workorders' },
+    { id: 'audit',           label: 'Auditoría',        icon: ShieldCheck,     href: '#/audit' },
+    { id: 'branding',        label: 'Branding',         icon: Palette,         href: '#/branding' },    { id: 'settings',       label: 'Settings',        icon: Settings,        href: '#/settings' },
     { id: 'logs',           label: 'Logs',            icon: FileText,        href: '#/logs' },
     { id: 'tunnels',        label: 'Tunnels',         icon: Route,           href: '#/tunnels' },
     { id: 'roles',          label: 'Roles',           icon: Shield,          href: '#/roles' },
