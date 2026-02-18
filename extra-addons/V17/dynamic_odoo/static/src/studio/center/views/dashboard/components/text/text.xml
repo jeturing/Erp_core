@@ -1,9 +1,0 @@
-<?xml version="1.0" encoding="UTF-8"?>
-<templates xml:space="preserve">
-    <t t-name="dynamic_odoo.RichText.Layout_1">
-        <rich_text text="Odoo Studio for Community">
-            <div class="rich_text" t-ref="text">
-            </div>
-        </rich_text>
-    </t>
-</templates>

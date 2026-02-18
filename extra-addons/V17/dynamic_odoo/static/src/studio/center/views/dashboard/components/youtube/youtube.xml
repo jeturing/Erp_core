@@ -1,9 +1,0 @@
-<?xml version="1.0" encoding="UTF-8"?>
-<templates xml:space="preserve">
-    <t t-name="dynamic_odoo.Youtube.Layout_1">
-        <youtube>
-            <iframe class="db_youtube" width="560" height="315" t-att-src="state.link" frameborder="0"
-                    allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture"></iframe>
-        </youtube>
-    </t>
-</templates>

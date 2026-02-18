@@ -1,3 +1,0 @@
-1) command for install stripe
-
-	pip3 install stripe

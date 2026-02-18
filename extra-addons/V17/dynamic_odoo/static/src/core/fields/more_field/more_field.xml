@@ -1,9 +1,0 @@
-<?xml version="1.0" encoding="UTF-8"?>
-<templates xml:space="preserve">
-    <t t-name="dynamic_odoo.Field.More" owl="1">
-        <div class="more_field">
-            <button t-if="props.more" class="btn_more" t-on-click="onShowMore">More</button>
-            <button t-if="props.remove" class="btn_remove" t-on-click="props.onRemove">Remove</button>
-        </div>
-    </t>
-</templates>
