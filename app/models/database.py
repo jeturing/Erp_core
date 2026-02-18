@@ -404,15 +404,47 @@ def get_all_configs(category: str = None) -> list:
         db.close()
 
 # Database connection - PCT 160 (SRV-Sajet)
-DATABASE_URL = os.getenv("DATABASE_URL", "postgresql://jeturing:321Abcd@10.10.10.20:5432/erp_core_db")
-engine = create_engine(DATABASE_URL)
-SessionLocal = sessionmaker(autocommit=False, autoflush=False, bind=engine)
+# Uses psycopg3 (postgresql+psycopg://) driver
+_raw_url = os.getenv("DATABASE_URL", "postgresql://jeturing:321Abcd@10.10.10.20:5432/erp_core_db")
+DATABASE_URL = _raw_url.replace("postgresql://", "postgresql+psycopg://", 1) if _raw_url.startswith("postgresql://") and "+psycopg" not in _raw_url else _raw_url
+
+# Lazy engine initialization - avoids import-time DB connection (helps testing)
+_engine = None
+_SessionLocal = None
+
+def _get_engine():
+    global _engine
+    if _engine is None:
+        _engine = create_engine(DATABASE_URL)
+    return _engine
+
+def _get_session_factory():
+    global _SessionLocal
+    if _SessionLocal is None:
+        _SessionLocal = sessionmaker(autocommit=False, autoflush=False, bind=_get_engine())
+    return _SessionLocal
+
+# Backwards-compatible properties via module-level accessors
+class _EngineProxy:
+    """Proxy that lazily initializes the engine on first use."""
+    def __getattr__(self, name):
+        return getattr(_get_engine(), name)
+
+class _SessionLocalProxy:
+    """Proxy that lazily initializes SessionLocal on first use."""
+    def __call__(self, *args, **kwargs):
+        return _get_session_factory()(*args, **kwargs)
+    def __getattr__(self, name):
+        return getattr(_get_session_factory(), name)
+
+engine = _EngineProxy()
+SessionLocal = _SessionLocalProxy()
 
 def init_db():
-    Base.metadata.create_all(bind=engine)
+    Base.metadata.create_all(bind=_get_engine())
 
 def get_db():
-    db = SessionLocal()
+    db = _get_session_factory()()
     try:
         yield db
     finally:

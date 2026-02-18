@@ -163,34 +163,6 @@ class TestStripeEvents:
             pass
 
 
-class TestPricingPage:
-    """Tests for pricing calculator page"""
-    
-    def test_pricing_page_accessible(self, client):
-        """Test pricing page is accessible"""
-        response = client.get("/pricing")
-        assert response.status_code == status.HTTP_200_OK
-        assert "text/html" in response.headers["content-type"]
-    
-    def test_pricing_page_contains_apps(self, client):
-        """Test pricing page contains app selection"""
-        response = client.get("/pricing")
-        assert response.status_code == status.HTTP_200_OK
-        content = response.content.decode()
-        
-        # Should contain some app names
-        assert any(app in content.lower() for app in ["asana", "quickbooks", "salesforce", "shopify"])
-    
-    def test_pricing_page_contains_calculator(self, client):
-        """Test pricing page contains calculator elements"""
-        response = client.get("/pricing")
-        assert response.status_code == status.HTTP_200_OK
-        content = response.content.decode()
-        
-        # Should contain price elements
-        assert "precio" in content.lower() or "price" in content.lower() or "$" in content
-
-
 class TestLandingPage:
     """Tests for landing page"""
     

@@ -41,13 +41,14 @@ class TestAuthLogin:
         assert response.status_code == status.HTTP_401_UNAUTHORIZED
     
     def test_invalid_role_login(self, client):
-        """Test login with invalid role"""
+        """Test login ignores unknown extra fields (role is auto-detected)"""
         response = client.post("/api/auth/login", json={
             "email": "admin",
             "password": "testpass123",
-            "role": "superadmin"  # Invalid role
+            "role": "superadmin"  # Extra field, ignored by backend
         })
-        assert response.status_code == status.HTTP_400_BAD_REQUEST
+        # Role is auto-detected, extra fields are ignored → admin login succeeds
+        assert response.status_code == status.HTTP_200_OK
     
     def test_login_page_renders(self, client):
         """Test that login page renders correctly"""

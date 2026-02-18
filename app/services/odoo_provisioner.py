@@ -46,7 +46,12 @@ def _validate_email(email: str) -> None:
     if len(email) > 254:
         raise ValidationError("Email muy largo (máximo 254 caracteres)")
     
-    if not re.match(r'^[a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\.[a-zA-Z]{2,}$', email):
+    # Rechazar puntos consecutivos, inicio/fin con punto en parte local
+    local_part = email.split('@')[0] if '@' in email else email
+    if '..' in local_part or local_part.startswith('.') or local_part.endswith('.'):
+        raise ValidationError(f"Email inválido: {email}")
+    
+    if not re.match(r'^[a-zA-Z0-9_%+-]+(\.[a-zA-Z0-9_%+-]+)*@[a-zA-Z0-9-]+(\.[a-zA-Z0-9-]+)*\.[a-zA-Z]{2,}$', email):
         raise ValidationError(f"Email inválido: {email}")
 
 

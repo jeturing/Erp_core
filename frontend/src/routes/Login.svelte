@@ -6,7 +6,6 @@
   let showPassword = $state(false);
   let loading = $state(false);
   let error = $state('');
-  let selectedRole = $state<'admin' | 'partner' | 'empresa'>('admin');
   let requiresTotp = $state(false);
   let totpCode = $state('');
   let storedEmail = $state('');
@@ -101,31 +100,21 @@
         <h2 class="text-2xl font-bold text-text-primary mb-1">Iniciar Sesión</h2>
         <p class="text-sm text-gray-500 mb-8">Accede al panel de administración</p>
 
-        <!-- Role tabs -->
-        <div class="flex gap-1 mb-8 bg-bg-card border border-border-light p-1">
-          {#each [['admin', 'Admin'], ['partner', 'Partner'], ['empresa', 'Empresa']] as [val, label]}
-            <button
-              type="button"
-              class="flex-1 py-1.5 text-[11px] uppercase tracking-[0.08em] font-semibold transition-colors {selectedRole === val ? 'bg-charcoal text-white' : 'text-gray-500 hover:text-text-primary'}"
-              onclick={() => selectedRole = val as typeof selectedRole}
-            >
-              {label}
-            </button>
-          {/each}
-        </div>
-
         <form onsubmit={handleLogin} class="space-y-5">
           <div>
-            <label class="label" for="email">Email</label>
+            <label class="label" for="email">Usuario o Email</label>
             <input
               id="email"
-              type="email"
+              type="text"
               class="input w-full px-3 py-2"
-              placeholder="admin@sajet.us"
+              placeholder="admin o correo@empresa.com"
               bind:value={email}
               required
-              autocomplete="email"
+              autocomplete="username"
             />
+            <p class="text-[11px] text-gray-400 mt-1">
+              {email.includes('@') ? 'Acceso como partner o empresa' : 'Acceso administrativo'}
+            </p>
           </div>
 
           <div>

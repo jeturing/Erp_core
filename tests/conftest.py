@@ -9,12 +9,22 @@ import sys
 # Add parent directory to path for imports
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
+# Set test environment variables BEFORE importing the app
+# This ensures middleware (HTTPS redirect, WAF) reads the correct values
+os.environ["ENVIRONMENT"] = "test"
+os.environ["FORCE_HTTPS"] = "false"
+os.environ["ENABLE_WAF"] = "false"
+os.environ["JWT_SECRET_KEY"] = "test-secret-key-for-testing-only"
+os.environ["ADMIN_USERNAME"] = "admin"
+os.environ["ADMIN_PASSWORD"] = "testpass123"
+
 from fastapi.testclient import TestClient
 from sqlalchemy import create_engine
 from sqlalchemy.orm import sessionmaker
 from sqlalchemy.pool import StaticPool
 
 from app.main import app
+from app.models import database as db_module
 from app.models.database import Base, Customer, Subscription, SubscriptionStatus, ProxmoxNode, LXCContainer
 
 
@@ -28,16 +38,17 @@ engine = create_engine(
 )
 TestingSessionLocal = sessionmaker(autocommit=False, autoflush=False, bind=engine)
 
+# Patch the database module so routes using SessionLocal() get the test DB
+db_module._engine = engine
+db_module._SessionLocal = TestingSessionLocal
+
+# Create tables in the in-memory SQLite database
+Base.metadata.create_all(bind=engine)
+
 
 @pytest.fixture(scope="session", autouse=True)
 def setup_test_environment():
-    """Set up test environment variables"""
-    os.environ["ENVIRONMENT"] = "test"
-    os.environ["FORCE_HTTPS"] = "false"
-    os.environ["ENABLE_WAF"] = "false"
-    os.environ["JWT_SECRET_KEY"] = "test-secret-key-for-testing-only"
-    os.environ["ADMIN_USERNAME"] = "admin"
-    os.environ["ADMIN_PASSWORD"] = "testpass123"
+    """Set up test environment variables (already set at module level, this ensures cleanup)"""
     yield
 
 
