@@ -15,6 +15,46 @@ from .roles import verify_token_with_role
 router = APIRouter(prefix="/api/domains", tags=["domains"])
 
 
+def _check_domain_limit(db: Session, customer_id: int):
+    """Verifica que el cliente no exceda el límite de dominios de su plan."""
+    from ..models.database import Customer, Subscription, SubscriptionStatus, Plan, CustomDomain
+
+    customer = db.query(Customer).filter(Customer.id == customer_id).first()
+    if not customer:
+        raise HTTPException(status_code=404, detail="Cliente no encontrado")
+
+    sub = db.query(Subscription).filter(
+        Subscription.customer_id == customer_id,
+        Subscription.status == SubscriptionStatus.active,
+    ).first()
+
+    if not sub:
+        raise HTTPException(status_code=400, detail="Cliente no tiene suscripción activa")
+
+    plan = db.query(Plan).filter(Plan.name == sub.plan_name, Plan.is_active == True).first()
+    if not plan:
+        # Sin plan definido → permitir (backward compat)
+        return
+
+    max_domains = plan.max_domains if plan.max_domains is not None else 0
+    # -1 = ilimitado, 0 = sin dominios custom
+    if max_domains == -1:
+        return  # Sin límite
+
+    current_count = db.query(CustomDomain).filter(
+        CustomDomain.customer_id == customer_id,
+        CustomDomain.is_active == True,
+    ).count()
+
+    if current_count >= max_domains:
+        raise HTTPException(
+            status_code=403,
+            detail=f"Límite de dominios alcanzado ({current_count}/{max_domains}). "
+                   f"El plan '{plan.display_name or plan.name}' permite máximo {max_domains} dominio(s). "
+                   f"Actualice a Enterprise para dominios ilimitados.",
+        )
+
+
 # ==================== Auth Dependencies ====================
 
 async def get_current_admin(access_token: str = Cookie(None)):
@@ -82,11 +122,16 @@ async def create_domain(
 ):
     """
     Registra un nuevo dominio personalizado.
+    Verifica límite de dominios del plan antes de crear.
     
     El sistema:
-    1. Genera un subdominio de sajet.us automáticamente
-    2. Devuelve instrucciones para configurar el CNAME en el DNS del cliente
+    1. Verifica límite de dominios del plan del cliente
+    2. Genera un subdominio de sajet.us automáticamente
+    3. Devuelve instrucciones para configurar el CNAME en el DNS del cliente
     """
+    # Verificar límite de dominios del plan
+    _check_domain_limit(db, data.customer_id)
+
     manager = DomainManager(db)
     result = manager.create_domain(
         external_domain=data.external_domain,

@@ -78,3 +78,5 @@ Pencil_desaing/
 
 # Node modules (frontend)
 node_modules/
+.env.production
+.env

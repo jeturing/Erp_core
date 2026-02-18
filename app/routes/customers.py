@@ -6,13 +6,18 @@ from pydantic import BaseModel
 from typing import Optional, Dict, Any, List
 from ..models.database import (
     Customer, Subscription, SubscriptionStatus, Plan,
-    TenantDeployment, SessionLocal
+    TenantDeployment, CustomDomain, SessionLocal
 )
 from .roles import verify_token_with_role
+import stripe
 import logging
+import os
+import secrets
 
 router = APIRouter(prefix="/api/customers", tags=["Customers"])
 logger = logging.getLogger(__name__)
+
+stripe.api_key = os.getenv("STRIPE_SECRET_KEY")
 
 
 def _verify_admin(request: Request, token: str = None):
@@ -335,5 +340,243 @@ async def recalculate_all(
             "admin_accounts": skipped_admin,
             "details": details,
         }
+    finally:
+        db.close()
+
+
+# ──────────────────────────────────────────────────────
+# Auto Stripe Customer + Credential Management
+# ──────────────────────────────────────────────────────
+
+class SendCredentialsRequest(BaseModel):
+    customer_id: int
+    custom_password: Optional[str] = None  # Si no se pasa, se genera uno aleatorio
+
+
+@router.post("/{customer_id}/create-stripe-customer")
+async def create_stripe_customer(
+    customer_id: int,
+    request: Request,
+    access_token: str = Cookie(None),
+) -> Dict[str, Any]:
+    """
+    Crea automáticamente un Stripe Customer para este cliente.
+    Si ya tiene stripe_customer_id, retorna error.
+    """
+    _verify_admin(request, access_token)
+    db = SessionLocal()
+    try:
+        customer = db.query(Customer).filter(Customer.id == customer_id).first()
+        if not customer:
+            raise HTTPException(status_code=404, detail="Cliente no encontrado")
+
+        if customer.stripe_customer_id:
+            return {
+                "success": True,
+                "already_exists": True,
+                "stripe_customer_id": customer.stripe_customer_id,
+                "message": "El cliente ya tiene Stripe Customer ID",
+            }
+
+        # Crear en Stripe
+        stripe_customer = stripe.Customer.create(
+            email=customer.email,
+            name=customer.company_name or customer.full_name,
+            metadata={
+                "erp_customer_id": str(customer.id),
+                "subdomain": customer.subdomain or "",
+                "platform": "sajet",
+            },
+        )
+
+        customer.stripe_customer_id = stripe_customer.id
+        db.commit()
+
+        logger.info(f"✅ Stripe Customer {stripe_customer.id} creado para {customer.company_name}")
+
+        return {
+            "success": True,
+            "already_exists": False,
+            "stripe_customer_id": stripe_customer.id,
+            "message": f"Stripe Customer creado: {stripe_customer.id}",
+        }
+
+    except stripe.error.StripeError as e:
+        logger.error(f"Error Stripe: {e}")
+        raise HTTPException(status_code=400, detail=f"Error Stripe: {e}")
+    except HTTPException:
+        raise
+    except Exception as e:
+        db.rollback()
+        raise HTTPException(status_code=500, detail=str(e))
+    finally:
+        db.close()
+
+
+@router.post("/{customer_id}/send-credentials")
+async def send_credentials(
+    customer_id: int,
+    request: Request,
+    access_token: str = Cookie(None),
+) -> Dict[str, Any]:
+    """
+    Envía las credenciales de acceso al tenant por email.
+    Usa las credenciales por defecto o genera una contraseña personalizada.
+    """
+    _verify_admin(request, access_token)
+    db = SessionLocal()
+    try:
+        customer = db.query(Customer).filter(Customer.id == customer_id).first()
+        if not customer:
+            raise HTTPException(status_code=404, detail="Cliente no encontrado")
+
+        if not customer.subdomain:
+            raise HTTPException(status_code=400, detail="Cliente no tiene subdominio asignado")
+
+        # Credenciales por defecto de Odoo
+        from ..services.odoo_database_manager import DEFAULT_ADMIN_LOGIN, DEFAULT_ADMIN_PASSWORD
+
+        admin_login = DEFAULT_ADMIN_LOGIN
+        admin_password = DEFAULT_ADMIN_PASSWORD
+
+        # Obtener plan
+        sub = db.query(Subscription).filter(
+            Subscription.customer_id == customer.id,
+            Subscription.status == SubscriptionStatus.active,
+        ).first()
+        plan_name = sub.plan_name if sub else "basic"
+
+        # Enviar email
+        from ..services.email_service import send_tenant_credentials
+
+        result = send_tenant_credentials(
+            to_email=customer.email,
+            company_name=customer.company_name or customer.subdomain,
+            subdomain=customer.subdomain,
+            admin_login=admin_login,
+            admin_password=admin_password,
+            plan_name=plan_name,
+        )
+
+        return {
+            "success": result["success"],
+            "message": f"Credenciales enviadas a {customer.email}" if result["success"] else result.get("error"),
+            "email_to": customer.email,
+        }
+
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.error(f"Error enviando credenciales: {e}")
+        raise HTTPException(status_code=500, detail=str(e))
+    finally:
+        db.close()
+
+
+@router.post("/{customer_id}/reset-password")
+async def reset_customer_password(
+    customer_id: int,
+    request: Request,
+    access_token: str = Cookie(None),
+) -> Dict[str, Any]:
+    """
+    Genera una nueva contraseña para el tenant en Odoo y la envía por email.
+    Resetea la contraseña del usuario admin (id=2) en la BD Odoo del tenant.
+    """
+    _verify_admin(request, access_token)
+    db = SessionLocal()
+    try:
+        customer = db.query(Customer).filter(Customer.id == customer_id).first()
+        if not customer:
+            raise HTTPException(status_code=404, detail="Cliente no encontrado")
+
+        if not customer.subdomain:
+            raise HTTPException(status_code=400, detail="Cliente no tiene subdominio")
+
+        # Generar nueva contraseña segura
+        new_password = secrets.token_urlsafe(12)  # ~16 chars, URL-safe
+
+        # Resetear en Odoo via SQL
+        from ..services.odoo_database_manager import _run_pct_sql, ODOO_SERVERS
+
+        server = list(ODOO_SERVERS.values())[0]
+        reset_sql = f"UPDATE res_users SET password = '{new_password}' WHERE id = 2"
+        success, output = _run_pct_sql(server.pct_id, customer.subdomain, reset_sql)
+
+        if not success:
+            raise HTTPException(status_code=500, detail=f"Error reseteando password en Odoo: {output}")
+
+        # Enviar nueva contraseña por email
+        from ..services.email_service import send_password_reset
+
+        email_result = send_password_reset(
+            to_email=customer.email,
+            company_name=customer.company_name or customer.subdomain,
+            subdomain=customer.subdomain,
+            new_password=new_password,
+        )
+
+        return {
+            "success": True,
+            "password_reset": True,
+            "email_sent": email_result["success"],
+            "message": f"Contraseña reseteada y enviada a {customer.email}",
+        }
+
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.error(f"Error reseteando password: {e}")
+        raise HTTPException(status_code=500, detail=str(e))
+    finally:
+        db.close()
+
+
+@router.post("/bulk-create-stripe")
+async def bulk_create_stripe_customers(
+    request: Request,
+    access_token: str = Cookie(None),
+) -> Dict[str, Any]:
+    """Crea Stripe Customer para todos los clientes que no lo tengan."""
+    _verify_admin(request, access_token)
+    db = SessionLocal()
+    try:
+        customers = db.query(Customer).filter(
+            Customer.stripe_customer_id == None,
+            Customer.is_admin_account == False,
+        ).all()
+
+        created = 0
+        errors = []
+
+        for c in customers:
+            try:
+                sc = stripe.Customer.create(
+                    email=c.email,
+                    name=c.company_name or c.full_name,
+                    metadata={
+                        "erp_customer_id": str(c.id),
+                        "subdomain": c.subdomain or "",
+                        "platform": "sajet",
+                    },
+                )
+                c.stripe_customer_id = sc.id
+                created += 1
+            except Exception as e:
+                errors.append({"customer_id": c.id, "email": c.email, "error": str(e)})
+
+        db.commit()
+        return {
+            "success": True,
+            "created": created,
+            "total_without_stripe": len(customers),
+            "errors": errors,
+        }
+
+    except HTTPException:
+        raise
+    except Exception as e:
+        db.rollback()
+        raise HTTPException(status_code=500, detail=str(e))
     finally:
         db.close()

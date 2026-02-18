@@ -13,7 +13,7 @@ from dotenv import load_dotenv
 load_dotenv()
 
 # Import routers
-from .routes import auth, dashboard, tenants, onboarding, roles, tenant_portal, secure_auth, nodes, tunnels, provisioning, settings, billing, logs, domains, plans, customers, partners, leads, commissions, quotations
+from .routes import auth, dashboard, tenants, onboarding, roles, tenant_portal, secure_auth, nodes, tunnels, provisioning, settings, billing, logs, domains, plans, customers, partners, leads, commissions, quotations, stripe_connect
 
 # Import security middleware
 from .security.middleware import SecurityMiddleware, WAFMiddleware
@@ -104,6 +104,7 @@ app.include_router(partners.router)  # Gestión de socios comerciales
 app.include_router(leads.router)  # Pipeline de prospectos por partner
 app.include_router(commissions.router)  # Comisiones 50/50
 app.include_router(quotations.router)  # Cotizaciones y catálogo de servicios
+app.include_router(stripe_connect.router)  # Stripe Connect Express para partners
 
 
 @app.get("/health")
