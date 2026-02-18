@@ -69,3 +69,12 @@ static/spa/
 
 # Claude worktrees
 .claude/
+
+# Virtual environments
+venv_security/
+
+# Design files
+Pencil_desaing/
+
+# Node modules (frontend)
+node_modules/
