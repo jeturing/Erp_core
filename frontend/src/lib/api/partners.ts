@@ -12,6 +12,9 @@ import type {
   ServiceCatalogItemType,
   PlanCatalogLinksResponse,
   PlanCatalogLinkType,
+  PartnerPricingOverridesResponse,
+  PartnerPricingOverrideItem,
+  PricingSimulation,
 } from '../types';
 
 export const partnersApi = {
@@ -212,6 +215,39 @@ export const partnersApi = {
 
   async deletePlanCatalogLink(linkId: number): Promise<{ message: string }> {
     return api.delete(`/api/catalog/plan-links/${linkId}`);
+  },
+
+  // ── Partner Pricing Overrides ──
+  async getPricingOverrides(partnerId: number): Promise<PartnerPricingOverridesResponse> {
+    return api.get<PartnerPricingOverridesResponse>(`/api/partners/${partnerId}/pricing`);
+  },
+
+  async createPricingOverride(partnerId: number, data: {
+    plan_name: string;
+    base_price_override?: number | null;
+    price_per_user_override?: number | null;
+    included_users_override?: number | null;
+    setup_fee?: number;
+    customization_hourly_rate?: number | null;
+    support_level?: string;
+    ecf_passthrough?: boolean;
+    ecf_monthly_cost?: number | null;
+    label?: string;
+    notes?: string;
+  }): Promise<{ message: string; override: PartnerPricingOverrideItem }> {
+    return api.post(`/api/partners/${partnerId}/pricing`, data);
+  },
+
+  async updatePricingOverride(partnerId: number, overrideId: number, data: Partial<PartnerPricingOverrideItem>): Promise<{ message: string; changes: string[]; override: PartnerPricingOverrideItem }> {
+    return api.put(`/api/partners/${partnerId}/pricing/${overrideId}`, data);
+  },
+
+  async deletePricingOverride(partnerId: number, overrideId: number): Promise<{ message: string }> {
+    return api.delete(`/api/partners/${partnerId}/pricing/${overrideId}`);
+  },
+
+  async simulatePricing(partnerId: number, planName: string = 'basic', userCount: number = 1): Promise<PricingSimulation> {
+    return api.get<PricingSimulation>(`/api/partners/${partnerId}/simulate-pricing?plan_name=${planName}&user_count=${userCount}`);
   },
 };
 

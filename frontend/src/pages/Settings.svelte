@@ -27,7 +27,7 @@
   }
 
   /* ─── Tab state ─── */
-  type TabId = 'credentials' | 'stripe' | 'system' | 'odoo';
+  type TabId = 'credentials' | 'stripe' | 'system' | 'Sajet';
   let activeTab = $state<TabId>('credentials');
 
   /* ─── System config ─── */
@@ -95,7 +95,7 @@
       const data = await settingsApi.getOdooCurrent();
       odooConfig = data.config ?? {};
     } catch (e: any) {
-      toasts.error(e?.message ?? 'Error al cargar config Odoo');
+      toasts.error(e?.message ?? 'Error al cargar config');
     }
   }
 
@@ -160,11 +160,11 @@
     odooLoading = true;
     try {
       await settingsApi.updateOdooConfig(odooFormData);
-      toasts.success('Configuración Odoo actualizada');
+      toasts.success('Configuración Sajet actualizada');
       showOdooForm = false;
       await loadOdooConfig();
     } catch (e: any) {
-      toasts.error(e?.message ?? 'Error al guardar config Odoo');
+      toasts.error(e?.message ?? 'Error al guardar config Sajet');
     } finally {
       odooLoading = false;
     }
@@ -264,7 +264,7 @@
       { id: 'credentials' as TabId, label: 'Credenciales', icon: Key },
       { id: 'stripe' as TabId, label: 'Stripe', icon: CreditCard },
       { id: 'system' as TabId, label: 'Sistema', icon: Server },
-      { id: 'odoo' as TabId, label: 'Odoo', icon: Database },
+      { id: 'odoo' as TabId, label: 'Sajet', icon: Database },
     ] as tab (tab.id)}
       <button
         class="px-4 py-2.5 text-sm font-medium flex items-center gap-2 border-b-2 transition-colors {activeTab === tab.id ? 'border-indigo-600 text-indigo-700' : 'border-transparent text-gray-500 hover:text-gray-700 hover:border-gray-300'}"
@@ -555,9 +555,9 @@
   {:else if activeTab === 'odoo'}
     <div class="card">
       <div class="flex items-center justify-between mb-5">
-        <h3 class="section-heading">CONFIGURACIÓN ODOO</h3>
+        <h3 class="section-heading">CONFIGURACIÓN Sajet</h3>
         {#if !showOdooForm}
-          <button class="btn-secondary px-4 py-2" onclick={startOdooEdit}>EDITAR ODOO</button>
+          <button class="btn-secondary px-4 py-2" onclick={startOdooEdit}>EDITAR Sajet</button>
         {/if}
       </div>
 
@@ -604,7 +604,7 @@
           <div class="flex gap-3 pt-2">
             <button type="button" class="btn-secondary px-4 py-2" onclick={() => showOdooForm = false}>CANCELAR</button>
             <button type="submit" class="btn-accent px-4 py-2 disabled:opacity-60" disabled={odooLoading}>
-              {odooLoading ? 'GUARDANDO...' : 'GUARDAR ODOO'}
+              {odooLoading ? 'GUARDANDO...' : 'GUARDAR Sajet'}
             </button>
           </div>
         </form>

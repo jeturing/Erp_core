@@ -140,6 +140,13 @@ class ServiceCategory(enum.Enum):
     payments_pos = "payments_pos"
 
 
+class SupportLevel(enum.Enum):
+    """Nivel de soporte asignado a un partner/pricing tier."""
+    helpdesk_only = "helpdesk_only"      # Solo vía ticket en helpdesk
+    priority = "priority"                # Soporte prioritario
+    dedicated = "dedicated"              # Soporte dedicado con SLA
+
+
 class SeatEventType(enum.Enum):
     """Tipos de evento de asientos/usuarios."""
     USER_CREATED = "user_created"       # Usuario creado en Odoo
@@ -188,7 +195,7 @@ class Customer(Base):
     __tablename__ = "customers"
     
     id = Column(Integer, primary_key=True, index=True)
-    email = Column(String, unique=True, index=True, nullable=False)
+    email = Column(String, unique=False, index=True, nullable=False)
     password_hash = Column(String(255))  # Para autenticación de portal
     full_name = Column(String, nullable=False)
     company_name = Column(String)
@@ -278,10 +285,33 @@ class Plan(Base):
     created_at = Column(DateTime, default=datetime.utcnow)
     updated_at = Column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
     
-    def calculate_monthly(self, user_count: int) -> float:
-        """Calcula precio mensual según cantidad de usuarios."""
-        extra = max(0, user_count - self.included_users)
-        return self.base_price + (extra * self.price_per_user)
+    def calculate_monthly(self, user_count: int, partner_id: int = None) -> float:
+        """Calcula precio mensual según cantidad de usuarios y override de partner."""
+        base = self.base_price
+        ppu = self.price_per_user
+        included = self.included_users
+
+        if partner_id:
+            try:
+                from . import database as _db
+                db = _db.SessionLocal()
+                try:
+                    override = db.query(PartnerPricingOverride).filter(
+                        PartnerPricingOverride.partner_id == partner_id,
+                        PartnerPricingOverride.plan_name == self.name,
+                        PartnerPricingOverride.is_active == True,
+                    ).first()
+                    if override:
+                        base = override.base_price_override if override.base_price_override is not None else base
+                        ppu = override.price_per_user_override if override.price_per_user_override is not None else ppu
+                        included = override.included_users_override if override.included_users_override is not None else included
+                finally:
+                    db.close()
+            except Exception:
+                pass  # Fallback a precios globales
+
+        extra = max(0, user_count - included)
+        return base + (extra * ppu)
     
     def __repr__(self):
         return f"<Plan {self.name}: ${self.base_price} + ${self.price_per_user}/user>"
@@ -353,6 +383,56 @@ class Partner(Base):
     customer = relationship("Customer", backref="partner_profile")
     leads = relationship("Lead", back_populates="partner", cascade="all, delete-orphan")
     commissions = relationship("Commission", back_populates="partner")
+    pricing_overrides = relationship("PartnerPricingOverride", back_populates="partner", cascade="all, delete-orphan")
+
+
+class PartnerPricingOverride(Base):
+    """
+    Override de precios por partner — permite tarifas diferenciadas.
+    Ej: Techeels paga $120 base + $30/user vs el precio público del plan.
+    Si un campo es NULL, se usa el valor del plan global.
+    """
+    __tablename__ = "partner_pricing_overrides"
+
+    id = Column(Integer, primary_key=True, index=True)
+    partner_id = Column(Integer, ForeignKey("partners.id", ondelete="CASCADE"), nullable=False)
+    plan_name = Column(String(50), nullable=False)                    # basic, pro, enterprise
+
+    # Overrides de precio (NULL = usar valor global del plan)
+    base_price_override = Column(Float, nullable=True)                # Precio base mensual USD
+    price_per_user_override = Column(Float, nullable=True)            # Precio por usuario adicional
+    included_users_override = Column(Integer, nullable=True)          # Usuarios incluidos en base
+
+    # Tarifas adicionales del partner
+    setup_fee = Column(Float, default=0)                              # Fee de setup/implementación
+    customization_hourly_rate = Column(Float, nullable=True)          # Tarifa hora personalización
+    support_level = Column(Enum(SupportLevel), default=SupportLevel.helpdesk_only)
+    ecf_passthrough = Column(Boolean, default=False)                  # Si e-CF es costo pass-through
+    ecf_monthly_cost = Column(Float, nullable=True)                   # Costo mensual e-CF por empresa
+
+    # Metadata
+    label = Column(String(100), nullable=True)                        # Ej: "Plan Partner SMB"
+    notes = Column(Text, nullable=True)
+    is_active = Column(Boolean, default=True)
+    valid_from = Column(DateTime, nullable=True)                      # Vigencia (NULL = siempre)
+    valid_until = Column(DateTime, nullable=True)
+    created_at = Column(DateTime, default=datetime.utcnow)
+    updated_at = Column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
+
+    __table_args__ = (
+        UniqueConstraint("partner_id", "plan_name", name="uq_partner_plan_override"),
+    )
+
+    # Relaciones
+    partner = relationship("Partner", back_populates="pricing_overrides")
+
+    def effective_price(self, plan: 'Plan', user_count: int) -> float:
+        """Calcula el precio mensual usando overrides o fallback al plan."""
+        base = self.base_price_override if self.base_price_override is not None else plan.base_price
+        ppu = self.price_per_user_override if self.price_per_user_override is not None else plan.price_per_user
+        included = self.included_users_override if self.included_users_override is not None else plan.included_users
+        extra = max(0, user_count - included)
+        return base + (extra * ppu)
 
 
 class Lead(Base):

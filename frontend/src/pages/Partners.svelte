@@ -5,8 +5,9 @@
   import { toasts } from '../lib/stores';
   import {
     Handshake, Plus, Search, Building2, Mail, Phone, Globe,
-    CheckCircle, Clock, XCircle, Pencil, Trash2, UserCheck,
+    CheckCircle, Clock, XCircle, Pencil, Trash2, UserCheck, DollarSign,
   } from 'lucide-svelte';
+  import type { PartnerPricingOverrideItem } from '../lib/types';
 
   let partners: PartnerItem[] = [];
   let loading = true;
@@ -15,6 +16,79 @@
   let showForm = false;
   let editingId: number | null = null;
   let summary = { active: 0, pending: 0, total_leads: 0 };
+
+  // Pricing overrides state
+  let expandedPricingId: number | null = null;
+  let pricingOverrides: PartnerPricingOverrideItem[] = [];
+  let pricingLoading = false;
+  let showPricingForm = false;
+  let pricingForm = {
+    plan_name: 'basic',
+    base_price_override: null as number | null,
+    price_per_user_override: null as number | null,
+    included_users_override: null as number | null,
+    setup_fee: 0,
+    customization_hourly_rate: null as number | null,
+    support_level: 'helpdesk_only',
+    ecf_passthrough: false,
+    ecf_monthly_cost: null as number | null,
+    label: '',
+    notes: '',
+  };
+
+  function resetPricingForm() {
+    pricingForm = {
+      plan_name: 'basic', base_price_override: null, price_per_user_override: null,
+      included_users_override: null, setup_fee: 0, customization_hourly_rate: null,
+      support_level: 'helpdesk_only', ecf_passthrough: false, ecf_monthly_cost: null,
+      label: '', notes: '',
+    };
+  }
+
+  async function togglePricing(partnerId: number) {
+    if (expandedPricingId === partnerId) {
+      expandedPricingId = null;
+      return;
+    }
+    expandedPricingId = partnerId;
+    pricingLoading = true;
+    try {
+      const res = await partnersApi.getPricingOverrides(partnerId);
+      pricingOverrides = res.items;
+    } catch (e: any) {
+      toasts.error(e.message || 'Error cargando tarifario');
+      pricingOverrides = [];
+    } finally {
+      pricingLoading = false;
+    }
+  }
+
+  async function handleCreatePricing() {
+    if (!expandedPricingId) return;
+    try {
+      await partnersApi.createPricingOverride(expandedPricingId, pricingForm as any);
+      toasts.success('Tarifa creada');
+      showPricingForm = false;
+      resetPricingForm();
+      await togglePricing(expandedPricingId);
+      expandedPricingId = expandedPricingId; // keep open
+    } catch (e: any) {
+      toasts.error(e.message || 'Error creando tarifa');
+    }
+  }
+
+  async function handleDeletePricing(overrideId: number) {
+    if (!expandedPricingId || !confirm('¿Eliminar esta tarifa?')) return;
+    try {
+      await partnersApi.deletePricingOverride(expandedPricingId, overrideId);
+      toasts.success('Tarifa eliminada');
+      const pid = expandedPricingId;
+      await togglePricing(pid);
+      expandedPricingId = pid;
+    } catch (e: any) {
+      toasts.error(e.message);
+    }
+  }
 
   // Form state
   let form = {
@@ -280,6 +354,7 @@
               </td>
               <td>
                 <div class="flex gap-1">
+                  <button class="btn-sm btn-secondary" title="Tarifario" on:click={() => togglePricing(p.id)}><DollarSign size={14} /></button>
                   <button class="btn-sm btn-secondary" title="Editar" on:click={() => editPartner(p)}><Pencil size={14} /></button>
                   {#if p.status === 'pending'}
                     <button class="btn-sm btn-accent" title="Activar" on:click={() => activatePartner(p.id)}><UserCheck size={14} /></button>
@@ -290,6 +365,122 @@
                 </div>
               </td>
             </tr>
+
+            <!-- Pricing Overrides Panel -->
+            {#if expandedPricingId === p.id}
+              <tr>
+                <td colspan="7" class="bg-bg-page border-t border-border-dark p-4">
+                  <div class="space-y-4">
+                    <div class="flex items-center justify-between">
+                      <h3 class="text-sm font-bold uppercase tracking-widest text-terracotta flex items-center gap-2">
+                        <DollarSign size={14} /> Tarifario — {p.company_name}
+                      </h3>
+                      <button class="btn-accent btn-sm" on:click={() => { resetPricingForm(); showPricingForm = !showPricingForm; }}>
+                        <Plus size={14} /> Agregar Tarifa
+                      </button>
+                    </div>
+
+                    {#if showPricingForm}
+                      <form on:submit|preventDefault={handleCreatePricing} class="card p-4 grid grid-cols-2 md:grid-cols-4 gap-3 border border-border-dark">
+                        <div>
+                          <label class="label">Plan *</label>
+                          <select bind:value={pricingForm.plan_name} class="input w-full">
+                            <option value="basic">Basic</option>
+                            <option value="pro">Pro</option>
+                            <option value="enterprise">Enterprise</option>
+                          </select>
+                        </div>
+                        <div>
+                          <label class="label">Precio Base USD</label>
+                          <input type="number" bind:value={pricingForm.base_price_override} step="0.01" min="0" class="input w-full" placeholder="Override..." />
+                        </div>
+                        <div>
+                          <label class="label">$/Usuario</label>
+                          <input type="number" bind:value={pricingForm.price_per_user_override} step="0.01" min="0" class="input w-full" placeholder="Override..." />
+                        </div>
+                        <div>
+                          <label class="label">Usuarios incl.</label>
+                          <input type="number" bind:value={pricingForm.included_users_override} min="0" class="input w-full" placeholder="Override..." />
+                        </div>
+                        <div>
+                          <label class="label">Setup Fee</label>
+                          <input type="number" bind:value={pricingForm.setup_fee} step="0.01" min="0" class="input w-full" />
+                        </div>
+                        <div>
+                          <label class="label">$/Hora Custom.</label>
+                          <input type="number" bind:value={pricingForm.customization_hourly_rate} step="0.01" min="0" class="input w-full" placeholder="Ej: 80" />
+                        </div>
+                        <div>
+                          <label class="label">Soporte</label>
+                          <select bind:value={pricingForm.support_level} class="input w-full">
+                            <option value="helpdesk_only">Solo Helpdesk</option>
+                            <option value="priority">Prioritario</option>
+                            <option value="dedicated">Dedicado</option>
+                          </select>
+                        </div>
+                        <div>
+                          <label class="label">Etiqueta</label>
+                          <input type="text" bind:value={pricingForm.label} class="input w-full" placeholder="Ej: Plan Partner SMB" />
+                        </div>
+                        <div class="flex items-end gap-2">
+                          <label class="flex items-center gap-2 text-sm cursor-pointer">
+                            <input type="checkbox" bind:checked={pricingForm.ecf_passthrough} class="accent-terracotta" />
+                            e-CF pass-through
+                          </label>
+                        </div>
+                        <div class="col-span-2 md:col-span-3 flex gap-2 items-end">
+                          <button type="submit" class="btn-accent btn-sm">Guardar</button>
+                          <button type="button" class="btn-secondary btn-sm" on:click={() => showPricingForm = false}>Cancelar</button>
+                        </div>
+                      </form>
+                    {/if}
+
+                    {#if pricingLoading}
+                      <div class="text-center py-4 text-gray-500 text-sm">Cargando tarifario...</div>
+                    {:else if pricingOverrides.length === 0}
+                      <div class="text-center py-4 text-gray-500 text-sm">Sin tarifas configuradas — usa precios globales</div>
+                    {:else}
+                      <table class="table w-full text-sm">
+                        <thead>
+                          <tr>
+                            <th>Plan</th>
+                            <th>Base Partner</th>
+                            <th>Base Global</th>
+                            <th>$/User Partner</th>
+                            <th>$/User Global</th>
+                            <th>Setup</th>
+                            <th>$/Hr</th>
+                            <th>Soporte</th>
+                            <th></th>
+                          </tr>
+                        </thead>
+                        <tbody>
+                          {#each pricingOverrides as po}
+                            <tr>
+                              <td><span class="badge-{po.plan_name === 'pro' ? 'pro' : po.plan_name === 'enterprise' ? 'enterprise' : 'basic'}">{po.plan_name}</span></td>
+                              <td class="font-mono text-emerald-400">${po.base_price_override ?? '—'}</td>
+                              <td class="font-mono text-gray-500">${po.global_base_price ?? '—'}</td>
+                              <td class="font-mono text-emerald-400">${po.price_per_user_override ?? '—'}</td>
+                              <td class="font-mono text-gray-500">${po.global_price_per_user ?? '—'}</td>
+                              <td class="font-mono">${po.setup_fee ?? 0}</td>
+                              <td class="font-mono">{po.customization_hourly_rate ? `$${po.customization_hourly_rate}` : '—'}</td>
+                              <td>
+                                <span class="badge-{po.support_level === 'dedicated' ? 'enterprise' : po.support_level === 'priority' ? 'pro' : 'neutral'} text-[10px]">
+                                  {po.support_level === 'helpdesk_only' ? 'Helpdesk' : po.support_level === 'priority' ? 'Prioritario' : 'Dedicado'}
+                                </span>
+                              </td>
+                              <td>
+                                <button class="btn-sm btn-danger" title="Eliminar" on:click={() => handleDeletePricing(po.id)}><Trash2 size={12} /></button>
+                              </td>
+                            </tr>
+                          {/each}
+                        </tbody>
+                      </table>
+                    {/if}
+                  </div>
+                </td>
+              </tr>
+            {/if}
           {/each}
         </tbody>
       </table>

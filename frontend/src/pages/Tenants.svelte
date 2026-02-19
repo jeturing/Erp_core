@@ -1,13 +1,16 @@
 <script lang="ts">
   import { onMount } from 'svelte';
   import { tenantsApi, api } from '../lib/api';
+  import { partnersApi } from '../lib/api/partners';
   import { toasts } from '../lib/stores/toast';
   import { formatDate } from '../lib/utils/formatters';
   import { Plus, RefreshCw, Search } from 'lucide-svelte';
   import type { Tenant } from '../lib/types';
+  import type { PartnerItem } from '../lib/types';
 
 
   let tenants = $state<Tenant[]>([]);
+  let partners = $state<PartnerItem[]>([]);
   let loading = $state(true);
   let searchQuery = $state('');
   let showForm = $state(false);
@@ -19,6 +22,7 @@
   let formPlan = $state<'basic' | 'pro' | 'enterprise'>('basic');
   let formPassword = $state('');
   let formConfirmPassword = $state('');
+  let formPartnerId = $state<number | null>(null);
   let formLoading = $state(false);
 
   // Per-row action state
@@ -30,8 +34,12 @@
   async function loadTenants() {
     loading = true;
     try {
-      const data = await tenantsApi.list();
+      const [data, pData] = await Promise.all([
+        tenantsApi.list(),
+        partnersApi.getPartners('active').catch(() => ({ items: [] })),
+      ]);
       tenants = data.items ?? [];
+      partners = pData.items ?? [];
     } catch (e: any) {
       toasts.error(e?.message ?? 'Error al cargar tenants');
     } finally {
@@ -53,6 +61,7 @@
         admin_email: formEmail,
         admin_password: formPassword,
         plan: formPlan,
+        partner_id: formPartnerId,
       });
       toasts.success('Tenant creado exitosamente');
       showForm = false;
@@ -62,6 +71,7 @@
       formPlan = 'basic';
       formPassword = '';
       formConfirmPassword = '';
+      formPartnerId = null;
       await loadTenants();
     } catch (e: any) {
       toasts.error(e?.message ?? 'Error al crear tenant');
@@ -198,6 +208,15 @@
             </select>
           </div>
           <div>
+            <label class="label" for="f-partner">Partner (opcional)</label>
+            <select id="f-partner" class="input w-full px-3 py-2" bind:value={formPartnerId}>
+              <option value={null}>— Directo (sin partner) —</option>
+              {#each partners as p (p.id)}
+                <option value={p.id}>{p.company_name}</option>
+              {/each}
+            </select>
+          </div>
+          <div>
             <label class="label" for="f-password">Contraseña</label>
             <input id="f-password" class="input w-full px-3 py-2" type="password" bind:value={formPassword} placeholder="••••••••" required />
           </div>
@@ -251,6 +270,7 @@
           <tr>
             <th>TENANT</th>
             <th>PLAN</th>
+            <th>PARTNER</th>
             <th>ESTADO</th>
             <th>SERVIDOR</th>
             <th>CREADO</th>
@@ -272,6 +292,16 @@
                   <span class="badge-pro">{tenant.plan}</span>
                 {:else}
                   <span class="badge-basic">{tenant.plan ?? 'basic'}</span>
+                {/if}
+                {#if tenant.monthly_amount}
+                  <div class="text-[10px] text-gray-400 mt-1">${tenant.monthly_amount}/mo</div>
+                {/if}
+              </td>
+              <td>
+                {#if tenant.partner_name}
+                  <span class="badge-pro text-[10px]">{tenant.partner_name}</span>
+                {:else}
+                  <span class="text-xs text-gray-400">Directo</span>
                 {/if}
               </td>
               <td>
@@ -311,7 +341,7 @@
             <!-- Inline password row -->
             {#if expandedPasswordRow === tenant.subdomain}
               <tr class="bg-bg-page">
-                <td colspan="6" class="py-4 px-6">
+                <td colspan="7" class="py-4 px-6">
                   <div class="flex items-end gap-4 flex-wrap">
                     <div>
                       <label class="label" for="rp-{tenant.subdomain}">Nueva contraseña</label>

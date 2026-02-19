@@ -5,7 +5,7 @@ Integrado con OdooDatabaseManager para provisioning real
 from fastapi import APIRouter, HTTPException, Header, Query
 from pydantic import BaseModel, Field
 from typing import Optional, List
-from ..models.database import Customer, Subscription, SubscriptionStatus, SessionLocal
+from ..models.database import Customer, Subscription, SubscriptionStatus, SessionLocal, Partner, Plan, BillingMode, PayerType, CollectorType, InvoiceIssuer
 from ..services.odoo_database_manager import (
     get_available_servers,
     get_servers_status,
@@ -16,7 +16,8 @@ from ..services.odoo_database_manager import (
     OdooDatabaseManager,
     ODOO_SERVERS,
     DEFAULT_ADMIN_LOGIN,
-    DEFAULT_ADMIN_PASSWORD
+    DEFAULT_ADMIN_PASSWORD,
+    query_admin_login_pg,
 )
 from .auth import verify_token
 import httpx
@@ -39,6 +40,7 @@ class TenantCreateRequest(BaseModel):
     admin_password: Optional[str] = Field(DEFAULT_ADMIN_PASSWORD, description="Password del admin")
     server_id: Optional[str] = Field(None, description="ID del servidor (None = automático)")
     plan: Optional[str] = Field("basic", description="Plan de suscripción")
+    partner_id: Optional[int] = Field(None, description="ID del partner que origina este tenant")
     use_fast_method: Optional[bool] = Field(True, description="Usar método SQL directo (más rápido)")
 
 
@@ -62,13 +64,22 @@ async def get_all_tenants_from_servers():
         databases = server_info.get("databases", [])
         if not databases:
             # Fallback: leer directamente PostgreSQL del nodo Odoo.
-            # Esto cubre escenarios donde /web/database/list retorna vacío.
             databases = _list_databases_via_postgres(server_info.get("id"))
+        
+        # Obtener IP del servidor para consultar login real
+        server_obj = ODOO_SERVERS.get(server_info.get("id"))
+        server_ip = server_obj.ip if server_obj else None
+        db_port = int(os.getenv("ODOO_DB_PORT", "5432"))
         
         for db_name in databases:
             # Saltar BDs del sistema
             if db_name in ['postgres', 'template0', 'template1', 'template_tenant']:
                 continue
+            
+            # Consultar login real desde Odoo PostgreSQL
+            real_login = None
+            if server_ip:
+                real_login = query_admin_login_pg(server_ip, db_name, db_port)
             
             # Buscar en BD local si existe info del tenant
             db = SessionLocal()
@@ -86,10 +97,30 @@ async def get_all_tenants_from_servers():
                     }
                     
                     customer = sub.customer
+                    
+                    # Si el login real difiere del almacenado, actualizar BD local
+                    if real_login and customer.email != real_login:
+                        try:
+                            logger.info(f"Sync email '{customer.subdomain}': {customer.email} → {real_login}")
+                            customer.email = real_login
+                            db.commit()
+                        except Exception as sync_err:
+                            logger.warning(f"No se pudo sincronizar email de {customer.subdomain}: {sync_err}")
+                            db.rollback()
+                    
+                    email_to_show = real_login or customer.email
+                    
+                    # Obtener info de partner si está vinculado
+                    partner_name = None
+                    if sub.owner_partner_id:
+                        partner = db.query(Partner).filter(Partner.id == sub.owner_partner_id).first()
+                        if partner:
+                            partner_name = partner.company_name
+                    
                     all_tenants.append({
                         "id": sub.id,
                         "company_name": customer.company_name,
-                        "email": customer.email,
+                        "email": email_to_show,
                         "subdomain": customer.subdomain,
                         "plan": sub.plan_name,
                         "status": status_map.get(sub.status, "active"),
@@ -98,22 +129,76 @@ async def get_all_tenants_from_servers():
                         "server_id": server_info.get("id"),
                         "created_at": sub.created_at.isoformat() + "Z" if sub.created_at else None,
                         "url": f"https://{customer.subdomain}.sajet.us",
+                        "partner_id": sub.owner_partner_id,
+                        "partner_name": partner_name,
+                        "monthly_amount": sub.monthly_amount or 0,
+                        "user_count": sub.user_count or 1,
+                        "billing_mode": sub.billing_mode.value if sub.billing_mode else None,
                     })
                 else:
-                    # Si no existe en BD local, crear entrada desde la BD de Odoo
-                    all_tenants.append({
-                        "id": abs(hash(db_name)) % 10000,
-                        "company_name": db_name.replace("_", " ").title(),
-                        "email": DEFAULT_ADMIN_LOGIN,
-                        "subdomain": db_name,
-                        "plan": "basic",
-                        "status": "active",
-                        "tunnel_active": True,
-                        "server": server_info.get("name"),
-                        "server_id": server_info.get("id"),
-                        "created_at": None,
-                        "url": f"https://{db_name}.sajet.us",
-                    })
+                    # Tenant existe en Odoo pero no en BD local — auto-registrar
+                    email_to_show = real_login or DEFAULT_ADMIN_LOGIN
+                    try:
+                        new_customer = Customer(
+                            company_name=db_name.replace("_", " ").title(),
+                            email=email_to_show,
+                            full_name=db_name.replace("_", " ").title(),
+                            subdomain=db_name
+                        )
+                        db.add(new_customer)
+                        db.commit()
+                        db.refresh(new_customer)
+                        
+                        new_sub = Subscription(
+                            customer_id=new_customer.id,
+                            plan_name="basic",
+                            status=SubscriptionStatus.active
+                        )
+                        db.add(new_sub)
+                        db.commit()
+                        db.refresh(new_sub)
+                        
+                        logger.info(f"Auto-registrado tenant '{db_name}' en BD local (email={email_to_show})")
+                        
+                        all_tenants.append({
+                            "id": new_sub.id,
+                            "company_name": new_customer.company_name,
+                            "email": email_to_show,
+                            "subdomain": db_name,
+                            "plan": "basic",
+                            "status": "active",
+                            "tunnel_active": True,
+                            "server": server_info.get("name"),
+                            "server_id": server_info.get("id"),
+                            "created_at": new_customer.created_at.isoformat() + "Z" if new_customer.created_at else None,
+                            "url": f"https://{db_name}.sajet.us",
+                            "partner_id": None,
+                            "partner_name": None,
+                            "monthly_amount": 0,
+                            "user_count": 1,
+                            "billing_mode": None,
+                        })
+                    except Exception as auto_err:
+                        logger.warning(f"No se pudo auto-registrar {db_name}: {auto_err}")
+                        db.rollback()
+                        all_tenants.append({
+                            "id": abs(hash(db_name)) % 10000,
+                            "company_name": db_name.replace("_", " ").title(),
+                            "email": email_to_show,
+                            "subdomain": db_name,
+                            "plan": "basic",
+                            "status": "active",
+                            "tunnel_active": True,
+                            "server": server_info.get("name"),
+                            "server_id": server_info.get("id"),
+                            "created_at": None,
+                            "url": f"https://{db_name}.sajet.us",
+                            "partner_id": None,
+                            "partner_name": None,
+                            "monthly_amount": 0,
+                            "user_count": 1,
+                            "billing_mode": None,
+                        })
             except Exception as e:
                 logger.error(f"Error consultando BD local para {db_name}: {e}")
             finally:
@@ -316,7 +401,9 @@ async def create_tenant(
             result = await create_tenant_from_template(
                 subdomain=payload.subdomain,
                 company_name=payload.company_name,
-                server_id=payload.server_id
+                server_id=payload.server_id,
+                admin_login=payload.admin_email,
+                admin_password=payload.admin_password,
             )
         else:
             # Método tradicional via HTTP API de Odoo
@@ -338,6 +425,7 @@ async def create_tenant(
                 if not existing:
                     customer = Customer(
                         company_name=payload.company_name or payload.subdomain.title(),
+                        full_name=payload.company_name or payload.subdomain.title(),
                         email=payload.admin_email or DEFAULT_ADMIN_LOGIN,
                         subdomain=payload.subdomain
                     )
@@ -349,7 +437,12 @@ async def create_tenant(
                     subscription = Subscription(
                         customer_id=customer.id,
                         plan_name=payload.plan or "basic",
-                        status=SubscriptionStatus.active
+                        status=SubscriptionStatus.active,
+                        owner_partner_id=payload.partner_id,
+                        billing_mode=BillingMode.PARTNER_DIRECT if payload.partner_id else BillingMode.JETURING_DIRECT_SUBSCRIPTION,
+                        payer_type=PayerType.PARTNER if payload.partner_id else PayerType.CLIENT,
+                        collector=CollectorType.STRIPE_CONNECT if payload.partner_id else CollectorType.STRIPE_DIRECT,
+                        invoice_issuer=InvoiceIssuer.JETURING,
                     )
                     db.add(subscription)
                     db.commit()

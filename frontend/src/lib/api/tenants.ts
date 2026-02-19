@@ -10,6 +10,7 @@ export interface CreateTenantRequest {
   admin_password?: string;
   server_id?: string;
   plan?: 'basic' | 'pro' | 'enterprise';
+  partner_id?: number | null;
   use_fast_method?: boolean;
 }
 

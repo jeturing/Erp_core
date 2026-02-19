@@ -730,10 +730,37 @@ def _run_pct_sql(pct_id: int, database: str, sql: str, timeout: int = 60) -> tup
         return False, str(e)
 
 
+def query_admin_login_pg(server_ip: str, db_name: str, db_port: int = 5432) -> Optional[str]:
+    """
+    Consulta el login real del admin (id=2) directamente en PostgreSQL de Odoo.
+    Retorna el login o None si no se puede conectar.
+    """
+    try:
+        import psycopg
+        with psycopg.connect(
+            host=server_ip,
+            port=db_port,
+            dbname=db_name,
+            user=DEFAULT_DB_USER,
+            password=DEFAULT_DB_PASSWORD,
+            connect_timeout=5,
+        ) as conn:
+            with conn.cursor() as cur:
+                cur.execute("SELECT login FROM res_users WHERE id = 2")
+                row = cur.fetchone()
+                if row:
+                    return row[0]
+    except Exception as e:
+        logger.warning(f"No se pudo consultar admin login en {db_name}@{server_ip}: {e}")
+    return None
+
+
 async def create_tenant_from_template(
     subdomain: str,
     company_name: str = None,
-    server_id: str = None
+    server_id: str = None,
+    admin_login: str = None,
+    admin_password: str = None
 ) -> Dict[str, Any]:
     """
     Crea tenant duplicando template_tenant via SQL directo (más rápido)
@@ -756,6 +783,10 @@ async def create_tenant_from_template(
     
     if company_name is None:
         company_name = subdomain.replace("_", " ").title()
+    
+    # Resolver login/password finales
+    final_login = admin_login or DEFAULT_ADMIN_LOGIN
+    final_password = admin_password or DEFAULT_ADMIN_PASSWORD
     
     # Obtener servidor
     server = ODOO_SERVERS.get(server_id) if server_id else list(ODOO_SERVERS.values())[0]
@@ -805,6 +836,21 @@ async def create_tenant_from_template(
         
         _run_pct_sql(pct_id, subdomain, config_sql)
         
+        # 6. Actualizar credenciales admin si son diferentes al default
+        if final_login != DEFAULT_ADMIN_LOGIN or final_password != DEFAULT_ADMIN_PASSWORD:
+            cred_sql = f"""
+            UPDATE res_users SET login = '{final_login}' WHERE id = 2;
+            UPDATE res_partner SET email = '{final_login}' WHERE id IN (SELECT partner_id FROM res_users WHERE id = 2);
+            """
+            if final_password != DEFAULT_ADMIN_PASSWORD:
+                cred_sql += f"UPDATE res_users SET password = '{final_password}' WHERE id = 2;\n"
+            
+            ok, out = _run_pct_sql(pct_id, subdomain, cred_sql)
+            if ok:
+                logger.info(f"✅ Credenciales admin actualizadas: login={final_login}")
+            else:
+                logger.warning(f"⚠️ Error actualizando credenciales: {out}")
+        
         logger.info(f"✅ Tenant '{subdomain}' creado exitosamente")
         
         return {
@@ -814,8 +860,8 @@ async def create_tenant_from_template(
             "server": server.id,
             "server_name": server.name,
             "url": f"https://{subdomain}.{BASE_DOMAIN}",
-            "admin_login": DEFAULT_ADMIN_LOGIN,
-            "admin_password": DEFAULT_ADMIN_PASSWORD,
+            "admin_login": final_login,
+            "admin_password": final_password,
             "created_at": datetime.utcnow().isoformat()
         }
         

@@ -48,6 +48,11 @@ export interface Tenant {
   server_id?: string;
   created_at?: string | null;
   url?: string;
+  partner_id?: number | null;
+  partner_name?: string | null;
+  monthly_amount?: number;
+  user_count?: number;
+  billing_mode?: string | null;
 }
 
 export interface TenantListResponse {
@@ -945,4 +950,53 @@ export interface BrandingProfile {
 export interface BrandingProfilesResponse {
   items: BrandingProfile[];
   total: number;
+}
+
+// ── Partner Pricing Override Types ──
+
+export type SupportLevelType = 'helpdesk_only' | 'priority' | 'dedicated';
+
+export interface PartnerPricingOverrideItem {
+  id: number;
+  partner_id: number;
+  plan_name: string;
+  base_price_override: number | null;
+  price_per_user_override: number | null;
+  included_users_override: number | null;
+  setup_fee: number;
+  customization_hourly_rate: number | null;
+  support_level: SupportLevelType | null;
+  ecf_passthrough: boolean;
+  ecf_monthly_cost: number | null;
+  label: string | null;
+  notes: string | null;
+  is_active: boolean;
+  valid_from: string | null;
+  valid_until: string | null;
+  created_at: string | null;
+  updated_at: string | null;
+  // Enriched from backend
+  global_base_price?: number;
+  global_price_per_user?: number;
+  global_included_users?: number;
+}
+
+export interface PartnerPricingOverridesResponse {
+  items: PartnerPricingOverrideItem[];
+  total: number;
+  partner_id: number;
+}
+
+export interface PricingSimulation {
+  plan: string;
+  user_count: number;
+  public_price: number;
+  partner_price: number;
+  discount_pct: number;
+  setup_fee: number;
+  customization_rate: number | null;
+  support_level?: string;
+  ecf_passthrough?: boolean;
+  ecf_monthly_cost?: number | null;
+  partner: string;
 }
