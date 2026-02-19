@@ -641,13 +641,19 @@ async def provision_tenant(
 
 
 async def _create_cloudflare_dns(subdomain: str, server: OdooServer) -> Dict[str, Any]:
-    """Crea registro DNS en Cloudflare para el nuevo tenant"""
+    """Crea registro DNS CNAME en Cloudflare apuntando al tunnel principal"""
     try:
         from .cloudflare_manager import CloudflareManager
+        from ..config import CLOUDFLARE_TUNNEL_ID
         
+        tunnel_id = CLOUDFLARE_TUNNEL_ID
+        if not tunnel_id:
+            logger.warning("CLOUDFLARE_TUNNEL_ID no configurado, no se puede crear DNS")
+            return {"success": False, "error": "CLOUDFLARE_TUNNEL_ID no configurado"}
+
         result = await CloudflareManager.create_dns_record(
             subdomain=subdomain,
-            target_ip=server.ip
+            tunnel_id=tunnel_id,
         )
         return result
     except ImportError:

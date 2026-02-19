@@ -331,12 +331,17 @@ async def create_cloudflare_tunnel(
     """
     try:
         from .cloudflare_manager import CloudflareManager
-        
-        result = await CloudflareManager.create_tunnel(
+        from ..config import CLOUDFLARE_TUNNEL_ID
+
+        # Crear registro DNS CNAME apuntando al tunnel principal
+        tunnel_id = CLOUDFLARE_TUNNEL_ID
+        if not tunnel_id:
+            return {"success": False, "error": "CLOUDFLARE_TUNNEL_ID no configurado"}
+
+        result = await CloudflareManager.create_dns_record(
             subdomain=subdomain,
-            container_id=None,
-            local_port=local_port,
-            domain=domain
+            tunnel_id=tunnel_id,
+            domain=domain,
         )
         
         return result

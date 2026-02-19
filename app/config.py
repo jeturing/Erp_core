@@ -80,6 +80,8 @@ CT105_NGINX_PORT = int(os.getenv("CT105_NGINX_PORT", "8080"))
 # Cloudflare
 # ═══════════════════════════════════════════════════════
 CLOUDFLARE_API_TOKEN = os.getenv("CLOUDFLARE_API_TOKEN", "")
+CLOUDFLARE_ACCOUNT_ID = os.getenv("CLOUDFLARE_ACCOUNT_ID", "")
+CLOUDFLARE_ZONE_ID = os.getenv("CLOUDFLARE_ZONE_ID", "")
 CLOUDFLARE_TUNNEL_ID = os.getenv("CLOUDFLARE_TUNNEL_ID", "")
 
 # Zones loaded from env (comma-separated key=value pairs) or defaults
