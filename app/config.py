@@ -2,11 +2,37 @@
 Centralized Configuration — Single source of truth for all settings.
 ALL credentials, IPs, secrets, and environment-specific values MUST come from here.
 NEVER hardcode credentials in route files, services, or models.
+
+Environment selection:
+  ERP_ENV=development  → loads .env           (local dev, BD 10.10.10.20)
+  ERP_ENV=test         → loads .env.test      (pruebas, BD 10.10.10.20)
+  ERP_ENV=production   → loads .env.production (HA cluster, BD 10.10.10.137)
+
+Set ERP_ENV before starting the app or export it in your shell.
+If not set, defaults to 'development' (.env).
 """
 import os
+from pathlib import Path
 from dotenv import load_dotenv
 
-load_dotenv()
+# ── Resolve which .env file to load ──
+_project_root = Path(__file__).resolve().parent.parent
+_erp_env = os.getenv("ERP_ENV", "development").lower().strip()
+
+_ENV_FILES = {
+    "development": _project_root / ".env",
+    "test":        _project_root / ".env.test",
+    "production":  _project_root / ".env.production",
+}
+
+_env_file = _ENV_FILES.get(_erp_env, _project_root / ".env")
+if _env_file.exists():
+    load_dotenv(_env_file, override=True)
+else:
+    # Fallback: load default .env if the specific file is missing
+    load_dotenv(override=True)
+
+ACTIVE_ENV_FILE = str(_env_file)
 
 
 # ═══════════════════════════════════════════════════════
@@ -108,6 +134,24 @@ ENVIRONMENT = os.getenv("ENVIRONMENT", "development")
 FORCE_HTTPS = os.getenv("FORCE_HTTPS", "false").lower() == "true"
 ENABLE_WAF = os.getenv("ENABLE_WAF", "true").lower() == "true"
 API_KEY_SECRET = os.getenv("API_KEY_SECRET", "")
+
+
+def get_env_info() -> dict:
+    """Return current environment info (for /api/env endpoint and logging)."""
+    # Mask sensitive parts of DATABASE_URL
+    _masked_db = DATABASE_URL
+    if "@" in _masked_db:
+        _pre, _post = _masked_db.split("@", 1)
+        _masked_db = _pre.rsplit(":", 1)[0] + ":****@" + _post
+    return {
+        "erp_env": _erp_env,
+        "env_file": ACTIVE_ENV_FILE,
+        "environment": ENVIRONMENT,
+        "database_host": _masked_db.split("@")[-1].split("/")[0] if "@" in DATABASE_URL else "unknown",
+        "database_name": DATABASE_URL.rsplit("/", 1)[-1] if "/" in DATABASE_URL else "unknown",
+        "stripe_mode": "live" if "rk_live" in STRIPE_SECRET_KEY or "sk_live" in STRIPE_SECRET_KEY else "test",
+        "app_url": APP_URL,
+    }
 
 
 def validate_required():

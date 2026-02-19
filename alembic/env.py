@@ -1,19 +1,39 @@
 """
 Alembic environment configuration for ERP Core.
-Reads DATABASE_URL from environment and uses app models for autogenerate.
+Loads the correct .env file based on ERP_ENV, then uses DATABASE_URL.
+
+Usage:
+  ERP_ENV=test alembic upgrade head        # → .env.test (BD 10.10.10.20)
+  ERP_ENV=production alembic upgrade head  # → .env.production (BD HA 10.10.10.137)
+  alembic upgrade head                     # → .env (dev default)
+  DATABASE_URL=... alembic upgrade head    # → explicit override
 """
 import os
 import sys
+from pathlib import Path
 from logging.config import fileConfig
 
 from sqlalchemy import engine_from_config, pool
 from alembic import context
 
 # Ensure the project root is in sys.path so we can import app.models
-sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
+_project_root = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+sys.path.insert(0, _project_root)
 
 from dotenv import load_dotenv
-load_dotenv()
+
+# ── Select .env file based on ERP_ENV ──
+_erp_env = os.getenv("ERP_ENV", "development").lower().strip()
+_env_files = {
+    "development": os.path.join(_project_root, ".env"),
+    "test":        os.path.join(_project_root, ".env.test"),
+    "production":  os.path.join(_project_root, ".env.production"),
+}
+_env_file = _env_files.get(_erp_env, os.path.join(_project_root, ".env"))
+if os.path.exists(_env_file):
+    load_dotenv(_env_file, override=True)
+else:
+    load_dotenv(override=True)
 
 # Alembic Config object
 config = context.config

@@ -8,12 +8,8 @@ from fastapi.staticfiles import StaticFiles
 import logging
 import os
 
-# Load environment variables from .env file
-from dotenv import load_dotenv
-load_dotenv()
-
-# Validate required env vars at startup
-from .config import validate_required, ENVIRONMENT, FORCE_HTTPS, ENABLE_WAF, APP_URL
+# Config loads the correct .env file based on ERP_ENV
+from .config import validate_required, ENVIRONMENT, FORCE_HTTPS, ENABLE_WAF, APP_URL, get_env_info, ACTIVE_ENV_FILE
 validate_required()
 
 # Import routers
@@ -120,6 +116,18 @@ app.include_router(audit.router)            # Audit events persistentes
 app.include_router(reports.router)          # Reportes consolidados / analytics
 
 
+# ── Startup log ──
+_env_info = get_env_info()
+logger.info(f"🚀 ERP Core starting — ERP_ENV={_env_info['erp_env']} | env_file={ACTIVE_ENV_FILE}")
+logger.info(f"   DB → {_env_info['database_host']}/{_env_info['database_name']} | Stripe={_env_info['stripe_mode']}")
+
+
+@app.get("/api/env")
+async def env_info():
+    """Returns current environment configuration (non-sensitive)."""
+    return get_env_info()
+
+
 @app.get("/health")
 async def health_check():
     """Health check endpoint"""
@@ -127,6 +135,9 @@ async def health_check():
         "status": "healthy",
         "version": "2.0.0",
         "environment": ENVIRONMENT,
+        "erp_env": _env_info["erp_env"],
+        "database_host": _env_info["database_host"],
+        "stripe_mode": _env_info["stripe_mode"],
         "security": {
             "https_enforced": FORCE_HTTPS,
             "waf_enabled": ENABLE_WAF
