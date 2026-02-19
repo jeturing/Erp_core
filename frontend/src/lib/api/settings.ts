@@ -1,6 +1,44 @@
 import api from './client';
 import type { OdooSettingsResponse, SettingsResponse } from '../types';
 
+export interface CredentialItem {
+  key: string;
+  value: string;
+  raw_length: number;
+  description: string;
+  is_secret: boolean;
+  is_set: boolean;
+  source: 'database' | 'env' | 'not_set';
+}
+
+export interface CredentialCategory {
+  label: string;
+  items: CredentialItem[];
+}
+
+export interface CredentialsResponse {
+  success: boolean;
+  credentials: Record<string, CredentialCategory>;
+}
+
+export interface StripeModeResponse {
+  success: boolean;
+  mode: 'test' | 'live';
+  detected_mode: string;
+  active_secret_key_prefix: string;
+  active_publishable_key: string;
+  has_test_keys: boolean;
+  has_live_keys: boolean;
+}
+
+export interface StripeModeSetResponse {
+  success: boolean;
+  mode: string;
+  message: string;
+  active_key_prefix: string;
+  requires_restart: boolean;
+}
+
 export const settingsApi = {
   async getAll(category?: string): Promise<SettingsResponse> {
     const suffix = category ? `?category=${encodeURIComponent(category)}` : '';
@@ -31,6 +69,40 @@ export const settingsApi = {
     template_db?: string;
   }): Promise<{ success: boolean; message: string }> {
     return api.put('/api/settings/odoo', payload);
+  },
+
+  // ── Credential Management ──
+
+  async getCredentials(category?: string): Promise<CredentialsResponse> {
+    const suffix = category ? `?category=${encodeURIComponent(category)}` : '';
+    return api.get<CredentialsResponse>(`/api/settings/credentials${suffix}`);
+  },
+
+  async updateCredential(key: string, value: string, category: string = 'general', is_secret: boolean = true): Promise<{ success: boolean }> {
+    return api.put(`/api/settings/credentials/${encodeURIComponent(key)}`, {
+      key,
+      value,
+      category,
+      is_secret,
+    });
+  },
+
+  // ── Stripe Mode ──
+
+  async getStripeMode(): Promise<StripeModeResponse> {
+    return api.get<StripeModeResponse>('/api/settings/stripe/mode');
+  },
+
+  async setStripeMode(payload: {
+    mode: 'test' | 'live';
+    test_secret_key?: string;
+    test_publishable_key?: string;
+    test_webhook_secret?: string;
+    live_secret_key?: string;
+    live_publishable_key?: string;
+    live_webhook_secret?: string;
+  }): Promise<StripeModeSetResponse> {
+    return api.post('/api/settings/stripe/mode', payload);
   },
 };
 

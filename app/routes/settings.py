@@ -11,6 +11,7 @@ from ..services.odoo_database_manager import get_odoo_config
 from .auth import verify_token
 import logging
 import os
+import re
 
 router = APIRouter(prefix="/api/settings", tags=["Settings"])
 logger = logging.getLogger(__name__)
@@ -43,6 +44,98 @@ class OdooConfigUpdateRequest(BaseModel):
     default_country: Optional[str] = Field(None, description="País por defecto (DO, MX, US)")
     base_domain: Optional[str] = Field(None, description="Dominio base para tenants")
     template_db: Optional[str] = Field(None, description="BD template para duplicar")
+
+
+# =====================================================
+# ENDPOINTS - GESTIÓN DE CREDENCIALES (.env)
+# =====================================================
+
+class CredentialEntry(BaseModel):
+    """Una credencial del sistema."""
+    key: str
+    value: str
+    category: str = "general"
+    description: Optional[str] = None
+    is_secret: bool = True
+
+
+class CredentialBulkRequest(BaseModel):
+    """Actualización masiva de credenciales."""
+    credentials: List[CredentialEntry]
+
+
+class StripeModeRequest(BaseModel):
+    """Cambiar modo Stripe (test/live)."""
+    mode: str = Field(..., description="'test' o 'live'")
+    test_secret_key: Optional[str] = None
+    test_publishable_key: Optional[str] = None
+    test_webhook_secret: Optional[str] = None
+    live_secret_key: Optional[str] = None
+    live_publishable_key: Optional[str] = None
+    live_webhook_secret: Optional[str] = None
+
+
+# Credenciales organizadas por categoría con metadatos
+CREDENTIAL_DEFINITIONS = {
+    "stripe": {
+        "label": "Stripe Payments",
+        "items": [
+            {"key": "STRIPE_MODE", "description": "Modo activo (test / live)", "is_secret": False, "default": "live"},
+            {"key": "STRIPE_SECRET_KEY", "description": "Secret key activa (sk_ o rk_)", "is_secret": True},
+            {"key": "STRIPE_PUBLISHABLE_KEY", "description": "Publishable key activa (pk_)", "is_secret": False},
+            {"key": "STRIPE_WEBHOOK_SECRET", "description": "Webhook secret activo (whsec_)", "is_secret": True},
+            {"key": "STRIPE_TEST_SECRET_KEY", "description": "Secret key de TEST (sk_test_)", "is_secret": True},
+            {"key": "STRIPE_TEST_PUBLISHABLE_KEY", "description": "Publishable key de TEST (pk_test_)", "is_secret": False},
+            {"key": "STRIPE_TEST_WEBHOOK_SECRET", "description": "Webhook secret de TEST", "is_secret": True},
+            {"key": "STRIPE_LIVE_SECRET_KEY", "description": "Secret key de LIVE (rk_live_ / sk_live_)", "is_secret": True},
+            {"key": "STRIPE_LIVE_PUBLISHABLE_KEY", "description": "Publishable key de LIVE (pk_live_)", "is_secret": False},
+            {"key": "STRIPE_LIVE_WEBHOOK_SECRET", "description": "Webhook secret de LIVE", "is_secret": True},
+        ],
+    },
+    "cloudflare": {
+        "label": "Cloudflare",
+        "items": [
+            {"key": "CLOUDFLARE_API_TOKEN", "description": "API Token de Cloudflare", "is_secret": True},
+            {"key": "CLOUDFLARE_ACCOUNT_ID", "description": "Account ID", "is_secret": False},
+            {"key": "CLOUDFLARE_ZONE_ID", "description": "Zone ID principal (sajet.us)", "is_secret": False},
+            {"key": "CLOUDFLARE_TUNNEL_ID", "description": "Tunnel ID principal", "is_secret": False},
+            {"key": "CLOUDFLARE_ZONES", "description": "Zonas: domain=zone_id,domain=zone_id", "is_secret": False},
+        ],
+    },
+    "database": {
+        "label": "Base de Datos",
+        "items": [
+            {"key": "DATABASE_URL", "description": "URL de conexión PostgreSQL", "is_secret": True},
+            {"key": "DB_HOST", "description": "Host PostgreSQL", "is_secret": False},
+            {"key": "DB_PORT", "description": "Puerto PostgreSQL", "is_secret": False},
+            {"key": "DB_NAME", "description": "Nombre de la BD", "is_secret": False},
+            {"key": "DB_USER", "description": "Usuario PostgreSQL", "is_secret": False},
+            {"key": "DB_PASSWORD", "description": "Password PostgreSQL", "is_secret": True},
+        ],
+    },
+    "auth": {
+        "label": "Autenticación / JWT",
+        "items": [
+            {"key": "JWT_SECRET_KEY", "description": "Clave secreta JWT", "is_secret": True},
+            {"key": "JWT_REFRESH_SECRET_KEY", "description": "Clave secreta refresh JWT", "is_secret": True},
+            {"key": "JWT_ACCESS_TOKEN_EXPIRE_MINUTES", "description": "Minutos de expiración del token", "is_secret": False},
+            {"key": "ADMIN_USERNAME", "description": "Email del admin", "is_secret": False},
+            {"key": "ADMIN_PASSWORD", "description": "Password del admin", "is_secret": True},
+        ],
+    },
+    "infrastructure": {
+        "label": "Infraestructura",
+        "items": [
+            {"key": "APP_URL", "description": "URL pública de la aplicación", "is_secret": False},
+            {"key": "ENVIRONMENT", "description": "Entorno (development / production)", "is_secret": False},
+            {"key": "ODOO_PRIMARY_IP", "description": "IP del servidor Odoo primario", "is_secret": False},
+            {"key": "CT105_IP", "description": "IP del contenedor CT105", "is_secret": False},
+            {"key": "ERP_CORE_IP", "description": "IP de ERP Core", "is_secret": False},
+            {"key": "PROVISIONING_API_KEY", "description": "API Key de provisioning", "is_secret": True},
+        ],
+    },
+}
+
 
 
 # =====================================================
@@ -113,6 +206,252 @@ async def list_all_configs(
     except Exception as e:
         logger.error(f"Error listando configuraciones: {e}")
         raise HTTPException(status_code=500, detail=str(e))
+
+
+
+@router.get("/credentials")
+async def list_credentials(
+    category: Optional[str] = Query(None, description="Filtrar por categoría"),
+    authorization: str = Header(None),
+    access_token: str = Cookie(None)
+):
+    """
+    Lista todas las credenciales del sistema organizadas por categoría.
+    Valores secretos se muestran enmascarados. Los valores vienen de:
+    1. BD (system_config) si existe
+    2. Variables de entorno como fallback
+    """
+    require_admin(authorization, access_token)
+
+    result = {}
+    for cat_key, cat_def in CREDENTIAL_DEFINITIONS.items():
+        if category and cat_key != category:
+            continue
+        items = []
+        for item_def in cat_def["items"]:
+            key = item_def["key"]
+            # Intentar BD primero, luego env
+            db_val = get_config(key, None)
+            env_val = os.getenv(key, "")
+            raw_value = db_val if db_val is not None else env_val
+            source = "database" if db_val is not None else ("env" if env_val else "not_set")
+
+            # Enmascarar secretos
+            if item_def["is_secret"] and raw_value:
+                if len(raw_value) > 8:
+                    masked = raw_value[:4] + "•" * (len(raw_value) - 8) + raw_value[-4:]
+                else:
+                    masked = "••••••••"
+            else:
+                masked = raw_value or ""
+
+            items.append({
+                "key": key,
+                "value": masked,
+                "raw_length": len(raw_value) if raw_value else 0,
+                "description": item_def["description"],
+                "is_secret": item_def["is_secret"],
+                "is_set": bool(raw_value),
+                "source": source,
+            })
+        result[cat_key] = {
+            "label": cat_def["label"],
+            "items": items,
+        }
+
+    return {"success": True, "credentials": result}
+
+
+@router.put("/credentials/{key}")
+async def update_credential(
+    key: str,
+    payload: CredentialEntry,
+    authorization: str = Header(None),
+    access_token: str = Cookie(None)
+):
+    """
+    Actualiza una credencial. Se guarda en system_config (BD).
+    Para cambios en .env del disco se requiere reinicio del servicio.
+    """
+    require_admin(authorization, access_token)
+
+    if payload.key != key:
+        raise HTTPException(status_code=400, detail="Key mismatch")
+
+    # Validar que la key esté en las definiciones permitidas
+    valid_keys = set()
+    for cat in CREDENTIAL_DEFINITIONS.values():
+        for item in cat["items"]:
+            valid_keys.add(item["key"])
+
+    if key not in valid_keys:
+        raise HTTPException(status_code=400, detail=f"Credencial '{key}' no está en la lista permitida")
+
+    success = set_config(
+        key=key,
+        value=payload.value,
+        description=payload.description or f"Credential: {key}",
+        category=payload.category,
+        is_secret=payload.is_secret,
+        updated_by="admin",
+    )
+
+    if success:
+        logger.info(f"Credencial actualizada: {key}")
+        return {"success": True, "key": key, "message": f"Credencial '{key}' actualizada"}
+    else:
+        raise HTTPException(status_code=500, detail="Error guardando credencial")
+
+
+@router.post("/credentials/bulk")
+async def update_credentials_bulk(
+    payload: CredentialBulkRequest,
+    authorization: str = Header(None),
+    access_token: str = Cookie(None)
+):
+    """Actualiza múltiples credenciales a la vez."""
+    require_admin(authorization, access_token)
+
+    results = []
+    for cred in payload.credentials:
+        success = set_config(
+            key=cred.key,
+            value=cred.value,
+            description=cred.description,
+            category=cred.category,
+            is_secret=cred.is_secret,
+            updated_by="admin",
+        )
+        results.append({"key": cred.key, "success": success})
+
+    return {
+        "success": True,
+        "results": results,
+        "updated": sum(1 for r in results if r["success"]),
+    }
+
+
+# =====================================================
+# ENDPOINTS - STRIPE MODE TOGGLE (dev / prod)
+# =====================================================
+
+@router.get("/stripe/mode")
+async def get_stripe_mode(
+    authorization: str = Header(None),
+    access_token: str = Cookie(None)
+):
+    """
+    Obtiene el modo actual de Stripe (test/live) y las keys configuradas.
+    """
+    require_admin(authorization, access_token)
+
+    mode = get_config("STRIPE_MODE", None) or "live"
+    current_sk = get_config("STRIPE_SECRET_KEY", None) or os.getenv("STRIPE_SECRET_KEY", "")
+    current_pk = get_config("STRIPE_PUBLISHABLE_KEY", None) or os.getenv("STRIPE_PUBLISHABLE_KEY", "")
+
+    # Auto-detectar modo si no está explícito
+    if current_sk:
+        if current_sk.startswith("sk_test_") or current_sk.startswith("rk_test_"):
+            detected = "test"
+        else:
+            detected = "live"
+    else:
+        detected = "unknown"
+
+    # Verificar si hay keys guardadas para cada modo
+    has_test = bool(get_config("STRIPE_TEST_SECRET_KEY", None))
+    has_live = bool(get_config("STRIPE_LIVE_SECRET_KEY", None) or (current_sk and "live" in current_sk))
+
+    return {
+        "success": True,
+        "mode": mode,
+        "detected_mode": detected,
+        "active_secret_key_prefix": current_sk[:12] + "..." if current_sk and len(current_sk) > 12 else "",
+        "active_publishable_key": current_pk[:20] + "..." if current_pk and len(current_pk) > 20 else "",
+        "has_test_keys": has_test,
+        "has_live_keys": has_live,
+    }
+
+
+@router.post("/stripe/mode")
+async def set_stripe_mode(
+    payload: StripeModeRequest,
+    authorization: str = Header(None),
+    access_token: str = Cookie(None)
+):
+    """
+    Cambia el modo Stripe entre test y live.
+    
+    Flujo:
+    1. Si se proporcionan keys nuevas, las guarda en STRIPE_{TEST/LIVE}_*
+    2. Copia las keys del modo seleccionado a STRIPE_SECRET_KEY, etc.
+    3. Actualiza STRIPE_MODE
+    
+    Los cambios se guardan en BD (system_config) y aplican en el próximo request.
+    Para aplicar globalmente se requiere reiniciar el servicio.
+    """
+    require_admin(authorization, access_token)
+
+    if payload.mode not in ("test", "live"):
+        raise HTTPException(status_code=400, detail="Modo debe ser 'test' o 'live'")
+
+    changes = []
+
+    # Guardar keys nuevas si se proporcionan
+    if payload.mode == "test":
+        if payload.test_secret_key:
+            set_config("STRIPE_TEST_SECRET_KEY", payload.test_secret_key, "Secret key TEST", "stripe", True, "admin")
+            changes.append("STRIPE_TEST_SECRET_KEY")
+        if payload.test_publishable_key:
+            set_config("STRIPE_TEST_PUBLISHABLE_KEY", payload.test_publishable_key, "Publishable key TEST", "stripe", False, "admin")
+            changes.append("STRIPE_TEST_PUBLISHABLE_KEY")
+        if payload.test_webhook_secret:
+            set_config("STRIPE_TEST_WEBHOOK_SECRET", payload.test_webhook_secret, "Webhook secret TEST", "stripe", True, "admin")
+            changes.append("STRIPE_TEST_WEBHOOK_SECRET")
+    else:
+        if payload.live_secret_key:
+            set_config("STRIPE_LIVE_SECRET_KEY", payload.live_secret_key, "Secret key LIVE", "stripe", True, "admin")
+            changes.append("STRIPE_LIVE_SECRET_KEY")
+        if payload.live_publishable_key:
+            set_config("STRIPE_LIVE_PUBLISHABLE_KEY", payload.live_publishable_key, "Publishable key LIVE", "stripe", False, "admin")
+            changes.append("STRIPE_LIVE_PUBLISHABLE_KEY")
+        if payload.live_webhook_secret:
+            set_config("STRIPE_LIVE_WEBHOOK_SECRET", payload.live_webhook_secret, "Webhook secret LIVE", "stripe", True, "admin")
+            changes.append("STRIPE_LIVE_WEBHOOK_SECRET")
+
+    # Obtener las keys del modo seleccionado
+    if payload.mode == "test":
+        sk = get_config("STRIPE_TEST_SECRET_KEY", "")
+        pk = get_config("STRIPE_TEST_PUBLISHABLE_KEY", "")
+        wh = get_config("STRIPE_TEST_WEBHOOK_SECRET", "")
+    else:
+        sk = get_config("STRIPE_LIVE_SECRET_KEY", None) or os.getenv("STRIPE_SECRET_KEY", "")
+        pk = get_config("STRIPE_LIVE_PUBLISHABLE_KEY", None) or os.getenv("STRIPE_PUBLISHABLE_KEY", "")
+        wh = get_config("STRIPE_LIVE_WEBHOOK_SECRET", None) or os.getenv("STRIPE_WEBHOOK_SECRET", "")
+
+    if not sk:
+        raise HTTPException(
+            status_code=400,
+            detail=f"No hay Secret Key configurada para modo '{payload.mode}'. Primero guarde las credenciales."
+        )
+
+    # Activar las keys del modo seleccionado
+    set_config("STRIPE_SECRET_KEY", sk, f"Stripe SK activa ({payload.mode})", "stripe", True, "admin")
+    set_config("STRIPE_PUBLISHABLE_KEY", pk, f"Stripe PK activa ({payload.mode})", "stripe", False, "admin")
+    if wh:
+        set_config("STRIPE_WEBHOOK_SECRET", wh, f"Stripe WH activa ({payload.mode})", "stripe", True, "admin")
+    set_config("STRIPE_MODE", payload.mode, "Modo Stripe activo", "stripe", False, "admin")
+
+    logger.info(f"Stripe modo cambiado a '{payload.mode}' — SK prefix: {sk[:12]}...")
+
+    return {
+        "success": True,
+        "mode": payload.mode,
+        "message": f"Stripe cambiado a modo {payload.mode.upper()}. Reinicie el servicio para aplicar globalmente.",
+        "active_key_prefix": sk[:12] + "..." if len(sk) > 12 else sk,
+        "changes": changes,
+        "requires_restart": True,
+    }
 
 
 @router.get("/{key}")
@@ -383,3 +722,4 @@ async def get_env_vars(
             for var in safe_vars
         }
     }
+

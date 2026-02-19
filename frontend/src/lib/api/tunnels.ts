@@ -72,6 +72,21 @@ export interface TunnelDetailResponse {
   };
 }
 
+export interface DeploymentItem {
+  id: number;
+  subdomain: string;
+  database_name: string | null;
+  tunnel_id: string | null;
+  tunnel_active: boolean;
+  tunnel_url: string | null;
+  direct_url: string | null;
+  plan_type: string | null;
+  subscription_id: number | null;
+  company_name: string | null;
+  stripe_subscription_id: string | null;
+  stripe_status: string | null;
+}
+
 // ─── API ───────────────────────────────────────────────
 export const tunnelsApi = {
   list(): Promise<TunnelsListResponse> {
@@ -114,5 +129,25 @@ export const tunnelsApi = {
     let url = `/api/tunnels/dns/records?domain=${encodeURIComponent(domain)}`;
     if (recordType) url += `&record_type=${recordType}`;
     return api.get(url);
+  },
+
+  /** Deployments disponibles para vincular */
+  listDeployments(): Promise<{ success: boolean; deployments: DeploymentItem[]; total: number }> {
+    return api.get('/api/tunnels/deployments/available');
+  },
+
+  /** Vincular tunnel → deployment */
+  linkDeployment(tunnelId: string, deploymentId: number): Promise<Record<string, unknown>> {
+    return api.post(`/api/tunnels/${tunnelId}/link`, { deployment_id: deploymentId });
+  },
+
+  /** Desvincular tunnel de deployment */
+  unlinkDeployment(tunnelId: string): Promise<Record<string, unknown>> {
+    return api.delete(`/api/tunnels/${tunnelId}/link`);
+  },
+
+  /** Vincular deployment/tunnel a subscription Stripe */
+  linkStripe(tunnelId: string, subscriptionId: number): Promise<Record<string, unknown>> {
+    return api.post(`/api/tunnels/${tunnelId}/link-stripe`, { subscription_id: subscriptionId });
   },
 };

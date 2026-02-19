@@ -7,8 +7,9 @@ from typing import Dict, Any, Optional
 import logging
 
 from ..services.cloudflare_manager import CloudflareManager
-from ..models.database import SessionLocal, TenantDeployment, Subscription
+from ..models.database import SessionLocal, TenantDeployment, Subscription, Customer
 from ..security.tokens import TokenManager
+from pydantic import BaseModel, Field
 
 logger = logging.getLogger(__name__)
 router = APIRouter(prefix="/api/tunnels", tags=["tunnels"])
@@ -27,6 +28,20 @@ def verify_admin(access_token: str) -> bool:
         raise
     except Exception:
         raise HTTPException(status_code=401, detail="Token inválido")
+
+
+# ═══════════════════════════════════════════════════════
+# DTOs
+# ═══════════════════════════════════════════════════════
+
+class LinkTunnelRequest(BaseModel):
+    """Vincular un tunnel de Cloudflare a un tenant deployment."""
+    deployment_id: int = Field(..., description="ID del TenantDeployment a vincular")
+
+
+class LinkStripeRequest(BaseModel):
+    """Vincular un deployment a una suscripción Stripe."""
+    subscription_id: int = Field(..., description="ID de la Subscription local")
 
 
 # ═══════════════════════════════════════════════════════
@@ -147,6 +162,166 @@ async def verify_api_token(access_token: str = Cookie(None)):
         return result
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
+
+
+@router.get("/deployments/available", summary="Deployments disponibles para vincular")
+async def list_available_deployments(access_token: str = Cookie(None)):
+    """Lista todos los TenantDeployments para vincular a tunnels."""
+    verify_admin(access_token)
+    db = SessionLocal()
+    try:
+        deployments = db.query(TenantDeployment).all()
+        items = []
+        for d in deployments:
+            customer = None
+            sub = None
+            if d.subscription_id:
+                sub = db.query(Subscription).filter_by(id=d.subscription_id).first()
+                if sub and sub.customer_id:
+                    customer = db.query(Customer).filter_by(id=sub.customer_id).first()
+            items.append({
+                "id": d.id,
+                "subdomain": d.subdomain,
+                "database_name": d.database_name,
+                "tunnel_id": d.tunnel_id or None,
+                "tunnel_active": d.tunnel_active,
+                "tunnel_url": d.tunnel_url,
+                "direct_url": d.direct_url,
+                "plan_type": str(d.plan_type.value) if d.plan_type else None,
+                "subscription_id": d.subscription_id,
+                "company_name": customer.company_name if customer else None,
+                "stripe_subscription_id": sub.stripe_subscription_id if sub else None,
+                "stripe_status": str(sub.status.value) if sub and sub.status else None,
+            })
+        return {"success": True, "deployments": items, "total": len(items)}
+    finally:
+        db.close()
+
+
+@router.post("/{tunnel_id}/link", summary="Vincular tunnel a un tenant deployment")
+async def link_tunnel_to_deployment(
+    tunnel_id: str,
+    payload: LinkTunnelRequest,
+    access_token: str = Cookie(None),
+):
+    """
+    Vincula un Cloudflare Tunnel a un TenantDeployment.
+    Actualiza tunnel_id y tunnel_active en la BD.
+    """
+    verify_admin(access_token)
+    db = SessionLocal()
+    try:
+        deployment = db.query(TenantDeployment).filter_by(id=payload.deployment_id).first()
+        if not deployment:
+            raise HTTPException(status_code=404, detail="Deployment no encontrado")
+
+        # Verificar que el tunnel existe en CF
+        result = await CloudflareManager.get_tunnel(tunnel_id)
+        if not result.get("success"):
+            raise HTTPException(status_code=404, detail="Tunnel no existe en Cloudflare")
+
+        tunnel_name = result["tunnel"].get("name", tunnel_id)
+
+        # Desvincular otros deployments de este tunnel
+        existing = db.query(TenantDeployment).filter_by(tunnel_id=tunnel_id).all()
+        for ex in existing:
+            if ex.id != payload.deployment_id:
+                ex.tunnel_id = None
+                ex.tunnel_active = False
+
+        deployment.tunnel_id = tunnel_id
+        deployment.tunnel_active = result["tunnel"].get("status") == "healthy"
+        db.commit()
+
+        logger.info(f"Tunnel {tunnel_id} ({tunnel_name}) vinculado a deployment {deployment.subdomain}")
+        return {
+            "success": True,
+            "message": f"Tunnel '{tunnel_name}' vinculado a '{deployment.subdomain}'",
+            "tunnel_id": tunnel_id,
+            "deployment_id": deployment.id,
+            "subdomain": deployment.subdomain,
+        }
+    except HTTPException:
+        raise
+    except Exception as e:
+        db.rollback()
+        logger.exception(f"Error vinculando tunnel: {e}")
+        raise HTTPException(status_code=500, detail=str(e))
+    finally:
+        db.close()
+
+
+@router.delete("/{tunnel_id}/link", summary="Desvincular tunnel de un tenant")
+async def unlink_tunnel_from_deployment(
+    tunnel_id: str,
+    access_token: str = Cookie(None),
+):
+    """Desvincula un tunnel de su TenantDeployment."""
+    verify_admin(access_token)
+    db = SessionLocal()
+    try:
+        deployments = db.query(TenantDeployment).filter_by(tunnel_id=tunnel_id).all()
+        if not deployments:
+            raise HTTPException(status_code=404, detail="No hay deployment vinculado a este tunnel")
+
+        for d in deployments:
+            d.tunnel_id = None
+            d.tunnel_active = False
+        db.commit()
+
+        names = [d.subdomain for d in deployments]
+        logger.info(f"Tunnel {tunnel_id} desvinculado de: {names}")
+        return {
+            "success": True,
+            "message": f"Tunnel desvinculado de: {', '.join(names)}",
+            "unlinked": names,
+        }
+    except HTTPException:
+        raise
+    except Exception as e:
+        db.rollback()
+        raise HTTPException(status_code=500, detail=str(e))
+    finally:
+        db.close()
+
+
+@router.post("/{tunnel_id}/link-stripe", summary="Vincular deployment/tunnel a Stripe")
+async def link_tunnel_stripe(
+    tunnel_id: str,
+    payload: LinkStripeRequest,
+    access_token: str = Cookie(None),
+):
+    """
+    Vincula el TenantDeployment de un tunnel a una Subscription (Stripe).
+    """
+    verify_admin(access_token)
+    db = SessionLocal()
+    try:
+        deployment = db.query(TenantDeployment).filter_by(tunnel_id=tunnel_id).first()
+        if not deployment:
+            raise HTTPException(status_code=404, detail="No hay deployment vinculado a este tunnel")
+
+        subscription = db.query(Subscription).filter_by(id=payload.subscription_id).first()
+        if not subscription:
+            raise HTTPException(status_code=404, detail="Subscription no encontrada")
+
+        deployment.subscription_id = subscription.id
+        db.commit()
+
+        logger.info(f"Deployment {deployment.subdomain} vinculado a subscription {subscription.id}")
+        return {
+            "success": True,
+            "message": f"Deployment '{deployment.subdomain}' vinculado a subscription #{subscription.id}",
+            "stripe_subscription_id": subscription.stripe_subscription_id,
+            "plan_name": subscription.plan_name,
+        }
+    except HTTPException:
+        raise
+    except Exception as e:
+        db.rollback()
+        raise HTTPException(status_code=500, detail=str(e))
+    finally:
+        db.close()
 
 
 @router.get("/subscription/{subscription_id}/tunnel", summary="Tunnel de una suscripción")
