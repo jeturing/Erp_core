@@ -23,7 +23,7 @@
     loading = true;
     try {
       const res = await reconciliationApi.list({ limit: 50 });
-      runs = res.items;
+      runs = res?.items ?? [];
     } catch (e: any) {
       toasts.error(e.message);
     } finally {
@@ -75,9 +75,9 @@
     return { icon: XCircle, color: 'text-error' };
   }
 
-  $: totalDiscrepancy = runs.reduce((s, r) => s + Math.abs(r.discrepancy), 0);
-  $: cleanRuns = runs.filter(r => Math.abs(r.discrepancy) < 0.01).length;
-  $: issueRuns = runs.length - cleanRuns;
+  $: totalDiscrepancy = (runs || []).reduce((s, r) => s + Math.abs(r.discrepancy), 0);
+  $: cleanRuns = (runs || []).filter(r => Math.abs(r.discrepancy) < 0.01).length;
+  $: issueRuns = (runs || []).length - cleanRuns;
 
   onMount(loadRuns);
 </script>

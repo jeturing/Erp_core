@@ -55,8 +55,8 @@
         blueprintsApi.getModules(),
         blueprintsApi.getPackages(),
       ]);
-      modules = modRes.items;
-      packages = pkgRes.items;
+      modules = modRes?.items ?? [];
+      packages = pkgRes?.items ?? [];
     } catch (e: any) {
       toasts.error(e.message);
     } finally {
@@ -136,19 +136,19 @@
     }
   }
 
-  $: filteredModules = modules.filter(m =>
+  $: filteredModules = (modules || []).filter(m =>
     m.technical_name.toLowerCase().includes(search.toLowerCase()) ||
     (m.display_name || '').toLowerCase().includes(search.toLowerCase()) ||
     (m.category || '').toLowerCase().includes(search.toLowerCase())
   );
 
-  $: filteredPackages = packages.filter(p =>
+  $: filteredPackages = (packages || []).filter(p =>
     p.name.toLowerCase().includes(search.toLowerCase()) ||
     (p.display_name || '').toLowerCase().includes(search.toLowerCase())
   );
 
-  $: coreModules = modules.filter(m => m.is_core).length;
-  $: addonModules = modules.filter(m => !m.is_core).length;
+  $: coreModules = (modules || []).filter(m => m.is_core).length;
+  $: addonModules = (modules || []).filter(m => !m.is_core).length;
 
   onMount(loadAll);
 </script>
@@ -299,7 +299,7 @@
         <div class="md:col-span-2">
           <label class="label mb-2">Módulos incluidos</label>
           <div class="grid grid-cols-2 md:grid-cols-3 gap-2 max-h-48 overflow-y-auto p-3 border border-border-light bg-bg-page">
-            {#each modules.filter(m => m.is_active) as m}
+            {#each (modules || []).filter(m => m.is_active) as m}
               <label class="flex items-center gap-2 cursor-pointer text-sm p-1.5 hover:bg-bg-card transition-colors">
                 <input type="checkbox" checked={packageForm.module_ids.includes(m.id)} on:change={() => toggleModuleInPackage(m.id)} class="w-4 h-4" />
                 <span class="truncate">{m.display_name || m.technical_name}</span>

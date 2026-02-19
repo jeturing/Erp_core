@@ -35,8 +35,8 @@
         status: statusFilter || undefined,
         limit: 50,
       });
-      workOrders = res.items;
-      total = res.total;
+      workOrders = res?.items ?? [];
+      total = res?.total ?? 0;
     } catch (e: any) {
       toasts.error(e.message);
     } finally {
@@ -102,15 +102,15 @@
     }
   }
 
-  $: filtered = workOrders.filter(w =>
+  $: filtered = (workOrders || []).filter(w =>
     (w.order_number || '').toLowerCase().includes(search.toLowerCase()) ||
     w.work_type.toLowerCase().includes(search.toLowerCase()) ||
     w.description.toLowerCase().includes(search.toLowerCase())
   );
 
-  $: requested = workOrders.filter(w => w.status === 'requested').length;
-  $: inProgress = workOrders.filter(w => w.status === 'in_progress').length;
-  $: completed = workOrders.filter(w => w.status === 'completed').length;
+  $: requested = (workOrders || []).filter(w => w.status === 'requested').length;
+  $: inProgress = (workOrders || []).filter(w => w.status === 'in_progress').length;
+  $: completed = (workOrders || []).filter(w => w.status === 'completed').length;
 
   onMount(loadWorkOrders);
 </script>

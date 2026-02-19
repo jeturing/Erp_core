@@ -51,10 +51,10 @@
         partnersApi.getLeads(partnerFilter || undefined, statusFilter || undefined),
         partnersApi.getPartners(),
       ]);
-      leads = leadsRes.items;
-      pipeline = leadsRes.pipeline;
-      totalEstimated = leadsRes.total_estimated_value;
-      partners = partnersRes.items.filter(p => p.status === 'active');
+      leads = leadsRes?.items ?? [];
+      pipeline = leadsRes?.pipeline ?? {};
+      totalEstimated = leadsRes?.total_estimated_value ?? 0;
+      partners = (partnersRes?.items ?? []).filter(p => p.status === 'active');
     } catch (e: any) {
       toasts.error(e.message);
     } finally {
@@ -126,7 +126,7 @@
     }
   }
 
-  $: filtered = leads.filter(l =>
+  $: filtered = (leads || []).filter(l =>
     l.company_name.toLowerCase().includes(search.toLowerCase()) ||
     (l.contact_name || '').toLowerCase().includes(search.toLowerCase()) ||
     (l.contact_email || '').toLowerCase().includes(search.toLowerCase())

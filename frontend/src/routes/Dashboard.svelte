@@ -11,8 +11,24 @@
   } from 'lucide-svelte';
   import type { ReportsOverview } from '../lib/api/dashboard';
 
-  // Reactive alias
-  $: report = $dashboard.report as ReportsOverview | null;
+  // Reactive alias — safe defaults to avoid undefined access
+  $: rawReport = $dashboard.report as ReportsOverview | null;
+  $: report = rawReport ? {
+    ...rawReport,
+    system_health: rawReport.system_health ?? [],
+    recent_activity: rawReport.recent_activity ?? [],
+    recent_stripe_events: rawReport.recent_stripe_events ?? [],
+    revenue: rawReport.revenue ?? { mrr: 0, arr: 0, pending_amount: 0, pending_count: 0, churn_rate: 0, total_users: 0, plan_distribution: {}, new_this_month: 0, cancelled_30d: 0 },
+    customers: rawReport.customers ?? { total: 0, active: 0, suspended: 0, active_subscriptions: 0 },
+    partners: { ...rawReport.partners ?? { total: 0, active: 0, pending: 0, top: [] }, top: rawReport.partners?.top ?? [] },
+    leads: { ...rawReport.leads ?? { total: 0, active: 0, won: 0, pipeline_value: 0, pipeline: {} }, pipeline: rawReport.leads?.pipeline ?? {} },
+    commissions: rawReport.commissions ?? { total_partner: 0, pending: 0, paid: 0, jeturing_share: 0 },
+    infrastructure: rawReport.infrastructure ?? { nodes_total: 0, nodes_online: 0, containers_total: 0, containers_running: 0, cpu: { used: 0, total: 0, percent: 0 }, ram: { used: 0, total: 0, percent: 0 }, disk: { used: 0, total: 0, percent: 0 } },
+    settlements: rawReport.settlements ?? { open: 0, closed: 0, total_partner_payout: 0 },
+    work_orders: rawReport.work_orders ?? { total: 0, requested: 0, in_progress: 0, completed: 0 },
+    reconciliation: rawReport.reconciliation ?? { total_runs: 0, clean: 0, issues: 0 },
+    invoices: rawReport.invoices ?? { total: 0, paid: 0, pending: 0, total_amount: 0, paid_amount: 0 },
+  } : null;
 
   async function handleRefresh() {
     await dashboard.load();
@@ -133,7 +149,7 @@
           <span class="section-heading">Distribución por Plan</span>
         </div>
         <div class="p-6 space-y-4">
-          {#each Object.entries(report.revenue.plan_distribution) as [plan, data]}
+          {#each Object.entries(report.revenue?.plan_distribution || {}) as [plan, data]}
             <div>
               <div class="flex justify-between mb-1.5">
                 <span class="text-sm font-semibold font-sans capitalize">{plan}</span>
@@ -172,10 +188,10 @@
               <div class="text-[10px] text-gray-400">{report.leads.won} ganados</div>
             </div>
           </div>
-          {#if report.partners.top.length > 0}
+          {#if (report.partners?.top || []).length > 0}
             <div class="px-6 py-3">
               <div class="text-[10px] uppercase tracking-widest text-gray-400 font-sans mb-2">Top Partners</div>
-              {#each report.partners.top.slice(0, 3) as p}
+              {#each (report.partners?.top || []).slice(0, 3) as p}
                 <div class="flex justify-between items-center py-1.5">
                   <span class="text-sm font-body text-text-primary truncate">{p.company_name}</span>
                   <span class="text-sm font-semibold font-sans">{formatCurrency(p.total_revenue)}</span>
@@ -187,7 +203,7 @@
           <div class="px-6 py-3">
             <div class="text-[10px] uppercase tracking-widest text-gray-400 font-sans mb-2">Pipeline</div>
             <div class="flex gap-1.5 flex-wrap">
-              {#each Object.entries(report.leads.pipeline) as [status, count]}
+              {#each Object.entries(report.leads?.pipeline || {}) as [status, count]}
                 <span class="badge-neutral text-[9px]">{status}: {count}</span>
               {/each}
             </div>
@@ -343,7 +359,7 @@
           <a href="#/logs" class="text-[11px] uppercase tracking-widest text-gray-500 hover:text-terracotta font-sans">Logs →</a>
         </div>
         <div class="divide-y divide-border-light">
-          {#each report.system_health as item}
+          {#each (report.system_health || []) as item}
             {@const si = statusIcon(item.status)}
             <div class="flex items-center justify-between px-6 py-3">
               <span class="text-sm font-body text-text-secondary">{item.name}</span>
@@ -356,10 +372,10 @@
         </div>
 
         <!-- Stripe Events -->
-        {#if report.recent_stripe_events.length > 0}
+        {#if (report.recent_stripe_events || []).length > 0}
           <div class="px-6 py-3 border-t border-border-light">
             <div class="text-[10px] uppercase tracking-widest text-gray-400 font-sans mb-2">Últimos eventos Stripe</div>
-            {#each report.recent_stripe_events.slice(0, 4) as evt}
+            {#each (report.recent_stripe_events || []).slice(0, 4) as evt}
               <div class="flex justify-between py-1">
                 <span class="text-[11px] font-mono text-gray-500 truncate">{evt.event_type}</span>
                 <span class="text-[10px] text-gray-400">{evt.processed ? '✓' : '⏳'}</span>
@@ -394,7 +410,7 @@
             </tr>
           </thead>
           <tbody>
-            {#each report.recent_activity as t}
+            {#each (report.recent_activity || []) as t}
               <tr>
                 <td>
                   <div class="flex items-center gap-2">

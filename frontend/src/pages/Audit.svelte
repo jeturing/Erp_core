@@ -28,8 +28,8 @@
         limit: PAGE_SIZE,
         offset: page * PAGE_SIZE,
       });
-      events = res.items;
-      total = res.total;
+      events = res?.items ?? [];
+      total = res?.total ?? 0;
     } catch (e: any) {
       toasts.error(e.message);
     } finally {
@@ -55,14 +55,14 @@
   $: startItem = currentPage * PAGE_SIZE + 1;
   $: endItem = Math.min((currentPage + 1) * PAGE_SIZE, total);
 
-  $: filtered = events.filter(e =>
+  $: filtered = (events || []).filter(e =>
     (e.event_type || '').toLowerCase().includes(search.toLowerCase()) ||
     (e.actor_username || '').toLowerCase().includes(search.toLowerCase()) ||
     (e.resource || '').toLowerCase().includes(search.toLowerCase()) ||
     (e.action || '').toLowerCase().includes(search.toLowerCase())
   );
 
-  $: eventTypes = [...new Set(events.map(e => e.event_type).filter(Boolean))];
+  $: eventTypes = [...new Set((events || []).map(e => e.event_type).filter(Boolean))];
 
   onMount(() => loadEvents(0));
 </script>
@@ -91,11 +91,11 @@
     </div>
     <div class="stat-card">
       <span class="stat-label">Éxitos</span>
-      <span class="stat-value text-success">{events.filter(e => e.status === 'success' || e.status === 'ok').length}</span>
+      <span class="stat-value text-success">{(events || []).filter(e => e.status === 'success' || e.status === 'ok').length}</span>
     </div>
     <div class="stat-card">
       <span class="stat-label">Errores</span>
-      <span class="stat-value text-error">{events.filter(e => e.status === 'error' || e.status === 'failed').length}</span>
+      <span class="stat-value text-error">{(events || []).filter(e => e.status === 'error' || e.status === 'failed').length}</span>
     </div>
   </div>
 

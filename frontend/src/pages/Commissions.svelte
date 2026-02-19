@@ -40,9 +40,9 @@
         partnersApi.getCommissions(partnerFilter || undefined, statusFilter || undefined),
         partnersApi.getPartners(),
       ]);
-      commissions = commsRes.items;
-      summary = commsRes.summary;
-      partners = partnersRes.items.filter(p => p.status === 'active');
+      commissions = commsRes?.items ?? [];
+      summary = commsRes?.summary ?? { total_partner_amount: 0, total_jeturing_amount: 0, total_pending_payout: 0, total_gross: 0 };
+      partners = (partnersRes?.items ?? []).filter(p => p.status === 'active');
     } catch (e: any) {
       toasts.error(e.message);
     } finally {
@@ -91,7 +91,7 @@
     }
   }
 
-  $: filtered = commissions.filter(c =>
+  $: filtered = (commissions || []).filter(c =>
     (c.partner_name || '').toLowerCase().includes(search.toLowerCase())
   );
 

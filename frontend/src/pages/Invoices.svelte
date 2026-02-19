@@ -31,8 +31,8 @@
         limit: PAGE_SIZE,
         offset: page * PAGE_SIZE,
       });
-      invoices = res.items;
-      total = res.total;
+      invoices = res?.items ?? [];
+      total = res?.total ?? 0;
     } catch (e: any) {
       toasts.error(e.message);
     } finally {
@@ -90,13 +90,13 @@
   $: startItem = currentPage * PAGE_SIZE + 1;
   $: endItem = Math.min((currentPage + 1) * PAGE_SIZE, total);
 
-  $: filtered = invoices.filter(i =>
+  $: filtered = (invoices || []).filter(i =>
     (i.invoice_number || '').toLowerCase().includes(search.toLowerCase())
   );
 
-  $: totalAmount = invoices.reduce((s, i) => s + i.total, 0);
-  $: paidCount = invoices.filter(i => i.status === 'paid').length;
-  $: pendingCount = invoices.filter(i => i.status === 'issued' || i.status === 'draft').length;
+  $: totalAmount = (invoices || []).reduce((s, i) => s + i.total, 0);
+  $: paidCount = (invoices || []).filter(i => i.status === 'paid').length;
+  $: pendingCount = (invoices || []).filter(i => i.status === 'issued' || i.status === 'draft').length;
 
   async function goToPage(page: number) {
     if (page < 0 || page >= totalPages) return;
