@@ -39,6 +39,38 @@ export interface StripeModeSetResponse {
   requires_restart: boolean;
 }
 
+export interface EnvironmentInfo {
+  key: string;
+  label: string;
+  description: string;
+  env_file: string;
+  color: string;
+  available: boolean;
+  is_active: boolean;
+  db_host: string;
+  stripe_mode: string;
+}
+
+export interface EnvironmentResponse {
+  success: boolean;
+  current: string;
+  env_file: string;
+  database_host: string;
+  database_name: string;
+  stripe_mode: string;
+  app_url: string;
+  environments: EnvironmentInfo[];
+}
+
+export interface EnvironmentSwitchResponse {
+  success: boolean;
+  message: string;
+  requires_restart: boolean;
+  previous?: string;
+  current: string;
+  target_db?: string;
+}
+
 export const settingsApi = {
   async getAll(category?: string): Promise<SettingsResponse> {
     const suffix = category ? `?category=${encodeURIComponent(category)}` : '';
@@ -103,6 +135,16 @@ export const settingsApi = {
     live_webhook_secret?: string;
   }): Promise<StripeModeSetResponse> {
     return api.post('/api/settings/stripe/mode', payload);
+  },
+
+  // ── Environment ──
+
+  async getEnvironment(): Promise<EnvironmentResponse> {
+    return api.get<EnvironmentResponse>('/api/settings/environment/current');
+  },
+
+  async switchEnvironment(environment: string): Promise<EnvironmentSwitchResponse> {
+    return api.put<EnvironmentSwitchResponse>('/api/settings/environment/switch', { environment });
   },
 };
 

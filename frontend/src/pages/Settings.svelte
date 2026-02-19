@@ -2,8 +2,8 @@
   import { onMount } from 'svelte';
   import { settingsApi } from '../lib/api';
   import { toasts } from '../lib/stores/toast';
-  import { RefreshCw, Eye, EyeOff, Save, CreditCard, Shield, Database, Key, Server, ToggleLeft, ToggleRight, ChevronDown, ChevronUp, CheckCircle, AlertCircle, Lock } from 'lucide-svelte';
-  import type { CredentialItem, CredentialCategory, StripeModeResponse } from '../lib/api/settings';
+  import { RefreshCw, Eye, EyeOff, Save, CreditCard, Shield, Database, Key, Server, ToggleLeft, ToggleRight, ChevronDown, ChevronUp, CheckCircle, AlertCircle, Lock, Globe, Zap, AlertTriangle } from 'lucide-svelte';
+  import type { CredentialItem, CredentialCategory, StripeModeResponse, EnvironmentResponse, EnvironmentInfo } from '../lib/api/settings';
 
   interface SettingsEntry {
     key: string;
@@ -27,7 +27,7 @@
   }
 
   /* ─── Tab state ─── */
-  type TabId = 'credentials' | 'stripe' | 'system' | 'Sajet';
+  type TabId = 'credentials' | 'stripe' | 'system' | 'Sajet' | 'environment';
   let activeTab = $state<TabId>('credentials');
 
   /* ─── System config ─── */
@@ -61,6 +61,12 @@
   let stripeToggling = $state(false);
   let stripeTestKeys = $state({ secret: '', publishable: '', webhook: '' });
   let stripeLiveKeys = $state({ secret: '', publishable: '', webhook: '' });
+
+  /* ─── Environment ─── */
+  let envData = $state<EnvironmentResponse | null>(null);
+  let envLoading = $state(true);
+  let envSwitching = $state(false);
+  let envCountdown = $state(0);
 
   const categoryIcons: Record<string, typeof Shield> = {
     stripe: CreditCard,
@@ -229,6 +235,52 @@
     }
   }
 
+  /* ─── Environment ─── */
+  async function loadEnvironment() {
+    envLoading = true;
+    try {
+      envData = await settingsApi.getEnvironment();
+    } catch (e: any) {
+      toasts.error(e?.message ?? 'Error al cargar ambiente');
+    } finally {
+      envLoading = false;
+    }
+  }
+
+  async function switchEnvironment(target: string) {
+    if (!envData) return;
+
+    const env = envData.environments.find(e => e.key === target);
+    const label = env?.label ?? target;
+
+    const msg = target === 'production'
+      ? `⚠️ ¿Cambiar a PRODUCCIÓN?\n\nSe usará la BD ${env?.db_host ?? '—'} con Stripe ${env?.stripe_mode?.toUpperCase() ?? '—'}.\n\nEl servicio se reiniciará automáticamente.`
+      : `¿Cambiar al ambiente "${label}"?\n\nBD: ${env?.db_host ?? '—'} | Stripe: ${env?.stripe_mode?.toUpperCase() ?? '—'}\n\nEl servicio se reiniciará.`;
+
+    if (!window.confirm(msg)) return;
+
+    envSwitching = true;
+    try {
+      const res = await settingsApi.switchEnvironment(target);
+      toasts.success(res.message || `Ambiente cambiado a ${label}`);
+      if (res.requires_restart) {
+        // Countdown then reload
+        envCountdown = 8;
+        const timer = setInterval(() => {
+          envCountdown--;
+          if (envCountdown <= 0) {
+            clearInterval(timer);
+            window.location.reload();
+          }
+        }, 1000);
+      }
+    } catch (e: any) {
+      toasts.error(e?.message ?? 'Error al cambiar ambiente');
+    } finally {
+      envSwitching = false;
+    }
+  }
+
   function toggleShowSecret(key: string) {
     showSecretMap = { ...showSecretMap, [key]: !showSecretMap[key] };
   }
@@ -242,6 +294,7 @@
     loadOdooConfig();
     loadCredentials();
     loadStripeMode();
+    loadEnvironment();
   });
 </script>
 
@@ -252,7 +305,7 @@
       <h1 class="page-title">SETTINGS</h1>
       <p class="page-subtitle">Configuración del sistema, credenciales y Stripe</p>
     </div>
-    <button class="btn-secondary px-4 py-2 flex items-center gap-2" onclick={() => { loadSettings(); loadOdooConfig(); loadCredentials(); loadStripeMode(); }}>
+    <button class="btn-secondary px-4 py-2 flex items-center gap-2" onclick={() => { loadSettings(); loadOdooConfig(); loadCredentials(); loadStripeMode(); loadEnvironment(); }}>
       <RefreshCw size={14} />
       ACTUALIZAR
     </button>
@@ -265,6 +318,7 @@
       { id: 'stripe' as TabId, label: 'Stripe', icon: CreditCard },
       { id: 'system' as TabId, label: 'Sistema', icon: Server },
       { id: 'odoo' as TabId, label: 'Sajet', icon: Database },
+      { id: 'environment' as TabId, label: 'Ambiente', icon: Globe },
     ] as tab (tab.id)}
       <button
         class="px-4 py-2.5 text-sm font-medium flex items-center gap-2 border-b-2 transition-colors {activeTab === tab.id ? 'border-indigo-600 text-indigo-700' : 'border-transparent text-gray-500 hover:text-gray-700 hover:border-gray-300'}"
@@ -625,5 +679,198 @@
         </div>
       {/if}
     </div>
+
+  <!-- ═══════════ TAB: AMBIENTE ═══════════ -->
+  {:else if activeTab === 'environment'}
+    {#if envCountdown > 0}
+      <!-- Restart overlay -->
+      <div class="card p-12 text-center">
+        <div class="inline-flex items-center justify-center w-16 h-16 bg-indigo-100 rounded-full mb-4">
+          <RefreshCw size={28} class="text-indigo-600 animate-spin" />
+        </div>
+        <h3 class="text-lg font-semibold text-gray-800 mb-2">Servicio reiniciándose...</h3>
+        <p class="text-sm text-gray-500">La página se recargará en <span class="font-bold text-indigo-600">{envCountdown}</span> segundos</p>
+        <div class="mt-4 w-full bg-gray-200 rounded-full h-1.5 max-w-xs mx-auto">
+          <div class="bg-indigo-600 h-1.5 rounded-full transition-all duration-1000" style="width: {((8 - envCountdown) / 8) * 100}%"></div>
+        </div>
+      </div>
+    {:else if envLoading}
+      <div class="card p-8 text-center text-gray-500 text-sm">
+        <RefreshCw size={16} class="animate-spin mx-auto mb-2" />
+        Cargando ambiente...
+      </div>
+    {:else if envData}
+      <div class="space-y-6">
+        <!-- Current environment banner -->
+        {#each envData.environments.filter(e => e.is_active) as currentEnv (currentEnv.key)}
+          <div class="card p-0 overflow-hidden border-l-4 {currentEnv.color === 'emerald' ? 'border-l-emerald-500' : currentEnv.color === 'amber' ? 'border-l-amber-500' : 'border-l-blue-500'}">
+            <div class="px-6 py-4 flex items-center justify-between flex-wrap gap-4">
+              <div class="flex items-center gap-4">
+                <div class="w-10 h-10 rounded-full flex items-center justify-center {currentEnv.color === 'emerald' ? 'bg-emerald-100' : currentEnv.color === 'amber' ? 'bg-amber-100' : 'bg-blue-100'}">
+                  {#if currentEnv.color === 'emerald'}
+                    <Zap size={18} class="text-emerald-600" />
+                  {:else if currentEnv.color === 'amber'}
+                    <AlertTriangle size={18} class="text-amber-600" />
+                  {:else}
+                    <Globe size={18} class="text-blue-600" />
+                  {/if}
+                </div>
+                <div>
+                  <div class="flex items-center gap-2">
+                    <h3 class="text-sm font-bold text-gray-800 uppercase">{currentEnv.label}</h3>
+                    <span class="px-2 py-0.5 rounded text-[10px] font-semibold uppercase {currentEnv.color === 'emerald' ? 'bg-emerald-100 text-emerald-700' : currentEnv.color === 'amber' ? 'bg-amber-100 text-amber-700' : 'bg-blue-100 text-blue-700'}">
+                      ACTIVO
+                    </span>
+                  </div>
+                  <p class="text-xs text-gray-500 mt-0.5">{currentEnv.description}</p>
+                </div>
+              </div>
+            </div>
+            <!-- Current env details -->
+            <div class="px-6 pb-4 grid grid-cols-2 md:grid-cols-4 gap-4">
+              <div class="bg-bg-page border border-border-light rounded p-3">
+                <div class="text-[10px] text-gray-400 uppercase font-semibold mb-1">Base de Datos</div>
+                <div class="font-mono text-sm text-gray-700">{envData.database_host ?? '—'}</div>
+                <div class="text-[10px] text-gray-400 mt-0.5">{envData.database_name ?? ''}</div>
+              </div>
+              <div class="bg-bg-page border border-border-light rounded p-3">
+                <div class="text-[10px] text-gray-400 uppercase font-semibold mb-1">Stripe</div>
+                <div class="flex items-center gap-1.5">
+                  {#if envData.stripe_mode === 'live'}
+                    <CheckCircle size={12} class="text-emerald-500" />
+                    <span class="text-sm font-semibold text-emerald-700 uppercase">LIVE</span>
+                  {:else}
+                    <AlertCircle size={12} class="text-amber-500" />
+                    <span class="text-sm font-semibold text-amber-700 uppercase">TEST</span>
+                  {/if}
+                </div>
+              </div>
+              <div class="bg-bg-page border border-border-light rounded p-3">
+                <div class="text-[10px] text-gray-400 uppercase font-semibold mb-1">Archivo .env</div>
+                <div class="font-mono text-sm text-gray-700">{envData.env_file ?? '—'}</div>
+              </div>
+              <div class="bg-bg-page border border-border-light rounded p-3">
+                <div class="text-[10px] text-gray-400 uppercase font-semibold mb-1">App URL</div>
+                <div class="font-mono text-xs text-gray-700 truncate">{envData.app_url ?? '—'}</div>
+              </div>
+            </div>
+          </div>
+        {/each}
+
+        <!-- Environment selector -->
+        <div class="card">
+          <h3 class="section-heading mb-4 flex items-center gap-2">
+            <Globe size={16} />
+            SELECCIONAR AMBIENTE
+          </h3>
+          <div class="grid grid-cols-1 md:grid-cols-3 gap-4">
+            {#each envData.environments as env (env.key)}
+              {@const isActive = env.is_active}
+              {@const colorClasses = env.color === 'emerald'
+                ? { ring: 'ring-emerald-500', bg: 'bg-emerald-50', border: 'border-emerald-300', text: 'text-emerald-700', btnBg: 'bg-emerald-600 hover:bg-emerald-700', badge: 'bg-emerald-100 text-emerald-700' }
+                : env.color === 'amber'
+                  ? { ring: 'ring-amber-500', bg: 'bg-amber-50', border: 'border-amber-300', text: 'text-amber-700', btnBg: 'bg-amber-600 hover:bg-amber-700', badge: 'bg-amber-100 text-amber-700' }
+                  : { ring: 'ring-blue-500', bg: 'bg-blue-50', border: 'border-blue-300', text: 'text-blue-700', btnBg: 'bg-blue-600 hover:bg-blue-700', badge: 'bg-blue-100 text-blue-700' }
+              }
+              <div class="relative border rounded-lg p-5 transition-all {isActive ? `${colorClasses.bg} ${colorClasses.border} ring-2 ${colorClasses.ring}` : 'border-gray-200 hover:border-gray-300 hover:shadow-sm'}">
+                <!-- Active indicator -->
+                {#if isActive}
+                  <div class="absolute -top-2 -right-2">
+                    <span class="flex h-5 w-5">
+                      <span class="animate-ping absolute inline-flex h-full w-full rounded-full {colorClasses.bg} opacity-75"></span>
+                      <CheckCircle size={20} class="{colorClasses.text}" />
+                    </span>
+                  </div>
+                {/if}
+
+                <!-- Header -->
+                <div class="flex items-center gap-3 mb-3">
+                  <div class="w-8 h-8 rounded-full flex items-center justify-center {colorClasses.bg}">
+                    {#if env.color === 'emerald'}
+                      <Zap size={16} class={colorClasses.text} />
+                    {:else if env.color === 'amber'}
+                      <AlertTriangle size={16} class={colorClasses.text} />
+                    {:else}
+                      <Globe size={16} class={colorClasses.text} />
+                    {/if}
+                  </div>
+                  <div>
+                    <h4 class="font-bold text-sm text-gray-800 uppercase">{env.label}</h4>
+                    <span class="text-[10px] font-mono text-gray-400">{env.key}</span>
+                  </div>
+                </div>
+
+                <!-- Description -->
+                <p class="text-xs text-gray-500 mb-4">{env.description}</p>
+
+                <!-- Details -->
+                <div class="space-y-2 mb-4">
+                  <div class="flex items-center justify-between text-xs">
+                    <span class="text-gray-400">BD Host</span>
+                    <span class="font-mono text-gray-600">{env.db_host || '—'}</span>
+                  </div>
+                  <div class="flex items-center justify-between text-xs">
+                    <span class="text-gray-400">Stripe</span>
+                    <span class="font-mono uppercase {env.stripe_mode === 'live' ? 'text-emerald-600' : 'text-amber-600'}">{env.stripe_mode || '—'}</span>
+                  </div>
+                  <div class="flex items-center justify-between text-xs">
+                    <span class="text-gray-400">Archivo</span>
+                    <span class="font-mono text-gray-600">{env.env_file}</span>
+                  </div>
+                  <div class="flex items-center justify-between text-xs">
+                    <span class="text-gray-400">Disponible</span>
+                    {#if env.available}
+                      <CheckCircle size={12} class="text-emerald-500" />
+                    {:else}
+                      <AlertCircle size={12} class="text-red-400" />
+                    {/if}
+                  </div>
+                </div>
+
+                <!-- Action -->
+                {#if isActive}
+                  <div class="text-center">
+                    <span class="inline-flex items-center gap-1.5 px-4 py-2 rounded-lg text-xs font-semibold {colorClasses.badge}">
+                      <CheckCircle size={12} />
+                      AMBIENTE ACTIVO
+                    </span>
+                  </div>
+                {:else}
+                  <button
+                    class="w-full px-4 py-2 rounded-lg text-white text-xs font-semibold transition-colors disabled:opacity-50 {colorClasses.btnBg}"
+                    disabled={!env.available || envSwitching}
+                    onclick={() => switchEnvironment(env.key)}
+                  >
+                    {#if envSwitching}
+                      <RefreshCw size={12} class="animate-spin inline mr-1" />
+                      CAMBIANDO...
+                    {:else if !env.available}
+                      NO DISPONIBLE
+                    {:else}
+                      CAMBIAR A {env.label.toUpperCase()}
+                    {/if}
+                  </button>
+                {/if}
+              </div>
+            {/each}
+          </div>
+
+          <!-- Warning -->
+          <div class="mt-6 p-4 bg-amber-50 border border-amber-200 rounded-lg flex items-start gap-3">
+            <AlertTriangle size={16} class="text-amber-600 shrink-0 mt-0.5" />
+            <div>
+              <p class="text-xs font-semibold text-amber-800">Cambiar de ambiente reinicia el servicio</p>
+              <p class="text-[11px] text-amber-600 mt-1">
+                Al cambiar de ambiente se modifica la variable ERP_ENV en systemd y se reinicia el servicio.
+                La página se recargará automáticamente después de unos segundos.
+                Asegúrate de que el archivo .env correspondiente existe y tiene todas las variables configuradas.
+              </p>
+            </div>
+          </div>
+        </div>
+      </div>
+    {:else}
+      <div class="card p-8 text-center text-gray-500 text-sm">No se pudo obtener la información del ambiente</div>
+    {/if}
   {/if}
 </div>

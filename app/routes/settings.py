@@ -75,6 +75,11 @@ class StripeModeRequest(BaseModel):
     live_webhook_secret: Optional[str] = None
 
 
+class EnvironmentSwitchRequest(BaseModel):
+    """Cambiar ambiente activo (dev / test / production)."""
+    environment: str = Field(..., description="development, test o production")
+
+
 # Credenciales organizadas por categoría con metadatos
 CREDENTIAL_DEFINITIONS = {
     "stripe": {
@@ -452,6 +457,180 @@ async def set_stripe_mode(
         "changes": changes,
         "requires_restart": True,
     }
+
+
+# =====================================================
+# ENDPOINTS - ENVIRONMENT SWITCH
+# =====================================================
+
+_ENV_DEFINITIONS = {
+    "development": {
+        "label": "Desarrollo",
+        "env_file": ".env",
+        "description": "Ambiente local de desarrollo — BD local, Stripe test",
+        "color": "blue",
+    },
+    "test": {
+        "label": "Pruebas",
+        "env_file": ".env.test",
+        "description": "Ambiente de pruebas — BD local 10.10.10.20, Stripe test",
+        "color": "amber",
+    },
+    "production": {
+        "label": "Producción",
+        "env_file": ".env.production",
+        "description": "Ambiente productivo — BD HA 10.10.10.137, Stripe live",
+        "color": "emerald",
+    },
+}
+
+
+@router.get("/environment/current")
+async def get_current_environment(
+    authorization: str = Header(None),
+    access_token: str = Cookie(None)
+):
+    """
+    Obtiene el ambiente activo y la info de cada ambiente disponible.
+    """
+    require_admin(authorization, access_token)
+
+    from ..config import get_env_info, ACTIVE_ENV_FILE
+
+    current = get_env_info()
+    erp_env = current["erp_env"]
+
+    # Check which .env files exist on disk
+    import pathlib
+    project_root = pathlib.Path(__file__).resolve().parent.parent.parent
+    environments = []
+    for env_key, env_def in _ENV_DEFINITIONS.items():
+        env_path = project_root / env_def["env_file"]
+        # Parse DB host from file if it exists
+        db_host = ""
+        stripe_mode_hint = ""
+        if env_path.exists():
+            content = env_path.read_text()
+            for line in content.splitlines():
+                if line.startswith("DATABASE_URL="):
+                    # Extract host:port
+                    val = line.split("=", 1)[1]
+                    if "@" in val:
+                        db_host = val.split("@")[1].split("/")[0]
+                if line.startswith("STRIPE_SECRET_KEY="):
+                    val = line.split("=", 1)[1]
+                    stripe_mode_hint = "live" if "live" in val else "test"
+
+        environments.append({
+            "key": env_key,
+            "label": env_def["label"],
+            "description": env_def["description"],
+            "env_file": env_def["env_file"],
+            "color": env_def["color"],
+            "available": env_path.exists(),
+            "is_active": env_key == erp_env,
+            "db_host": db_host,
+            "stripe_mode": stripe_mode_hint,
+        })
+
+    return {
+        "success": True,
+        "current": erp_env,
+        "env_file": ACTIVE_ENV_FILE,
+        "database_host": current["database_host"],
+        "database_name": current["database_name"],
+        "stripe_mode": current["stripe_mode"],
+        "app_url": current["app_url"],
+        "environments": environments,
+    }
+
+
+@router.put("/environment/switch")
+async def switch_environment(
+    payload: EnvironmentSwitchRequest,
+    authorization: str = Header(None),
+    access_token: str = Cookie(None)
+):
+    """
+    Cambia el ambiente activo modificando la variable ERP_ENV en el servicio systemd.
+    Requiere reinicio del servicio para tomar efecto.
+    """
+    require_admin(authorization, access_token)
+
+    target = payload.environment.lower().strip()
+    if target not in _ENV_DEFINITIONS:
+        raise HTTPException(
+            status_code=400,
+            detail=f"Ambiente '{target}' no válido. Opciones: {list(_ENV_DEFINITIONS.keys())}"
+        )
+
+    # Verify the target .env file exists
+    import pathlib
+    project_root = pathlib.Path(__file__).resolve().parent.parent.parent
+    env_file = project_root / _ENV_DEFINITIONS[target]["env_file"]
+    if not env_file.exists():
+        raise HTTPException(
+            status_code=400,
+            detail=f"Archivo {_ENV_DEFINITIONS[target]['env_file']} no encontrado en el servidor"
+        )
+
+    from ..config import get_env_info
+    current = get_env_info()
+    if current["erp_env"] == target:
+        return {
+            "success": True,
+            "message": f"Ya estás en el ambiente '{target}'",
+            "requires_restart": False,
+            "current": target,
+        }
+
+    # Update systemd service to use the new ERP_ENV
+    import subprocess
+    service_path = "/etc/systemd/system/erp-core.service"
+    try:
+        with open(service_path, "r") as f:
+            content = f.read()
+
+        # Replace ERP_ENV line
+        import re as _re
+        new_content = _re.sub(
+            r'Environment="ERP_ENV=\w+"',
+            f'Environment="ERP_ENV={target}"',
+            content
+        )
+
+        if new_content == content:
+            # ERP_ENV line might not exist yet, add it after [Service]
+            new_content = content.replace(
+                'WorkingDirectory=',
+                f'Environment="ERP_ENV={target}"\nWorkingDirectory='
+            )
+
+        with open(service_path, "w") as f:
+            f.write(new_content)
+
+        # Reload systemd and restart
+        subprocess.run(["systemctl", "daemon-reload"], check=True, capture_output=True)
+        subprocess.Popen(["systemctl", "restart", "erp-core"])
+
+        logger.warning(f"⚠️ ENVIRONMENT SWITCH: {current['erp_env']} → {target} — Service restarting...")
+
+        return {
+            "success": True,
+            "message": f"Ambiente cambiado a '{_ENV_DEFINITIONS[target]['label']}'. El servicio se está reiniciando...",
+            "requires_restart": True,
+            "previous": current["erp_env"],
+            "current": target,
+            "target_db": _ENV_DEFINITIONS[target]["description"],
+        }
+    except PermissionError:
+        raise HTTPException(
+            status_code=403,
+            detail="Sin permisos para modificar el servicio systemd. El proceso debe correr como root o tener permisos de escritura."
+        )
+    except Exception as e:
+        logger.error(f"Error switching environment: {e}")
+        raise HTTPException(status_code=500, detail=str(e))
 
 
 @router.get("/{key}")
