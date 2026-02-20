@@ -589,15 +589,22 @@ class DomainManager:
         """Configura un website en la BD Odoo del tenant para multi-website."""
         try:
             info = self._resolve_tenant_info(domain)
+            from .nginx_domain_configurator import NginxDomainConfigurator
+            nginx_conf = NginxDomainConfigurator()
+            internal_subdomain = nginx_conf.generate_internal_subdomain(
+                tenant_db=info["tenant_db"],
+                external_domain=domain.external_domain,
+            )
             configurator = OdooWebsiteConfigurator()
             result = configurator.configure_website(
                 tenant_db=info["tenant_db"],
                 external_domain=domain.external_domain,
+                internal_subdomain=internal_subdomain,
             )
             if result.get("success"):
                 logger.info(
                     f"Odoo website configurado para {domain.external_domain} "
-                    f"en BD {info['tenant_db']}: {result.get('action')}"
+                    f"→ {internal_subdomain} en BD {info['tenant_db']}: {result.get('action')}"
                 )
             else:
                 logger.error(
@@ -613,10 +620,17 @@ class DomainManager:
         """Elimina el dominio de un website Odoo."""
         try:
             info = self._resolve_tenant_info(domain)
+            from .nginx_domain_configurator import NginxDomainConfigurator
+            nginx_conf = NginxDomainConfigurator()
+            internal_subdomain = nginx_conf.generate_internal_subdomain(
+                tenant_db=info["tenant_db"],
+                external_domain=domain.external_domain,
+            )
             configurator = OdooWebsiteConfigurator()
             return configurator.remove_website_domain(
                 tenant_db=info["tenant_db"],
                 external_domain=domain.external_domain,
+                internal_subdomain=internal_subdomain,
             )
         except Exception as e:
             logger.error(f"Error eliminando Odoo website domain: {e}")

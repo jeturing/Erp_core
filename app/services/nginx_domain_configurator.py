@@ -5,11 +5,21 @@ un dominio externo para un tenant Odoo.
 
 Archivos que modifica:
   PCT160 (local):
-    /etc/nginx/sites-available/external-domains  → 2 maps + server_name
+    /etc/nginx/sites-available/external-domains  → map $external_tenant_db + server_name
     /etc/nginx/conf.d/odoo_http_routes.map       → dominio → backend
     /etc/nginx/conf.d/odoo_chat_routes.map       → dominio → backend
   CT105 (via SSH):
-    /etc/nginx/sites-enabled/odoo                → 3 maps + server_name + proxy_redirect
+    /etc/nginx/sites-enabled/odoo                → maps ($tenant_db, $odoo_proxy_host) + server_name + proxy_redirect
+
+Estrategia de enrutamiento (multi-website + multi-tenant):
+  - dbfilter = ^%d$ en Odoo: selecciona BD por primer segmento del Host
+  - X-Forwarded-Host NO se envía (ProxyFix de Odoo no se activa)
+  - Host = subdominio interno ({bd}.{alias}.sajet.us) → Odoo recibe esto
+  - Odoo usa Host para dbfilter (%d = {bd}) y para website matching (domain)
+  - Cada website en Odoo tiene domain = https://{bd}.{alias}.sajet.us
+  - Para el website principal del tenant: {bd}.sajet.us (alias vacío)
+  - Para websites adicionales: {bd}.{alias}.sajet.us (ej: techeels.em.sajet.us)
+  - nginx proxy_redirect reescribe URLs internas a dominio real del usuario
 
 Flujo:
   1. Leer archivos actuales
@@ -17,16 +27,13 @@ Flujo:
   3. Validar con nginx -t
   4. Recargar nginx
   5. Si falla, rollback automático
-
-NOTA: Los dominios externos se pasan como Host original a Odoo para que
-resuelva el website correcto (multi-website por dominio).
 """
 
 import subprocess
 import logging
 import re
 import shlex
-from typing import Dict, Any, Optional, List, Tuple
+from typing import Dict, Any, List, Optional, Tuple
 
 from ..config import CT105_IP, CT105_NGINX_PORT
 
@@ -220,26 +227,79 @@ class NginxDomainConfigurator:
     externos a tenants Odoo.
     """
 
+    @staticmethod
+    def generate_internal_subdomain(
+        tenant_db: str,
+        external_domain: str,
+        alias: Optional[str] = None,
+    ) -> str:
+        """
+        Genera el subdominio interno .sajet.us para un dominio externo.
+        Patrón: {bd}.{alias}.sajet.us donde %d (primer segmento) = {bd}
+
+        Si alias es None, genera uno automático basado en el dominio externo:
+          - impulse-max.com → "im" (iniciales de palabras)
+          - evolucionamujer.com → "em" (iniciales)
+          - techeels.io → "" (mismo nombre que BD → usa {bd}.sajet.us)
+
+        Returns:
+            Subdominio interno (ej: "techeels.em.sajet.us")
+        """
+        # Si el primer segmento del dominio externo == nombre de BD,
+        # no necesita alias — usa subdominio directo
+        domain_base = external_domain.lower().split(".")[0]
+        if domain_base == tenant_db:
+            return f"{tenant_db}.sajet.us"
+
+        if alias:
+            return f"{tenant_db}.{alias}.sajet.us"
+
+        # Generar alias automático a partir del dominio
+        # Tomar iniciales de partes separadas por - o camelCase
+        parts = domain_base.replace("-", " ").split()
+        if len(parts) > 1:
+            alias = "".join(p[0] for p in parts)  # impulse-max → im
+        else:
+            # Para nombres sin separador, tomar primeras 2-3 letras
+            alias = domain_base[:3] if len(domain_base) > 3 else domain_base
+
+        return f"{tenant_db}.{alias}.sajet.us"
+
     def configure_domain(
         self,
         external_domain: str,
         tenant_db: str,
         tenant_subdomain: str,
         node_ip: str = CT105_IP,
+        website_alias: Optional[str] = None,
     ) -> Dict[str, Any]:
         """
         Agrega un dominio externo a la configuración nginx de ambos servidores.
 
-        El dominio externo se pasa como Host original a Odoo para que éste
-        resuelva el website correcto (multi-website por dominio).
+        Estrategia:
+          - PCT160: pasa Host original al CT105 (donde se mapea internamente)
+          - CT105: mapea dominio externo → subdominio interno ({bd}.{alias}.sajet.us)
+          - Odoo recibe Host = subdominio interno, dbfilter %d selecciona BD
+          - Website module matchea por domain = https://{subdominio_interno}
+          - X-Forwarded-Host NO se envía (ProxyFix no se activa)
+          - proxy_redirect reescribe URLs internas a dominio real del usuario
 
         Args:
             external_domain: dominio del cliente (ej: impulse-max.com)
             tenant_db: nombre de la BD en Odoo (ej: techeels)
             tenant_subdomain: subdominio de sajet.us (ej: techeels)
             node_ip: IP del nodo Odoo (from env ODOO_PRIMARY_IP)
+            website_alias: alias corto opcional para el subdominio interno
         """
-        logger.info(f"Configurando nginx para {external_domain} → {tenant_db}")
+        # Generar el subdominio interno para este dominio externo
+        internal_subdomain = self.generate_internal_subdomain(
+            tenant_db, external_domain, website_alias
+        )
+
+        logger.info(
+            f"Configurando nginx: {external_domain} → "
+            f"{internal_subdomain} (BD: {tenant_db})"
+        )
         backups: Dict[str, str] = {}
         www_domain = f"www.{external_domain}"
 
@@ -250,12 +310,9 @@ class NginxDomainConfigurator:
 
             backend = f"{node_ip}:{CT105_NGINX_PORT}"
 
-            # Map $external_tenant_db → dominio → BD
+            # Map $external_tenant_db → dominio → BD (para validación)
             erp_content = _add_to_map(erp_content, "external_tenant_db", external_domain, tenant_db)
             erp_content = _add_to_map(erp_content, "external_tenant_db", www_domain, tenant_db)
-            # Map $external_odoo_host → dominio original (Odoo multi-website match)
-            erp_content = _add_to_map(erp_content, "external_odoo_host", external_domain, f"{external_domain}")
-            erp_content = _add_to_map(erp_content, "external_odoo_host", www_domain, f"{external_domain}")
             # server_name en bloque server
             erp_content = _add_to_server_name(erp_content, "listen 443", external_domain)
             erp_content = _add_to_server_name(erp_content, "listen 443", www_domain)
@@ -285,17 +342,16 @@ class NginxDomainConfigurator:
             # Map $tenant_db → dominio → BD
             ct105_content = _add_to_map(ct105_content, "tenant_db", external_domain, tenant_db)
             ct105_content = _add_to_map(ct105_content, "tenant_db", www_domain, tenant_db)
-            # Map $web_redirect_target (usa key "domain:")
-            ct105_content = _add_to_map(ct105_content, "web_redirect_target", f"{external_domain}:", f"/web?db={tenant_db}")
-            ct105_content = _add_to_map(ct105_content, "web_redirect_target", f"{www_domain}:", f"/web?db={tenant_db}")
-            # Map $odoo_proxy_host → dominio ORIGINAL (para Odoo multi-website)
-            ct105_content = _add_to_map(ct105_content, "odoo_proxy_host", external_domain, external_domain)
-            ct105_content = _add_to_map(ct105_content, "odoo_proxy_host", www_domain, external_domain)
+            # Map $odoo_proxy_host → subdominio INTERNO (para dbfilter + website match)
+            ct105_content = _add_to_map(ct105_content, "odoo_proxy_host", external_domain, internal_subdomain)
+            ct105_content = _add_to_map(ct105_content, "odoo_proxy_host", www_domain, internal_subdomain)
             # server_name en ambos bloques (8080 y 8443)
             ct105_content = _add_to_server_name(ct105_content, "listen 8080", external_domain)
             ct105_content = _add_to_server_name(ct105_content, "listen 8080", www_domain)
             ct105_content = _add_to_server_name(ct105_content, "listen 8443", external_domain)
             ct105_content = _add_to_server_name(ct105_content, "listen 8443", www_domain)
+            # proxy_redirect: reescribir URLs internas a dominio real
+            ct105_content = _add_proxy_redirect_ct105(ct105_content, internal_subdomain.replace(".sajet.us", ""))
 
             _write_file_ct105(CT105_ODOO_CONF, ct105_content)
 
@@ -309,7 +365,8 @@ class NginxDomainConfigurator:
 
             return {
                 "success": True,
-                "message": f"Nginx configurado para {external_domain} → {tenant_db}",
+                "message": f"Nginx configurado: {external_domain} → {internal_subdomain}",
+                "internal_subdomain": internal_subdomain,
                 "pct160": "ok",
                 "ct105": "ok",
             }
@@ -336,9 +393,8 @@ class NginxDomainConfigurator:
             erp_content = _read_file_local(PCT160_ERP_CONF)
             backups["pct160_erp"] = erp_content
 
-            for map_var in ("external_tenant_db", "external_odoo_host"):
-                erp_content = _remove_from_map(erp_content, map_var, external_domain)
-                erp_content = _remove_from_map(erp_content, map_var, www_domain)
+            erp_content = _remove_from_map(erp_content, "external_tenant_db", external_domain)
+            erp_content = _remove_from_map(erp_content, "external_tenant_db", www_domain)
             erp_content = _remove_from_server_name(erp_content, external_domain)
             erp_content = _remove_from_server_name(erp_content, www_domain)
             _write_file_local(PCT160_ERP_CONF, erp_content)
@@ -360,14 +416,25 @@ class NginxDomainConfigurator:
             ct105_content = _read_file_ct105(CT105_ODOO_CONF)
             backups["ct105_odoo"] = ct105_content
 
+            # Leer el subdominio interno actual del map antes de eliminar
+            internal_sub_match = re.search(
+                rf"^\s+{re.escape(external_domain)}\s+(\S+);",
+                ct105_content, re.MULTILINE
+            )
+            internal_subdomain = None
+            if internal_sub_match:
+                internal_subdomain = internal_sub_match.group(1)
+
             for map_var in ("tenant_db", "odoo_proxy_host"):
                 ct105_content = _remove_from_map(ct105_content, map_var, external_domain)
                 ct105_content = _remove_from_map(ct105_content, map_var, www_domain)
-            # web_redirect_target usa key "domain:"
-            ct105_content = _remove_from_map(ct105_content, "web_redirect_target", f"{external_domain}:")
-            ct105_content = _remove_from_map(ct105_content, "web_redirect_target", f"{www_domain}:")
             ct105_content = _remove_from_server_name(ct105_content, external_domain)
             ct105_content = _remove_from_server_name(ct105_content, www_domain)
+
+            # Eliminar proxy_redirect del subdominio interno si lo encontramos
+            if internal_subdomain:
+                sub_prefix = internal_subdomain.replace(".sajet.us", "")
+                ct105_content = _remove_proxy_redirect_ct105(ct105_content, sub_prefix)
 
             _write_file_ct105(CT105_ODOO_CONF, ct105_content)
 
