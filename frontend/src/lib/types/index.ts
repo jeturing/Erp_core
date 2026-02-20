@@ -215,6 +215,7 @@ export interface Domain {
   verified_at: string | null;
   cloudflare_configured: boolean;
   tunnel_ingress_configured: boolean;
+  nginx_configured: boolean;
   ssl_status: string | null;
   is_active: boolean;
   is_primary: boolean;

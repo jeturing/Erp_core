@@ -149,6 +149,95 @@ class DomainListResponse(BaseModel):
 
 # ==================== Endpoints ====================
 
+@router.get("/quota/{customer_id}", response_model=dict)
+async def get_domain_quota(
+    customer_id: int,
+    db: Session = Depends(get_db),
+    current_user: dict = Depends(get_current_admin)
+):
+    """
+    Obtiene la cuota de dominios del cliente según su plan.
+    Retorna: used, max (-1=ilimitado, 0=no permitido), plan_name, can_add
+    """
+    from ..models.database import Customer, Subscription, SubscriptionStatus, Plan, CustomDomain
+
+    customer = db.query(Customer).filter(Customer.id == customer_id).first()
+    if not customer:
+        raise HTTPException(status_code=404, detail="Cliente no encontrado")
+
+    used = db.query(CustomDomain).filter(
+        CustomDomain.customer_id == customer_id,
+    ).count()
+
+    active = db.query(CustomDomain).filter(
+        CustomDomain.customer_id == customer_id,
+        CustomDomain.is_active == True,
+    ).count()
+
+    sub = db.query(Subscription).filter(
+        Subscription.customer_id == customer_id,
+        Subscription.status == SubscriptionStatus.active,
+    ).first()
+
+    plan_name = sub.plan_name if sub else customer.plan.value if customer.plan else "basic"
+    plan = db.query(Plan).filter(Plan.name == plan_name, Plan.is_active == True).first()
+
+    max_domains = plan.max_domains if plan and plan.max_domains is not None else 0
+    can_add = max_domains == -1 or used < max_domains
+
+    return {
+        "customer_id": customer_id,
+        "company_name": customer.company_name,
+        "plan_name": plan.display_name if plan else plan_name,
+        "used": used,
+        "active": active,
+        "max": max_domains,
+        "can_add": can_add,
+        "unlimited": max_domains == -1,
+    }
+
+
+@router.get("/customers-with-plans", response_model=dict)
+async def list_customers_with_domain_info(
+    db: Session = Depends(get_db),
+    current_user: dict = Depends(get_current_admin)
+):
+    """
+    Lista todos los clientes con info de plan y cuota de dominios.
+    Útil para el selector de cliente en el formulario de dominios.
+    """
+    from ..models.database import Customer, Subscription, SubscriptionStatus, Plan, CustomDomain
+
+    customers = db.query(Customer).order_by(Customer.company_name).all()
+    result = []
+
+    for c in customers:
+        sub = db.query(Subscription).filter(
+            Subscription.customer_id == c.id,
+            Subscription.status == SubscriptionStatus.active,
+        ).first()
+
+        plan_name = sub.plan_name if sub else (c.plan.value if c.plan else "basic")
+        plan = db.query(Plan).filter(Plan.name == plan_name, Plan.is_active == True).first()
+        max_d = plan.max_domains if plan and plan.max_domains is not None else 0
+
+        used = db.query(CustomDomain).filter(CustomDomain.customer_id == c.id).count()
+
+        result.append({
+            "id": c.id,
+            "company_name": c.company_name,
+            "subdomain": c.subdomain,
+            "plan_name": plan.display_name if plan else plan_name,
+            "plan_key": plan_name,
+            "max_domains": max_d,
+            "used_domains": used,
+            "can_add": max_d == -1 or used < max_d,
+            "unlimited": max_d == -1,
+        })
+
+    return {"items": result, "total": len(result)}
+
+
 @router.post("", response_model=dict)
 async def create_domain(
     data: DomainCreate,
