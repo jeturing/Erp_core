@@ -477,6 +477,61 @@ async def nginx_status(
     }
 
 
+# ==================== Odoo Website Configuration ====================
+
+@router.post("/{domain_id}/configure-odoo-website", response_model=dict)
+async def configure_odoo_website(
+    domain_id: int,
+    db: Session = Depends(get_db),
+    current_user: dict = Depends(get_current_admin)
+):
+    """
+    Configura el website de Odoo en la BD del tenant para multi-website.
+    Crea o actualiza un registro website con el dominio externo.
+    El dominio debe estar activo.
+    """
+    manager = DomainManager(db)
+    result = manager.configure_odoo_website_manual(domain_id)
+
+    if not result.get("success"):
+        raise HTTPException(
+            status_code=400,
+            detail=result.get("error", "Error configurando Odoo website")
+        )
+
+    return result
+
+
+@router.get("/{domain_id}/odoo-websites", response_model=dict)
+async def list_odoo_websites(
+    domain_id: int,
+    db: Session = Depends(get_db),
+    current_user: dict = Depends(get_current_admin)
+):
+    """
+    Lista los websites de Odoo del tenant asociado al dominio.
+    """
+    from ..services.odoo_website_configurator import OdooWebsiteConfigurator
+
+    manager = DomainManager(db)
+    domain = manager.get_domain(domain_id=domain_id)
+    if not domain:
+        raise HTTPException(status_code=404, detail="Dominio no encontrado")
+
+    info = manager._resolve_tenant_info(domain)
+    configurator = OdooWebsiteConfigurator()
+    result = configurator.list_websites(info["tenant_db"])
+
+    if not result.get("success"):
+        raise HTTPException(status_code=400, detail=result.get("error"))
+
+    return {
+        "domain": domain.external_domain,
+        "tenant_db": info["tenant_db"],
+        "websites": result["websites"],
+    }
+
+
 # ==================== Épica 8: Early Domain Verification ====================
 
 class EarlyDomainRequest(BaseModel):

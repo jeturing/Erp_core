@@ -22,6 +22,7 @@ from sqlalchemy.orm import Session
 
 from ..models.database import CustomDomain, Customer, TenantDeployment, DomainVerificationStatus
 from .nginx_domain_configurator import NginxDomainConfigurator
+from .odoo_website_configurator import OdooWebsiteConfigurator
 
 logger = logging.getLogger("domain_manager")
 
@@ -400,7 +401,7 @@ class DomainManager:
             }
     
     def activate_domain(self, domain_id: int) -> Dict[str, Any]:
-        """Activa manualmente un dominio y configura nginx automáticamente"""
+        """Activa manualmente un dominio y configura nginx + Odoo website automáticamente"""
         domain = self.get_domain(domain_id=domain_id)
         if not domain:
             return {"success": False, "error": "Dominio no encontrado"}
@@ -413,10 +414,14 @@ class DomainManager:
         # ── Configurar nginx automáticamente ──
         nginx_result = self._configure_nginx_for_domain(domain)
         
+        # ── Configurar website Odoo automáticamente ──
+        website_result = self._configure_odoo_website_for_domain(domain)
+        
         return {
             "success": True,
             "message": "Dominio activado",
             "nginx": nginx_result,
+            "odoo_website": website_result,
         }
     
     def deactivate_domain(self, domain_id: int) -> Dict[str, Any]:
@@ -577,6 +582,54 @@ class DomainManager:
         if not domain.is_active:
             return {"success": False, "error": "El dominio debe estar activo"}
         return self._configure_nginx_for_domain(domain)
+
+    # ==================== Odoo Website Integration ====================
+
+    def _configure_odoo_website_for_domain(self, domain: CustomDomain) -> Dict[str, Any]:
+        """Configura un website en la BD Odoo del tenant para multi-website."""
+        try:
+            info = self._resolve_tenant_info(domain)
+            configurator = OdooWebsiteConfigurator()
+            result = configurator.configure_website(
+                tenant_db=info["tenant_db"],
+                external_domain=domain.external_domain,
+            )
+            if result.get("success"):
+                logger.info(
+                    f"Odoo website configurado para {domain.external_domain} "
+                    f"en BD {info['tenant_db']}: {result.get('action')}"
+                )
+            else:
+                logger.error(
+                    f"Odoo website falló para {domain.external_domain}: "
+                    f"{result.get('error')}"
+                )
+            return result
+        except Exception as e:
+            logger.error(f"Error configurando Odoo website: {e}")
+            return {"success": False, "error": str(e)}
+
+    def _remove_odoo_website_for_domain(self, domain: CustomDomain) -> Dict[str, Any]:
+        """Elimina el dominio de un website Odoo."""
+        try:
+            info = self._resolve_tenant_info(domain)
+            configurator = OdooWebsiteConfigurator()
+            return configurator.remove_website_domain(
+                tenant_db=info["tenant_db"],
+                external_domain=domain.external_domain,
+            )
+        except Exception as e:
+            logger.error(f"Error eliminando Odoo website domain: {e}")
+            return {"success": False, "error": str(e)}
+
+    def configure_odoo_website_manual(self, domain_id: int) -> Dict[str, Any]:
+        """Endpoint manual para configurar el website Odoo de un dominio."""
+        domain = self.get_domain(domain_id=domain_id)
+        if not domain:
+            return {"success": False, "error": "Dominio no encontrado"}
+        if not domain.is_active:
+            return {"success": False, "error": "El dominio debe estar activo"}
+        return self._configure_odoo_website_for_domain(domain)
 
     def _domain_to_dict(self, domain: CustomDomain) -> Dict[str, Any]:
         """Convierte un dominio a diccionario"""

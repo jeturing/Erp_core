@@ -5,11 +5,11 @@ un dominio externo para un tenant Odoo.
 
 Archivos que modifica:
   PCT160 (local):
-    /etc/nginx/sites-available/erp          → 3 maps + server_name
-    /etc/nginx/conf.d/odoo_http_routes.map  → dominio → backend
-    /etc/nginx/conf.d/odoo_chat_routes.map  → dominio → backend
+    /etc/nginx/sites-available/external-domains  → 2 maps + server_name
+    /etc/nginx/conf.d/odoo_http_routes.map       → dominio → backend
+    /etc/nginx/conf.d/odoo_chat_routes.map       → dominio → backend
   CT105 (via SSH):
-    /etc/nginx/sites-enabled/odoo           → 3 maps + server_name + proxy_redirect
+    /etc/nginx/sites-enabled/odoo                → 3 maps + server_name + proxy_redirect
 
 Flujo:
   1. Leer archivos actuales
@@ -17,6 +17,9 @@ Flujo:
   3. Validar con nginx -t
   4. Recargar nginx
   5. Si falla, rollback automático
+
+NOTA: Los dominios externos se pasan como Host original a Odoo para que
+resuelva el website correcto (multi-website por dominio).
 """
 
 import subprocess
@@ -32,7 +35,7 @@ logger = logging.getLogger("nginx_configurator")
 # ── Constantes ────────────────────────────────────────────────────────────────────
 CT105_SSH = f"root@{CT105_IP}"
 
-PCT160_ERP_CONF = "/etc/nginx/sites-available/erp"
+PCT160_ERP_CONF = "/etc/nginx/sites-available/external-domains"
 PCT160_HTTP_MAP = "/etc/nginx/conf.d/odoo_http_routes.map"
 PCT160_CHAT_MAP = "/etc/nginx/conf.d/odoo_chat_routes.map"
 CT105_ODOO_CONF = "/etc/nginx/sites-enabled/odoo"
@@ -227,6 +230,9 @@ class NginxDomainConfigurator:
         """
         Agrega un dominio externo a la configuración nginx de ambos servidores.
 
+        El dominio externo se pasa como Host original a Odoo para que éste
+        resuelva el website correcto (multi-website por dominio).
+
         Args:
             external_domain: dominio del cliente (ej: impulse-max.com)
             tenant_db: nombre de la BD en Odoo (ej: techeels)
@@ -235,23 +241,24 @@ class NginxDomainConfigurator:
         """
         logger.info(f"Configurando nginx para {external_domain} → {tenant_db}")
         backups: Dict[str, str] = {}
+        www_domain = f"www.{external_domain}"
 
         try:
-            # ── 1. PCT160: editar /etc/nginx/sites-available/erp ──────────
+            # ── 1. PCT160: editar /etc/nginx/sites-available/external-domains
             erp_content = _read_file_local(PCT160_ERP_CONF)
             backups["pct160_erp"] = erp_content
 
-            tenant_sajet = f"{tenant_subdomain}.sajet.us"
             backend = f"{node_ip}:{CT105_NGINX_PORT}"
 
-            # Map $external_tenant_db
+            # Map $external_tenant_db → dominio → BD
             erp_content = _add_to_map(erp_content, "external_tenant_db", external_domain, tenant_db)
-            # Map $external_odoo_host
-            erp_content = _add_to_map(erp_content, "external_odoo_host", external_domain, tenant_sajet)
-            # Map $proxy_odoo_host
-            erp_content = _add_to_map(erp_content, "proxy_odoo_host", external_domain, tenant_sajet)
-            # server_name en bloque DOMINIOS EXTERNOS
-            erp_content = _add_to_server_name(erp_content, "DOMINIOS EXTERNOS", external_domain)
+            erp_content = _add_to_map(erp_content, "external_tenant_db", www_domain, tenant_db)
+            # Map $external_odoo_host → dominio original (Odoo multi-website match)
+            erp_content = _add_to_map(erp_content, "external_odoo_host", external_domain, f"{external_domain}")
+            erp_content = _add_to_map(erp_content, "external_odoo_host", www_domain, f"{external_domain}")
+            # server_name en bloque server
+            erp_content = _add_to_server_name(erp_content, "listen 443", external_domain)
+            erp_content = _add_to_server_name(erp_content, "listen 443", www_domain)
 
             _write_file_local(PCT160_ERP_CONF, erp_content)
 
@@ -260,6 +267,8 @@ class NginxDomainConfigurator:
             backups["pct160_chat_map"] = _read_file_local(PCT160_CHAT_MAP)
             _add_to_route_map(PCT160_HTTP_MAP, external_domain, backend)
             _add_to_route_map(PCT160_CHAT_MAP, external_domain, backend)
+            _add_to_route_map(PCT160_HTTP_MAP, www_domain, backend)
+            _add_to_route_map(PCT160_CHAT_MAP, www_domain, backend)
 
             # ── 3. PCT160: validar y recargar ─────────────────────────────
             rc, _, err = _run_local("nginx -t")
@@ -273,18 +282,20 @@ class NginxDomainConfigurator:
             ct105_content = _read_file_ct105(CT105_ODOO_CONF)
             backups["ct105_odoo"] = ct105_content
 
-            # Map $tenant_db
+            # Map $tenant_db → dominio → BD
             ct105_content = _add_to_map(ct105_content, "tenant_db", external_domain, tenant_db)
+            ct105_content = _add_to_map(ct105_content, "tenant_db", www_domain, tenant_db)
             # Map $web_redirect_target (usa key "domain:")
-            web_map_key = f"{external_domain}:"
-            web_map_val = f"/web?db={tenant_db}"
-            ct105_content = _add_to_map(ct105_content, "web_redirect_target", web_map_key, web_map_val)
-            # Map $odoo_proxy_host
-            ct105_content = _add_to_map(ct105_content, "odoo_proxy_host", external_domain, tenant_sajet)
-            # server_name
+            ct105_content = _add_to_map(ct105_content, "web_redirect_target", f"{external_domain}:", f"/web?db={tenant_db}")
+            ct105_content = _add_to_map(ct105_content, "web_redirect_target", f"{www_domain}:", f"/web?db={tenant_db}")
+            # Map $odoo_proxy_host → dominio ORIGINAL (para Odoo multi-website)
+            ct105_content = _add_to_map(ct105_content, "odoo_proxy_host", external_domain, external_domain)
+            ct105_content = _add_to_map(ct105_content, "odoo_proxy_host", www_domain, external_domain)
+            # server_name en ambos bloques (8080 y 8443)
             ct105_content = _add_to_server_name(ct105_content, "listen 8080", external_domain)
-            # proxy_redirect
-            ct105_content = _add_proxy_redirect_ct105(ct105_content, tenant_subdomain)
+            ct105_content = _add_to_server_name(ct105_content, "listen 8080", www_domain)
+            ct105_content = _add_to_server_name(ct105_content, "listen 8443", external_domain)
+            ct105_content = _add_to_server_name(ct105_content, "listen 8443", www_domain)
 
             _write_file_ct105(CT105_ODOO_CONF, ct105_content)
 
@@ -318,21 +329,26 @@ class NginxDomainConfigurator:
         """
         logger.info(f"Eliminando nginx config para {external_domain}")
         backups: Dict[str, str] = {}
+        www_domain = f"www.{external_domain}"
 
         try:
             # ── PCT160 ───────────────────────────────────────────────────
             erp_content = _read_file_local(PCT160_ERP_CONF)
             backups["pct160_erp"] = erp_content
 
-            for map_var in ("external_tenant_db", "external_odoo_host", "proxy_odoo_host"):
+            for map_var in ("external_tenant_db", "external_odoo_host"):
                 erp_content = _remove_from_map(erp_content, map_var, external_domain)
+                erp_content = _remove_from_map(erp_content, map_var, www_domain)
             erp_content = _remove_from_server_name(erp_content, external_domain)
+            erp_content = _remove_from_server_name(erp_content, www_domain)
             _write_file_local(PCT160_ERP_CONF, erp_content)
 
             backups["pct160_http_map"] = _read_file_local(PCT160_HTTP_MAP)
             backups["pct160_chat_map"] = _read_file_local(PCT160_CHAT_MAP)
             _remove_from_route_map(PCT160_HTTP_MAP, external_domain)
             _remove_from_route_map(PCT160_CHAT_MAP, external_domain)
+            _remove_from_route_map(PCT160_HTTP_MAP, www_domain)
+            _remove_from_route_map(PCT160_CHAT_MAP, www_domain)
 
             rc, _, err = _run_local("nginx -t")
             if rc != 0:
@@ -346,14 +362,12 @@ class NginxDomainConfigurator:
 
             for map_var in ("tenant_db", "odoo_proxy_host"):
                 ct105_content = _remove_from_map(ct105_content, map_var, external_domain)
+                ct105_content = _remove_from_map(ct105_content, map_var, www_domain)
             # web_redirect_target usa key "domain:"
             ct105_content = _remove_from_map(ct105_content, "web_redirect_target", f"{external_domain}:")
+            ct105_content = _remove_from_map(ct105_content, "web_redirect_target", f"{www_domain}:")
             ct105_content = _remove_from_server_name(ct105_content, external_domain)
-
-            # Solo eliminar proxy_redirect si no quedan otros dominios de este tenant
-            # (verificar si aún hay alguna referencia al tenant_subdomain en los maps)
-            if f"{tenant_subdomain}.sajet.us" not in ct105_content.split("proxy_redirect")[0]:
-                ct105_content = _remove_proxy_redirect_ct105(ct105_content, tenant_subdomain)
+            ct105_content = _remove_from_server_name(ct105_content, www_domain)
 
             _write_file_ct105(CT105_ODOO_CONF, ct105_content)
 
