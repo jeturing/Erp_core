@@ -112,6 +112,12 @@ export interface Plan {
   price_per_user: number;
   included_users: number;
   max_users: number;
+  max_domains: number;
+  max_storage_mb: number;
+  max_websites: number;
+  max_companies: number;
+  max_backups: number;
+  max_api_calls_day: number;
   currency: string;
   stripe_price_id?: string | null;
   stripe_product_id?: string | null;

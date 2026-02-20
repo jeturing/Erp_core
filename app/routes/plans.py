@@ -35,6 +35,12 @@ class PlanCreate(BaseModel):
     price_per_user: float = 0
     included_users: int = 1
     max_users: int = 0
+    max_domains: int = 0
+    max_storage_mb: int = 0
+    max_websites: int = 1
+    max_companies: int = 1
+    max_backups: int = 0
+    max_api_calls_day: int = 0
     currency: str = "USD"
     stripe_price_id: Optional[str] = None
     stripe_product_id: Optional[str] = None
@@ -49,6 +55,12 @@ class PlanUpdate(BaseModel):
     price_per_user: Optional[float] = None
     included_users: Optional[int] = None
     max_users: Optional[int] = None
+    max_domains: Optional[int] = None
+    max_storage_mb: Optional[int] = None
+    max_websites: Optional[int] = None
+    max_companies: Optional[int] = None
+    max_backups: Optional[int] = None
+    max_api_calls_day: Optional[int] = None
     stripe_price_id: Optional[str] = None
     stripe_product_id: Optional[str] = None
     features: Optional[str] = None
@@ -94,6 +106,12 @@ async def list_plans(
                 "price_per_user": p.price_per_user,
                 "included_users": p.included_users,
                 "max_users": p.max_users,
+                "max_domains": p.max_domains,
+                "max_storage_mb": p.max_storage_mb,
+                "max_websites": p.max_websites,
+                "max_companies": p.max_companies,
+                "max_backups": p.max_backups,
+                "max_api_calls_day": p.max_api_calls_day,
                 "currency": p.currency,
                 "stripe_price_id": p.stripe_price_id,
                 "stripe_product_id": p.stripe_product_id,
@@ -132,6 +150,12 @@ async def create_plan(
             price_per_user=payload.price_per_user,
             included_users=payload.included_users,
             max_users=payload.max_users,
+            max_domains=payload.max_domains,
+            max_storage_mb=payload.max_storage_mb,
+            max_websites=payload.max_websites,
+            max_companies=payload.max_companies,
+            max_backups=payload.max_backups,
+            max_api_calls_day=payload.max_api_calls_day,
             currency=payload.currency,
             stripe_price_id=payload.stripe_price_id,
             stripe_product_id=payload.stripe_product_id,

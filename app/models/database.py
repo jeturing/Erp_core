@@ -276,6 +276,12 @@ class Plan(Base):
     included_users = Column(Integer, default=1, nullable=False)  # Usuarios incluidos en base_price
     max_users = Column(Integer, default=0)                       # 0 = ilimitado
     max_domains = Column(Integer, default=0)                     # 0 = sin dominios custom, -1 = ilimitado
+    # ── Quotas de recursos (Phase 2) ──
+    max_storage_mb = Column(Integer, default=0)                  # 0 = ilimitado, MB de almacenamiento
+    max_websites = Column(Integer, default=1)                    # Websites Odoo (multi-website)
+    max_companies = Column(Integer, default=1)                   # Multi-company
+    max_backups = Column(Integer, default=0)                     # Backups automáticos retenidos, 0=ilimitado
+    max_api_calls_day = Column(Integer, default=0)               # Llamadas API diarias, 0=ilimitado
     currency = Column(String(3), default="USD")
     stripe_price_id = Column(String(100))                        # Price ID de Stripe (recurrente)
     stripe_product_id = Column(String(100))                      # Product ID de Stripe

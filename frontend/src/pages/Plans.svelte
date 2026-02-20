@@ -1,6 +1,6 @@
 <script lang="ts">
   import { onMount } from 'svelte';
-  import { Package, Plus, Edit3, Trash2, Calculator, Users, DollarSign, Check, X } from 'lucide-svelte';
+  import { Package, Plus, Edit3, Trash2, Calculator, Users, DollarSign, Check, X, Globe, HardDrive, LayoutGrid, Building2, Archive, Zap } from 'lucide-svelte';
   import { billingApi } from '../lib/api/billing';
   import type { Plan, PlanCalculation } from '../lib/types';
 
@@ -28,6 +28,12 @@
     price_per_user: 0,
     included_users: 1,
     max_users: 0,
+    max_domains: 0,
+    max_storage_mb: 0,
+    max_websites: 1,
+    max_companies: 1,
+    max_backups: 0,
+    max_api_calls_day: 0,
     stripe_price_id: '',
     stripe_product_id: '',
     features: '',
@@ -57,6 +63,12 @@
       price_per_user: 0,
       included_users: 1,
       max_users: 0,
+      max_domains: 0,
+      max_storage_mb: 0,
+      max_websites: 1,
+      max_companies: 1,
+      max_backups: 0,
+      max_api_calls_day: 0,
       stripe_price_id: '',
       stripe_product_id: '',
       features: '',
@@ -75,6 +87,12 @@
       price_per_user: plan.price_per_user,
       included_users: plan.included_users,
       max_users: plan.max_users,
+      max_domains: plan.max_domains ?? 0,
+      max_storage_mb: plan.max_storage_mb ?? 0,
+      max_websites: plan.max_websites ?? 1,
+      max_companies: plan.max_companies ?? 1,
+      max_backups: plan.max_backups ?? 0,
+      max_api_calls_day: plan.max_api_calls_day ?? 0,
       stripe_price_id: plan.stripe_price_id || '',
       stripe_product_id: plan.stripe_product_id || '',
       features: Array.isArray(plan.features) ? plan.features.join('\n') : '',
@@ -207,6 +225,34 @@
                 <span>Máx. usuarios</span>
                 <span class="text-text-light font-medium">{plan.max_users === 0 ? 'Ilimitado' : plan.max_users}</span>
               </div>
+            </div>
+          </div>
+
+          <!-- Resource Quotas -->
+          <div class="grid grid-cols-2 gap-2 mb-4 text-xs">
+            <div class="flex items-center gap-1.5 text-gray-400" title="Dominios custom ({plan.max_domains === -1 ? 'ilimitado' : plan.max_domains === 0 ? 'no incluido' : plan.max_domains})">
+              <Globe size={12} class="text-blue-400" />
+              <span>Dominios: <span class="text-text-light font-medium">{plan.max_domains === -1 ? '∞' : plan.max_domains}</span></span>
+            </div>
+            <div class="flex items-center gap-1.5 text-gray-400" title="Almacenamiento ({plan.max_storage_mb === 0 ? 'ilimitado' : plan.max_storage_mb + ' MB'})">
+              <HardDrive size={12} class="text-purple-400" />
+              <span>Storage: <span class="text-text-light font-medium">{plan.max_storage_mb === 0 ? '∞' : plan.max_storage_mb + 'MB'}</span></span>
+            </div>
+            <div class="flex items-center gap-1.5 text-gray-400" title="Websites Odoo">
+              <LayoutGrid size={12} class="text-green-400" />
+              <span>Websites: <span class="text-text-light font-medium">{plan.max_websites}</span></span>
+            </div>
+            <div class="flex items-center gap-1.5 text-gray-400" title="Multi-company">
+              <Building2 size={12} class="text-yellow-400" />
+              <span>Companies: <span class="text-text-light font-medium">{plan.max_companies}</span></span>
+            </div>
+            <div class="flex items-center gap-1.5 text-gray-400" title="Backups retenidos ({plan.max_backups === 0 ? 'ilimitado' : plan.max_backups})">
+              <Archive size={12} class="text-teal-400" />
+              <span>Backups: <span class="text-text-light font-medium">{plan.max_backups === 0 ? '∞' : plan.max_backups}</span></span>
+            </div>
+            <div class="flex items-center gap-1.5 text-gray-400" title="API calls/día ({plan.max_api_calls_day === 0 ? 'ilimitado' : plan.max_api_calls_day})">
+              <Zap size={12} class="text-orange-400" />
+              <span>API/día: <span class="text-text-light font-medium">{plan.max_api_calls_day === 0 ? '∞' : plan.max_api_calls_day}</span></span>
             </div>
           </div>
 
@@ -369,6 +415,37 @@
           <div>
             <label class="label" for="plan-sort">Orden</label>
             <input id="plan-sort" type="number" class="input" bind:value={form.sort_order} />
+          </div>
+        </div>
+
+        <!-- Resource Quotas -->
+        <div class="border border-border-dark rounded-lg p-4 space-y-3">
+          <h3 class="text-sm font-semibold text-gray-400 uppercase tracking-wide">Cuotas de Recursos</h3>
+          <div class="grid grid-cols-3 gap-3">
+            <div>
+              <label class="label text-xs" for="plan-domains">Dominios (-1=∞, 0=no)</label>
+              <input id="plan-domains" type="number" min="-1" class="input" bind:value={form.max_domains} />
+            </div>
+            <div>
+              <label class="label text-xs" for="plan-storage">Storage MB (0=∞)</label>
+              <input id="plan-storage" type="number" min="0" class="input" bind:value={form.max_storage_mb} />
+            </div>
+            <div>
+              <label class="label text-xs" for="plan-websites">Websites</label>
+              <input id="plan-websites" type="number" min="1" class="input" bind:value={form.max_websites} />
+            </div>
+            <div>
+              <label class="label text-xs" for="plan-companies">Companies</label>
+              <input id="plan-companies" type="number" min="1" class="input" bind:value={form.max_companies} />
+            </div>
+            <div>
+              <label class="label text-xs" for="plan-backups">Backups (0=∞)</label>
+              <input id="plan-backups" type="number" min="0" class="input" bind:value={form.max_backups} />
+            </div>
+            <div>
+              <label class="label text-xs" for="plan-api">API calls/día (0=∞)</label>
+              <input id="plan-api" type="number" min="0" class="input" bind:value={form.max_api_calls_day} />
+            </div>
           </div>
         </div>
 
