@@ -60,10 +60,10 @@
         billingApi.getPlans(true),
         partnersApi.getPlanCatalogLinks(),
       ]);
-      catalog = catalogRes.items;
-      categories = catalogRes.categories;
-      plans = plansRes.items;
-      planLinks = linksRes.links;
+      catalog = catalogRes.items ?? [];
+      categories = catalogRes.categories ?? [];
+      plans = plansRes.items ?? [];
+      planLinks = linksRes.links ?? [];
 
       // Expandir todas las categorías al cargar
       if (expandedCategories.size === 0) {

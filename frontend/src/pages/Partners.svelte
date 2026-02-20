@@ -54,7 +54,7 @@
     pricingLoading = true;
     try {
       const res = await partnersApi.getPricingOverrides(partnerId);
-      pricingOverrides = res.items;
+      pricingOverrides = res.items ?? [];
     } catch (e: any) {
       toasts.error(e.message || 'Error cargando tarifario');
       pricingOverrides = [];
@@ -121,7 +121,7 @@
     loading = true;
     try {
       const res = await partnersApi.getPartners(statusFilter || undefined);
-      partners = res.items;
+      partners = res.items ?? [];
       summary = res.summary;
     } catch (e: any) {
       toasts.error(e.message);

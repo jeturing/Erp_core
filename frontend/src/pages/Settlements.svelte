@@ -24,7 +24,7 @@
     loading = true;
     try {
       const res = await settlementsApi.list({ limit: 50 });
-      settlements = res.items;
+      settlements = res.items ?? [];
     } catch (e: any) {
       toasts.error(e.message);
     } finally {
@@ -84,9 +84,9 @@
     return map[status] || 'badge-neutral';
   }
 
-  $: totalGross = settlements.reduce((s, i) => s + i.gross_revenue, 0);
-  $: totalJeturing = settlements.reduce((s, i) => s + i.jeturing_share, 0);
-  $: totalPartner = settlements.reduce((s, i) => s + i.final_partner_payout, 0);
+  $: totalGross = (settlements || []).reduce((s, i) => s + i.gross_revenue, 0);
+  $: totalJeturing = (settlements || []).reduce((s, i) => s + i.jeturing_share, 0);
+  $: totalPartner = (settlements || []).reduce((s, i) => s + i.final_partner_payout, 0);
 
   onMount(loadSettlements);
 </script>

@@ -1,11 +1,11 @@
 <script lang="ts">
   import {
     LayoutDashboard, Users, Globe, Server, CreditCard,
-    Settings, LogOut, Menu, X, FileText, Route, Shield,
+    Settings as SettingsIcon, LogOut, Menu, X, FileText, Route, Shield,
     ExternalLink, Package, UserCheck, Handshake, Target,
     Percent, FileSpreadsheet, Boxes, UsersRound, Receipt,
     Scale, GitCompareArrows, ClipboardList, ShieldCheck, Palette,
-    ShoppingBag,
+    ShoppingBag, ChevronDown,
   } from 'lucide-svelte';
   import { auth } from '../stores';
 
@@ -14,32 +14,115 @@
   let mobileOpen = false;
 
   type NavItem = { id: string; label: string; icon: any; href: string };
+  type NavGroup = { id: string; label: string; icon: any; children: NavItem[] };
+  type NavEntry = NavItem | NavGroup;
 
-  const navItems: NavItem[] = [
-    { id: 'dashboard',      label: 'Dashboard',      icon: LayoutDashboard, href: '#/dashboard' },
-    { id: 'tenants',        label: 'Tenants',         icon: Users,           href: '#/tenants' },
-    { id: 'domains',        label: 'Domains',         icon: Globe,           href: '#/domains' },
-    { id: 'infrastructure', label: 'Infrastructure',  icon: Server,          href: '#/infrastructure' },
-    { id: 'billing',        label: 'Billing',         icon: CreditCard,      href: '#/billing' },
-    { id: 'plans',          label: 'Planes',          icon: Package,         href: '#/plans' },
-    { id: 'clients',        label: 'Clientes',        icon: UserCheck,       href: '#/clients' },
-    { id: 'partners',       label: 'Partners',        icon: Handshake,       href: '#/partners' },
-    { id: 'leads',          label: 'Leads',           icon: Target,          href: '#/leads' },
-    { id: 'commissions',    label: 'Comisiones',      icon: Percent,         href: '#/commissions' },
-    { id: 'quotations',     label: 'Cotizaciones',    icon: FileSpreadsheet, href: '#/quotations' },
-    { id: 'catalog',        label: 'Catálogo',        icon: ShoppingBag,     href: '#/catalog' },    { id: 'blueprints',      label: 'Blueprints',       icon: Boxes,           href: '#/blueprints' },
-    { id: 'seats',           label: 'Seats',            icon: UsersRound,      href: '#/seats' },
-    { id: 'invoices',        label: 'Facturas',         icon: Receipt,         href: '#/invoices' },
-    { id: 'settlements',     label: 'Liquidaciones',    icon: Scale,           href: '#/settlements' },
-    { id: 'reconciliation',  label: 'Conciliación',     icon: GitCompareArrows, href: '#/reconciliation' },
-    { id: 'workorders',      label: 'Work Orders',      icon: ClipboardList,   href: '#/workorders' },
-    { id: 'audit',           label: 'Auditoría',        icon: ShieldCheck,     href: '#/audit' },
-    { id: 'branding',        label: 'Branding',         icon: Palette,         href: '#/branding' },    { id: 'settings',       label: 'Settings',        icon: Settings,        href: '#/settings' },
-    { id: 'logs',           label: 'Logs',            icon: FileText,        href: '#/logs' },
-    { id: 'tunnels',        label: 'Tunnels',         icon: Route,           href: '#/tunnels' },
-    { id: 'roles',          label: 'Roles',           icon: Shield,          href: '#/roles' },
-    { id: 'portal',         label: 'Portal Tenant',   icon: ExternalLink,    href: '#/portal' },
+  function isGroup(entry: NavEntry): entry is NavGroup {
+    return 'children' in entry;
+  }
+
+  const navStructure: NavEntry[] = [
+    { id: 'dashboard', label: 'Dashboard', icon: LayoutDashboard, href: '#/dashboard' },
+
+    {
+      id: 'grp-infra', label: 'Infraestructura', icon: Server,
+      children: [
+        { id: 'tenants',        label: 'Tenants',    icon: Users,  href: '#/tenants' },
+        { id: 'domains',        label: 'Dominios',   icon: Globe,  href: '#/domains' },
+        { id: 'infrastructure', label: 'Servidores', icon: Server, href: '#/infrastructure' },
+        { id: 'tunnels',        label: 'Tunnels',    icon: Route,  href: '#/tunnels' },
+      ],
+    },
+
+    {
+      id: 'grp-comercial', label: 'Comercial', icon: Handshake,
+      children: [
+        { id: 'partners',   label: 'Partners',    icon: Handshake,       href: '#/partners' },
+        { id: 'leads',      label: 'Leads',        icon: Target,          href: '#/leads' },
+        { id: 'clients',    label: 'Clientes',     icon: UserCheck,       href: '#/clients' },
+        { id: 'quotations', label: 'Cotizaciones', icon: FileSpreadsheet, href: '#/quotations' },
+        { id: 'catalog',    label: 'Catálogo',     icon: ShoppingBag,     href: '#/catalog' },
+      ],
+    },
+
+    {
+      id: 'grp-billing', label: 'Facturación', icon: CreditCard,
+      children: [
+        { id: 'billing',        label: 'Billing',       icon: CreditCard,       href: '#/billing' },
+        { id: 'plans',          label: 'Planes',        icon: Package,          href: '#/plans' },
+        { id: 'invoices',       label: 'Facturas',      icon: Receipt,          href: '#/invoices' },
+        { id: 'seats',          label: 'Seats',         icon: UsersRound,       href: '#/seats' },
+        { id: 'settlements',    label: 'Liquidaciones', icon: Scale,            href: '#/settlements' },
+        { id: 'reconciliation', label: 'Conciliación',  icon: GitCompareArrows, href: '#/reconciliation' },
+      ],
+    },
+
+    {
+      id: 'grp-ops', label: 'Operaciones', icon: ClipboardList,
+      children: [
+        { id: 'workorders',  label: 'Work Orders', icon: ClipboardList, href: '#/workorders' },
+        { id: 'blueprints',  label: 'Blueprints',  icon: Boxes,         href: '#/blueprints' },
+        { id: 'commissions', label: 'Comisiones',   icon: Percent,       href: '#/commissions' },
+        { id: 'branding',    label: 'Branding',     icon: Palette,       href: '#/branding' },
+      ],
+    },
+
+    {
+      id: 'grp-admin', label: 'Administración', icon: SettingsIcon,
+      children: [
+        { id: 'settings', label: 'Settings',     icon: SettingsIcon, href: '#/settings' },
+        { id: 'roles',    label: 'Roles',         icon: Shield,       href: '#/roles' },
+        { id: 'audit',    label: 'Auditoría',     icon: ShieldCheck,  href: '#/audit' },
+        { id: 'logs',     label: 'Logs',          icon: FileText,     href: '#/logs' },
+        { id: 'portal',   label: 'Portal Tenant', icon: ExternalLink, href: '#/portal' },
+      ],
+    },
   ];
+
+  // Flat list for header breadcrumb
+  const allNavItems: NavItem[] = navStructure.flatMap(e => isGroup(e) ? e.children : [e]);
+
+  // Which group owns a route
+  function findGroupForRoute(route: string): string | null {
+    for (const entry of navStructure) {
+      if (isGroup(entry) && entry.children.some(c => c.id === route)) return entry.id;
+    }
+    return null;
+  }
+
+  // Expanded groups — persisted in localStorage
+  let expandedGroups: Set<string> = new Set();
+
+  function initExpandedGroups() {
+    try {
+      const saved = localStorage.getItem('sidebar_expanded');
+      if (saved) expandedGroups = new Set(JSON.parse(saved));
+    } catch { /* ignore */ }
+    const activeGroup = findGroupForRoute(currentRoute);
+    if (activeGroup) expandedGroups.add(activeGroup);
+    expandedGroups = new Set(expandedGroups);
+  }
+
+  initExpandedGroups();
+
+  $: {
+    const grp = findGroupForRoute(currentRoute);
+    if (grp && !expandedGroups.has(grp)) {
+      expandedGroups.add(grp);
+      expandedGroups = new Set(expandedGroups);
+    }
+  }
+
+  function toggleGroup(groupId: string) {
+    if (expandedGroups.has(groupId)) expandedGroups.delete(groupId);
+    else expandedGroups.add(groupId);
+    expandedGroups = new Set(expandedGroups);
+    try { localStorage.setItem('sidebar_expanded', JSON.stringify([...expandedGroups])); } catch { /* */ }
+  }
+
+  function groupHasActive(group: NavGroup): boolean {
+    return group.children.some(c => c.id === currentRoute);
+  }
 
   function handleLogout() {
     auth.logout();
@@ -68,21 +151,62 @@
     </div>
 
     <!-- Nav -->
-    <nav class="flex-1 px-6 pt-2 overflow-y-auto">
-      {#each navItems as item}
-        <a
-          href={item.href}
-          class={currentRoute === item.id ? 'sidebar-link-active' : 'sidebar-link'}
-          on:click={() => (mobileOpen = false)}
-        >
-          <svelte:component this={item.icon} size={18} />
-          <span>{item.label}</span>
-        </a>
+    <nav class="flex-1 px-3 pt-2 overflow-y-auto sidebar-nav">
+      {#each navStructure as entry}
+        {#if isGroup(entry)}
+          <!-- Group header -->
+          <button
+            type="button"
+            class="sidebar-group-toggle {groupHasActive(entry) ? 'sidebar-group-active' : ''}"
+            on:click={() => toggleGroup(entry.id)}
+            aria-expanded={expandedGroups.has(entry.id)}
+          >
+            <div class="flex items-center gap-2.5 min-w-0">
+              <svelte:component this={entry.icon} size={16} class="shrink-0 opacity-60" />
+              <span class="truncate">{entry.label}</span>
+            </div>
+            <div class="flex items-center gap-1.5">
+              {#if !expandedGroups.has(entry.id)}
+                <span class="sidebar-group-badge">{entry.children.length}</span>
+              {/if}
+              <ChevronDown
+                size={14}
+                class="shrink-0 transition-transform duration-200 {expandedGroups.has(entry.id) ? 'rotate-180' : ''}"
+              />
+            </div>
+          </button>
+
+          <!-- Group children -->
+          {#if expandedGroups.has(entry.id)}
+            <div class="sidebar-group-children">
+              {#each entry.children as item}
+                <a
+                  href={item.href}
+                  class={currentRoute === item.id ? 'sidebar-child-active' : 'sidebar-child'}
+                  on:click={() => (mobileOpen = false)}
+                >
+                  <svelte:component this={item.icon} size={15} />
+                  <span>{item.label}</span>
+                </a>
+              {/each}
+            </div>
+          {/if}
+        {:else}
+          <!-- Direct link (Dashboard) -->
+          <a
+            href={entry.href}
+            class="sidebar-direct-link {currentRoute === entry.id ? 'sidebar-direct-active' : ''}"
+            on:click={() => (mobileOpen = false)}
+          >
+            <svelte:component this={entry.icon} size={18} />
+            <span>{entry.label}</span>
+          </a>
+        {/if}
       {/each}
     </nav>
 
     <!-- User -->
-    <div class="px-6 py-5 border-t border-border-dark">
+    <div class="px-4 py-4 border-t border-border-dark">
       <div class="flex items-center justify-between gap-3">
         <div class="flex items-center gap-3 min-w-0">
           <div class="w-8 h-8 rounded-full bg-dark-subtle flex items-center justify-center flex-shrink-0">
@@ -111,7 +235,7 @@
       </button>
 
       <span class="hidden lg:block text-[11px] font-semibold uppercase tracking-widest text-gray-500 font-sans">
-        {navItems.find(n => n.id === currentRoute)?.label ?? currentRoute}
+        {allNavItems.find(n => n.id === currentRoute)?.label ?? currentRoute}
       </span>
 
       <div class="ml-auto flex items-center gap-4">
@@ -127,3 +251,58 @@
     </main>
   </div>
 </div>
+
+<style>
+  .sidebar-nav::-webkit-scrollbar { width: 4px; }
+  .sidebar-nav::-webkit-scrollbar-track { background: transparent; }
+  .sidebar-nav::-webkit-scrollbar-thumb { background: rgba(255,255,255,0.1); border-radius: 2px; }
+
+  .sidebar-direct-link {
+    display: flex; align-items: center; gap: 0.625rem;
+    padding: 0.5rem 0.75rem; margin-bottom: 0.25rem; border-radius: 0.375rem;
+    font-size: 0.8125rem; font-weight: 500; color: #9ca3af;
+    transition: all 150ms; text-decoration: none;
+  }
+  .sidebar-direct-link:hover { color: #e5e7eb; background: rgba(255,255,255,0.05); }
+  .sidebar-direct-active {
+    color: #f5f5f5 !important; background: rgba(192,90,60,0.2) !important;
+    border-left: 3px solid #C05A3C;
+  }
+
+  .sidebar-group-toggle {
+    display: flex; align-items: center; justify-content: space-between;
+    width: 100%; padding: 0.4375rem 0.75rem; margin-top: 0.5rem; margin-bottom: 0.125rem;
+    border-radius: 0.375rem; font-size: 0.6875rem; font-weight: 700;
+    letter-spacing: 0.05em; text-transform: uppercase; color: #6b7280;
+    transition: all 150ms; border: none; background: transparent;
+    cursor: pointer; text-align: left;
+  }
+  .sidebar-group-toggle:hover { color: #9ca3af; background: rgba(255,255,255,0.03); }
+  .sidebar-group-active { color: #d1d5db !important; }
+
+  .sidebar-group-badge {
+    font-size: 0.625rem; font-weight: 600;
+    min-width: 1.125rem; height: 1.125rem;
+    display: inline-flex; align-items: center; justify-content: center;
+    border-radius: 9999px; background: rgba(255,255,255,0.08); color: #6b7280;
+  }
+
+  .sidebar-group-children {
+    padding-left: 0.5rem; margin-bottom: 0.25rem;
+    border-left: 1px solid rgba(255,255,255,0.06); margin-left: 1.25rem;
+  }
+
+  .sidebar-child {
+    display: flex; align-items: center; gap: 0.5rem;
+    padding: 0.375rem 0.625rem; border-radius: 0.375rem;
+    font-size: 0.8125rem; color: #9ca3af;
+    transition: all 150ms; text-decoration: none;
+  }
+  .sidebar-child:hover { color: #e5e7eb; background: rgba(255,255,255,0.05); }
+  .sidebar-child-active {
+    display: flex; align-items: center; gap: 0.5rem;
+    padding: 0.375rem 0.625rem; border-radius: 0.375rem;
+    font-size: 0.8125rem; font-weight: 600; color: #f5f5f5;
+    background: rgba(192,90,60,0.15); text-decoration: none;
+  }
+</style>

@@ -76,10 +76,10 @@
         partnersApi.getCatalog(),
         partnersApi.getPartners(),
       ]);
-      quotations = quotesRes.items;
+      quotations = quotesRes.items ?? [];
       summary = quotesRes.summary;
-      catalog = catalogRes.items;
-      catalogByCategory = catalogRes.by_category;
+      catalog = catalogRes.items ?? [];
+      catalogByCategory = catalogRes.by_category ?? {};
       partners = partnersRes.items.filter(p => p.status === 'active');
     } catch (e: any) {
       toasts.error(e.message);

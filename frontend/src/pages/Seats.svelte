@@ -22,7 +22,7 @@
         seatsApi.getHWM(subId),
         seatsApi.getSummary(subId),
       ]);
-      hwmRecords = hwmRes.items;
+      hwmRecords = hwmRes.items ?? [];
       summary = sumRes;
     } catch (e: any) {
       toasts.error(e.message);

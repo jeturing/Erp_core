@@ -37,7 +37,7 @@
     loading = true;
     try {
       const res = await brandingApi.list();
-      profiles = res.items;
+      profiles = res.items ?? [];
     } catch (e: any) {
       toasts.error(e.message);
     } finally {

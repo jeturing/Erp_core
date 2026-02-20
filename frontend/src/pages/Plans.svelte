@@ -39,7 +39,7 @@
     error = '';
     try {
       const data = await billingApi.getPlans(true);
-      plans = data.items;
+      plans = data.items ?? [];
     } catch (e: any) {
       error = e.message || 'Error cargando planes';
     } finally {

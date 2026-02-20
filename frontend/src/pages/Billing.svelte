@@ -34,7 +34,7 @@
   async function loadInvoices(page = 0) {
     try {
       const res = await billingApi.getInvoices(PAGE_SIZE, page * PAGE_SIZE);
-      invoices = res.invoices;
+      invoices = res.invoices ?? [];
       totalInvoices = res.total;
     } catch (err) {
       toasts.error(err instanceof Error ? err.message : 'Error cargando facturas');

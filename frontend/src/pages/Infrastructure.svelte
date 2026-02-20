@@ -20,9 +20,9 @@
         infrastructureApi.getClusterSummary(),
         infrastructureApi.getContainers(),
       ]);
-      nodes = nodesRes.items;
+      nodes = nodesRes.items ?? [];
       summary = summaryRes;
-      containers = containersRes.items;
+      containers = containersRes.items ?? [];
     } catch (err) {
       toasts.error(err instanceof Error ? err.message : 'Error cargando infraestructura');
     } finally {
