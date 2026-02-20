@@ -331,73 +331,110 @@ class DomainManager:
     
     async def verify_domain(self, domain_id: int) -> Dict[str, Any]:
         """
-        Verifica que el CNAME del dominio externo apunte correctamente a sajet.us
+        Verifica que el CNAME del dominio externo apunte correctamente a sajet.us.
+        Soporta dominios con A record apuntando a nuestra IP (Cloudflare proxy).
         """
         domain = self.get_domain(domain_id=domain_id)
         if not domain:
             return {"success": False, "error": "Dominio no encontrado"}
-        
+
+        try:
+            import dns.resolver
+        except ImportError:
+            return {
+                "success": False,
+                "status": "error",
+                "message": "Módulo dnspython no instalado. Ejecute: pip install dnspython",
+            }
+
         domain.verification_status = DomainVerificationStatus.verifying
         self.db.commit()
-        
-        # Verificar CNAME usando DNS lookup
-        import dns.resolver
+
         try:
-            answers = dns.resolver.resolve(domain.external_domain, 'CNAME')
-            cname_target = str(answers[0].target).rstrip('.')
-            
-            # Verificar que apunte a nuestro subdominio
-            expected = domain.sajet_full_domain
-            if cname_target == expected or cname_target.endswith('.sajet.us'):
-                domain.verification_status = DomainVerificationStatus.verified
-                domain.verified_at = datetime.utcnow()
-                domain.is_active = True
-                self.db.commit()
-                
-                return {
-                    "success": True,
-                    "status": "verified",
-                    "message": "Dominio verificado correctamente",
-                    "cname_detected": cname_target,
-                    "expected": expected
-                }
-            else:
+            # Intentar CNAME primero
+            try:
+                answers = dns.resolver.resolve(domain.external_domain, 'CNAME')
+                cname_target = str(answers[0].target).rstrip('.')
+
+                expected = domain.sajet_full_domain
+                if cname_target == expected or cname_target.endswith('.sajet.us'):
+                    domain.verification_status = DomainVerificationStatus.verified
+                    domain.verified_at = datetime.utcnow()
+                    domain.is_active = True
+                    self.db.commit()
+                    return {
+                        "success": True,
+                        "status": "verified",
+                        "message": "Dominio verificado correctamente (CNAME)",
+                        "cname_detected": cname_target,
+                        "expected": expected,
+                    }
+                else:
+                    domain.verification_status = DomainVerificationStatus.failed
+                    self.db.commit()
+                    return {
+                        "success": False,
+                        "status": "failed",
+                        "message": "CNAME no apunta al destino correcto",
+                        "cname_detected": cname_target,
+                        "expected": expected,
+                    }
+
+            except (dns.resolver.NoAnswer, dns.resolver.NoNameservers):
+                # Sin CNAME — verificar A record (dominios con Cloudflare proxy)
+                try:
+                    answers = dns.resolver.resolve(domain.external_domain, 'A')
+                    a_records = [str(r) for r in answers]
+                    # Nuestra IP pública (Cloudflare o directa)
+                    our_ips = {"208.115.125.29"}
+                    if our_ips & set(a_records):
+                        domain.verification_status = DomainVerificationStatus.verified
+                        domain.verified_at = datetime.utcnow()
+                        domain.is_active = True
+                        self.db.commit()
+                        return {
+                            "success": True,
+                            "status": "verified",
+                            "message": "Dominio verificado correctamente (A record)",
+                            "a_records": a_records,
+                        }
+                    else:
+                        domain.verification_status = DomainVerificationStatus.failed
+                        self.db.commit()
+                        return {
+                            "success": False,
+                            "status": "failed",
+                            "message": "No se encontró CNAME ni A record apuntando a sajet.us",
+                            "a_records": a_records,
+                            "instructions": f"Configure: {domain.external_domain} CNAME {domain.sajet_full_domain}",
+                        }
+                except Exception:
+                    domain.verification_status = DomainVerificationStatus.failed
+                    self.db.commit()
+                    return {
+                        "success": False,
+                        "status": "failed",
+                        "message": "No se encontró registro CNAME ni A",
+                        "instructions": f"Configure: {domain.external_domain} CNAME {domain.sajet_full_domain}",
+                    }
+
+            except dns.resolver.NXDOMAIN:
                 domain.verification_status = DomainVerificationStatus.failed
                 self.db.commit()
-                
                 return {
                     "success": False,
                     "status": "failed",
-                    "message": "CNAME no apunta al destino correcto",
-                    "cname_detected": cname_target,
-                    "expected": expected
+                    "message": "El dominio no existe en DNS",
+                    "instructions": "Verifique que el dominio esté correctamente configurado",
                 }
-                
-        except dns.resolver.NoAnswer:
-            domain.verification_status = DomainVerificationStatus.failed
-            self.db.commit()
-            return {
-                "success": False,
-                "status": "failed",
-                "message": "No se encontró registro CNAME",
-                "instructions": f"Configure: {domain.external_domain} CNAME {domain.sajet_full_domain}"
-            }
-        except dns.resolver.NXDOMAIN:
-            domain.verification_status = DomainVerificationStatus.failed
-            self.db.commit()
-            return {
-                "success": False,
-                "status": "failed", 
-                "message": "El dominio no existe en DNS",
-                "instructions": "Verifique que el dominio esté correctamente configurado"
-            }
+
         except Exception as e:
             domain.verification_status = DomainVerificationStatus.pending
             self.db.commit()
             return {
                 "success": False,
                 "status": "error",
-                "message": f"Error verificando dominio: {str(e)}"
+                "message": f"Error verificando dominio: {str(e)}",
             }
     
     def activate_domain(self, domain_id: int) -> Dict[str, Any]:

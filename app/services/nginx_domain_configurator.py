@@ -17,7 +17,8 @@ Estrategia de enrutamiento (multi-website + multi-tenant):
   - Host = subdominio interno ({bd}.{alias}.sajet.us) → Odoo recibe esto
   - Odoo usa Host para dbfilter (%d = {bd}) y para website matching (domain)
   - Cada website en Odoo tiene domain = https://{bd}.{alias}.sajet.us
-  - Para el website principal del tenant: {bd}.sajet.us (alias vacío)
+  - Dominios con mismo nombre que la BD usan alias derivado del TLD
+    (ej: techeels.io → techeels.ti.sajet.us, NO techeels.sajet.us)
   - Para websites adicionales: {bd}.{alias}.sajet.us (ej: techeels.em.sajet.us)
   - nginx proxy_redirect reescribe URLs internas a dominio real del usuario
 
@@ -240,21 +241,27 @@ class NginxDomainConfigurator:
         Si alias es None, genera uno automático basado en el dominio externo:
           - impulse-max.com → "im" (iniciales de palabras)
           - evolucionamujer.com → "em" (iniciales)
-          - techeels.io → "" (mismo nombre que BD → usa {bd}.sajet.us)
+          - techeels.io → "ti" (t de techeels + i de io, evita colisión con nativo)
 
         Returns:
             Subdominio interno (ej: "techeels.em.sajet.us")
         """
-        # Si el primer segmento del dominio externo == nombre de BD,
-        # no necesita alias — usa subdominio directo
-        domain_base = external_domain.lower().split(".")[0]
-        if domain_base == tenant_db:
-            return f"{tenant_db}.sajet.us"
-
         if alias:
             return f"{tenant_db}.{alias}.sajet.us"
 
-        # Generar alias automático a partir del dominio
+        # Generar alias automático a partir del dominio externo
+        domain_base = external_domain.lower().split(".")[0]
+        domain_parts = external_domain.lower().rsplit(".", 1)
+        tld = domain_parts[-1] if len(domain_parts) > 1 else ""
+
+        # Si el primer segmento del dominio externo == nombre de BD,
+        # DEBE generar alias con TLD para evitar colisión con el subdominio nativo
+        # Ej: techeels.io → techeels.ti.sajet.us (t de techeels + i de io)
+        #     techeels.com → techeels.tc.sajet.us
+        if domain_base == tenant_db:
+            alias = f"{domain_base[0]}{tld[0]}" if tld else "ext"
+            return f"{tenant_db}.{alias}.sajet.us"
+
         # Tomar iniciales de partes separadas por - o camelCase
         parts = domain_base.replace("-", " ").split()
         if len(parts) > 1:
