@@ -16,6 +16,7 @@ validate_required()
 from .routes import auth, dashboard, tenants, onboarding, roles, tenant_portal, secure_auth, nodes, tunnels, provisioning, settings, billing, logs, domains, plans, customers, partners, leads, commissions, quotations, stripe_connect, suspension
 from .routes import blueprints, seats, invoices, settlements, reconciliation, work_orders, branding, audit
 from .routes import reports, quotas, partner_portal
+from .routes import customer_onboarding
 
 # Import security middleware
 from .security.middleware import SecurityMiddleware, WAFMiddleware
@@ -116,6 +117,7 @@ app.include_router(branding.router)         # White-label partner branding
 app.include_router(audit.router)            # Audit events persistentes
 app.include_router(reports.router)          # Reportes consolidados / analytics
 app.include_router(quotas.router)           # Resource quotas por cliente/plan
+app.include_router(customer_onboarding.router)  # Customer onboarding + RD e-CF flow
 
 
 # ── Startup log ──

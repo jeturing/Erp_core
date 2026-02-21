@@ -31,6 +31,7 @@
   import Audit from './pages/Audit.svelte';
   import Branding from './pages/Branding.svelte';
   import ServiceCatalog from './pages/ServiceCatalog.svelte';
+  import CustomerOnboarding from './pages/CustomerOnboarding.svelte';
   import { Spinner } from './lib/components';
   import Toast from './lib/components/Toast.svelte';
 
@@ -63,6 +64,7 @@
     | 'branding'
     | 'catalog'
     | 'partner-portal'
+    | 'customer-onboarding'
     | 'signup'
     | 'notfound';
 
@@ -108,6 +110,17 @@
     }
 
     if ($currentUser?.role === 'tenant') {
+      // Si el tenant tiene onboarding pendiente, redirigir al flujo de onboarding
+      const onboardingStep = ($currentUser as any)?.onboarding_step ?? 999;
+      if (onboardingStep < 4 && route !== 'customer-onboarding') {
+        currentPage = 'customer-onboarding';
+        setRouteHash('customer-onboarding');
+        return;
+      }
+      if (route === 'customer-onboarding') {
+        currentPage = 'customer-onboarding';
+        return;
+      }
       currentPage = 'portal';
       if (route !== 'portal') {
         setRouteHash('portal');
@@ -150,6 +163,7 @@
       case 'branding':
       case 'catalog':
       case 'partner-portal':
+      case 'customer-onboarding':
         currentPage = route as AppPage;
         break;
       default:
@@ -199,6 +213,8 @@
   <TenantPortal />
 {:else if currentPage === 'partner-portal'}
   <PartnerPortal />
+{:else if currentPage === 'customer-onboarding'}
+  <CustomerOnboarding />
 {:else}
   <Layout currentRoute={currentPage === 'notfound' ? currentRoute : currentPage}>
     {#if currentPage === 'dashboard'}

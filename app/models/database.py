@@ -207,12 +207,30 @@ class Customer(Base):
     notes = Column(Text)
     user_count = Column(Integer, default=1)              # Usuarios Odoo del tenant
     is_admin_account = Column(Boolean, default=False)    # True = admin@sajet.us (no se cobra)
+
+    # ── Onboarding flow ──
+    onboarding_step = Column(Integer, default=0)         # 0=nuevo, 1=perfil, 2=ecf(si RD), 3=pago, 4=completo
+    onboarding_completed_at = Column(DateTime, nullable=True)
+    country = Column(String(100), nullable=True)
+    partner_id = Column(Integer, ForeignKey("partners.id"), nullable=True)
+
+    # ── Dominican Republic e-CF (Comprobantes Fiscales Electrónicos) ──
+    requires_ecf = Column(Boolean, default=False)
+    ecf_rnc = Column(String(20), nullable=True)                      # RNC / Cédula fiscal
+    ecf_business_name = Column(String(250), nullable=True)           # Razón social ante DGII
+    ecf_establishment_type = Column(String(50), nullable=True)       # persona_fisica, persona_juridica, zona_franca
+    ecf_ncf_series = Column(String(20), nullable=True)               # Serie NCF autorizada (B01, B02, B14, B15)
+    ecf_environment = Column(String(20), default="test_ecf")         # test_ecf | production
+    ecf_certificate_expiry = Column(DateTime, nullable=True)         # Vencimiento certificado digital DGII
+    ecf_authorized_sequences = Column(Text, nullable=True)           # JSON: rangos autorizados DGII
+
     created_at = Column(DateTime, default=datetime.utcnow)
     updated_at = Column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
     
     # Relaciones
     custom_domains = relationship("CustomDomain", back_populates="customer", cascade="all, delete-orphan")
     subscriptions = relationship("Subscription", back_populates="customer")
+    referral_partner = relationship("Partner", foreign_keys=[partner_id])
 
 class Subscription(Base):
     __tablename__ = "subscriptions"
@@ -396,7 +414,7 @@ class Partner(Base):
     updated_at = Column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
 
     # Relaciones
-    customer = relationship("Customer", backref="partner_profile")
+    customer = relationship("Customer", foreign_keys=[customer_id], backref="partner_profile")
     leads = relationship("Lead", back_populates="partner", cascade="all, delete-orphan")
     commissions = relationship("Commission", back_populates="partner")
     pricing_overrides = relationship("PartnerPricingOverride", back_populates="partner", cascade="all, delete-orphan")

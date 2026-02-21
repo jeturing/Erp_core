@@ -345,6 +345,9 @@ async def get_current_user(request: Request):
                 if customer:
                     user_data["company_name"] = customer.company_name
                     user_data["plan"] = customer.plan
+                    user_data["onboarding_step"] = customer.onboarding_step
+                    user_data["country"] = customer.country
+                    user_data["requires_ecf"] = customer.requires_ecf
             finally:
                 db.close()
 

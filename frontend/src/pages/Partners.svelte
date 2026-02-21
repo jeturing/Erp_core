@@ -6,7 +6,7 @@
   import {
     Handshake, Plus, Search, Building2, Mail, Phone, Globe,
     CheckCircle, Clock, XCircle, Pencil, Trash2, UserCheck, DollarSign,
-    KeyRound, Eye, EyeOff, Copy, ShieldCheck, Loader2,
+    KeyRound, Eye, EyeOff, Copy, ShieldCheck, Loader2, RefreshCw,
   } from 'lucide-svelte';
   import type { PartnerPricingOverrideItem } from '../lib/types';
   import { partnerPortalApi } from '../lib/api/partnerPortal';
