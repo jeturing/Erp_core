@@ -6,8 +6,10 @@
   import {
     Handshake, Plus, Search, Building2, Mail, Phone, Globe,
     CheckCircle, Clock, XCircle, Pencil, Trash2, UserCheck, DollarSign,
+    KeyRound, Eye, EyeOff, Copy, ShieldCheck, Loader2,
   } from 'lucide-svelte';
   import type { PartnerPricingOverrideItem } from '../lib/types';
+  import { partnerPortalApi } from '../lib/api/partnerPortal';
 
   let partners: PartnerItem[] = [];
   let loading = true;
@@ -88,6 +90,84 @@
     } catch (e: any) {
       toasts.error(e.message);
     }
+  }
+
+  // ── Credentials modal state ──
+  let showCredentialsModal = false;
+  let credentialsPartnerId: number | null = null;
+  let credentialsPartnerName = '';
+  let credentialsEmail = '';
+  let credentialsTempPassword = '';
+  let credentialsLoading = false;
+  let credentialsSuccess = '';
+  let credentialsError = '';
+  let showTempPassword = false;
+  let credentialsCopied = false;
+
+  function generateTempPassword(): string {
+    const chars = 'ABCDEFGHJKLMNPQRSTUVWXYZabcdefghkmnpqrstuvwxyz23456789!@#$';
+    let pw = '';
+    for (let i = 0; i < 12; i++) pw += chars.charAt(Math.floor(Math.random() * chars.length));
+    return pw;
+  }
+
+  function openCredentialsModal(p: PartnerItem) {
+    credentialsPartnerId = p.id;
+    credentialsPartnerName = p.company_name;
+    credentialsEmail = p.contact_email;
+    credentialsTempPassword = generateTempPassword();
+    credentialsSuccess = '';
+    credentialsError = '';
+    showTempPassword = false;
+    credentialsCopied = false;
+    showCredentialsModal = true;
+  }
+
+  async function handleAssignCredentials() {
+    if (!credentialsPartnerId || !credentialsTempPassword) return;
+    credentialsLoading = true;
+    credentialsError = '';
+    credentialsSuccess = '';
+    try {
+      const result = await partnerPortalApi.invitePartner(
+        credentialsPartnerId,
+        credentialsTempPassword,
+        credentialsEmail || undefined,
+      );
+      credentialsSuccess = `✅ Credenciales asignadas. El partner puede acceder con el email: ${credentialsEmail}`;
+      await loadPartners();
+    } catch (e: any) {
+      credentialsError = e.message || 'Error al asignar credenciales';
+    } finally {
+      credentialsLoading = false;
+    }
+  }
+
+  async function handleResetPartnerPassword() {
+    if (!credentialsPartnerId || !credentialsTempPassword) return;
+    credentialsLoading = true;
+    credentialsError = '';
+    credentialsSuccess = '';
+    try {
+      await partnerPortalApi.resetPartnerPassword(
+        credentialsPartnerId,
+        credentialsTempPassword,
+        credentialsEmail || undefined,
+      );
+      credentialsSuccess = `✅ Contraseña reseteada. Nueva contraseña temporal asignada.`;
+    } catch (e: any) {
+      credentialsError = e.message || 'Error al resetear contraseña';
+    } finally {
+      credentialsLoading = false;
+    }
+  }
+
+  function copyCredentials() {
+    const text = `Email: ${credentialsEmail}\nContraseña temporal: ${credentialsTempPassword}\nURL: ${window.location.origin}/#/login`;
+    navigator.clipboard.writeText(text).then(() => {
+      credentialsCopied = true;
+      setTimeout(() => credentialsCopied = false, 2500);
+    });
   }
 
   // Form state
@@ -321,6 +401,7 @@
             <th>Escenario</th>
             <th>Comisión</th>
             <th>Leads</th>
+            <th>Portal</th>
             <th>Estado</th>
             <th>Acciones</th>
           </tr>
@@ -344,6 +425,13 @@
               <td class="font-mono text-sm">{p.commission_rate}%</td>
               <td class="font-mono">{p.leads_count}</td>
               <td>
+                {#if p.portal_access}
+                  <span class="badge-success flex items-center gap-1 w-fit text-[10px]"><ShieldCheck size={11} /> Activo</span>
+                {:else}
+                  <span class="badge-neutral flex items-center gap-1 w-fit text-[10px]">Sin acceso</span>
+                {/if}
+              </td>
+              <td>
                 {#if p.status === 'active'}
                   <span class="badge-success flex items-center gap-1 w-fit"><CheckCircle size={12} /> Activo</span>
                 {:else if p.status === 'pending'}
@@ -354,6 +442,9 @@
               </td>
               <td>
                 <div class="flex gap-1">
+                  <button class="btn-sm btn-secondary" title="Asignar Credenciales Portal" on:click={() => openCredentialsModal(p)}>
+                    <KeyRound size={14} />
+                  </button>
                   <button class="btn-sm btn-secondary" title="Tarifario" on:click={() => togglePricing(p.id)}><DollarSign size={14} /></button>
                   <button class="btn-sm btn-secondary" title="Editar" on:click={() => editPartner(p)}><Pencil size={14} /></button>
                   {#if p.status === 'pending'}
@@ -369,7 +460,7 @@
             <!-- Pricing Overrides Panel -->
             {#if expandedPricingId === p.id}
               <tr>
-                <td colspan="7" class="bg-bg-page border-t border-border-dark p-4">
+                <td colspan="8" class="bg-bg-page border-t border-border-dark p-4">
                   <div class="space-y-4">
                     <div class="flex items-center justify-between">
                       <h3 class="text-sm font-bold uppercase tracking-widest text-terracotta flex items-center gap-2">
@@ -484,6 +575,103 @@
           {/each}
         </tbody>
       </table>
+    </div>
+  {/if}
+
+  <!-- ═══ CREDENTIALS MODAL ═══ -->
+  {#if showCredentialsModal}
+    <!-- svelte-ignore a11y-click-events-have-key-events -->
+    <!-- svelte-ignore a11y-no-static-element-interactions -->
+    <div class="fixed inset-0 bg-black/50 z-50 flex items-center justify-center p-4" on:click|self={() => showCredentialsModal = false}>
+      <div class="bg-bg-card rounded-xl border border-border-dark shadow-2xl w-full max-w-lg p-6 space-y-5">
+        <div class="flex items-center gap-3">
+          <div class="w-10 h-10 rounded-lg bg-terracotta/10 flex items-center justify-center">
+            <KeyRound size={20} class="text-terracotta" />
+          </div>
+          <div>
+            <h2 class="text-lg font-bold text-text-light">Credenciales de Portal</h2>
+            <p class="text-xs text-gray-500">{credentialsPartnerName}</p>
+          </div>
+        </div>
+
+        {#if credentialsError}
+          <div class="rounded border border-red-500/30 bg-red-900/20 px-4 py-3 text-sm text-red-300">{credentialsError}</div>
+        {/if}
+        {#if credentialsSuccess}
+          <div class="rounded border border-emerald-500/30 bg-emerald-900/20 px-4 py-3 text-sm text-emerald-300">{credentialsSuccess}</div>
+        {/if}
+
+        <div class="space-y-4">
+          <div>
+            <label class="label">Email de acceso al portal</label>
+            <input type="email" bind:value={credentialsEmail} class="input w-full" placeholder="socio@empresa.com" />
+            <p class="text-[10px] text-gray-500 mt-1">Se usará como usuario de login. Por defecto es el email de contacto.</p>
+          </div>
+
+          <div>
+            <label class="label">Contraseña temporal</label>
+            <div class="flex gap-2">
+              <div class="relative flex-1">
+                {#if showTempPassword}
+                  <input type="text" bind:value={credentialsTempPassword} class="input w-full pr-10 font-mono text-sm" />
+                {:else}
+                  <input type="password" bind:value={credentialsTempPassword} class="input w-full pr-10 font-mono text-sm" />
+                {/if}
+                <button
+                  class="absolute right-2 top-1/2 -translate-y-1/2 text-gray-400 hover:text-gray-200"
+                  on:click={() => showTempPassword = !showTempPassword}
+                  type="button"
+                >
+                  {#if showTempPassword}<EyeOff size={16} />{:else}<Eye size={16} />{/if}
+                </button>
+              </div>
+              <button class="btn-secondary btn-sm px-3" title="Generar nueva" on:click={() => credentialsTempPassword = generateTempPassword()}>
+                <RefreshCw size={14} />
+              </button>
+            </div>
+            <p class="text-[10px] text-gray-500 mt-1">El partner deberá cambiarla en el primer login (onboarding paso 1).</p>
+          </div>
+        </div>
+
+        <div class="bg-bg-page rounded-lg border border-border-dark p-3">
+          <div class="flex items-center justify-between mb-2">
+            <span class="text-[10px] font-semibold uppercase tracking-widest text-gray-500">Resumen de credenciales</span>
+            <button class="btn-sm btn-secondary flex items-center gap-1 text-[11px]" on:click={copyCredentials}>
+              <Copy size={12} />
+              {credentialsCopied ? '¡Copiado!' : 'Copiar'}
+            </button>
+          </div>
+          <div class="font-mono text-xs space-y-1 text-gray-400">
+            <div><span class="text-gray-500">Email:</span> {credentialsEmail}</div>
+            <div><span class="text-gray-500">Password:</span> {showTempPassword ? credentialsTempPassword : '••••••••••••'}</div>
+            <div><span class="text-gray-500">URL:</span> {window.location.origin}/#/login</div>
+          </div>
+        </div>
+
+        <div class="flex gap-3 pt-2">
+          <button
+            class="btn-accent flex-1 flex items-center justify-center gap-2"
+            on:click={handleAssignCredentials}
+            disabled={credentialsLoading || !credentialsEmail || !credentialsTempPassword}
+          >
+            {#if credentialsLoading}<Loader2 size={14} class="animate-spin" />{/if}
+            <KeyRound size={14} /> Asignar Credenciales
+          </button>
+          <button
+            class="btn-secondary flex items-center justify-center gap-2"
+            on:click={handleResetPartnerPassword}
+            disabled={credentialsLoading || !credentialsEmail || !credentialsTempPassword}
+            title="Resetear contraseña de un partner existente"
+          >
+            {#if credentialsLoading}<Loader2 size={14} class="animate-spin" />{/if}
+            Resetear
+          </button>
+        </div>
+
+        <div class="flex justify-end">
+          <button class="text-sm text-gray-500 hover:text-gray-300" on:click={() => showCredentialsModal = false}>Cerrar</button>
+        </div>
+      </div>
     </div>
   {/if}
 </div>
