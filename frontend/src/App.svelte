@@ -32,8 +32,10 @@
   import Branding from './pages/Branding.svelte';
   import ServiceCatalog from './pages/ServiceCatalog.svelte';
   import CustomerOnboarding from './pages/CustomerOnboarding.svelte';
+  import OnboardingConfig from './pages/OnboardingConfig.svelte';
   import { Spinner } from './lib/components';
   import Toast from './lib/components/Toast.svelte';
+  import OfflineBanner from './lib/components/OfflineBanner.svelte';
 
   type AppPage =
     | 'landing'
@@ -65,6 +67,7 @@
     | 'catalog'
     | 'partner-portal'
     | 'customer-onboarding'
+    | 'onboarding-config'
     | 'signup'
     | 'notfound';
 
@@ -164,6 +167,7 @@
       case 'catalog':
       case 'partner-portal':
       case 'customer-onboarding':
+      case 'onboarding-config':
         currentPage = route as AppPage;
         break;
       default:
@@ -197,6 +201,7 @@
 </script>
 
 <Toast />
+<OfflineBanner />
 
 {#if $auth.isLoading && currentPage !== 'landing'}
   <div class="min-h-screen bg-bg-page flex items-center justify-center">
@@ -265,6 +270,8 @@
       <Branding />
     {:else if currentPage === 'catalog'}
       <ServiceCatalog />
+    {:else if currentPage === 'onboarding-config'}
+      <OnboardingConfig />
     {:else}
       <div class="p-6">
         <h1 class="page-title">404 - Página no encontrada</h1>

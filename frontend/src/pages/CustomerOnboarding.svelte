@@ -1,7 +1,9 @@
 <script lang="ts">
   import { onMount } from 'svelte';
   import { customerOnboardingApi } from '../lib/api/customerOnboarding';
+  import { onboardingConfigApi } from '../lib/api/onboardingConfig';
   import type { OnboardingStatus } from '../lib/api/customerOnboarding';
+  import type { OnboardingConfig, OnboardingStep } from '../lib/api/onboardingConfig';
   import { toasts } from '../lib/stores';
   import {
     CheckCircle, User, Building2, Globe, Phone, Mail, Lock,
@@ -10,9 +12,13 @@
   } from 'lucide-svelte';
 
   let status: OnboardingStatus | null = null;
+  let onboardingConfig: OnboardingConfig | null = null;
   let loading = true;
   let saving = false;
   let currentStep = 0;
+
+  // Derived: steps visible and filtered by country condition
+  let visibleSteps: OnboardingStep[] = [];
 
   // Step 0: Password
   let password = '';
@@ -83,25 +89,63 @@
   async function loadStatus() {
     loading = true;
     try {
-      status = await customerOnboardingApi.getStatus();
-      currentStep = status.onboarding_step;
+      // Load both in parallel
+      const [s, cfg] = await Promise.all([
+        customerOnboardingApi.getStatus(),
+        onboardingConfigApi.getActive(),
+      ]);
+      status = s;
+      onboardingConfig = cfg;
+      currentStep = s.onboarding_step;
+
+      // Build visibleSteps from config, filtered by country condition
+      visibleSteps = (cfg.steps_config || []).filter(step => {
+        if (!step.visible) return false;
+        if (step.condition?.country_in && profileForm.country) {
+          return step.condition.country_in.includes(profileForm.country);
+        }
+        if (step.condition?.country_in && step.key === 'ecf') {
+          // Show ecf step by default if condition present; filter when country known
+          return true;
+        }
+        return true;
+      });
+
       // Pre-fill profile form
-      profileForm.full_name = status.full_name || '';
-      profileForm.company_name = status.company_name || '';
-      profileForm.phone = status.phone || '';
-      profileForm.country = status.country || '';
+      profileForm.full_name = s.full_name || '';
+      profileForm.company_name = s.company_name || '';
+      profileForm.phone = s.phone || '';
+      profileForm.country = s.country || '';
       // Pre-fill e-CF if available
-      if (status.ecf_rnc) ecfForm.ecf_rnc = status.ecf_rnc;
-      if (status.ecf_business_name) ecfForm.ecf_business_name = status.ecf_business_name;
-      if (status.ecf_establishment_type) ecfForm.ecf_establishment_type = status.ecf_establishment_type;
-      if (status.ecf_ncf_series) ecfForm.ecf_ncf_series = status.ecf_ncf_series;
-      if (status.ecf_environment) ecfForm.ecf_environment = status.ecf_environment;
+      if (s.ecf_rnc) ecfForm.ecf_rnc = s.ecf_rnc;
+      if (s.ecf_business_name) ecfForm.ecf_business_name = s.ecf_business_name;
+      if (s.ecf_establishment_type) ecfForm.ecf_establishment_type = s.ecf_establishment_type;
+      if (s.ecf_ncf_series) ecfForm.ecf_ncf_series = s.ecf_ncf_series;
+      if (s.ecf_environment) ecfForm.ecf_environment = s.ecf_environment;
     } catch (e: any) {
       toasts.error(e.message || 'Error cargando onboarding');
     } finally {
       loading = false;
     }
   }
+
+  // Recompute visible steps when country changes
+  $: if (onboardingConfig && profileForm.country) {
+    const ecfCountries = onboardingConfig.ecf_countries || ['DO'];
+    visibleSteps = (onboardingConfig.steps_config || []).filter(step => {
+      if (!step.visible) return false;
+      if (step.key === 'ecf') {
+        return ecfCountries.includes(profileForm.country);
+      }
+      if (step.condition?.country_in) {
+        return step.condition.country_in.includes(profileForm.country);
+      }
+      return true;
+    });
+  }
+
+  // Get step key by currentStep index in the visible list
+  $: currentStepKey = visibleSteps[currentStep]?.key ?? 'password';
 
   // Step 0: Set password
   async function handleSetPassword() {
@@ -196,18 +240,18 @@
     }
   }
 
-  // Determine effective steps (without e-CF if not Dominican)
+  // Determine effective steps: use dynamic config when loaded, fallback to old static logic
   $: isDominican = profileForm.country === 'DO';
-  $: effectiveSteps = isDominican
-    ? stepLabels
-    : stepLabels.filter((_, i) => i !== 2);
+  $: effectiveSteps = visibleSteps.length > 0
+    ? visibleSteps
+    : (isDominican ? stepLabels : stepLabels.filter((_, i) => i !== 2));
 
   // Map currentStep to visible step index
-  $: visibleStep = isDominican
+  $: visibleStep = visibleSteps.length > 0
     ? currentStep
-    : currentStep >= 3
-      ? currentStep - 1
-      : currentStep;
+    : isDominican
+      ? currentStep
+      : currentStep >= 3 ? currentStep - 1 : currentStep;
 
   function formatRNC(value: string): string {
     const clean = value.replace(/[^0-9]/g, '');
@@ -227,8 +271,12 @@
   <div class="max-w-3xl mx-auto space-y-8">
     <!-- Header -->
     <div class="text-center">
-      <h1 class="text-3xl font-bold text-text-light mb-2">Bienvenido a Sajet</h1>
-      <p class="text-gray-400">Complete su configuración para comenzar a usar la plataforma</p>
+      <h1 class="text-3xl font-bold text-text-light mb-2">
+        {onboardingConfig?.welcome_title ?? 'Bienvenido a Sajet'}
+      </h1>
+      <p class="text-gray-400">
+        {onboardingConfig?.welcome_subtitle ?? 'Complete su configuración para comenzar a usar la plataforma'}
+      </p>
     </div>
 
     {#if loading}

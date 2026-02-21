@@ -1182,6 +1182,47 @@ class PartnerBrandingProfile(Base):
     partner = relationship("Partner", backref="branding_profile")
 
 
+# ═══════════════════════════════════════════════════════
+# ONBOARDING CONFIG — Admin-configurable onboarding flow
+# ═══════════════════════════════════════════════════════
+
+class OnboardingConfig(Base):
+    """
+    Configuración de onboarding editable por admin.
+    Define pasos visibles, planes mostrados, menú del portal y textos.
+    """
+    __tablename__ = "onboarding_config"
+
+    id = Column(Integer, primary_key=True, index=True)
+    config_key = Column(String(100), unique=True, nullable=False)    # 'default', 'partner_referred', etc.
+    display_name = Column(String(200), nullable=False, default='Onboarding Principal')
+
+    # Steps: [{step, key, label, required, visible, condition}]
+    steps_config = Column(JSON, nullable=False, default=list)
+    # Plans shown in onboarding/portal pricing section
+    visible_plans = Column(JSON, nullable=False, default=list)
+    # Tenant portal menu: [{key, label, icon, visible, order}]
+    portal_menu = Column(JSON, nullable=False, default=list)
+
+    # Welcome texts
+    welcome_title = Column(String(300), default='¡Bienvenido a Sajet ERP!')
+    welcome_subtitle = Column(String(500), default='Configure su cuenta para comenzar.')
+
+    # Account management toggles
+    allow_plan_change = Column(Boolean, default=True)
+    allow_cancel = Column(Boolean, default=True)
+    allow_email_change = Column(Boolean, default=False)
+    show_invoices = Column(Boolean, default=True)
+    show_usage = Column(Boolean, default=True)
+
+    # Countries that require e-CF questionnaire
+    ecf_countries = Column(JSON, nullable=False, default=lambda: ["DO"])
+
+    is_active = Column(Boolean, default=True)
+    created_at = Column(DateTime, default=datetime.utcnow)
+    updated_at = Column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
+
+
 # ===== HELPER FUNCTIONS PARA CONFIGURACIÓN =====
 
 def get_config(key: str, default: str = None) -> str:

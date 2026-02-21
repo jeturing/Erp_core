@@ -5,7 +5,7 @@
     ExternalLink, Package, UserCheck, Handshake, Target,
     Percent, FileSpreadsheet, Boxes, UsersRound, Receipt,
     Scale, GitCompareArrows, ClipboardList, ShieldCheck, Palette,
-    ShoppingBag, ChevronDown,
+    ShoppingBag, ChevronDown, Sliders,
   } from 'lucide-svelte';
   import { auth } from '../stores';
 
@@ -70,11 +70,12 @@
     {
       id: 'grp-admin', label: 'Administración', icon: SettingsIcon,
       children: [
-        { id: 'settings', label: 'Settings',     icon: SettingsIcon, href: '#/settings' },
-        { id: 'roles',    label: 'Roles',         icon: Shield,       href: '#/roles' },
-        { id: 'audit',    label: 'Auditoría',     icon: ShieldCheck,  href: '#/audit' },
-        { id: 'logs',     label: 'Logs',          icon: FileText,     href: '#/logs' },
-        { id: 'portal',   label: 'Portal Tenant', icon: ExternalLink, href: '#/portal' },
+        { id: 'settings',          label: 'Settings',          icon: SettingsIcon, href: '#/settings' },
+        { id: 'onboarding-config', label: 'Config. Onboarding',icon: Sliders,      href: '#/onboarding-config' },
+        { id: 'roles',             label: 'Roles',              icon: Shield,       href: '#/roles' },
+        { id: 'audit',             label: 'Auditoría',          icon: ShieldCheck,  href: '#/audit' },
+        { id: 'logs',              label: 'Logs',               icon: FileText,     href: '#/logs' },
+        { id: 'portal',            label: 'Portal Tenant',      icon: ExternalLink, href: '#/portal' },
       ],
     },
   ];
