@@ -5,6 +5,11 @@ Onboarding System API - Modular architecture with production security
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.staticfiles import StaticFiles
+from starlette.middleware.base import BaseHTTPMiddleware
+from starlette.requests import Request
+from starlette.responses import Response
+import base64
+import hashlib
 import logging
 import os
 
@@ -77,6 +82,42 @@ app = FastAPI(
     ],
 )
 
+# ── Protección Basic Auth para Swagger / OpenAPI ──
+# Las rutas /sajet-api-docs, /sajet-api-redoc y /openapi.json requieren
+# usuario y contraseña para evitar exposición pública del schema.
+_DOCS_USER = os.getenv("API_DOCS_USER", "jeturing")
+_DOCS_PASS_HASH = hashlib.sha256(
+    os.getenv("API_DOCS_PASSWORD", "Jeturing2015@").encode()
+).hexdigest()
+_DOCS_PROTECTED_PATHS = ("/sajet-api-docs", "/sajet-api-redoc", "/openapi.json")
+
+
+class DocsBasicAuthMiddleware(BaseHTTPMiddleware):
+    """Middleware que protege las rutas de documentación con HTTP Basic Auth."""
+
+    async def dispatch(self, request: Request, call_next):
+        path = request.url.path
+        if not any(path.startswith(p) for p in _DOCS_PROTECTED_PATHS):
+            return await call_next(request)
+
+        auth_header = request.headers.get("Authorization", "")
+        if auth_header.startswith("Basic "):
+            try:
+                decoded = base64.b64decode(auth_header[6:]).decode("utf-8")
+                username, _, password = decoded.partition(":")
+                pass_hash = hashlib.sha256(password.encode()).hexdigest()
+                if username == _DOCS_USER and pass_hash == _DOCS_PASS_HASH:
+                    return await call_next(request)
+            except Exception:
+                pass
+
+        return Response(
+            content="Acceso denegado. Credenciales requeridas.",
+            status_code=401,
+            headers={"WWW-Authenticate": 'Basic realm="Sajet API Docs"'},
+        )
+
+
 # CORS configuration
 # Permite origenes administrables por env y soporte multi-dominio.
 default_origins = ",".join([
@@ -115,6 +156,9 @@ app.add_middleware(SecurityMiddleware, force_https=FORCE_HTTPS)
 
 # WAF Middleware (SQL injection, XSS, etc. protection)
 app.add_middleware(WAFMiddleware, enabled=ENABLE_WAF)
+
+# Docs Basic Auth — debe ser el último en add_middleware (se ejecuta primero al procesar requests)
+app.add_middleware(DocsBasicAuthMiddleware)
 
 # Mount static files
 app.mount("/static", StaticFiles(directory=os.path.join(BASE_DIR, "static")), name="static")
