@@ -29,11 +29,52 @@ logger = logging.getLogger(__name__)
 BASE_DIR = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 
 app = FastAPI(
-    title="Onboarding System API",
-    description="Sistema de onboarding automático con integración de Stripe y Odoo",
+    title="Sajet ERP API",
+    description=(
+        "## API del Sistema ERP Sajet\n\n"
+        "Plataforma SaaS multi-tenant sobre Odoo con facturación Stripe, "
+        "provisioning automático en Proxmox y portal self-service para clientes y partners.\n\n"
+        "### Autenticación\n"
+        "Todos los endpoints protegidos requieren un JWT en cookie `access_token` "
+        "o header `Authorization: Bearer <token>`.\n\n"
+        "### Entornos\n"
+        "- **Producción**: `https://api.sajet.us`\n"
+        "- **Staging**: `https://staging-api.sajet.us`\n"
+    ),
     version="2.0.0",
-    docs_url="/docs" if ENVIRONMENT != "production" else None,  # Disable docs in prod
-    redoc_url="/redoc" if ENVIRONMENT != "production" else None
+    contact={
+        "name": "Sajet ERP - Soporte Técnico",
+        "url": "https://sajet.us",
+        "email": "soporte@sajet.us",
+    },
+    license_info={
+        "name": "Propietario - Jeturing SRL",
+        "url": "https://sajet.us/legal",
+    },
+    docs_url="/sajet-api-docs",
+    redoc_url="/sajet-api-redoc",
+    openapi_tags=[
+        {"name": "Auth", "description": "Autenticación JWT y 2FA"},
+        {"name": "Tenant Portal", "description": "Portal self-service: plan, facturas, dominios, usuarios, contraseña"},
+        {"name": "Customer Onboarding", "description": "Flujo de alta de nuevos clientes"},
+        {"name": "Onboarding Config", "description": "Configuración admin del wizard de onboarding"},
+        {"name": "Plans", "description": "CRUD de planes y precios Stripe"},
+        {"name": "Customers", "description": "Gestión de clientes"},
+        {"name": "Domains", "description": "Dominios personalizados por tenant"},
+        {"name": "Billing", "description": "Métricas de facturación y Stripe"},
+        {"name": "Seats", "description": "Usuarios Odoo: seat events y high-water mark"},
+        {"name": "Partners", "description": "Socios comerciales y comisiones"},
+        {"name": "Partner Portal", "description": "Portal self-service para partners"},
+        {"name": "Provisioning", "description": "Auto-provisioning de instancias Odoo en Proxmox"},
+        {"name": "Nodes", "description": "Gestión multi-Proxmox"},
+        {"name": "Tunnels", "description": "Cloudflare Tunnels"},
+        {"name": "Invoices", "description": "Facturas e intercompany"},
+        {"name": "Settlements", "description": "Liquidaciones partner / Jeturing"},
+        {"name": "Work Orders", "description": "Órdenes de trabajo con gating"},
+        {"name": "Audit", "description": "Registro de auditoría"},
+        {"name": "Reports", "description": "Analytics y reportes consolidados"},
+        {"name": "Dashboard", "description": "Métricas del dashboard admin"},
+    ],
 )
 
 # CORS configuration

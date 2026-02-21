@@ -3,13 +3,17 @@ Portal del Tenant - Vista de facturación y gestión de suscripción
 """
 from fastapi import APIRouter, HTTPException, Request, status, Depends, Cookie
 from fastapi.responses import HTMLResponse, JSONResponse, RedirectResponse
+from pydantic import BaseModel, Field
 from sqlalchemy.orm import Session
-from ..models.database import Customer, Subscription, SessionLocal, SubscriptionStatus
+from ..models.database import Customer, Subscription, SessionLocal, SubscriptionStatus, CustomDomain, SeatEvent
 from .roles import verify_token_with_role
 from ..services.spa_shell import render_spa_shell
 import stripe
 import os
+import hashlib
+import secrets
 from datetime import datetime
+from ..services.domain_manager import DomainManager
 
 router = APIRouter(prefix="/tenant", tags=["Tenant Portal"])
 
@@ -243,5 +247,200 @@ async def cancel_subscription(request: Request, access_token: str = Cookie(None)
     
     except stripe.error.StripeError as e:
         raise HTTPException(status_code=400, detail=str(e))
+    finally:
+        db.close()
+
+
+# ─────────────────────────────────────────────────────────
+# DTOs
+# ─────────────────────────────────────────────────────────
+
+class ChangePasswordRequest(BaseModel):
+    current_password: str = Field(..., min_length=1)
+    new_password: str = Field(..., min_length=8)
+    confirm_password: str = Field(..., min_length=8)
+
+
+class DomainRequestBody(BaseModel):
+    external_domain: str = Field(..., min_length=3, example="miempresa.com")
+
+
+# ─────────────────────────────────────────────────────────
+# Cambio de contraseña
+# ─────────────────────────────────────────────────────────
+
+@router.post("/api/change-password")
+async def change_password(
+    body: ChangePasswordRequest,
+    request: Request,
+    access_token: str = Cookie(None)
+):
+    """Permite al tenant cambiar su contraseña del portal."""
+    token_data = get_current_tenant(request, access_token)
+    tenant_id = token_data.get("tenant_id")
+
+    if not tenant_id:
+        raise HTTPException(status_code=403, detail="Contexto de tenant requerido")
+
+    if body.new_password != body.confirm_password:
+        raise HTTPException(status_code=400, detail="Las contraseñas nuevas no coinciden")
+
+    db = SessionLocal()
+    try:
+        customer = db.query(Customer).filter_by(id=tenant_id).first()
+        if not customer:
+            raise HTTPException(status_code=404, detail="Tenant no encontrado")
+
+        if not customer.password_hash:
+            raise HTTPException(status_code=400, detail="Este usuario no tiene contraseña configurada")
+
+        # Verificar contraseña actual (formato salt:sha256)
+        parts = customer.password_hash.split(":")
+        if len(parts) != 2:
+            raise HTTPException(status_code=500, detail="Hash de contraseña inválido en base de datos")
+
+        stored_salt, stored_digest = parts[0], parts[1]
+        current_digest = hashlib.sha256((body.current_password + stored_salt).encode()).hexdigest()
+
+        if current_digest != stored_digest:
+            raise HTTPException(status_code=400, detail="Contraseña actual incorrecta")
+
+        # Generar nuevo hash
+        new_salt = secrets.token_hex(16)
+        new_hash = f"{new_salt}:{hashlib.sha256((body.new_password + new_salt).encode()).hexdigest()}"
+        customer.password_hash = new_hash
+        db.commit()
+
+        return {"message": "Contraseña actualizada exitosamente"}
+    finally:
+        db.close()
+
+
+# ─────────────────────────────────────────────────────────
+# Dominios del tenant
+# ─────────────────────────────────────────────────────────
+
+@router.get("/api/my-domains")
+async def get_my_domains(request: Request, access_token: str = Cookie(None)):
+    """Lista los dominios personalizados del tenant."""
+    token_data = get_current_tenant(request, access_token)
+    tenant_id = token_data.get("tenant_id")
+
+    if not tenant_id:
+        raise HTTPException(status_code=403, detail="Contexto de tenant requerido")
+
+    db = SessionLocal()
+    try:
+        domains = db.query(CustomDomain).filter_by(customer_id=tenant_id).all()
+        return {
+            "domains": [
+                {
+                    "id": d.id,
+                    "external_domain": d.external_domain,
+                    "verification_status": d.verification_status,
+                    "is_active": d.is_active,
+                    "sajet_subdomain": d.sajet_subdomain,
+                    "sajet_full_domain": d.sajet_full_domain,
+                    "created_at": d.created_at.isoformat() if hasattr(d, "created_at") and d.created_at else None,
+                }
+                for d in domains
+            ]
+        }
+    finally:
+        db.close()
+
+
+@router.post("/api/request-domain")
+async def request_domain(
+    body: DomainRequestBody,
+    request: Request,
+    access_token: str = Cookie(None)
+):
+    """Solicita un dominio personalizado para el tenant."""
+    token_data = get_current_tenant(request, access_token)
+    tenant_id = token_data.get("tenant_id")
+
+    if not tenant_id:
+        raise HTTPException(status_code=403, detail="Contexto de tenant requerido")
+
+    db = SessionLocal()
+    try:
+        result = DomainManager(db).create_domain(
+            external_domain=body.external_domain,
+            customer_id=tenant_id,
+            created_by="tenant_portal"
+        )
+
+        if not result.get("success"):
+            raise HTTPException(status_code=409, detail=result.get("error", "No se pudo registrar el dominio"))
+
+        domain = result["domain"]
+        return {
+            "message": "Dominio registrado. Pendiente de verificación DNS.",
+            "domain": {
+                "id": domain["id"],
+                "external_domain": domain["external_domain"],
+                "verification_status": domain["verification_status"],
+                "is_active": domain["is_active"],
+            }
+        }
+    finally:
+        db.close()
+
+
+# ─────────────────────────────────────────────────────────
+# Usuarios / Seats del tenant
+# ─────────────────────────────────────────────────────────
+
+@router.get("/api/users")
+async def get_tenant_users(request: Request, access_token: str = Cookie(None)):
+    """Retorna historial de usuarios (seat events) del tenant."""
+    token_data = get_current_tenant(request, access_token)
+    tenant_id = token_data.get("tenant_id")
+
+    if not tenant_id:
+        raise HTTPException(status_code=403, detail="Contexto de tenant requerido")
+
+    db = SessionLocal()
+    try:
+        customer = db.query(Customer).filter_by(id=tenant_id).first()
+        if not customer:
+            raise HTTPException(status_code=404, detail="Tenant no encontrado")
+
+        # Obtener la suscripción activa
+        subscription = db.query(Subscription).filter_by(customer_id=tenant_id).first()
+
+        seat_events = []
+        current_user_count = customer.user_count or 0
+
+        if subscription:
+            events = (
+                db.query(SeatEvent)
+                .filter_by(subscription_id=subscription.id)
+                .order_by(SeatEvent.created_at.desc())
+                .limit(50)
+                .all()
+            )
+            seat_events = [
+                {
+                    "id": e.id,
+                    "event_type": e.event_type.value if hasattr(e.event_type, "value") else str(e.event_type),
+                    "odoo_login": e.odoo_login,
+                    "odoo_user_id": e.odoo_user_id,
+                    "user_count_after": e.user_count_after,
+                    "is_billable": e.is_billable,
+                    "source": e.source,
+                    "created_at": e.created_at.isoformat() if e.created_at else None,
+                }
+                for e in events
+            ]
+            if events:
+                current_user_count = events[0].user_count_after
+
+        return {
+            "current_user_count": current_user_count,
+            "plan_user_limit": subscription.user_count if subscription else 1,
+            "seat_events": seat_events,
+        }
     finally:
         db.close()
