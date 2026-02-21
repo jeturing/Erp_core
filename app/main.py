@@ -15,7 +15,7 @@ validate_required()
 # Import routers
 from .routes import auth, dashboard, tenants, onboarding, roles, tenant_portal, secure_auth, nodes, tunnels, provisioning, settings, billing, logs, domains, plans, customers, partners, leads, commissions, quotations, stripe_connect, suspension
 from .routes import blueprints, seats, invoices, settlements, reconciliation, work_orders, branding, audit
-from .routes import reports, quotas
+from .routes import reports, quotas, partner_portal
 
 # Import security middleware
 from .security.middleware import SecurityMiddleware, WAFMiddleware
@@ -102,6 +102,7 @@ app.include_router(leads.router)  # Pipeline de prospectos por partner
 app.include_router(commissions.router)  # Comisiones 50/50
 app.include_router(quotations.router)  # Cotizaciones y catálogo de servicios
 app.include_router(stripe_connect.router)  # Stripe Connect Express para partners
+app.include_router(partner_portal.router)  # Portal self-service para partners
 app.include_router(suspension.router)  # Páginas y API de suspensión de tenants
 
 # ── Épicas SaaS Billing & Partner ──

@@ -7,6 +7,7 @@
   import Landing from './routes/Landing.svelte';
   import Dashboard from './routes/Dashboard.svelte';
   import TenantPortal from './routes/TenantPortal.svelte';
+  import PartnerPortal from './routes/PartnerPortal.svelte';
   import Domains from './pages/Domains.svelte';
   import Tenants from './pages/Tenants.svelte';
   import Infrastructure from './pages/Infrastructure.svelte';
@@ -61,6 +62,7 @@
     | 'audit'
     | 'branding'
     | 'catalog'
+    | 'partner-portal'
     | 'signup'
     | 'notfound';
 
@@ -113,6 +115,14 @@
       return;
     }
 
+    if ($currentUser?.role === 'partner') {
+      currentPage = 'partner-portal';
+      if (route !== 'partner-portal') {
+        setRouteHash('partner-portal');
+      }
+      return;
+    }
+
     switch (route) {
       case 'dashboard':
       case 'portal':
@@ -139,6 +149,7 @@
       case 'audit':
       case 'branding':
       case 'catalog':
+      case 'partner-portal':
         currentPage = route as AppPage;
         break;
       default:
@@ -186,6 +197,8 @@
   <Login />
 {:else if currentPage === 'portal'}
   <TenantPortal />
+{:else if currentPage === 'partner-portal'}
+  <PartnerPortal />
 {:else}
   <Layout currentRoute={currentPage === 'notfound' ? currentRoute : currentPage}>
     {#if currentPage === 'dashboard'}

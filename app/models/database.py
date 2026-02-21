@@ -381,6 +381,16 @@ class Partner(Base):
     contract_signed_at = Column(DateTime)
     contract_reference = Column(String(100))             # Nro de contrato
 
+    # ── Portal Auth (Épica Partners) ──
+    password_hash = Column(String(255), nullable=True)   # Hash salt:sha256 para login propio
+    portal_email = Column(String(200), nullable=True, unique=True, index=True)  # Email de login (default=contact_email)
+    onboarding_step = Column(Integer, default=0)         # 0=invited, 1=credentials, 2=profile, 3=stripe_kyc, 4=complete
+    onboarding_completed_at = Column(DateTime, nullable=True)
+    last_login_at = Column(DateTime, nullable=True)
+    login_count = Column(Integer, default=0)
+    invited_at = Column(DateTime, nullable=True)
+    invited_by = Column(String(150), nullable=True)
+
     notes = Column(Text)
     created_at = Column(DateTime, default=datetime.utcnow)
     updated_at = Column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)

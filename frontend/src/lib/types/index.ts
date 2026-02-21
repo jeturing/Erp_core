@@ -1,11 +1,12 @@
 // Shared frontend types for ERP Core SPA
 
-export type UserRole = 'admin' | 'operator' | 'viewer' | 'tenant';
+export type UserRole = 'admin' | 'operator' | 'viewer' | 'tenant' | 'partner';
 
 export interface User {
   id?: number;
   user_id?: number | null;
   tenant_id?: number | null;
+  partner_id?: number | null;
   username: string;
   email: string;
   role: UserRole;
@@ -14,6 +15,123 @@ export interface User {
   company_name?: string;
   full_name?: string;
   plan?: 'basic' | 'pro' | 'enterprise' | string;
+  // Partner-specific
+  onboarding_step?: number;
+  stripe_connected?: boolean;
+  commission_rate?: number;
+}
+
+// ── Partner Portal Types ──
+
+export interface PartnerOnboardingStatus {
+  current_step: number;
+  steps: Array<{
+    step: number;
+    name: string;
+    label: string;
+    completed: boolean;
+  }>;
+  completed: boolean;
+  completed_at: string | null;
+  stripe_account_id: string | null;
+  stripe_onboarding_complete: boolean;
+  stripe_charges_enabled: boolean;
+}
+
+export interface PartnerDashboard {
+  partner: {
+    id: number;
+    company_name: string;
+    status: string;
+    commission_rate: number;
+    onboarding_step: number;
+    stripe_charges_enabled: boolean;
+  };
+  kpis: {
+    total_leads: number;
+    active_leads: number;
+    won_leads: number;
+    conversion_rate: number;
+    active_clients: number;
+    total_earned: number;
+    pending_commissions: number;
+    paid_commissions: number;
+    estimated_pipeline: number;
+  };
+  stripe_balance: {
+    success: boolean;
+    available: number;
+    pending: number;
+  } | null;
+}
+
+export interface PartnerLeadItem {
+  id: number;
+  company_name: string;
+  contact_name: string | null;
+  contact_email: string | null;
+  phone: string | null;
+  country: string | null;
+  status: string | null;
+  estimated_monthly_value: number;
+  notes: string | null;
+  registered_at: string | null;
+  updated_at: string | null;
+}
+
+export interface PartnerLeadsResponse {
+  items: PartnerLeadItem[];
+  total: number;
+  pipeline: Record<string, number>;
+}
+
+export interface PartnerClientItem {
+  subscription_id: number;
+  customer_id: number;
+  company_name: string;
+  email: string;
+  plan: string;
+  status: string | null;
+  billing_mode: string | null;
+  monthly_amount: number;
+  user_count: number;
+  created_at: string | null;
+}
+
+export interface PartnerCommissionItem {
+  id: number;
+  period_start: string | null;
+  period_end: string | null;
+  gross_revenue: number;
+  net_revenue: number;
+  partner_amount: number;
+  jeturing_amount: number;
+  status: string | null;
+  paid_at: string | null;
+  payment_reference: string | null;
+}
+
+export interface PartnerProfile {
+  id: number;
+  company_name: string;
+  legal_name: string | null;
+  tax_id: string | null;
+  contact_name: string | null;
+  contact_email: string;
+  portal_email: string | null;
+  phone: string | null;
+  country: string | null;
+  address: string | null;
+  billing_scenario: string | null;
+  commission_rate: number;
+  status: string | null;
+  stripe_account_id: string | null;
+  stripe_onboarding_complete: boolean;
+  stripe_charges_enabled: boolean;
+  onboarding_step: number;
+  contract_signed_at: string | null;
+  contract_reference: string | null;
+  created_at: string | null;
 }
 
 export interface LoginRequest {

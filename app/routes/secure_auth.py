@@ -5,9 +5,10 @@ from fastapi import APIRouter, HTTPException, Request, Response, status, Depends
 from fastapi.responses import JSONResponse
 from pydantic import BaseModel, EmailStr
 from typing import Optional
+from datetime import datetime
 import os
 
-from ..models.database import Customer, SessionLocal
+from ..models.database import Customer, Partner, PartnerStatus, SessionLocal
 from ..security.tokens import TokenManager, RefreshTokenManager
 from ..security.middleware import RateLimiter
 from ..security.audit import AuditLogger, AuditEvent
@@ -101,6 +102,9 @@ async def secure_login(request: Request, login_data: LoginRequest):
     try:
         user_id = None
         tenant_id = None
+        username = None
+        role = None
+        redirect_url = None
         
         # Auto-detectar tipo de usuario basándose en el formato
         is_admin_login = '@' not in login_data.email or login_data.email == ADMIN_USERNAME
@@ -123,60 +127,98 @@ async def secure_login(request: Request, login_data: LoginRequest):
             redirect_url = "/admin"
             
         else:
-            # Login de tenant (tiene @)
-            customer = db.query(Customer).filter_by(email=login_data.email).first()
-            
-            if not customer:
-                AuditLogger.log_login_failed(
-                    username=login_data.email,
-                    reason="Email not found",
-                    request=request
-                )
-                raise HTTPException(
-                    status_code=status.HTTP_401_UNAUTHORIZED,
-                    detail="Credenciales inválidas"
-                )
-            
-            # Verificar password hasheado (formato: salt:hash)
-            if customer.password_hash:
-                import hashlib
-                parts = customer.password_hash.split(':')
+            # Login con email (@) — puede ser partner o tenant
+            import hashlib
+
+            # ── Intentar login como partner primero ──
+            partner = db.query(Partner).filter(
+                (Partner.portal_email == login_data.email) |
+                (Partner.contact_email == login_data.email)
+            ).first()
+
+            partner_authenticated = False
+            if partner and partner.password_hash and partner.portal_access and partner.status in (PartnerStatus.active, PartnerStatus.pending):
+                parts = partner.password_hash.split(':')
                 if len(parts) == 2:
                     salt, stored_hash = parts
                     computed_hash = hashlib.sha256((login_data.password + salt).encode()).hexdigest()
-                    if computed_hash != stored_hash:
+                    if computed_hash == stored_hash:
+                        # Login partner exitoso
+                        username = partner.portal_email or partner.contact_email
+                        role = "partner"
+                        user_id = partner.id
+                        tenant_id = None
+                        redirect_url = "/partner/portal"
+                        partner_authenticated = True
+
+                        # Actualizar stats de login
+                        partner.last_login_at = datetime.utcnow()
+                        partner.login_count = (partner.login_count or 0) + 1
+                        db.commit()
+                    else:
+                        # Password incorrecta del partner
                         AuditLogger.log_login_failed(
                             username=login_data.email,
-                            reason="Invalid password",
+                            reason="Invalid partner password",
                             request=request
                         )
                         raise HTTPException(
                             status_code=status.HTTP_401_UNAUTHORIZED,
                             detail="Credenciales inválidas"
                         )
-                else:
-                    # Hash inválido, rechazar
+
+            # ── Si no es partner, intentar como tenant ──
+            if not partner_authenticated:
+                customer = db.query(Customer).filter_by(email=login_data.email).first()
+
+                if not customer:
+                    AuditLogger.log_login_failed(
+                        username=login_data.email,
+                        reason="Email not found",
+                        request=request
+                    )
                     raise HTTPException(
                         status_code=status.HTTP_401_UNAUTHORIZED,
                         detail="Credenciales inválidas"
                     )
-            else:
-                # Sin password configurada
-                AuditLogger.log_login_failed(
-                    username=login_data.email,
-                    reason="No password set",
-                    request=request
-                )
-                raise HTTPException(
-                    status_code=status.HTTP_401_UNAUTHORIZED,
-                    detail="Cuenta sin contraseña configurada. Contacte al administrador."
-                )
-            
-            username = customer.email
-            role = "tenant"
-            user_id = customer.id
-            tenant_id = customer.id
-            redirect_url = "/tenant/portal"
+
+                # Verificar password hasheado (formato: salt:hash)
+                if customer.password_hash:
+                    parts = customer.password_hash.split(':')
+                    if len(parts) == 2:
+                        salt, stored_hash = parts
+                        computed_hash = hashlib.sha256((login_data.password + salt).encode()).hexdigest()
+                        if computed_hash != stored_hash:
+                            AuditLogger.log_login_failed(
+                                username=login_data.email,
+                                reason="Invalid password",
+                                request=request
+                            )
+                            raise HTTPException(
+                                status_code=status.HTTP_401_UNAUTHORIZED,
+                                detail="Credenciales inválidas"
+                            )
+                    else:
+                        raise HTTPException(
+                            status_code=status.HTTP_401_UNAUTHORIZED,
+                            detail="Credenciales inválidas"
+                        )
+                else:
+                    AuditLogger.log_login_failed(
+                        username=login_data.email,
+                        reason="No password set",
+                        request=request
+                    )
+                    raise HTTPException(
+                        status_code=status.HTTP_401_UNAUTHORIZED,
+                        detail="Cuenta sin contraseña configurada. Contacte al administrador."
+                    )
+
+                username = customer.email
+                role = "tenant"
+                user_id = customer.id
+                tenant_id = customer.id
+                redirect_url = "/tenant/portal"
         
         # Verificar 2FA si está habilitado
         effective_user_id = user_id if user_id else 0  # 0 para admin
@@ -303,6 +345,24 @@ async def get_current_user(request: Request):
                 if customer:
                     user_data["company_name"] = customer.company_name
                     user_data["plan"] = customer.plan
+            finally:
+                db.close()
+
+        # Si es partner, obtener info del partner
+        if payload.get("role") == "partner" and payload.get("user_id"):
+            db = SessionLocal()
+            try:
+                partner = db.query(Partner).filter(
+                    Partner.id == payload.get("user_id")
+                ).first()
+                if partner:
+                    user_data["company_name"] = partner.company_name
+                    user_data["partner_id"] = partner.id
+                    user_data["onboarding_step"] = partner.onboarding_step
+                    user_data["stripe_onboarding_complete"] = partner.stripe_onboarding_complete
+                    user_data["stripe_charges_enabled"] = partner.stripe_charges_enabled
+                    user_data["commission_rate"] = partner.commission_rate
+                    user_data["status"] = partner.status.value if partner.status else None
             finally:
                 db.close()
         
