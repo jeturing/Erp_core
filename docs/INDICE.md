@@ -3,6 +3,7 @@
 Estado: vigente  
 Validado: 2026-02-22  
 Entorno objetivo: `/opt/Erp_core` (PCT160 + PCT105)
+Auditoria documental: 2026-02-22 (sin enlaces internos rotos)
 
 Este documento es la entrada oficial para navegar la documentacion de `Erp_core`.
 

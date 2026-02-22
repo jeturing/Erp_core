@@ -1,5 +1,10 @@
 # Automatización de dominios (BD + aplicación) con fallback `*.sajet.us`
 
+Estado: vigente  
+Validado: 2026-02-22  
+Entorno objetivo: `/opt/Erp_core`
+
+
 ## Objetivo
 Automatizar el ciclo completo de dominios personalizados desde la base de datos de ERP Core y garantizar un **fallback estable** por subdominio `sajet.us`.
 
@@ -12,9 +17,9 @@ Si falla DNS externo, el tenant sigue disponible por `*.sajet.us`.
 
 ## Componentes
 
-1. Servicio de aplicación: [app/services/domain_manager.py](app/services/domain_manager.py)
-2. Endpoints API: [app/routes/domains.py](app/routes/domains.py)
-3. Sincronizador operativo: [scripts/domain_sync.sh](scripts/domain_sync.sh)
+1. Servicio de aplicacion: [app/services/domain_manager.py](../../app/services/domain_manager.py)
+2. Endpoints API: [app/routes/domains.py](../../app/routes/domains.py)
+3. Sincronizador operativo: [scripts/domain_sync.sh](../../scripts/domain_sync.sh)
 4. Túnel Cloudflare en PCT 105:
    - Config: `/etc/cloudflared/tcs-sajet-tunnel.yml`
    - Servicio: `cloudflared-tcs-sajet-tunnel`
@@ -90,7 +95,7 @@ Archivo operativo:
 
 ## CORS (ERP Core)
 
-Se ampliaron orígenes permitidos en [app/main.py](app/main.py) para:
+Se ampliaron origenes permitidos en [app/main.py](../../app/main.py) para:
 - `sajet.us` y subdominios
 - `techeels.io`, `evolucionamujer.com`, `impulse-max.com` (incluyendo `www`)
 

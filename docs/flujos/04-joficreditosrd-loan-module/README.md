@@ -1,5 +1,10 @@
 # 04 - Tenant joficreditosrd: Módulo de Préstamos (jeturing_finance_core)
 
+Estado: vigente  
+Validado: 2026-02-22  
+Entorno objetivo: `/opt/Erp_core`
+
+
 > **Fecha**: 2025-02-18  
 > **Nodo**: PCT105 (10.10.10.100)  
 > **BD**: `joficreditosrd`  

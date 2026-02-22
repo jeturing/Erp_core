@@ -1,5 +1,10 @@
 # Odoo 17 to 19 Automated Migration Tool
 
+Estado: vigente  
+Validado: 2026-02-22  
+Entorno objetivo: `/opt/Erp_core`
+
+
 Herramienta Python para **automatizar completamente la migración de módulos Odoo** de v17 a v19.
 
 ## Características

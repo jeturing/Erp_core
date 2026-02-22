@@ -1,5 +1,10 @@
 # Blue-Green Deployment Runbook
 
+Estado: vigente  
+Validado: 2026-02-22  
+Entorno objetivo: `/opt/Erp_core`
+
+
 **Sistema**: Sajet ERP Core (FastAPI + Svelte)  
 **Ambiente**: Production  
 **Estrategia**: Blue-Green con traffic shifting gradual  

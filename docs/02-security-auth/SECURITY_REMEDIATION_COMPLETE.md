@@ -1,5 +1,10 @@
 # Remediación de Seguridad - Phase 3 Release Candidate
 
+Estado: vigente  
+Validado: 2026-02-22  
+Entorno objetivo: `/opt/Erp_core`
+
+
 **Fecha**: 17 de febrero de 2026  
 **Status**: ✅ COMPLETADO  
 **Vulnerabilidades corregidas**: 7/7

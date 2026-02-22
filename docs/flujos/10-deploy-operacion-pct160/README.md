@@ -1,5 +1,10 @@
 # 10 - Deploy y operación en PCT160
 
+Estado: vigente  
+Validado: 2026-02-22  
+Entorno objetivo: `/opt/Erp_core`
+
+
 ## Objetivo
 Describir flujo de despliegue seguro de backend/frontend y validaciones mínimas operativas.
 

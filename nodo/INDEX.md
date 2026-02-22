@@ -1,5 +1,10 @@
 # /nodo/ - Paquete de Instalación para Nodo Odoo Multi-Tenant
 
+Estado: vigente  
+Validado: 2026-02-22  
+Entorno objetivo: `/opt/Erp_core`
+
+
 ## 📦 Contenido
 
 Este directorio contiene todo lo necesario para convertir un servidor Odoo en un nodo multi-tenant con provisioning automático.
@@ -235,7 +240,7 @@ systemctl status odoo-db-watcher
 - **[QUICKSTART.md](./QUICKSTART.md)** - Instalación rápida (5 min)
 - **[docs/README.md](./docs/README.md)** - Guía completa
 - **[docs/API.md](./docs/API.md)** - Referencia de endpoints
-- **[docs/TROUBLESHOOTING.md](./docs/TROUBLESHOOTING.md)** - Solución de problemas (crear si falta)
+- **[docs/TROUBLESHOOTING.md](./docs/TROUBLESHOOTING.md)** - Solución de problemas
 
 ## ❓ Preguntas Frecuentes
 

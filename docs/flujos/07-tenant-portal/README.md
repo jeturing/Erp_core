@@ -1,5 +1,10 @@
 # 07 - Portal Tenant
 
+Estado: vigente  
+Validado: 2026-02-22  
+Entorno objetivo: `/opt/Erp_core`
+
+
 ## Objetivo
 Permitir al tenant autenticado ver su plan, estado, facturas y acciones de pago.
 

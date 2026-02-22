@@ -1,5 +1,10 @@
 # 01 - Auth/Login/JWT
 
+Estado: vigente  
+Validado: 2026-02-22  
+Entorno objetivo: `/opt/Erp_core`
+
+
 ## Objetivo
 Autenticar usuarios admin o tenant, emitir access token + refresh token y exponer sesión activa a la SPA.
 

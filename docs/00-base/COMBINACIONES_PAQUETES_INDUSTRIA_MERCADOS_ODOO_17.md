@@ -1,5 +1,10 @@
 # Combinaciones de Paquetes por Industria y Mercado (Odoo 17)
 
+Estado: vigente  
+Validado: 2026-02-22  
+Entorno objetivo: `/opt/Erp_core`
+
+
 - Fecha de generacion: 2026-02-18
 - Fuente: `/opt/extra-addons/V17` (inventario de modulos por `__manifest__.py`)
 - Objetivo: definir combinaciones comerciales de lo que ya tenemos disponible para salir a mercado por vertical.

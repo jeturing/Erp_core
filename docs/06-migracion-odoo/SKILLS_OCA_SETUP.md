@@ -1,5 +1,10 @@
 # Skills OCA - Automatización de Migración Odoo V17→V19
 
+Estado: vigente  
+Validado: 2026-02-22  
+Entorno objetivo: `/opt/Erp_core`
+
+
 **Fecha**: 17 de febrero de 2026  
 **Status**: 📋 DOCUMENTACIÓN LISTA PARA IMPLEMENTACIÓN  
 **Enfoque**: Automatizar migración incremental de 152+ módulos

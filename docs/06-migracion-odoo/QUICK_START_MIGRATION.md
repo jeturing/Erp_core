@@ -1,5 +1,10 @@
 # Quick Start: Odoo 17→19 Migration
 
+Estado: vigente  
+Validado: 2026-02-22  
+Entorno objetivo: `/opt/Erp_core`
+
+
 ## En 5 Minutos
 
 ```bash

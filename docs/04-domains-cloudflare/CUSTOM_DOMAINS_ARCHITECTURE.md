@@ -1,5 +1,10 @@
 # Dominios Externos — Arquitectura Multi-Tenant Odoo
 
+Estado: vigente  
+Validado: 2026-02-22  
+Entorno objetivo: `/opt/Erp_core`
+
+
 > **Última actualización**: 2026-02-14  
 > **Estado**: Vigente  
 > **Infraestructura**: Proxmox → LXC Containers (PCT 105, PCT 160)  

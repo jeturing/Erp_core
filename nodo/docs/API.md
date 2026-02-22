@@ -1,5 +1,10 @@
 # API Local de Provisioning
 
+Estado: vigente  
+Validado: 2026-02-22  
+Entorno objetivo: `/opt/Erp_core`
+
+
 Documentación técnica de la API REST para provisioning de tenants.
 
 ## Información General

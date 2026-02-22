@@ -1,5 +1,10 @@
 # 06 - Infraestructura Proxmox
 
+Estado: vigente  
+Validado: 2026-02-22  
+Entorno objetivo: `/opt/Erp_core`
+
+
 ## Objetivo
 Exponer estado de nodos/containers y ejecutar provisioning operativo desde panel admin.
 

@@ -1,5 +1,10 @@
 # NODO ODOO MULTI-TENANT
 
+Estado: vigente  
+Validado: 2026-02-22  
+Entorno objetivo: `/opt/Erp_core`
+
+
 Paquete de instalación para convertir un servidor Odoo en un nodo multi-tenant con provisioning automático de tenants via API.
 
 ## 📋 Requisitos Previos

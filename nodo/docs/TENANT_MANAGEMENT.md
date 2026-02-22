@@ -1,5 +1,10 @@
 # API de Gestión de Tenants - Guía Completa
 
+Estado: vigente  
+Validado: 2026-02-22  
+Entorno objetivo: `/opt/Erp_core`
+
+
 ## Descripción
 
 El sistema de gestión de tenants permite:
@@ -222,7 +227,7 @@ Header: X-API-KEY: prov-key-2026-secure
 
 ## Panel Admin
 
-Acceso en: `https://sajet.us/admin/tenants`
+Acceso en: ruta frontend `#/tenants` (portal admin de ERP Core)
 
 Características:
 - ✅ Ver todos los tenants en tiempo real
@@ -300,6 +305,6 @@ curl -X PUT http://localhost:4443/api/provisioning/tenant/password \
 
 ## Referencias
 
-- [Creación de Tenants](/nodo/docs/API.md)
-- [Panel Admin](/admin/tenants)
-- [Instalación](/nodo/QUICKSTART.md)
+- [Creacion de Tenants](./API.md)
+- `#/tenants` (vista admin en SPA)
+- [Instalacion](../QUICKSTART.md)

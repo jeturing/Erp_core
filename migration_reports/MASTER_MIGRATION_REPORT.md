@@ -1,5 +1,10 @@
 # 🚀 Master Migration Report - Odoo 17 → 19
 
+Estado: vigente  
+Validado: 2026-02-22  
+Entorno objetivo: `/opt/Erp_core`
+
+
 **Fecha**: 2026-02-16 22:56:22
 **Origen**: extra-addons/V17
 **Destino**: extra-addons/V19

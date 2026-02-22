@@ -1,5 +1,10 @@
 # Inventario de Modulos Odoo 17
 
+Estado: vigente  
+Validado: 2026-02-22  
+Entorno objetivo: `/opt/Erp_core`
+
+
 - Fecha de generacion: 2026-02-18 21:31:49
 - Ruta analizada: `/opt/extra-addons/V17`
 - Manifiestos procesados: **154**

@@ -1,5 +1,10 @@
 # MANIFEST - Contenido de /nodo/
 
+Estado: vigente  
+Validado: 2026-02-22  
+Entorno objetivo: `/opt/Erp_core`
+
+
 ## 📋 Checklist de Archivos
 
 ### Scripts (scripts/)

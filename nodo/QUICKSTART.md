@@ -1,5 +1,10 @@
 # QUICK START - Despliegue de Nodo Odoo Multi-Tenant
 
+Estado: vigente  
+Validado: 2026-02-22  
+Entorno objetivo: `/opt/Erp_core`
+
+
 Guía rápida para desplegar `/nodo/` en un servidor nuevo.
 
 ## ⚡ 5 Minutos - Instalación Mínima

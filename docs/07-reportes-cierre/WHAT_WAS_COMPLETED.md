@@ -1,5 +1,10 @@
 # ✅ What You Asked For vs What You Got
 
+Estado: vigente  
+Validado: 2026-02-22  
+Entorno objetivo: `/opt/Erp_core`
+
+
 ## Your Original Request
 > "prodece a migrarlos todos y validar que todo cumplan"
 > (proceed to migrate them all and validate that everything complies)

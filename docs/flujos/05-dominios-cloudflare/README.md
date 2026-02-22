@@ -1,5 +1,10 @@
 # 05 - Dominios y Cloudflare
 
+Estado: vigente  
+Validado: 2026-02-22  
+Entorno objetivo: `/opt/Erp_core`
+
+
 ## Objetivo
 Registrar y activar dominios personalizados para tenants, configurando DNS/tunnel/nginx.
 

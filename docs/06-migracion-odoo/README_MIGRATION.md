@@ -1,5 +1,10 @@
 # 🚀 Odoo v17 → v19 Migration Guide
 
+Estado: vigente  
+Validado: 2026-02-22  
+Entorno objetivo: `/opt/Erp_core`
+
+
 **Status**: ✅ **COMPLETE AND PRODUCTION-READY**
 **All 86 modules successfully migrated and validated**
 
@@ -9,7 +14,7 @@
 
 ### I want to...
 
-**Understand what was accomplished** → Read: [`FINAL_SUMMARY.md`](FINAL_SUMMARY.md) (10 min read)
+**Understand what was accomplished** → Read: [`../07-reportes-cierre/FINAL_SUMMARY.md`](../07-reportes-cierre/FINAL_SUMMARY.md) (10 min read)
 
 **See the complete technical report** → Read: [`MIGRATION_COMPLETION_REPORT.md`](MIGRATION_COMPLETION_REPORT.md) (30 min read)
 
@@ -17,9 +22,9 @@
 
 **Deploy the modules** → See: [Deployment Instructions](#deployment)
 
-**Find a specific module's status** → Check: [`migration_reports/`](migration_reports/)
+**Find a specific module's status** → Check: [`../../migration_reports/`](../../migration_reports/)
 
-**Understand the migration process** → Read: [`docs/ODOO_MIGRATION_V17_TO_V19.md`](docs/ODOO_MIGRATION_V17_TO_V19.md) (comprehensive guide)
+**Understand the migration process** → Read: [`ODOO_MIGRATION_V17_TO_V19.md`](ODOO_MIGRATION_V17_TO_V19.md) (comprehensive guide)
 
 ---
 
@@ -336,12 +341,12 @@ cat migration_reports/module_name_migration.json | jq .
 
 | Document | Purpose | Read Time |
 |----------|---------|-----------|
-| [FINAL_SUMMARY.md](FINAL_SUMMARY.md) | Complete overview | 10 min |
+| [../07-reportes-cierre/FINAL_SUMMARY.md](../07-reportes-cierre/FINAL_SUMMARY.md) | Complete overview | 10 min |
 | [MIGRATION_COMPLETION_REPORT.md](MIGRATION_COMPLETION_REPORT.md) | Technical details | 30 min |
 | [MIGRATION_STATUS.txt](MIGRATION_STATUS.txt) | Quick reference | 5 min |
-| [docs/ODOO_MIGRATION_V17_TO_V19.md](docs/ODOO_MIGRATION_V17_TO_V19.md) | Full guide | 60 min |
-| [validation_report.json](validation_report.json) | Validation data | As needed |
-| [migration_reports/](migration_reports/) | Module details | As needed |
+| [ODOO_MIGRATION_V17_TO_V19.md](ODOO_MIGRATION_V17_TO_V19.md) | Full guide | 60 min |
+| `validation_report.json` (artefacto externo/no versionado) | Validation data | As needed |
+| [../../migration_reports/](../../migration_reports/) | Module details | As needed |
 
 ---
 

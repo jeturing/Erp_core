@@ -1,4 +1,9 @@
 # 📦 SUMARIO FINAL – Entrega Completada a PCT 160
+
+Estado: vigente  
+Validado: 2026-02-22  
+Entorno objetivo: `/opt/Erp_core`
+
 ## Phase 3: Onboarding Público Sin Precios + Rol Proveedor + Cotizador Interno
 
 **Fecha**: Febrero 14, 2026  

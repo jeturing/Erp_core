@@ -1,5 +1,10 @@
 # 🚀 Guía de Migración en Lote - Odoo 17 → 19
 
+Estado: vigente  
+Validado: 2026-02-22  
+Entorno objetivo: `/opt/Erp_core`
+
+
 Automatiza la migración de **TODOS** los módulos Odoo de v17 a v19 con validación completa.
 
 ## 📋 Requisitos Previos

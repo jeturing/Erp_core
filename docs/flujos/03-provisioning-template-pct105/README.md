@@ -1,5 +1,10 @@
 # 03 - Provisioning con template en PCT105
 
+Estado: vigente  
+Validado: 2026-02-22  
+Entorno objetivo: `/opt/Erp_core`
+
+
 ## Objetivo
 Crear un tenant nuevo clonando `template_tenant` en PostgreSQL/Odoo del servidor PCT105,
 con DNS automático en Cloudflare, módulos Odoo instalados, y opcionalmente dominio custom.

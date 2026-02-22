@@ -1,5 +1,10 @@
 # RESUMEN EJECUTIVO: PAQUETE /nodo/
 
+Estado: vigente  
+Validado: 2026-02-22  
+Entorno objetivo: `/opt/Erp_core`
+
+
 **Fecha:** 10 de Febrero de 2026  
 **Estado:** ✅ COMPLETADO Y FUNCIONAL  
 **Ubicación:** `/opt/Erp_core/nodo/`

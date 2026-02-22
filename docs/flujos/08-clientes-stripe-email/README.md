@@ -1,5 +1,10 @@
 # 08 - Clientes: Stripe Customer + Email
 
+Estado: vigente  
+Validado: 2026-02-22  
+Entorno objetivo: `/opt/Erp_core`
+
+
 ## Objetivo
 Automatizar alta de Stripe Customer y envío de credenciales/reset por email.
 

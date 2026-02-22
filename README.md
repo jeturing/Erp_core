@@ -3,6 +3,7 @@
 Estado: vigente  
 Validado: 2026-02-22  
 Entorno objetivo: `/opt/Erp_core` (desarrollo local + despliegue PCT160)
+Auditoria documental: 2026-02-22 (enlaces Markdown internos verificados)
 
 Plataforma SaaS multi-tenant para operar instancias Odoo con onboarding comercial, facturacion, gestion de partners, provisioning de tenants y operaciones de dominios/infraestructura.
 

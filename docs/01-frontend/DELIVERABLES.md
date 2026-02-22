@@ -1,5 +1,10 @@
 # Entregables: Herramienta y Documentación de Migración Odoo 17→19
 
+Estado: vigente  
+Validado: 2026-02-22  
+Entorno objetivo: `/opt/Erp_core`
+
+
 ## 📦 Archivos Entregados
 
 ### 1. Plan Estratégico Detallado

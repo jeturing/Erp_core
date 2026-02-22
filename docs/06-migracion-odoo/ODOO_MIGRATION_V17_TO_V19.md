@@ -1,4 +1,9 @@
 # Guía de Migración: Odoo v17 → v19
+
+Estado: vigente  
+Validado: 2026-02-22  
+Entorno objetivo: `/opt/Erp_core`
+
 ## ERP_Core SaaS Multi-Tenant
 
 **Fecha**: Febrero 2026

@@ -1,7 +1,7 @@
 # MODULAR ARCHITECTURE
 
 Estado: vigente
-Validado: 2026-02-14
+Validado: 2026-02-22
 Entorno objetivo: `/opt/Erp_core` (PCT160)
 Dominio: Arquitectura
 

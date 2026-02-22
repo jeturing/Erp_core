@@ -1,5 +1,10 @@
 # Copilot Instructions - Jeturing ERP Core
 
+Estado: vigente  
+Validado: 2026-02-22  
+Entorno objetivo: `/opt/Erp_core`
+
+
 ## 📋 Project Overview
 
 Multi-tenant ERP platform (Jeturing Core) for Odoo instance management, built with:

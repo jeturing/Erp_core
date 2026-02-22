@@ -1,5 +1,10 @@
 # API Audit: Backend ↔ Frontend Connectivity
 
+Estado: vigente  
+Validado: 2026-02-22  
+Entorno objetivo: `/opt/Erp_core`
+
+
 **Fecha:** 2026-02-17  
 **Estado:** Merge completado de `affectionate-maxwell` → `feature/phase3-partner-led-onboarding`  
 **Objetivo:** Auditar endpoints backend contra consumo frontend y detectar brecha de datos/APIs faltantes.

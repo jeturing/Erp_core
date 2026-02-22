@@ -1,5 +1,10 @@
 # 02 - Tenants: listado y gestión
 
+Estado: vigente  
+Validado: 2026-02-22  
+Entorno objetivo: `/opt/Erp_core`
+
+
 ## Objetivo
 Mostrar tenants en la SPA y ejecutar operaciones de creación, suspensión, cambio de password y borrado.
 

@@ -1,5 +1,10 @@
 # 09 - Ecosistema Partners (Leads/Comisiones/Cotizaciones)
 
+Estado: vigente  
+Validado: 2026-02-22  
+Entorno objetivo: `/opt/Erp_core`
+
+
 ## Objetivo
 Gestionar ciclo comercial de partners: leads, comisiones y cotizaciones con integración de cobro.
 

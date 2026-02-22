@@ -1,5 +1,10 @@
 # Guía: Agregar un Nuevo Dominio Externo a un Tenant Odoo
 
+Estado: vigente  
+Validado: 2026-02-22  
+Entorno objetivo: `/opt/Erp_core`
+
+
 > **Última actualización**: 2026-02-14  
 > **Pre-requisito**: Leer `CUSTOM_DOMAINS_ARCHITECTURE.md` para entender la arquitectura
 

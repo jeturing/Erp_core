@@ -1,5 +1,10 @@
 # 🚀 Odoo 19 Installer - ERP_Core
 
+Estado: vigente  
+Validado: 2026-02-22  
+Entorno objetivo: `/opt/Erp_core`
+
+
 **Quick Installation Guide for Odoo 19 with All Migrated Modules**
 
 ---

@@ -1,5 +1,10 @@
 # Resumen Ejecutivo: Migración Odoo 17 a 19
 
+Estado: vigente  
+Validado: 2026-02-22  
+Entorno objetivo: `/opt/Erp_core`
+
+
 **Preparado para**: Equipo DevOps/Backend
 **Fecha**: 16 febrero 2026
 

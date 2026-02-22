@@ -1,5 +1,10 @@
 # 🚀 REFERENCIA RÁPIDA - /nodo/
 
+Estado: vigente  
+Validado: 2026-02-22  
+Entorno objetivo: `/opt/Erp_core`
+
+
 ## 📍 Ubicación
 ```
 /opt/Erp_core/nodo/

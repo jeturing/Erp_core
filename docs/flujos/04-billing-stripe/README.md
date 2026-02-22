@@ -1,5 +1,10 @@
 # 04 - Billing y Stripe
 
+Estado: vigente  
+Validado: 2026-02-22  
+Entorno objetivo: `/opt/Erp_core`
+
+
 ## Objetivo
 Gestionar métricas de facturación, eventos Stripe y operaciones de cobro/suscripción.
 

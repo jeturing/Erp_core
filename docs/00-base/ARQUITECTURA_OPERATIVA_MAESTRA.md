@@ -1,7 +1,7 @@
 # ARQUITECTURA OPERATIVA MAESTRA
 
 Estado: vigente  
-Validado: 2026-02-18  
+Validado: 2026-02-22  
 Entorno objetivo: PCT160 (10.10.10.20) + PCT105 (10.10.10.100)
 
 ## Diagrama maestro (mapa operativo)
