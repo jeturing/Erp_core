@@ -76,12 +76,12 @@
           Gestión inteligente<br />para tu empresa.
         </h2>
         <p class="text-gray-500 text-sm leading-relaxed max-w-sm">
-          Controla tenants, infraestructura, dominios y facturación desde un solo panel administrativo unificado.
+          Controla tu empresa de una forma facil intuitiva y agil.
         </p>
       </div>
     </div>
     <div>
-      <p class="text-gray-600 text-xs">© 2026 Sajet. Todos los derechos reservados.</p>
+      <p class="text-gray-600 text-xs">© 2026 Jeturing inc. Todos los derechos reservados.</p>
     </div>
   </div>
 
@@ -107,7 +107,7 @@
               id="email"
               type="text"
               class="input w-full px-3 py-2"
-              placeholder="admin o correo@empresa.com"
+              placeholder="correo@empresa.com"
               bind:value={email}
               required
               autocomplete="username"
@@ -173,7 +173,7 @@
               pattern="[0-9]{6}"
               maxlength="6"
               class="input w-full px-3 py-2 text-center text-2xl tracking-[0.5em] font-mono"
-              placeholder="000000"
+              placeholder="000-000"
               bind:value={totpCode}
               required
               autocomplete="one-time-code"
