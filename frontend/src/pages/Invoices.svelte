@@ -1,12 +1,14 @@
 <script lang="ts">
   import { onMount } from 'svelte';
-  import { invoicesApi } from '../lib/api';
+  import { invoicesApi, stripeSyncApi } from '../lib/api';
+  import type { SyncResult, SyncStatus } from '../lib/api/stripeSync';
   import { toasts } from '../lib/stores';
   import type { InvoiceItem } from '../lib/types';
   import { formatCurrency, formatDate } from '../lib/utils/formatters';
   import {
     FileText, RefreshCw, Search, ChevronLeft, ChevronRight,
     Plus, CheckCircle, DollarSign, Clock, AlertCircle, Filter,
+    Zap, CloudDownload, Link2, Unlink, ExternalLink,
   } from 'lucide-svelte';
 
   let invoices: InvoiceItem[] = [];
@@ -17,6 +19,12 @@
   let typeFilter = '';
   const PAGE_SIZE = 20;
   let currentPage = 0;
+
+  // Stripe Sync
+  let syncing = false;
+  let syncStatus: SyncStatus | null = null;
+  let showSyncPanel = false;
+  let lastSyncResult: SyncResult | null = null;
 
   // Generate form
   let showGenerateForm = false;
@@ -37,6 +45,40 @@
       toasts.error(e.message);
     } finally {
       loading = false;
+    }
+  }
+
+  async function loadSyncStatus() {
+    try {
+      syncStatus = await stripeSyncApi.getStatus();
+    } catch (_) { /* silent */ }
+  }
+
+  async function runFullSync() {
+    syncing = true;
+    try {
+      lastSyncResult = await stripeSyncApi.fullSync(6);
+      toasts.success('Sincronización Stripe completada');
+      await loadSyncStatus();
+      await loadInvoices(currentPage);
+    } catch (e: any) {
+      toasts.error(`Error sync: ${e.message}`);
+    } finally {
+      syncing = false;
+    }
+  }
+
+  async function syncOnlyInvoices() {
+    syncing = true;
+    try {
+      lastSyncResult = await stripeSyncApi.syncInvoices(6);
+      toasts.success('Facturas importadas de Stripe');
+      await loadSyncStatus();
+      await loadInvoices(currentPage);
+    } catch (e: any) {
+      toasts.error(`Error sync facturas: ${e.message}`);
+    } finally {
+      syncing = false;
     }
   }
 
@@ -86,6 +128,10 @@
     return map[t] || 'badge-neutral';
   }
 
+  function stripeUrl(stripeId: string): string {
+    return `https://dashboard.stripe.com/invoices/${stripeId}`;
+  }
+
   $: totalPages = Math.max(1, Math.ceil(total / PAGE_SIZE));
   $: startItem = currentPage * PAGE_SIZE + 1;
   $: endItem = Math.min((currentPage + 1) * PAGE_SIZE, total);
@@ -97,6 +143,7 @@
   $: totalAmount = (invoices || []).reduce((s, i) => s + i.total, 0);
   $: paidCount = (invoices || []).filter(i => i.status === 'paid').length;
   $: pendingCount = (invoices || []).filter(i => i.status === 'issued' || i.status === 'draft').length;
+  $: stripeLinked = (invoices || []).filter(i => i.stripe_invoice_id).length;
 
   async function goToPage(page: number) {
     if (page < 0 || page >= totalPages) return;
@@ -104,7 +151,10 @@
     await loadInvoices(currentPage);
   }
 
-  onMount(() => loadInvoices(0));
+  onMount(() => {
+    loadInvoices(0);
+    loadSyncStatus();
+  });
 </script>
 
 <div class="p-6 space-y-6">
@@ -112,9 +162,12 @@
   <div class="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4">
     <div>
       <h1 class="page-title flex items-center gap-2"><FileText size={24} /> Facturas</h1>
-      <p class="page-subtitle">Facturación SaaS — Direct, Partner e Intercompany</p>
+      <p class="page-subtitle">Facturación SaaS — Fuente de verdad: Stripe</p>
     </div>
     <div class="flex gap-2">
+      <button class="btn-secondary flex items-center gap-2" on:click={() => showSyncPanel = !showSyncPanel}>
+        <Zap size={14} /> Stripe Sync
+      </button>
       <button class="btn-secondary flex items-center gap-2" on:click={() => loadInvoices(currentPage)} disabled={loading}>
         <RefreshCw size={14} class={loading ? 'animate-spin' : ''} /> Actualizar
       </button>
@@ -124,8 +177,102 @@
     </div>
   </div>
 
+  <!-- Stripe Sync Panel -->
+  {#if showSyncPanel}
+    <div class="card p-6 border border-indigo-500/30 bg-gradient-to-r from-indigo-500/5 to-purple-500/5">
+      <div class="flex items-center justify-between mb-4">
+        <h2 class="section-heading flex items-center gap-2">
+          <CloudDownload size={18} class="text-indigo-400" /> Sincronización Stripe
+        </h2>
+        <div class="flex gap-2">
+          <button class="btn-secondary btn-sm flex items-center gap-1.5" on:click={syncOnlyInvoices} disabled={syncing}>
+            <FileText size={13} /> Solo Facturas
+          </button>
+          <button class="btn-accent flex items-center gap-2" on:click={runFullSync} disabled={syncing}>
+            {#if syncing}
+              <RefreshCw size={14} class="animate-spin" /> Sincronizando...
+            {:else}
+              <Zap size={14} /> Sincronización Completa
+            {/if}
+          </button>
+        </div>
+      </div>
+
+      <!-- Sync Status Grid -->
+      {#if syncStatus}
+        <div class="grid grid-cols-2 md:grid-cols-4 gap-3 mb-4">
+          <div class="rounded-lg bg-surface-dark p-3 text-center">
+            <div class="text-[11px] text-gray-500 uppercase tracking-wider">Clientes</div>
+            <div class="text-lg font-bold text-text-primary">{syncStatus.database.customers.total}</div>
+            <div class="flex items-center justify-center gap-1 text-[10px]">
+              <Link2 size={10} class="text-emerald-400" />
+              <span class="text-emerald-400">{syncStatus.database.customers.stripe_linked}</span>
+              <span class="text-gray-600 mx-0.5">|</span>
+              <Unlink size={10} class="text-amber-400" />
+              <span class="text-amber-400">{syncStatus.database.customers.unlinked}</span>
+            </div>
+          </div>
+          <div class="rounded-lg bg-surface-dark p-3 text-center">
+            <div class="text-[11px] text-gray-500 uppercase tracking-wider">Suscripciones</div>
+            <div class="text-lg font-bold text-text-primary">{syncStatus.database.subscriptions.active}</div>
+            <div class="flex items-center justify-center gap-1 text-[10px]">
+              <Link2 size={10} class="text-emerald-400" />
+              <span class="text-emerald-400">{syncStatus.database.subscriptions.stripe_linked}</span>
+              <span class="text-gray-600 mx-0.5">|</span>
+              <Unlink size={10} class="text-amber-400" />
+              <span class="text-amber-400">{syncStatus.database.subscriptions.unlinked}</span>
+            </div>
+          </div>
+          <div class="rounded-lg bg-surface-dark p-3 text-center">
+            <div class="text-[11px] text-gray-500 uppercase tracking-wider">Facturas Stripe</div>
+            <div class="text-lg font-bold text-indigo-400">{syncStatus.database.invoices.from_stripe}</div>
+            <div class="text-[10px] text-gray-500">de {syncStatus.database.invoices.total} total</div>
+          </div>
+          <div class="rounded-lg bg-surface-dark p-3 text-center">
+            <div class="text-[11px] text-gray-500 uppercase tracking-wider">Exentos</div>
+            <div class="text-lg font-bold text-gray-500">{syncStatus.database.customers.admin_accounts}</div>
+            <div class="text-[10px] text-gray-500">cuentas admin</div>
+          </div>
+        </div>
+        {#if syncStatus.last_sync}
+          <p class="text-[11px] text-gray-500">Última sync: {formatDate(syncStatus.last_sync)}</p>
+        {:else}
+          <p class="text-[11px] text-amber-400">⚠ Nunca sincronizado — ejecuta una sincronización completa</p>
+        {/if}
+      {/if}
+
+      <!-- Last Sync Result -->
+      {#if lastSyncResult}
+        <div class="mt-4 rounded-lg bg-surface-dark p-4 text-sm space-y-2">
+          <h3 class="font-semibold text-emerald-400 flex items-center gap-1.5"><CheckCircle size={14} /> Resultado</h3>
+          {#if lastSyncResult.customers}
+            <p class="text-gray-400">
+              <span class="text-text-primary font-mono">{lastSyncResult.customers.linked}</span> clientes vinculados,
+              <span class="text-text-primary font-mono">{lastSyncResult.customers.already_linked}</span> ya estaban,
+              <span class="text-text-primary font-mono">{lastSyncResult.customers.not_found}</span> sin match
+            </p>
+          {/if}
+          {#if lastSyncResult.subscriptions}
+            <p class="text-gray-400">
+              <span class="text-text-primary font-mono">{lastSyncResult.subscriptions.linked}</span> subs vinculadas,
+              <span class="text-text-primary font-mono">{lastSyncResult.subscriptions.created}</span> creadas,
+              <span class="text-text-primary font-mono">{lastSyncResult.subscriptions.updated}</span> actualizadas
+            </p>
+          {/if}
+          {#if lastSyncResult.invoices}
+            <p class="text-gray-400">
+              <span class="text-text-primary font-mono">{lastSyncResult.invoices.imported}</span> facturas importadas,
+              <span class="text-text-primary font-mono">{lastSyncResult.invoices.updated}</span> actualizadas,
+              <span class="text-text-primary font-mono">{lastSyncResult.invoices.skipped_existing}</span> ya existentes
+            </p>
+          {/if}
+        </div>
+      {/if}
+    </div>
+  {/if}
+
   <!-- KPIs -->
-  <div class="grid grid-cols-2 lg:grid-cols-4 gap-4">
+  <div class="grid grid-cols-2 lg:grid-cols-5 gap-4">
     <div class="stat-card">
       <span class="stat-label">Total Facturas</span>
       <span class="stat-value">{total}</span>
@@ -141,6 +288,10 @@
     <div class="stat-card">
       <span class="stat-label">Pendientes</span>
       <span class="stat-value text-warning">{pendingCount}</span>
+    </div>
+    <div class="stat-card">
+      <span class="stat-label flex items-center gap-1"><Link2 size={12} /> Stripe</span>
+      <span class="stat-value text-indigo-400">{stripeLinked}</span>
     </div>
   </div>
 
@@ -211,6 +362,7 @@
               <th>Tax</th>
               <th>Total</th>
               <th>Estado</th>
+              <th>Stripe</th>
               <th>Fecha</th>
               <th>Acciones</th>
             </tr>
@@ -225,18 +377,38 @@
                 <td class="text-sm text-gray-500">{formatCurrency(inv.tax_amount)}</td>
                 <td class="font-semibold">{formatCurrency(inv.total)}</td>
                 <td><span class={statusBadge(inv.status)}>{inv.status}</span></td>
+                <td>
+                  {#if inv.stripe_invoice_id}
+                    <a href={stripeUrl(inv.stripe_invoice_id)} target="_blank" rel="noopener"
+                       class="inline-flex items-center gap-1 text-indigo-400 hover:text-indigo-300 text-[11px] font-mono"
+                       title={inv.stripe_invoice_id}>
+                      <Link2 size={11} />
+                      {inv.stripe_invoice_id.slice(0, 12)}…
+                    </a>
+                  {:else}
+                    <span class="text-gray-600 text-[11px]">—</span>
+                  {/if}
+                </td>
                 <td class="text-sm text-text-secondary">{formatDate(inv.issued_at || inv.created_at)}</td>
                 <td>
-                  {#if inv.status !== 'paid' && inv.status !== 'void'}
-                    <button class="btn-sm btn-accent" title="Marcar pagada" on:click={() => markPaid(inv)}>
-                      <CheckCircle size={14} />
-                    </button>
-                  {/if}
+                  <div class="flex items-center gap-1">
+                    {#if inv.status !== 'paid' && inv.status !== 'void'}
+                      <button class="btn-sm btn-accent" title="Marcar pagada" on:click={() => markPaid(inv)}>
+                        <CheckCircle size={14} />
+                      </button>
+                    {/if}
+                    {#if inv.stripe_invoice_id}
+                      <a href={stripeUrl(inv.stripe_invoice_id)} target="_blank" rel="noopener"
+                         class="btn-sm btn-secondary" title="Ver en Stripe">
+                        <ExternalLink size={14} />
+                      </a>
+                    {/if}
+                  </div>
                 </td>
               </tr>
             {:else}
               <tr>
-                <td colspan="9" class="text-center text-gray-500 py-12">No hay facturas</td>
+                <td colspan="10" class="text-center text-gray-500 py-12">No hay facturas</td>
               </tr>
             {/each}
           </tbody>

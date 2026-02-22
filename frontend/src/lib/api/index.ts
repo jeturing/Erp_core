@@ -20,3 +20,5 @@ export { brandingApi } from './branding';
 export { communicationsApi } from './communications';
 export type { EmailLog, EmailLogsResponse, EmailStats } from './communications';
 export { agreementsApi } from './agreements';
+export { stripeSyncApi } from './stripeSync';
+export type { SyncResult, SyncStatus } from './stripeSync';

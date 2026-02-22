@@ -25,6 +25,7 @@ from .routes import onboarding_config
 from .routes import communications
 from .routes import admin_users
 from .routes import agreements
+from .routes import stripe_sync
 
 # Import security middleware
 from .security.middleware import SecurityMiddleware, WAFMiddleware
@@ -183,6 +184,7 @@ app.include_router(onboarding_config.router)    # Admin-configurable onboarding 
 app.include_router(communications.router)        # Historial de emails transaccionales
 app.include_router(admin_users.router)           # CRUD usuarios administrativos
 app.include_router(agreements.router)            # NDA/TOS templates + signing flow
+app.include_router(stripe_sync.router)           # Stripe → BD sync (source of truth)
 
 
 # ── CORS Cache Refresh endpoint ──
