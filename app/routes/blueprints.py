@@ -2,11 +2,12 @@
 Blueprints Routes — Module Catalog & Packages (Épica 2)
 CRUD para catálogo de módulos Odoo y paquetes/blueprints.
 """
-from fastapi import APIRouter, HTTPException, Depends
+from fastapi import APIRouter, HTTPException, Depends, Request, Cookie
 from pydantic import BaseModel
-from typing import Optional
+from typing import Optional, List
 from sqlalchemy.orm import Session
 from datetime import datetime
+import os, ast, logging
 
 from ..models.database import (
     ModuleCatalog, ModulePackage, ModulePackageItem,
@@ -14,6 +15,9 @@ from ..models.database import (
 )
 
 router = APIRouter(prefix="/api/blueprints", tags=["Blueprints"])
+logger = logging.getLogger(__name__)
+
+V17_PATH = os.getenv("V17_ADDONS_PATH", "/opt/extra-addons/V17")
 
 
 # ── DTOs ──
@@ -46,7 +50,7 @@ class PackageCreate(BaseModel):
     plan_type: Optional[str] = None
     base_price_monthly: float = 0
     is_default: bool = False
-    module_list: list[str] = []       # technical_names
+    module_list: List[str] = []       # technical_names
 
 class PackageUpdate(BaseModel):
     display_name: Optional[str] = None
@@ -54,7 +58,7 @@ class PackageUpdate(BaseModel):
     base_price_monthly: Optional[float] = None
     is_default: Optional[bool] = None
     is_active: Optional[bool] = None
-    module_list: Optional[list[str]] = None
+    module_list: Optional[List[str]] = None
 
 
 # ── MODULE CATALOG ──
@@ -75,22 +79,121 @@ def list_modules(
     if category:
         q = q.filter(ModuleCatalog.category == category)
     modules = q.order_by(ModuleCatalog.sort_order, ModuleCatalog.display_name).all()
-    return [
-        {
-            "id": m.id,
-            "technical_name": m.technical_name,
-            "display_name": m.display_name,
-            "description": m.description,
-            "category": m.category,
-            "version": m.version,
-            "is_core": m.is_core,
-            "partner_allowed": m.partner_allowed,
-            "price_monthly": m.price_monthly,
-            "requires_module_id": m.requires_module_id,
-            "is_active": m.is_active,
-        }
-        for m in modules
-    ]
+    return {
+        "total": len(modules),
+        "items": [
+            {
+                "id": m.id,
+                "technical_name": m.technical_name,
+                "display_name": m.display_name,
+                "description": m.description,
+                "category": m.category,
+                "version": m.version,
+                "is_core": m.is_core,
+                "partner_allowed": m.partner_allowed,
+                "price_monthly": m.price_monthly,
+                "requires_module_id": m.requires_module_id,
+                "is_active": m.is_active,
+                "sort_order": m.sort_order or 0,
+            }
+            for m in modules
+        ]
+    }
+
+
+@router.get("/modules/categories")
+def list_categories(db: Session = Depends(get_db)):
+    """Lista categorías únicas de módulos."""
+    rows = db.query(ModuleCatalog.category).filter(
+        ModuleCatalog.is_active == True,
+        ModuleCatalog.category != None
+    ).distinct().all()
+    return sorted([r[0] for r in rows if r[0]])
+
+
+@router.post("/modules/import-fs")
+def import_modules_from_fs(db: Session = Depends(get_db)):
+    """Importa módulos desde el filesystem V17 al catálogo (upsert)."""
+    if not os.path.isdir(V17_PATH):
+        raise HTTPException(404, f"V17 path not found: {V17_PATH}")
+
+    JETURING_ONLY = {
+        "jeturing_branding", "jeturing_iframe_app_manager", "odoo_saas_kit",
+        "cetmix_tower", "odoo_rest", "odoo_database_restore_manager",
+    }
+    CORE_MODULES = {"web", "portal", "dynamic_odoo", "queue_job", "document_management_system"}
+
+    created = 0
+    updated = 0
+    skipped = 0
+
+    dirs = sorted([d for d in os.listdir(V17_PATH) if os.path.isdir(os.path.join(V17_PATH, d))])
+    for d in dirs:
+        technical_name = d.split("-")[0]
+        manifest_path = os.path.join(V17_PATH, d, "__manifest__.py")
+        manifest = {}
+        if os.path.exists(manifest_path):
+            try:
+                with open(manifest_path, "r", encoding="utf-8", errors="ignore") as f:
+                    content = f.read()
+                manifest = ast.literal_eval(content)
+            except Exception:
+                pass
+
+        display_name = str(manifest.get("name", technical_name.replace("_", " ").title()))[:100]
+        category = str(manifest.get("category", "General"))[:50]
+        version = str(manifest.get("version", "17.0.1.0"))[:20]
+        desc_raw = manifest.get("summary", manifest.get("description", ""))
+        description = str(desc_raw or "")[:500] if desc_raw else None
+        partner_allowed = technical_name not in JETURING_ONLY
+        is_core = technical_name in CORE_MODULES
+
+        try:
+            existing = db.query(ModuleCatalog).filter(
+                ModuleCatalog.technical_name == technical_name
+            ).first()
+            if existing:
+                existing.display_name = display_name
+                existing.category = category
+                existing.version = version
+                existing.partner_allowed = partner_allowed
+                existing.is_core = is_core
+                if description:
+                    existing.description = description
+                updated += 1
+            else:
+                db.add(ModuleCatalog(
+                    technical_name=technical_name,
+                    display_name=display_name,
+                    category=category,
+                    version=version,
+                    description=description,
+                    partner_allowed=partner_allowed,
+                    is_core=is_core,
+                    price_monthly=0,
+                    is_active=True,
+                ))
+                created += 1
+        except Exception as e:
+            logger.warning(f"Skipping {technical_name}: {e}")
+            db.rollback()
+            skipped += 1
+            continue
+
+    try:
+        db.commit()
+    except Exception as e:
+        db.rollback()
+        raise HTTPException(500, f"Commit error: {e}")
+
+    total = db.query(ModuleCatalog).count()
+    return {
+        "status": "ok",
+        "created": created,
+        "updated": updated,
+        "skipped": skipped,
+        "total_in_catalog": total,
+    }
 
 
 @router.post("/modules")
