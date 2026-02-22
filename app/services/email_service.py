@@ -334,6 +334,78 @@ def send_quotation_email(
         email_type="quotation",
     )
 
+
+def send_partner_change_notification(
+    to_email: str,
+    company_name: str,
+    old_partner_name: Optional[str] = None,
+    new_partner_name: Optional[str] = None,
+    action: str = "transfer",
+) -> dict:
+    """
+    Notifica al cliente sobre un cambio en su partner de soporte/facturación.
+    action: 'transfer' (cambio de partner), 'link' (nuevo partner asignado), 'unlink' (desvinculado)
+    """
+    if action == "unlink":
+        title = "Cambio en su cuenta — Partner desvinculado"
+        emoji = "🔄"
+        main_text = (
+            f"<p>Le informamos que su cuenta de <strong>{company_name}</strong> "
+            f"ha sido desvinculada del partner <strong>{old_partner_name}</strong>.</p>"
+            f"<p>A partir de ahora, su facturación y soporte serán gestionados directamente por <strong>SAJET / Jeturing SRL</strong>.</p>"
+        )
+    elif action == "link":
+        title = "¡Nuevo partner asignado!"
+        emoji = "🤝"
+        main_text = (
+            f"<p>Le informamos que su cuenta de <strong>{company_name}</strong> "
+            f"ha sido vinculada al partner <strong>{new_partner_name}</strong>.</p>"
+            f"<p>Su facturación y soporte técnico serán gestionados a través de este partner.</p>"
+        )
+    else:  # transfer
+        title = "Cambio de partner en su cuenta"
+        emoji = "🔄"
+        from_text = f" de <strong>{old_partner_name}</strong>" if old_partner_name else ""
+        main_text = (
+            f"<p>Le informamos que su cuenta de <strong>{company_name}</strong> "
+            f"ha sido transferida{from_text} al partner <strong>{new_partner_name}</strong>.</p>"
+            f"<p>A partir de ahora, su facturación y soporte serán gestionados por <strong>{new_partner_name}</strong>.</p>"
+        )
+
+    content = f"""
+    <h2 style="color: #e74c3c; margin-top: 0;">{title} {emoji}</h2>
+    {main_text}
+
+    <div style="background: #1a1a2e; border-radius: 8px; padding: 20px; margin: 20px 0;
+                border-left: 4px solid #3498db;">
+      <h3 style="margin-top: 0; color: #fff; font-size: 14px;">¿Qué significa esto?</h3>
+      <ul style="color: #ccc; font-size: 13px; margin: 0; padding-left: 20px;">
+        <li>Su servicio y datos no se ven afectados</li>
+        <li>Su acceso a la plataforma continúa sin cambios</li>
+        <li>Las facturas futuras reflejarán el nuevo esquema</li>
+      </ul>
+    </div>
+
+    <p style="color: #999; font-size: 13px;">
+      Si tiene preguntas sobre este cambio, por favor contacte a su equipo de soporte.
+    </p>
+
+    <a href="{APP_URL}/#/portal" style="display: inline-block; background: #e74c3c; color: #fff;
+       padding: 12px 24px; border-radius: 6px; text-decoration: none; font-weight: 600; margin-top: 10px;">
+      Ir al Portal →
+    </a>
+    """
+
+    return send_email(
+        to_email=to_email,
+        subject=f"{emoji} {title} — {company_name} | SAJET",
+        html_body=_base_template(content),
+        text_body=f"{title}\nEmpresa: {company_name}\n"
+                  f"{'Anterior: ' + old_partner_name if old_partner_name else ''}\n"
+                  f"{'Nuevo: ' + new_partner_name if new_partner_name else 'Gestión directa SAJET'}",
+        email_type="partner_change",
+    )
+
 def send_work_order_completion(
     to_email: str,
     company_name: str,

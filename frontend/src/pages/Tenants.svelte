@@ -13,6 +13,9 @@
   let partners = $state<PartnerItem[]>([]);
   let loading = $state(true);
   let searchQuery = $state('');
+  let filterStatus = $state('all');
+  let filterPlan = $state('all');
+  let filterPartner = $state('all');
   let showForm = $state(false);
 
   // Form fields
@@ -141,18 +144,30 @@
 
   let filteredTenants = $derived(
     tenants.filter(t => {
-      if (!searchQuery) return true;
-      const q = searchQuery.toLowerCase();
-      return (
-        t.subdomain?.toLowerCase().includes(q) ||
-        t.email?.toLowerCase().includes(q) ||
-        t.company_name?.toLowerCase().includes(q)
-      );
+      // Text search
+      if (searchQuery) {
+        const q = searchQuery.toLowerCase();
+        const match =
+          t.subdomain?.toLowerCase().includes(q) ||
+          t.email?.toLowerCase().includes(q) ||
+          t.company_name?.toLowerCase().includes(q);
+        if (!match) return false;
+      }
+      // Status filter
+      if (filterStatus !== 'all' && t.status !== filterStatus) return false;
+      // Plan filter
+      if (filterPlan !== 'all' && (t.plan ?? 'basic') !== filterPlan) return false;
+      // Partner filter
+      if (filterPartner === 'none' && t.partner_name) return false;
+      if (filterPartner !== 'all' && filterPartner !== 'none' && t.partner_name !== filterPartner) return false;
+      return true;
     })
   );
 
   let totalTenants = $derived(tenants.length);
   let activeTenants = $derived(tenants.filter(t => t.status === 'active').length);
+  let suspendedTenants = $derived(tenants.filter(t => t.status === 'suspended').length);
+  let uniquePartnerNames = $derived([...new Set(tenants.map(t => t.partner_name).filter(Boolean))] as string[]);
 
   onMount(loadTenants);
 </script>
@@ -245,17 +260,56 @@
       <div class="stat-value">{activeTenants}</div>
       <div class="stat-label">Activos</div>
     </div>
+    <div class="stat-card card">
+      <div class="stat-value">{suspendedTenants}</div>
+      <div class="stat-label">Suspendidos</div>
+    </div>
+    <div class="stat-card card">
+      <div class="stat-value">{filteredTenants.length}</div>
+      <div class="stat-label">Mostrando</div>
+    </div>
   </div>
 
-  <!-- Search -->
-  <div class="relative">
-    <Search size={14} class="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400" />
-    <input
-      class="input w-full pl-9 pr-3 py-2"
-      type="text"
-      placeholder="Buscar por subdominio, email o empresa..."
-      bind:value={searchQuery}
-    />
+  <!-- Search + Filters -->
+  <div class="space-y-3">
+    <div class="relative">
+      <Search size={14} class="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400" />
+      <input
+        class="input w-full pl-9 pr-3 py-2"
+        type="text"
+        placeholder="Buscar por subdominio, email o empresa..."
+        bind:value={searchQuery}
+      />
+    </div>
+    <div class="flex flex-wrap gap-3">
+      <select class="input px-3 py-2 text-sm" bind:value={filterStatus}>
+        <option value="all">Estado: Todos</option>
+        <option value="active">✅ Activos</option>
+        <option value="suspended">⚠️ Suspendidos</option>
+        <option value="pending">⏳ Pendientes</option>
+      </select>
+      <select class="input px-3 py-2 text-sm" bind:value={filterPlan}>
+        <option value="all">Plan: Todos</option>
+        <option value="basic">Basic</option>
+        <option value="pro">Pro</option>
+        <option value="enterprise">Enterprise</option>
+      </select>
+      <select class="input px-3 py-2 text-sm" bind:value={filterPartner}>
+        <option value="all">Partner: Todos</option>
+        <option value="none">🔹 Sin Partner (Directo)</option>
+        {#each uniquePartnerNames as pn}
+          <option value={pn}>{pn}</option>
+        {/each}
+      </select>
+      {#if filterStatus !== 'all' || filterPlan !== 'all' || filterPartner !== 'all'}
+        <button
+          class="btn-secondary btn-sm text-xs"
+          onclick={() => { filterStatus = 'all'; filterPlan = 'all'; filterPartner = 'all'; }}
+        >
+          ✕ Limpiar filtros
+        </button>
+      {/if}
+    </div>
   </div>
 
   <!-- Table -->

@@ -81,6 +81,7 @@
         { id: 'settings',          label: 'Settings',          icon: SettingsIcon, href: '#/settings' },
         { id: 'onboarding-config', label: 'Config. Onboarding',icon: Sliders,      href: '#/onboarding-config' },
         { id: 'roles',             label: 'Roles',              icon: Shield,       href: '#/roles' },
+        { id: 'admin-users',       label: 'Usuarios Admin',     icon: UsersRound,   href: '#/admin-users' },
         { id: 'audit',             label: 'Auditoría',          icon: ShieldCheck,  href: '#/audit' },
         { id: 'logs',              label: 'Logs',               icon: FileText,     href: '#/logs' },
         { id: 'portal',            label: 'Portal Tenant',      icon: ExternalLink, href: '#/portal' },

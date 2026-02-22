@@ -249,6 +249,28 @@ export const partnersApi = {
   async simulatePricing(partnerId: number, planName: string = 'basic', userCount: number = 1): Promise<PricingSimulation> {
     return api.get<PricingSimulation>(`/api/partners/${partnerId}/simulate-pricing?plan_name=${planName}&user_count=${userCount}`);
   },
+
+  // ── Customer ↔ Partner Linking ──
+  async getAvailableCustomers(partnerId: number, search?: string): Promise<{ items: any[]; total: number }> {
+    const params = search ? `?search=${encodeURIComponent(search)}` : '';
+    return api.get(`/api/partners/${partnerId}/available-customers${params}`);
+  },
+
+  async linkCustomer(partnerId: number, customerId: number): Promise<{ message: string; customer_id: number; partner_id: number }> {
+    return api.post(`/api/partners/${partnerId}/link-customer`, { customer_id: customerId });
+  },
+
+  async unlinkCustomer(partnerId: number, customerId: number): Promise<{ message: string }> {
+    return api.post(`/api/partners/${partnerId}/unlink-customer/${customerId}`);
+  },
+
+  async transferCustomer(partnerId: number, customerId: number, sendEmail: boolean = true): Promise<{ message: string }> {
+    return api.post(`/api/partners/${partnerId}/transfer-customer`, { customer_id: customerId, send_email: sendEmail });
+  },
+
+  async lookupPartnerByCode(partnerCode: string): Promise<{ partner_id: number; company_name: string; partner_code: string }> {
+    return api.post('/api/partners/request-partner-change', { partner_code: partnerCode });
+  },
 };
 
 export default partnersApi;

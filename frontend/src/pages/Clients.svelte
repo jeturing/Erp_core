@@ -11,6 +11,9 @@
   let loading = $state(true);
   let error = $state('');
   let searchQuery = $state('');
+  let filterStatus = $state('all');
+  let filterPlan = $state('all');
+  let filterType = $state('all');
   let recalculating = $state(false);
   let customerActionLoading = $state<number | null>(null);
 
@@ -90,13 +93,31 @@
   let saving = $state(false);
 
   let filtered = $derived(
-    searchQuery.trim()
-      ? customers.filter(c =>
-          c.company_name?.toLowerCase().includes(searchQuery.toLowerCase()) ||
-          c.email?.toLowerCase().includes(searchQuery.toLowerCase()) ||
-          c.subdomain?.toLowerCase().includes(searchQuery.toLowerCase())
-        )
-      : customers
+    customers.filter(c => {
+      // Text search
+      if (searchQuery.trim()) {
+        const q = searchQuery.toLowerCase();
+        const match =
+          c.company_name?.toLowerCase().includes(q) ||
+          c.email?.toLowerCase().includes(q) ||
+          c.subdomain?.toLowerCase().includes(q);
+        if (!match) return false;
+      }
+      // Status filter
+      if (filterStatus !== 'all') {
+        const status = c.subscription?.status ?? 'none';
+        if (filterStatus !== status) return false;
+      }
+      // Plan filter
+      if (filterPlan !== 'all') {
+        const plan = c.subscription?.plan_name ?? '';
+        if (filterPlan !== plan) return false;
+      }
+      // Type filter (admin vs billable)
+      if (filterType === 'admin' && !c.is_admin_account) return false;
+      if (filterType === 'billable' && c.is_admin_account) return false;
+      return true;
+    })
   );
 
   async function loadData() {
@@ -276,15 +297,45 @@
     <div class="bg-red-500/10 border border-red-500/30 rounded-lg p-4 text-red-400 text-sm">{error}</div>
   {/if}
 
-  <!-- Search -->
-  <div class="relative">
-    <Search size={16} class="absolute left-3 top-1/2 -translate-y-1/2 text-gray-500" />
-    <input
-      type="text"
-      class="input pl-10"
-      placeholder="Buscar por empresa, email o subdominio..."
-      bind:value={searchQuery}
-    />
+  <!-- Search + Filters -->
+  <div class="space-y-3">
+    <div class="relative">
+      <Search size={16} class="absolute left-3 top-1/2 -translate-y-1/2 text-gray-500" />
+      <input
+        type="text"
+        class="input pl-10"
+        placeholder="Buscar por empresa, email o subdominio..."
+        bind:value={searchQuery}
+      />
+    </div>
+    <div class="flex flex-wrap gap-3">
+      <select class="input px-3 py-2 text-sm" bind:value={filterStatus}>
+        <option value="all">Estado: Todos</option>
+        <option value="active">✅ Activo</option>
+        <option value="pending">⏳ Pendiente</option>
+        <option value="suspended">⚠️ Suspendido</option>
+        <option value="none">🔹 Sin suscripción</option>
+      </select>
+      <select class="input px-3 py-2 text-sm" bind:value={filterPlan}>
+        <option value="all">Plan: Todos</option>
+        <option value="basic">Basic</option>
+        <option value="pro">Pro</option>
+        <option value="enterprise">Enterprise</option>
+      </select>
+      <select class="input px-3 py-2 text-sm" bind:value={filterType}>
+        <option value="all">Tipo: Todos</option>
+        <option value="billable">💳 Facturables</option>
+        <option value="admin">🛡️ Admin (Exentos)</option>
+      </select>
+      {#if filterStatus !== 'all' || filterPlan !== 'all' || filterType !== 'all'}
+        <button
+          class="btn-secondary btn-sm text-xs"
+          onclick={() => { filterStatus = 'all'; filterPlan = 'all'; filterType = 'all'; }}
+        >
+          ✕ Limpiar filtros
+        </button>
+      {/if}
+    </div>
   </div>
 
   {#if loading}

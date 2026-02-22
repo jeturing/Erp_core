@@ -24,6 +24,7 @@ from .routes import reports, quotas, partner_portal
 from .routes import customer_onboarding
 from .routes import onboarding_config
 from .routes import communications
+from .routes import admin_users
 
 # Import security middleware
 from .security.middleware import SecurityMiddleware, WAFMiddleware
@@ -38,8 +39,8 @@ app = FastAPI(
     title="Sajet ERP API",
     description=(
         "## API del Sistema ERP Sajet\n\n"
-        "Plataforma SaaS multi-tenant sobre Odoo con facturación Stripe, "
-        "provisioning automático en Proxmox y portal self-service para clientes y partners.\n\n"
+        "Plataforma SaaS multi-tenant sobre con facturación Stripe, "
+        "provisioning automático en nuestro cloud y portal self-service para clientes y partners.\n\n"
         "### Autenticación\n"
         "Todos los endpoints protegidos requieren un JWT en cookie `access_token` "
         "o header `Authorization: Bearer <token>`.\n\n"
@@ -51,7 +52,7 @@ app = FastAPI(
     contact={
         "name": "Sajet ERP - Soporte Técnico",
         "url": "https://sajet.us",
-        "email": "soporte@sajet.us",
+        "email": "help@sajet.us",
     },
     license_info={
         "name": "Propietario - Jeturing SRL",
@@ -207,6 +208,7 @@ app.include_router(quotas.router)           # Resource quotas por cliente/plan
 app.include_router(customer_onboarding.router)  # Customer onboarding + RD e-CF flow
 app.include_router(onboarding_config.router)    # Admin-configurable onboarding config
 app.include_router(communications.router)        # Historial de emails transaccionales
+app.include_router(admin_users.router)           # CRUD usuarios administrativos
 
 
 # ── Startup log ──

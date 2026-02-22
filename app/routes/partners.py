@@ -4,17 +4,32 @@ Basado en el Acuerdo Global de Partnership (No Exclusivo)
 """
 from datetime import datetime
 from typing import List, Optional
+import secrets
+import string
+import logging
 
 from fastapi import APIRouter, Cookie, HTTPException, Request, status
 from pydantic import BaseModel, EmailStr
 
 from ..models.database import (
-    Customer, Partner, Lead, Commission, SessionLocal,
+    Customer, Partner, Lead, Commission, Subscription, SubscriptionStatus, SessionLocal,
     PartnerStatus, BillingScenario, PartnerPricingOverride, Plan, SupportLevel,
 )
 from .roles import _require_admin
 
 router = APIRouter(prefix="/api/partners", tags=["Partners"])
+logger = logging.getLogger(__name__)
+
+
+def _generate_partner_code(db) -> str:
+    """Genera un código único de partner: P-XXXX (4 alfanuméricos uppercase)."""
+    chars = string.ascii_uppercase + string.digits
+    for _ in range(100):
+        code = "P-" + "".join(secrets.choice(chars) for _ in range(4))
+        existing = db.query(Partner).filter(Partner.partner_code == code).first()
+        if not existing:
+            return code
+    raise ValueError("No se pudo generar un código de partner único")
 
 
 # ── DTOs ──
@@ -71,6 +86,8 @@ def _partner_to_dict(p: Partner) -> dict:
         "margin_cap": p.margin_cap,
         "status": p.status.value if p.status else None,
         "portal_access": p.portal_access,
+        "partner_code": p.partner_code,
+        "stripe_account_id": p.stripe_account_id,
         "contract_signed_at": p.contract_signed_at.isoformat() if p.contract_signed_at else None,
         "contract_reference": p.contract_reference,
         "notes": p.notes,
@@ -201,6 +218,7 @@ async def create_partner(
             margin_cap=payload.margin_cap,
             status=PartnerStatus.pending,
             portal_access=True,
+            partner_code=_generate_partner_code(db),
             contract_reference=payload.contract_reference,
             notes=payload.notes,
         )
@@ -585,6 +603,323 @@ async def simulate_pricing(
             "ecf_passthrough": override.ecf_passthrough if override else False,
             "ecf_monthly_cost": override.ecf_monthly_cost if override else None,
             "partner": partner.company_name,
+        }
+    finally:
+        db.close()
+
+
+# ══════════════════════════════════════════════════════
+# CUSTOMER ↔ PARTNER LINKING / TRANSFER
+# ══════════════════════════════════════════════════════
+
+class LinkCustomerRequest(BaseModel):
+    customer_id: int
+
+
+class TransferCustomerRequest(BaseModel):
+    customer_id: int
+    send_email: bool = True
+
+
+class PartnerChangeRequest(BaseModel):
+    """Cliente solicita cambio de partner usando un código."""
+    partner_code: str
+
+
+@router.get("/{partner_id}/available-customers")
+async def list_available_customers(
+    partner_id: int,
+    request: Request,
+    access_token: Optional[str] = Cookie(None),
+    search: Optional[str] = None,
+):
+    """Lista clientes sin partner asignado (disponibles para vincular)."""
+    _require_admin(request, access_token)
+    db = SessionLocal()
+    try:
+        partner = db.query(Partner).filter(Partner.id == partner_id).first()
+        if not partner:
+            raise HTTPException(status_code=404, detail="Partner no encontrado")
+
+        q = db.query(Customer).filter(Customer.partner_id == None)
+        if search:
+            s = f"%{search}%"
+            q = q.filter(
+                (Customer.company_name.ilike(s)) |
+                (Customer.email.ilike(s)) |
+                (Customer.subdomain.ilike(s))
+            )
+
+        customers = q.order_by(Customer.company_name).limit(50).all()
+        items = []
+        for c in customers:
+            sub = db.query(Subscription).filter(
+                Subscription.customer_id == c.id,
+                Subscription.status == SubscriptionStatus.active,
+            ).first()
+            items.append({
+                "id": c.id,
+                "company_name": c.company_name,
+                "email": c.email,
+                "subdomain": c.subdomain,
+                "plan_name": sub.plan_name if sub else None,
+                "user_count": c.user_count or 1,
+                "is_admin_account": c.is_admin_account or False,
+            })
+
+        return {"items": items, "total": len(items)}
+    finally:
+        db.close()
+
+
+@router.post("/{partner_id}/link-customer")
+async def link_customer_to_partner(
+    partner_id: int,
+    payload: LinkCustomerRequest,
+    request: Request,
+    access_token: Optional[str] = Cookie(None),
+):
+    """
+    Vincula un cliente sin partner al partner indicado.
+    Si el cliente ya tiene partner → error (debe usar transfer).
+    Actualiza customer.partner_id y subscription.partner_id.
+    """
+    _require_admin(request, access_token)
+    db = SessionLocal()
+    try:
+        partner = db.query(Partner).filter(Partner.id == partner_id).first()
+        if not partner:
+            raise HTTPException(status_code=404, detail="Partner no encontrado")
+
+        customer = db.query(Customer).filter(Customer.id == payload.customer_id).first()
+        if not customer:
+            raise HTTPException(status_code=404, detail="Cliente no encontrado")
+
+        if customer.partner_id is not None:
+            existing_partner = db.query(Partner).filter(Partner.id == customer.partner_id).first()
+            raise HTTPException(
+                status_code=409,
+                detail=f"El cliente ya está vinculado al partner '{existing_partner.company_name if existing_partner else customer.partner_id}'. "
+                       f"Use el proceso de transferencia para cambiar de partner."
+            )
+
+        # Vincular
+        customer.partner_id = partner_id
+
+        # Actualizar suscripciones activas
+        subs = db.query(Subscription).filter(
+            Subscription.customer_id == customer.id,
+            Subscription.status == SubscriptionStatus.active,
+        ).all()
+        for sub in subs:
+            sub.owner_partner_id = partner_id
+
+        db.commit()
+
+        logger.info(f"✅ Cliente '{customer.company_name}' vinculado a partner '{partner.company_name}'")
+
+        return {
+            "message": f"Cliente '{customer.company_name}' vinculado exitosamente a '{partner.company_name}'",
+            "customer_id": customer.id,
+            "partner_id": partner_id,
+        }
+    except HTTPException:
+        raise
+    except Exception as e:
+        db.rollback()
+        logger.error(f"Error vinculando cliente: {e}")
+        raise HTTPException(status_code=500, detail=str(e))
+    finally:
+        db.close()
+
+
+@router.post("/{partner_id}/unlink-customer/{customer_id}")
+async def unlink_customer_from_partner(
+    partner_id: int,
+    customer_id: int,
+    request: Request,
+    access_token: Optional[str] = Cookie(None),
+):
+    """
+    Desvincula un cliente de su partner (baja).
+    Limpia customer.partner_id y subscription.partner_id.
+    Envía notificación al cliente.
+    """
+    _require_admin(request, access_token)
+    db = SessionLocal()
+    try:
+        partner = db.query(Partner).filter(Partner.id == partner_id).first()
+        if not partner:
+            raise HTTPException(status_code=404, detail="Partner no encontrado")
+
+        customer = db.query(Customer).filter(Customer.id == customer_id).first()
+        if not customer:
+            raise HTTPException(status_code=404, detail="Cliente no encontrado")
+
+        if customer.partner_id != partner_id:
+            raise HTTPException(
+                status_code=400,
+                detail="Este cliente no está vinculado a este partner"
+            )
+
+        # Desvincular
+        old_partner_name = partner.company_name
+        customer.partner_id = None
+
+        # Limpiar suscripciones
+        subs = db.query(Subscription).filter(
+            Subscription.customer_id == customer.id,
+            Subscription.status == SubscriptionStatus.active,
+        ).all()
+        for sub in subs:
+            sub.owner_partner_id = None
+
+        db.commit()
+
+        # Enviar email de notificación
+        try:
+            from ..services.email_service import send_partner_change_notification
+            send_partner_change_notification(
+                to_email=customer.email,
+                company_name=customer.company_name or customer.subdomain,
+                old_partner_name=old_partner_name,
+                new_partner_name=None,
+                action="unlink",
+            )
+        except Exception as email_err:
+            logger.warning(f"No se pudo enviar email de desvinculación: {email_err}")
+
+        logger.info(f"✅ Cliente '{customer.company_name}' desvinculado de partner '{old_partner_name}'")
+
+        return {
+            "message": f"Cliente '{customer.company_name}' desvinculado de '{old_partner_name}'",
+            "customer_id": customer_id,
+            "partner_id": partner_id,
+            "email_sent": True,
+        }
+    except HTTPException:
+        raise
+    except Exception as e:
+        db.rollback()
+        logger.error(f"Error desvinculando cliente: {e}")
+        raise HTTPException(status_code=500, detail=str(e))
+    finally:
+        db.close()
+
+
+@router.post("/{partner_id}/transfer-customer")
+async def transfer_customer_to_partner(
+    partner_id: int,
+    payload: TransferCustomerRequest,
+    request: Request,
+    access_token: Optional[str] = Cookie(None),
+):
+    """
+    Transfiere un cliente de un partner a otro.
+    1. Desvincula del partner anterior
+    2. Vincula al nuevo partner
+    3. Actualiza suscripciones
+    4. Envía email al cliente notificando el cambio
+    """
+    _require_admin(request, access_token)
+    db = SessionLocal()
+    try:
+        new_partner = db.query(Partner).filter(Partner.id == partner_id).first()
+        if not new_partner:
+            raise HTTPException(status_code=404, detail="Partner destino no encontrado")
+
+        customer = db.query(Customer).filter(Customer.id == payload.customer_id).first()
+        if not customer:
+            raise HTTPException(status_code=404, detail="Cliente no encontrado")
+
+        old_partner_name = None
+        old_partner_id = customer.partner_id
+        if old_partner_id:
+            old_partner = db.query(Partner).filter(Partner.id == old_partner_id).first()
+            old_partner_name = old_partner.company_name if old_partner else f"Partner #{old_partner_id}"
+
+        if old_partner_id == partner_id:
+            raise HTTPException(status_code=400, detail="El cliente ya pertenece a este partner")
+
+        # Transferir
+        customer.partner_id = partner_id
+
+        # Actualizar suscripciones
+        subs = db.query(Subscription).filter(
+            Subscription.customer_id == customer.id,
+            Subscription.status == SubscriptionStatus.active,
+        ).all()
+        for sub in subs:
+            sub.owner_partner_id = partner_id
+
+        db.commit()
+
+        # Enviar email
+        if payload.send_email:
+            try:
+                from ..services.email_service import send_partner_change_notification
+                send_partner_change_notification(
+                    to_email=customer.email,
+                    company_name=customer.company_name or customer.subdomain,
+                    old_partner_name=old_partner_name,
+                    new_partner_name=new_partner.company_name,
+                    action="transfer",
+                )
+            except Exception as email_err:
+                logger.warning(f"No se pudo enviar email de transferencia: {email_err}")
+
+        action_desc = f"transferido de '{old_partner_name}'" if old_partner_name else "vinculado"
+        logger.info(f"✅ Cliente '{customer.company_name}' {action_desc} a '{new_partner.company_name}'")
+
+        return {
+            "message": f"Cliente '{customer.company_name}' {action_desc} a '{new_partner.company_name}'",
+            "customer_id": customer.id,
+            "old_partner_id": old_partner_id,
+            "new_partner_id": partner_id,
+            "email_sent": payload.send_email,
+        }
+    except HTTPException:
+        raise
+    except Exception as e:
+        db.rollback()
+        logger.error(f"Error transfiriendo cliente: {e}")
+        raise HTTPException(status_code=500, detail=str(e))
+    finally:
+        db.close()
+
+
+# ── Endpoint para que el CLIENTE solicite cambio de partner usando código ──
+
+@router.post("/request-partner-change")
+async def request_partner_change_by_code(
+    payload: PartnerChangeRequest,
+    request: Request,
+    access_token: Optional[str] = Cookie(None),
+):
+    """
+    Un cliente o admin ingresa un partner_code para vincular/transferir.
+    Si el cliente no tiene partner → vincula directo.
+    Si ya tiene partner → transfiere (con email).
+    """
+    _require_admin(request, access_token)
+    db = SessionLocal()
+    try:
+        # Buscar partner por código
+        target_partner = db.query(Partner).filter(
+            Partner.partner_code == payload.partner_code.strip().upper()
+        ).first()
+        if not target_partner:
+            raise HTTPException(status_code=404, detail="Código de partner no válido")
+
+        if target_partner.status != PartnerStatus.active:
+            raise HTTPException(status_code=400, detail="El partner no está activo")
+
+        return {
+            "partner_id": target_partner.id,
+            "company_name": target_partner.company_name,
+            "partner_code": target_partner.partner_code,
+            "status": target_partner.status.value,
+            "message": f"Partner '{target_partner.company_name}' encontrado. Confirme la vinculación.",
         }
     finally:
         db.close()

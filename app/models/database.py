@@ -191,6 +191,34 @@ class WorkOrderStatus(enum.Enum):
     cancelled = "cancelled"
 
 
+class AdminUserRole(enum.Enum):
+    admin = "admin"
+    operator = "operator"
+    viewer = "viewer"
+
+
+class AdminUser(Base):
+    """
+    Usuarios administrativos de la plataforma.
+    Permite múltiples admins, operadores y viewers con login por email.
+    El admin hardcodeado (env vars) se mantiene como fallback.
+    """
+    __tablename__ = "admin_users"
+
+    id = Column(Integer, primary_key=True, index=True)
+    email = Column(String(200), unique=True, nullable=False, index=True)
+    password_hash = Column(String(255), nullable=False)
+    display_name = Column(String(200), nullable=False)
+    role = Column(Enum(AdminUserRole), default=AdminUserRole.admin, nullable=False)
+    is_active = Column(Boolean, default=True, nullable=False)
+    last_login_at = Column(DateTime, nullable=True)
+    login_count = Column(Integer, default=0)
+    notes = Column(Text, nullable=True)
+    created_at = Column(DateTime, default=datetime.utcnow)
+    updated_at = Column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
+    created_by = Column(String(150), nullable=True)
+
+
 class Customer(Base):
     __tablename__ = "customers"
     
@@ -395,6 +423,9 @@ class Partner(Base):
     margin_cap = Column(Float, default=30.0)             # Máx % margen sobre precio base (cláusula 8.7)
     status = Column(Enum(PartnerStatus), default=PartnerStatus.pending)
     portal_access = Column(Boolean, default=True)
+
+    # Código único de partner (visible en dashboard, clientes lo usan para solicitar cambio)
+    partner_code = Column(String(20), unique=True, index=True, nullable=True)
 
     # Stripe Connect Express
     stripe_account_id = Column(String(100))              # acct_XXXX — Stripe Connected Account ID

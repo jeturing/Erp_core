@@ -7,6 +7,7 @@
     Handshake, Plus, Search, Building2, Mail, Phone, Globe,
     CheckCircle, Clock, XCircle, Pencil, Trash2, UserCheck, DollarSign,
     KeyRound, Eye, EyeOff, Copy, ShieldCheck, Loader2, RefreshCw, Users,
+    Link2, Unlink, ArrowRightLeft, Hash,
   } from 'lucide-svelte';
   import { billingApi } from '../lib/api/billing';
   import type { PartnerPricingOverrideItem } from '../lib/types';
@@ -25,10 +26,21 @@
   let partnerClients: any[] = [];
   let clientsLoading = false;
 
+  // Vincular cliente state
+  let showLinkSearch = false;
+  let linkSearch = '';
+  let availableCustomers: any[] = [];
+  let linkSearchLoading = false;
+  let linkingCustomerId: number | null = null;
+  let unlinkingCustomerId: number | null = null;
+
   async function toggleClients(partnerId: number) {
     if (expandedClientsId === partnerId) { expandedClientsId = null; return; }
     expandedClientsId = partnerId;
     expandedPricingId = null; // cerrar pricing si estaba abierto
+    showLinkSearch = false;
+    linkSearch = '';
+    availableCustomers = [];
     clientsLoading = true;
     try {
       const res = await billingApi.getCustomers(partnerId);
@@ -38,6 +50,57 @@
       partnerClients = [];
     } finally {
       clientsLoading = false;
+    }
+  }
+
+  async function searchAvailableCustomers() {
+    if (!expandedClientsId) return;
+    linkSearchLoading = true;
+    try {
+      const res = await partnersApi.getAvailableCustomers(expandedClientsId, linkSearch || undefined);
+      availableCustomers = res.items ?? [];
+    } catch (e: any) {
+      toasts.error(e.message || 'Error buscando clientes');
+      availableCustomers = [];
+    } finally {
+      linkSearchLoading = false;
+    }
+  }
+
+  async function handleLinkCustomer(customerId: number) {
+    if (!expandedClientsId) return;
+    linkingCustomerId = customerId;
+    try {
+      const res = await partnersApi.linkCustomer(expandedClientsId, customerId);
+      toasts.success(res.message || 'Cliente vinculado');
+      // Refresh lists
+      showLinkSearch = false;
+      linkSearch = '';
+      availableCustomers = [];
+      const pid = expandedClientsId;
+      await toggleClients(pid);
+      expandedClientsId = pid;
+    } catch (e: any) {
+      toasts.error(e.message || 'Error vinculando cliente');
+    } finally {
+      linkingCustomerId = null;
+    }
+  }
+
+  async function handleUnlinkCustomer(customerId: number, companyName: string) {
+    if (!expandedClientsId) return;
+    if (!confirm(`¿Desvincular a "${companyName}" de este partner?\nSe enviará un email al cliente.`)) return;
+    unlinkingCustomerId = customerId;
+    try {
+      const res = await partnersApi.unlinkCustomer(expandedClientsId, customerId);
+      toasts.success(res.message || 'Cliente desvinculado');
+      const pid = expandedClientsId;
+      await toggleClients(pid);
+      expandedClientsId = pid;
+    } catch (e: any) {
+      toasts.error(e.message || 'Error desvinculando');
+    } finally {
+      unlinkingCustomerId = null;
     }
   }
 
@@ -434,6 +497,15 @@
               <td>
                 <div class="font-semibold text-text-light">{p.company_name}</div>
                 {#if p.legal_name}<div class="text-xs text-gray-500">{p.legal_name}</div>{/if}
+                {#if p.partner_code}
+                  <div class="flex items-center gap-1 mt-1">
+                    <Hash size={10} class="text-terracotta" />
+                    <span class="font-mono text-[11px] text-terracotta font-semibold">{p.partner_code}</span>
+                    {#if p.stripe_account_id}
+                      <span class="text-[10px] text-gray-600 ml-1">• {p.stripe_account_id}</span>
+                    {/if}
+                  </div>
+                {/if}
               </td>
               <td>
                 <div class="flex items-center gap-1 text-sm"><Mail size={12} /> {p.contact_email}</div>
@@ -603,9 +675,87 @@
               <tr>
                 <td colspan="8" class="bg-bg-page border-t border-border-dark p-4">
                   <div class="space-y-3">
-                    <h3 class="text-sm font-bold uppercase tracking-widest text-blue-400 flex items-center gap-2">
-                      <Users size={14} /> Clientes de {p.company_name}
-                    </h3>
+                    <div class="flex items-center justify-between">
+                      <h3 class="text-sm font-bold uppercase tracking-widest text-blue-400 flex items-center gap-2">
+                        <Users size={14} /> Clientes de {p.company_name}
+                      </h3>
+                      <button
+                        class="btn-accent btn-sm flex items-center gap-1"
+                        on:click={() => { showLinkSearch = !showLinkSearch; if (showLinkSearch) searchAvailableCustomers(); }}
+                      >
+                        <Link2 size={14} /> Vincular Cliente
+                      </button>
+                    </div>
+
+                    <!-- Buscador de clientes disponibles -->
+                    {#if showLinkSearch}
+                      <div class="card p-4 border border-blue-500/30 space-y-3">
+                        <div class="flex items-center gap-2">
+                          <h4 class="text-xs font-semibold uppercase tracking-widest text-blue-300">Buscar clientes sin partner</h4>
+                        </div>
+                        <div class="flex gap-2">
+                          <div class="relative flex-1">
+                            <Search size={14} class="absolute left-3 top-1/2 -translate-y-1/2 text-gray-500" />
+                            <input
+                              type="text"
+                              bind:value={linkSearch}
+                              placeholder="Nombre, email o subdominio..."
+                              class="input pl-9 w-full text-sm"
+                              on:keydown={(e) => { if (e.key === 'Enter') searchAvailableCustomers(); }}
+                            />
+                          </div>
+                          <button class="btn-secondary btn-sm" on:click={searchAvailableCustomers} disabled={linkSearchLoading}>
+                            {#if linkSearchLoading}<Loader2 size={14} class="animate-spin" />{:else}Buscar{/if}
+                          </button>
+                        </div>
+
+                        {#if availableCustomers.length > 0}
+                          <div class="max-h-48 overflow-y-auto border border-border-dark rounded">
+                            <table class="table w-full text-sm">
+                              <thead>
+                                <tr>
+                                  <th>Empresa</th>
+                                  <th>Email</th>
+                                  <th>Plan</th>
+                                  <th>Usuarios</th>
+                                  <th></th>
+                                </tr>
+                              </thead>
+                              <tbody>
+                                {#each availableCustomers as ac}
+                                  <tr class="hover:bg-bg-card/50">
+                                    <td class="font-medium text-text-light">{ac.company_name}</td>
+                                    <td class="text-xs text-gray-400">{ac.email}</td>
+                                    <td>
+                                      <span class="badge-{ac.plan_name === 'pro' ? 'pro' : ac.plan_name === 'enterprise' ? 'enterprise' : 'basic'} text-[10px]">
+                                        {ac.plan_name || 'N/A'}
+                                      </span>
+                                    </td>
+                                    <td class="font-mono text-center">{ac.user_count}</td>
+                                    <td>
+                                      <button
+                                        class="btn-accent btn-sm text-[11px] flex items-center gap-1"
+                                        on:click={() => handleLinkCustomer(ac.id)}
+                                        disabled={linkingCustomerId === ac.id}
+                                      >
+                                        {#if linkingCustomerId === ac.id}<Loader2 size={12} class="animate-spin" />{:else}<Link2 size={12} />{/if}
+                                        Vincular
+                                      </button>
+                                    </td>
+                                  </tr>
+                                {/each}
+                              </tbody>
+                            </table>
+                          </div>
+                        {:else if !linkSearchLoading}
+                          <div class="text-center py-3 text-gray-500 text-sm">
+                            No hay clientes disponibles{linkSearch ? ` para "${linkSearch}"` : ''}
+                          </div>
+                        {/if}
+                      </div>
+                    {/if}
+
+                    <!-- Lista de clientes actuales del partner -->
                     {#if clientsLoading}
                       <div class="text-center py-4 text-gray-500 text-sm">Cargando clientes...</div>
                     {:else if partnerClients.length === 0}
@@ -620,6 +770,7 @@
                             <th>Plan</th>
                             <th>Usuarios</th>
                             <th>MRR</th>
+                            <th></th>
                           </tr>
                         </thead>
                         <tbody>
@@ -637,6 +788,17 @@
                               </td>
                               <td class="font-mono text-center">{c.user_count}</td>
                               <td class="font-mono text-emerald-400">${(c.subscription?.calculated_amount ?? 0).toFixed(2)}</td>
+                              <td>
+                                <button
+                                  class="btn-sm btn-danger flex items-center gap-1 text-[11px]"
+                                  title="Desvincular cliente"
+                                  on:click={() => handleUnlinkCustomer(c.id, c.company_name)}
+                                  disabled={unlinkingCustomerId === c.id}
+                                >
+                                  {#if unlinkingCustomerId === c.id}<Loader2 size={12} class="animate-spin" />{:else}<Unlink size={12} />{/if}
+                                  Desvincular
+                                </button>
+                              </td>
                             </tr>
                           {/each}
                         </tbody>

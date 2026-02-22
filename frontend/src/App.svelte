@@ -35,6 +35,7 @@
   import OnboardingConfig from './pages/OnboardingConfig.svelte';
   import Communications from './pages/Communications.svelte';
   import Reports from './pages/Reports.svelte';
+  import AdminUsers from './pages/AdminUsers.svelte';
   import { Spinner } from './lib/components';
   import Toast from './lib/components/Toast.svelte';
   import OfflineBanner from './lib/components/OfflineBanner.svelte';
@@ -72,6 +73,7 @@
     | 'onboarding-config'
     | 'communications'
     | 'reports'
+    | 'admin-users'
     | 'signup'
     | 'notfound';
 
@@ -174,6 +176,7 @@
       case 'onboarding-config':
       case 'communications':
       case 'reports':
+      case 'admin-users':
         currentPage = route as AppPage;
         break;
       default:
@@ -282,6 +285,8 @@
       <Communications />
     {:else if currentPage === 'reports'}
       <Reports />
+    {:else if currentPage === 'admin-users'}
+      <AdminUsers />
     {:else}
       <div class="p-6">
         <h1 class="page-title">404 - Página no encontrada</h1>

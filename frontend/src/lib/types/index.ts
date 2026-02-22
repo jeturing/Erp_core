@@ -7,9 +7,11 @@ export interface User {
   user_id?: number | null;
   tenant_id?: number | null;
   partner_id?: number | null;
+  admin_user_id?: number | null;
   username: string;
   email: string;
   role: UserRole;
+  display_name?: string;
   is_active?: boolean;
   created_at?: string;
   company_name?: string;
@@ -639,6 +641,8 @@ export interface PartnerItem {
   margin_cap: number;
   status: PartnerStatusType;
   portal_access: boolean;
+  partner_code: string | null;
+  stripe_account_id: string | null;
   contract_signed_at: string | null;
   contract_reference: string | null;
   notes: string | null;
