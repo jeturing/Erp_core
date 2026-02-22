@@ -1,8 +1,10 @@
 <script lang="ts">
-  import { createEventDispatcher } from 'svelte';
-  import { Lock, User, CreditCard, CheckCircle, ArrowRight, ArrowLeft, ExternalLink, Loader2, Eye } from 'lucide-svelte';
+  import { createEventDispatcher, onMount } from 'svelte';
+  import { Lock, User, FileSignature, CreditCard, CheckCircle, ArrowRight, ArrowLeft, ExternalLink, Loader2, Eye } from 'lucide-svelte';
   import partnerPortalApi from '../api/partnerPortal';
-  import type { PartnerOnboardingStatus, PartnerProfile } from '../types';
+  import { agreementsApi } from '../api';
+  import type { PartnerOnboardingStatus, PartnerProfile, AgreementTemplate } from '../types';
+  import SignaturePanel from './SignaturePanel.svelte';
 
   export let onboardingStatus: PartnerOnboardingStatus;
   export let profile: PartnerProfile | null = null;
@@ -41,15 +43,22 @@
       ? { company_name: profile.company_name, contact_name: profile.contact_name || '', country: profile.country || '' }
       : null;
 
-  // Step 3: Stripe
+  // Step 3: Agreements / NDA
+  let requiredAgreements: AgreementTemplate[] = [];
+  let signedIds: Set<number> = new Set();
+  let signingId: number | null = null;
+  $: allSigned = requiredAgreements.length > 0 && requiredAgreements.every(a => signedIds.has(a.id));
+
+  // Step 4: Stripe
   let stripeUrl = '';
   let verifying = false;
 
   const steps = [
-    { step: 1, icon: Lock,        label: 'Credenciales' },
-    { step: 2, icon: User,        label: 'Perfil'        },
-    { step: 3, icon: CreditCard,  label: 'Stripe KYC'   },
-    { step: 4, icon: CheckCircle, label: 'Completo'      },
+    { step: 1, icon: Lock,          label: 'Credenciales' },
+    { step: 2, icon: User,          label: 'Perfil'        },
+    { step: 3, icon: FileSignature, label: 'Acuerdos'      },
+    { step: 4, icon: CreditCard,    label: 'Stripe KYC'   },
+    { step: 5, icon: CheckCircle,   label: 'Completo'      },
   ];
 
   // ¿Está el paso visible en modo lectura (completado, navegando hacia atrás)?
@@ -77,6 +86,21 @@
     resetMessages();
     viewStep = currentStep;
   }
+
+  // Load required agreements when we reach step 3
+  async function loadAgreements() {
+    try {
+      const res = await agreementsApi.getRequired('partner');
+      requiredAgreements = res.items || [];
+    } catch (err) {
+      // silently fail - agreements are optional during initial rollout
+      requiredAgreements = [];
+    }
+  }
+
+  onMount(() => {
+    if (currentStep >= 3) loadAgreements();
+  });
 
   // ─── Paso 1: establecer contraseña ───────────────────────────────────────
 
@@ -122,6 +146,8 @@
       onboardingStatus.steps[1].completed = true;
       onboardingStatus.steps[2].completed = result.onboarding_step >= 3;
       savedProfile = { company_name: companyName, contact_name: contactName, country: country };
+      // Load required agreements for next step
+      await loadAgreements();
     } catch (err) {
       error = err instanceof Error ? err.message : 'Error al actualizar el perfil';
     } finally {
@@ -129,7 +155,49 @@
     }
   }
 
-  // ─── Paso 3: Stripe ───────────────────────────────────────────────────────
+  // ─── Paso 3: Agreements / NDA ────────────────────────────────────────────
+
+  async function handleSignAgreement(event: CustomEvent<{ signer_name: string; signature_data: string }>, templateId: number) {
+    resetMessages();
+    signingId = templateId;
+    try {
+      await agreementsApi.sign({
+        template_id: templateId,
+        signer_name: event.detail.signer_name,
+        signature_data: event.detail.signature_data,
+      });
+      signedIds = new Set([...signedIds, templateId]);
+      success = 'Acuerdo firmado correctamente';
+
+      // If all agreements signed, auto-advance
+      if (requiredAgreements.every(a => signedIds.has(a.id) || a.id === templateId)) {
+        // Advance onboarding step on backend
+        try {
+          await partnerPortalApi.updateProfile({});  // trigger step advance
+        } catch { /* ignore */ }
+        onboardingStatus.current_step = Math.max(onboardingStatus.current_step, 4);
+        if (onboardingStatus.steps[2]) onboardingStatus.steps[2].completed = true;
+      }
+    } catch (err) {
+      error = err instanceof Error ? err.message : 'Error al firmar el acuerdo';
+    } finally {
+      signingId = null;
+    }
+  }
+
+  async function handleSkipAgreements() {
+    resetMessages();
+    loading = true;
+    try {
+      onboardingStatus.current_step = 4;
+      if (onboardingStatus.steps[2]) onboardingStatus.steps[2].completed = true;
+      success = 'Paso omitido. Podrás firmar los acuerdos después.';
+    } finally {
+      loading = false;
+    }
+  }
+
+  // ─── Paso 4: Stripe ───────────────────────────────────────────────────────
 
   async function handleStartStripe() {
     resetMessages();
@@ -157,9 +225,9 @@
       const result = await partnerPortalApi.verifyStripe();
       if (result.onboarding_complete) {
         success = '¡KYC completado! Tu cuenta Stripe está activa.';
-        onboardingStatus.current_step = 4;
-        onboardingStatus.steps[2].completed = true;
+        onboardingStatus.current_step = 5;
         onboardingStatus.steps[3].completed = true;
+        onboardingStatus.steps[4].completed = true;
         onboardingStatus.stripe_onboarding_complete = true;
         onboardingStatus.stripe_charges_enabled = result.charges_enabled;
       } else {
@@ -177,8 +245,8 @@
     loading = true;
     try {
       await partnerPortalApi.skipStripe();
-      onboardingStatus.current_step = 4;
-      onboardingStatus.steps[3].completed = true;
+      onboardingStatus.current_step = 5;
+      onboardingStatus.steps[4].completed = true;
       success = 'Onboarding completado. Podrás configurar Stripe después.';
     } catch (err) {
       error = err instanceof Error ? err.message : 'Error';
@@ -417,10 +485,84 @@
           </div>
         {/if}
 
-      <!-- ── PASO 3 ── -->
+      <!-- ── PASO 3: Acuerdos / NDA ── -->
       {:else if viewStep === 3}
         {#if isReadOnly}
-          <!-- Paso 3 completado: vista read-only -->
+          <div class="flex items-center gap-3 mb-4">
+            <div class="w-8 h-8 rounded-full bg-[#4A7C59] flex items-center justify-center flex-shrink-0">
+              <CheckCircle class="w-4 h-4 text-white" />
+            </div>
+            <div>
+              <h2 class="text-lg font-bold text-[#1a1a1a]">Acuerdos firmados</h2>
+              <p class="text-xs text-[#4A7C59] font-semibold">✓ Paso completado</p>
+            </div>
+          </div>
+          <div class="rounded-lg border border-gray-100 bg-gray-50 p-4">
+            <p class="text-sm text-gray-600">
+              ✅ Todos los acuerdos requeridos han sido firmados digitalmente.
+            </p>
+          </div>
+        {:else}
+          <h2 class="text-lg font-bold text-[#1a1a1a] mb-1">Acuerdos y contratos</h2>
+          <p class="text-sm text-gray-500 mb-6">
+            Revisa y firma los acuerdos requeridos para activar tu cuenta de partner
+          </p>
+
+          {#if requiredAgreements.length === 0}
+            <div class="rounded-lg border border-gray-200 bg-gray-50 p-6 text-center">
+              <p class="text-sm text-gray-500">No hay acuerdos pendientes de firma.</p>
+              <button
+                class="mt-4 bg-[#C05A3C] text-white font-semibold px-6 py-2 rounded-lg hover:bg-[#a94e33] transition-colors text-sm"
+                on:click={handleSkipAgreements}
+              >
+                Continuar
+              </button>
+            </div>
+          {:else}
+            <div class="space-y-6">
+              {#each requiredAgreements as agreement (agreement.id)}
+                <div class="border border-gray-200 rounded-lg p-5">
+                  <SignaturePanel
+                    documentTitle={agreement.title}
+                    htmlPreview={agreement.html_content}
+                    loading={signingId === agreement.id}
+                    signed={signedIds.has(agreement.id)}
+                    on:sign={(e) => handleSignAgreement(e, agreement.id)}
+                  />
+                </div>
+              {/each}
+            </div>
+
+            {#if allSigned}
+              <button
+                class="w-full mt-4 bg-[#C05A3C] text-white font-semibold py-2.5 rounded-lg hover:bg-[#a94e33] transition-colors flex items-center justify-center gap-2 text-sm"
+                on:click={() => { onboardingStatus.current_step = 4; }}
+              >
+                Continuar <ArrowRight class="w-4 h-4" />
+              </button>
+            {/if}
+
+            <div class="flex gap-3 mt-4">
+              <button
+                class="flex items-center gap-1.5 text-sm text-gray-500 hover:text-gray-700 transition-colors px-4 py-2 border border-gray-200 rounded-lg"
+                on:click={goBack}
+              >
+                <ArrowLeft class="w-4 h-4" /> Atrás
+              </button>
+              <button
+                class="flex-1 text-gray-500 text-sm hover:text-gray-700 transition-colors py-2"
+                on:click={handleSkipAgreements}
+              >
+                Saltar (firmar después)
+              </button>
+            </div>
+          {/if}
+        {/if}
+
+      <!-- ── PASO 4 ── -->
+      {:else if viewStep === 4}
+        {#if isReadOnly}
+          <!-- Paso 4 completado: vista read-only -->
           <div class="flex items-center gap-3 mb-4">
             <div class="w-8 h-8 rounded-full bg-[#4A7C59] flex items-center justify-center flex-shrink-0">
               <CheckCircle class="w-4 h-4 text-white" />
@@ -443,7 +585,7 @@
             {/if}
           </div>
         {:else}
-          <!-- Paso 3 activo: formulario -->
+          <!-- Paso 4 activo: formulario -->
           <h2 class="text-lg font-bold text-[#1a1a1a] mb-1">Conecta tu cuenta Stripe</h2>
           <p class="text-sm text-gray-500 mb-6">
             Para recibir pagos y comisiones, necesitas completar la verificación KYC de Stripe Connect.
@@ -504,7 +646,7 @@
           </div>
         {/if}
 
-      <!-- ── PASO 4: Completo ── -->
+      <!-- ── PASO 5: Completo ── -->
       {:else}
         <div class="text-center py-6">
           <div class="w-16 h-16 rounded-full bg-[#4A7C59] flex items-center justify-center mx-auto mb-4">
@@ -532,7 +674,7 @@
     </div>
 
     <!-- Botones de navegación inferior (cuando está en modo lectura y no es el paso 4) -->
-    {#if isReadOnly && viewStep < 4}
+    {#if isReadOnly && viewStep < 5}
       <div class="flex justify-between mt-4">
         <button
           class="flex items-center gap-1.5 text-sm text-gray-500 hover:text-gray-700 transition-colors"

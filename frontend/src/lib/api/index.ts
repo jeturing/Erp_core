@@ -19,3 +19,4 @@ export { auditApi } from './audit';
 export { brandingApi } from './branding';
 export { communicationsApi } from './communications';
 export type { EmailLog, EmailLogsResponse, EmailStats } from './communications';
+export { agreementsApi } from './agreements';

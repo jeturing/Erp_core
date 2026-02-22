@@ -13,6 +13,7 @@ from ..security.tokens import TokenManager, RefreshTokenManager
 from ..security.middleware import RateLimiter
 from ..security.audit import AuditLogger, AuditEvent
 from ..security.totp import TOTPManager
+from ..security.email_verify import create_verification_token, verify_token, send_verification_email
 
 from ..config import ADMIN_USERNAME, ADMIN_PASSWORD
 
@@ -31,6 +32,7 @@ class LoginRequest(BaseModel):
     email: str
     password: str
     totp_code: Optional[str] = None
+    email_verify_code: Optional[str] = None
 
 
 class TOTPSetupRequest(BaseModel):
@@ -55,6 +57,7 @@ class LoginResponse(BaseModel):
     message: str
     role: str
     requires_totp: bool = False
+    requires_email_verify: bool = False
     redirect_url: Optional[str] = None
 
 
@@ -289,6 +292,47 @@ async def secure_login(request: Request, login_data: LoginRequest):
                 request=request
             )
         
+        # ── Email Verification (Steam-style) ──
+        # Required for partner/tenant; optional for admin (per admin_users.require_email_verify)
+        needs_email_verify = False
+        if role in ("partner", "tenant"):
+            needs_email_verify = True
+        elif role in ("admin", "operator", "viewer") and user_id:
+            admin_user_obj = db.query(AdminUser).filter(AdminUser.id == user_id).first()
+            if admin_user_obj and admin_user_obj.require_email_verify:
+                needs_email_verify = True
+
+        if needs_email_verify:
+            if not login_data.email_verify_code:
+                # Generate and send token
+                client_ip = get_client_ip(request)
+                token = create_verification_token(
+                    email=username,
+                    user_type=role,
+                    user_id=user_id,
+                    ip_address=client_ip,
+                    user_agent=request.headers.get("User-Agent", "")[:500],
+                )
+                send_verification_email(username, token, role)
+
+                return LoginResponse(
+                    message="Código de verificación enviado a tu email",
+                    role=role,
+                    requires_email_verify=True,
+                )
+            else:
+                # Verify the code
+                if not verify_token(username, login_data.email_verify_code):
+                    AuditLogger.log_login_failed(
+                        username=username,
+                        reason="Invalid email verification code",
+                        request=request,
+                    )
+                    raise HTTPException(
+                        status_code=status.HTTP_401_UNAUTHORIZED,
+                        detail="Código de verificación inválido o expirado",
+                    )
+
         # Login exitoso - resetear rate limiter
         login_rate_limiter.reset(request)
         
@@ -320,6 +364,7 @@ async def secure_login(request: Request, login_data: LoginRequest):
             "message": "Login exitoso",
             "role": role,
             "requires_totp": False,
+            "requires_email_verify": False,
             "redirect_url": redirect_url,
             "user_id": user_id
         })

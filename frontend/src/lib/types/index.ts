@@ -140,14 +140,58 @@ export interface LoginRequest {
   username: string;
   password: string;
   totp_code?: string;
+  email_verify_code?: string;
 }
 
 export interface LoginResponse {
   message: string;
   role: UserRole;
   requires_totp: boolean;
+  requires_email_verify: boolean;
   redirect_url?: string | null;
   user_id?: number | null;
+}
+
+// ── Agreement Types ──
+
+export type AgreementType = 'nda' | 'service_agreement' | 'terms_of_service' | 'privacy_policy';
+export type AgreementTarget = 'partner' | 'customer' | 'both';
+
+export interface AgreementTemplate {
+  id: number;
+  agreement_type: AgreementType;
+  target: AgreementTarget;
+  title: string;
+  version: string;
+  html_content: string;
+  is_active: boolean;
+  is_required: boolean;
+  created_at: string | null;
+  updated_at: string | null;
+}
+
+export interface SignedAgreement {
+  id: number;
+  template_id: number;
+  template_title?: string;
+  template_type?: AgreementType;
+  partner_id: number | null;
+  customer_id: number | null;
+  signer_name: string;
+  signer_email?: string;
+  document_hash: string;
+  pdf_path: string | null;
+  signed_at: string;
+}
+
+export interface AgreementTemplatesResponse {
+  items: AgreementTemplate[];
+  total: number;
+}
+
+export interface SignedAgreementsResponse {
+  items: SignedAgreement[];
+  total: number;
 }
 
 export interface ApiResponse<T> {

@@ -3,7 +3,6 @@ Main application entry point
 Onboarding System API - Modular architecture with production security
 """
 from fastapi import FastAPI
-from fastapi.middleware.cors import CORSMiddleware
 from fastapi.staticfiles import StaticFiles
 from starlette.middleware.base import BaseHTTPMiddleware
 from starlette.requests import Request
@@ -25,9 +24,11 @@ from .routes import customer_onboarding
 from .routes import onboarding_config
 from .routes import communications
 from .routes import admin_users
+from .routes import agreements
 
 # Import security middleware
 from .security.middleware import SecurityMiddleware, WAFMiddleware
+from .security.cors_dynamic import DynamicCORSMiddleware, refresh_cors_cache
 
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
@@ -120,38 +121,10 @@ class DocsBasicAuthMiddleware(BaseHTTPMiddleware):
         )
 
 
-# CORS configuration
-# Permite origenes administrables por env y soporte multi-dominio.
-default_origins = ",".join([
-    "http://localhost:4443",
-    "http://localhost:5173",
-    "https://sajet.us",
-    "https://techeels.sajet.us",
-    "https://tcs.sajet.us",
-    "https://boocking.sajet.us",
-    "https://cliente1.sajet.us",
-    "https://demo_cliente.sajet.us",
-    "https://techeels.io",
-    "https://www.techeels.io",
-    "https://evolucionamujer.com",
-    "https://www.evolucionamujer.com",
-    "https://impulse-max.com",
-    "https://www.impulse-max.com",
-])
-
-ALLOWED_ORIGINS = [o.strip() for o in os.getenv("ALLOWED_ORIGINS", default_origins).split(",") if o.strip()]
-ALLOWED_ORIGIN_REGEX = os.getenv(
-    "ALLOWED_ORIGIN_REGEX",
-    r"https://([a-z0-9-]+\.)?sajet\.us$|https://(www\.)?(techeels\.io|evolucionamujer\.com|impulse-max\.com)$|https://[a-z0-9-]+\.use\.devtunnels\.ms$"
-)
-app.add_middleware(
-    CORSMiddleware,
-    allow_origins=ALLOWED_ORIGINS,
-    allow_origin_regex=ALLOWED_ORIGIN_REGEX,
-    allow_credentials=True,
-    allow_methods=["GET", "POST", "PUT", "DELETE", "OPTIONS"],
-    allow_headers=["*"],
-)
+# CORS configuration — Dynamic from DB (custom_domains + tenant_deployments)
+# Origins are cached in-memory with 60s TTL. Zero latency on requests.
+# Refresh cache manually: POST /api/admin/cors/refresh
+app.add_middleware(DynamicCORSMiddleware)
 
 # Security Middleware (HTTPS enforcement, security headers)
 app.add_middleware(SecurityMiddleware, force_https=FORCE_HTTPS)
@@ -209,6 +182,15 @@ app.include_router(customer_onboarding.router)  # Customer onboarding + RD e-CF 
 app.include_router(onboarding_config.router)    # Admin-configurable onboarding config
 app.include_router(communications.router)        # Historial de emails transaccionales
 app.include_router(admin_users.router)           # CRUD usuarios administrativos
+app.include_router(agreements.router)            # NDA/TOS templates + signing flow
+
+
+# ── CORS Cache Refresh endpoint ──
+@app.post("/api/admin/cors/refresh", tags=["Admin"])
+async def cors_refresh():
+    """Force refresh CORS allowed origins from DB."""
+    refresh_cors_cache()
+    return {"message": "CORS cache refreshed"}
 
 
 # ── Startup log ──

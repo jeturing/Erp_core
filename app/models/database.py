@@ -211,12 +211,110 @@ class AdminUser(Base):
     display_name = Column(String(200), nullable=False)
     role = Column(Enum(AdminUserRole), default=AdminUserRole.admin, nullable=False)
     is_active = Column(Boolean, default=True, nullable=False)
+    require_email_verify = Column(Boolean, default=False, nullable=False)
     last_login_at = Column(DateTime, nullable=True)
     login_count = Column(Integer, default=0)
     notes = Column(Text, nullable=True)
     created_at = Column(DateTime, default=datetime.utcnow)
     updated_at = Column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
     created_by = Column(String(150), nullable=True)
+
+
+# ═══════════════════════════════════════════════════════
+# EMAIL VERIFICATION TOKENS — Steam-style login verify
+# ═══════════════════════════════════════════════════════
+
+class EmailVerificationToken(Base):
+    """
+    Token alfanumérico de 6 caracteres enviado por email al hacer login.
+    Estilo Steam Guard: tras verificar contraseña, se envía código al email.
+    Configurable por rol: obligatorio partner/tenant, opcional admin.
+    """
+    __tablename__ = "email_verification_tokens"
+
+    id = Column(Integer, primary_key=True, index=True)
+    email = Column(String(255), nullable=False, index=True)
+    token = Column(String(10), nullable=False)
+    token_hash = Column(String(64), nullable=False, index=True)
+    user_type = Column(String(30), nullable=False, default="tenant")
+    user_id = Column(Integer, nullable=True)
+    ip_address = Column(String(45), nullable=True)
+    user_agent = Column(String(500), nullable=True)
+    is_used = Column(Boolean, default=False, nullable=False)
+    used_at = Column(DateTime, nullable=True)
+    expires_at = Column(DateTime, nullable=False)
+    created_at = Column(DateTime, default=datetime.utcnow)
+
+
+# ═══════════════════════════════════════════════════════
+# AGREEMENT TEMPLATES + SIGNED AGREEMENTS (NDA, TOS)
+# ═══════════════════════════════════════════════════════
+
+class AgreementType(enum.Enum):
+    nda = "nda"
+    service_agreement = "service_agreement"
+    terms_of_service = "terms_of_service"
+    privacy_policy = "privacy_policy"
+
+
+class AgreementTarget(enum.Enum):
+    partner = "partner"
+    customer = "customer"
+    both = "both"
+
+
+class AgreementTemplate(Base):
+    """
+    Template editable de NDA/TOS/Acuerdos.
+    HTML con variables: {{signer_name}}, {{signer_company}}, {{date}}, etc.
+    El admin puede editar desde el panel. Se renderiza a PDF al firmar.
+    """
+    __tablename__ = "agreement_templates"
+
+    id = Column(Integer, primary_key=True, index=True)
+    agreement_type = Column(Enum(AgreementType), default=AgreementType.nda, nullable=False)
+    target = Column(Enum(AgreementTarget), default=AgreementTarget.partner, nullable=False)
+    title = Column(String(300), nullable=False)
+    version = Column(String(20), nullable=False, default="1.0")
+    html_content = Column(Text, nullable=False)
+    is_active = Column(Boolean, default=True, nullable=False)
+    is_required = Column(Boolean, default=True, nullable=False)
+    sort_order = Column(Integer, default=0)
+    created_by = Column(String(150), nullable=True)
+    updated_by = Column(String(150), nullable=True)
+    created_at = Column(DateTime, default=datetime.utcnow)
+    updated_at = Column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
+
+    signed_agreements = relationship("SignedAgreement", back_populates="template")
+
+
+class SignedAgreement(Base):
+    """
+    Registro de firma digital — hash SHA256 del documento + firma + timestamp + IP.
+    Almacena la firma como texto (typed signature, estilo Stripe).
+    """
+    __tablename__ = "signed_agreements"
+
+    id = Column(Integer, primary_key=True, index=True)
+    template_id = Column(Integer, ForeignKey("agreement_templates.id"), nullable=False)
+    partner_id = Column(Integer, ForeignKey("partners.id", ondelete="SET NULL"), nullable=True)
+    customer_id = Column(Integer, ForeignKey("customers.id", ondelete="SET NULL"), nullable=True)
+    signer_name = Column(String(200), nullable=False)
+    signer_email = Column(String(255), nullable=False)
+    signer_title = Column(String(150), nullable=True)
+    signer_company = Column(String(200), nullable=True)
+    signature_data = Column(Text, nullable=False)          # Typed name as signature
+    signature_type = Column(String(20), default="typed", nullable=False)
+    ip_address = Column(String(45), nullable=True)
+    user_agent = Column(String(500), nullable=True)
+    document_hash = Column(String(64), nullable=False)     # SHA256 of rendered HTML
+    pdf_path = Column(String(500), nullable=True)
+    signed_at = Column(DateTime, default=datetime.utcnow, nullable=False)
+    created_at = Column(DateTime, default=datetime.utcnow)
+
+    template = relationship("AgreementTemplate", back_populates="signed_agreements")
+    partner = relationship("Partner", foreign_keys=[partner_id])
+    customer = relationship("Customer", foreign_keys=[customer_id])
 
 
 class Customer(Base):

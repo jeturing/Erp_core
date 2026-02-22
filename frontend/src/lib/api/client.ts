@@ -140,7 +140,7 @@ class ApiClient {
     return this.request<T>(endpoint, { method: 'DELETE' });
   }
 
-  private async authenticate(endpoint: string, payload: { email: string; password: string; totp_code?: string }): Promise<LoginResponse> {
+  private async authenticate(endpoint: string, payload: { email: string; password: string; totp_code?: string; email_verify_code?: string }): Promise<LoginResponse> {
     const response = await fetch(`${this.baseUrl}${endpoint}`, {
       method: 'POST',
       headers: {
@@ -159,12 +159,15 @@ class ApiClient {
   }
 
   async login(credentials: LoginRequest): Promise<LoginResponse> {
-    const payload: { email: string; password: string; totp_code?: string } = {
+    const payload: { email: string; password: string; totp_code?: string; email_verify_code?: string } = {
       email: credentials.username.trim(),
       password: credentials.password,
     };
     if (credentials.totp_code?.trim()) {
       payload.totp_code = credentials.totp_code.trim();
+    }
+    if (credentials.email_verify_code?.trim()) {
+      payload.email_verify_code = credentials.email_verify_code.trim();
     }
     return this.authenticate('/api/auth/login', payload);
   }

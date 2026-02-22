@@ -2,14 +2,18 @@
   import { onMount } from 'svelte';
   import { customerOnboardingApi } from '../lib/api/customerOnboarding';
   import { onboardingConfigApi } from '../lib/api/onboardingConfig';
+  import { agreementsApi } from '../lib/api';
   import type { OnboardingStatus } from '../lib/api/customerOnboarding';
   import type { OnboardingConfig, OnboardingStep } from '../lib/api/onboardingConfig';
+  import type { Plan, AgreementTemplate } from '../lib/types';
   import { toasts } from '../lib/stores';
+  import { api } from '../lib/api';
   import {
     CheckCircle, User, Building2, Globe, Phone, Mail, Lock,
     FileText, ArrowRight, ArrowLeft, Loader2, AlertTriangle,
     Shield, CreditCard, PartyPopper, ChevronRight, Eye, EyeOff,
   } from 'lucide-svelte';
+  import SignaturePanel from '../lib/components/SignaturePanel.svelte';
 
   let status: OnboardingStatus | null = null;
   let onboardingConfig: OnboardingConfig | null = null;
@@ -43,6 +47,14 @@
     ecf_ncf_series: 'B01',
     ecf_environment: 'test_ecf',
   };
+
+  // Step 3 — Plan pricing + TOS
+  let plans: Plan[] = [];
+  let selectedPlan = '';
+  let plansLoading = false;
+  let customerTOS: AgreementTemplate[] = [];
+  let tosSignedIds: Set<number> = new Set();
+  let tosSigningId: number | null = null;
 
   const countries = [
     { code: 'DO', name: 'República Dominicana 🇩🇴' },
@@ -253,6 +265,44 @@
       ? currentStep
       : currentStep >= 3 ? currentStep - 1 : currentStep;
 
+  // Load available plans
+  async function loadPlans() {
+    plansLoading = true;
+    try {
+      const res = await api.get<{ items: Plan[]; total: number }>('/api/admin/plans?active_only=true');
+      plans = (res.items || []).sort((a, b) => a.sort_order - b.sort_order);
+      if (status?.plan) selectedPlan = status.plan;
+      else if (plans.length > 0) selectedPlan = plans[0].name;
+    } catch { /* plans not available, show fallback */ }
+    plansLoading = false;
+  }
+
+  // Load customer TOS
+  async function loadCustomerTOS() {
+    try {
+      const res = await agreementsApi.getRequired('customer');
+      customerTOS = res.items || [];
+    } catch { customerTOS = []; }
+  }
+
+  // Sign TOS
+  async function handleSignTOS(event: CustomEvent<{ signer_name: string; signature_data: string }>, templateId: number) {
+    tosSigningId = templateId;
+    try {
+      await agreementsApi.sign({
+        template_id: templateId,
+        signer_name: event.detail.signer_name,
+        signature_data: event.detail.signature_data,
+      });
+      tosSignedIds = new Set([...tosSignedIds, templateId]);
+      toasts.success('Acuerdo firmado');
+    } catch (e: any) {
+      toasts.error(e.message || 'Error al firmar');
+    } finally {
+      tosSigningId = null;
+    }
+  }
+
   function formatRNC(value: string): string {
     const clean = value.replace(/[^0-9]/g, '');
     if (clean.length === 9) {
@@ -264,7 +314,11 @@
     return clean;
   }
 
-  onMount(loadStatus);
+  onMount(() => {
+    loadStatus();
+    loadPlans();
+    loadCustomerTOS();
+  });
 </script>
 
 <div class="min-h-screen bg-bg-page p-4 sm:p-8">
@@ -528,7 +582,7 @@
         </div>
       {/if}
 
-      <!-- ═══ STEP 3: PAYMENT / CONFIRMATION ═══ -->
+      <!-- ═══ STEP 3: PLAN SELECTION + TOS + CONFIRMATION ═══ -->
       {#if currentStep === 3}
         <div class="card p-6 sm:p-8 border border-border-dark space-y-6">
           <div class="flex items-center gap-3">
@@ -536,10 +590,79 @@
               <CreditCard size={20} class="text-emerald-400" />
             </div>
             <div>
-              <h2 class="text-lg font-bold text-text-light">Confirmación</h2>
-              <p class="text-xs text-gray-500">Revise sus datos y complete el proceso</p>
+              <h2 class="text-lg font-bold text-text-light">Plan y Confirmación</h2>
+              <p class="text-xs text-gray-500">Seleccione su plan y revise sus datos</p>
             </div>
           </div>
+
+          <!-- Plan pricing cards -->
+          {#if plans.length > 0}
+            <div>
+              <h3 class="text-xs font-semibold uppercase tracking-widest text-gray-500 mb-3">Seleccione su plan</h3>
+              <div class="grid grid-cols-1 sm:grid-cols-3 gap-4">
+                {#each plans as plan}
+                  <button
+                    class="relative rounded-xl border-2 p-5 text-left transition-all
+                      {selectedPlan === plan.name ? 'border-terracotta bg-terracotta/5 shadow-lg' : 'border-border-dark hover:border-gray-500 bg-bg-page'}"
+                    on:click={() => selectedPlan = plan.name}
+                  >
+                    {#if selectedPlan === plan.name}
+                      <div class="absolute top-2 right-2 w-5 h-5 rounded-full bg-terracotta flex items-center justify-center">
+                        <CheckCircle size={12} class="text-white" />
+                      </div>
+                    {/if}
+                    <h4 class="font-bold text-text-light text-base mb-1">{plan.display_name}</h4>
+                    <div class="flex items-baseline gap-1 mb-3">
+                      <span class="text-2xl font-bold text-terracotta">${plan.base_price}</span>
+                      <span class="text-xs text-gray-500">/{plan.currency === 'usd' ? 'mo' : plan.currency}</span>
+                    </div>
+                    <ul class="space-y-1.5 text-xs text-gray-400">
+                      <li class="flex items-center gap-1.5">
+                        <CheckCircle size={10} class="text-emerald-400 flex-shrink-0" />
+                        {plan.included_users} usuario{plan.included_users > 1 ? 's' : ''} incluido{plan.included_users > 1 ? 's' : ''}
+                      </li>
+                      {#if plan.price_per_user > 0}
+                        <li class="flex items-center gap-1.5">
+                          <CheckCircle size={10} class="text-emerald-400 flex-shrink-0" />
+                          +${plan.price_per_user}/usuario extra
+                        </li>
+                      {/if}
+                      <li class="flex items-center gap-1.5">
+                        <CheckCircle size={10} class="text-emerald-400 flex-shrink-0" />
+                        {plan.max_users === 999 ? 'Usuarios ilimitados' : `Hasta ${plan.max_users} usuarios`}
+                      </li>
+                      {#each (plan.features || []).slice(0, 3) as feat}
+                        <li class="flex items-center gap-1.5">
+                          <CheckCircle size={10} class="text-emerald-400 flex-shrink-0" />
+                          {feat}
+                        </li>
+                      {/each}
+                    </ul>
+                  </button>
+                {/each}
+              </div>
+            </div>
+          {/if}
+
+          <!-- Customer TOS -->
+          {#if customerTOS.length > 0}
+            <div>
+              <h3 class="text-xs font-semibold uppercase tracking-widest text-gray-500 mb-3">Términos y Condiciones</h3>
+              <div class="space-y-4">
+                {#each customerTOS as tos (tos.id)}
+                  <div class="border border-border-dark rounded-lg p-4">
+                    <SignaturePanel
+                      documentTitle={tos.title}
+                      htmlPreview={tos.html_content}
+                      loading={tosSigningId === tos.id}
+                      signed={tosSignedIds.has(tos.id)}
+                      on:sign={(e) => handleSignTOS(e, tos.id)}
+                    />
+                  </div>
+                {/each}
+              </div>
+            </div>
+          {/if}
 
           <!-- Summary card -->
           <div class="bg-bg-page rounded-lg border border-border-dark p-4 space-y-3">
