@@ -1099,6 +1099,16 @@ class WorkOrder(Base):
     result_json = Column(JSON, nullable=True)              # Resultado de la ejecución
     notes = Column(Text, nullable=True)
 
+    # ── Épica 9: Blueprint + Aprobación de módulos ──────────────────────────
+    blueprint_package_id = Column(Integer, ForeignKey("module_packages.id"), nullable=True)
+    selected_modules = Column(JSON, nullable=True)      # technical_names elegidos por cliente/partner
+    approved_modules = Column(JSON, nullable=True)      # aprobados por Jeturing
+    rejected_modules = Column(JSON, nullable=True)      # rechazados por Jeturing
+    tenant_admin_email = Column(String(200), nullable=True)
+    tenant_admin_password = Column(String(200), nullable=True)
+    tenant_user_email = Column(String(200), nullable=True)
+    tenant_user_password = Column(String(200), nullable=True)
+
     created_at = Column(DateTime, default=datetime.utcnow)
     updated_at = Column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
 

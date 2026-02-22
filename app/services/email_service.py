@@ -284,3 +284,89 @@ def send_quotation_email(
         text_body=f"Cotización {quote_number}\nTotal: ${total_monthly:,.2f}/mes",
         reply_to="ventas@sajet.us",
     )
+
+def send_work_order_completion(
+    to_email: str,
+    company_name: str,
+    subdomain: str,
+    admin_login: str,
+    admin_password: str,
+    user_login: str,
+    user_password: str,
+    approved_modules: list,
+    order_number: str,
+) -> dict:
+    """
+    Envía credenciales de acceso al completar una work order de aprovisionamiento.
+    Sin referencias a Odoo — texto neutro de plataforma.
+    """
+    url = f"https://{subdomain}.sajet.us" if subdomain else APP_URL
+    portal_url = f"{APP_URL}/#/portal"
+
+    modules_html = ""
+    if approved_modules:
+        items = "".join(
+            f"<li style='color:#ccc;margin:3px 0;font-size:13px;'>{m}</li>"
+            for m in approved_modules[:25]
+        )
+        extra = f"<li style='color:#666;'>... y {len(approved_modules)-25} más</li>" if len(approved_modules) > 25 else ""
+        modules_html = f"""
+    <div style="background:#1a1a2e;border-radius:8px;padding:16px;margin:16px 0;border-left:4px solid #3498db;">
+      <h3 style="margin-top:0;color:#fff;font-size:14px;">✅ Aplicaciones configuradas ({len(approved_modules)})</h3>
+      <ul style="margin:0;padding-left:20px;">{items}{extra}</ul>
+    </div>"""
+
+    content = f"""
+    <h2 style="color:#e74c3c;margin-top:0;">¡Su espacio de trabajo está listo! 🎉</h2>
+    <p>El espacio de trabajo para <strong>{company_name}</strong> ha sido configurado y está disponible.</p>
+    <p style="color:#999;font-size:12px;">Referencia de orden: <code style="background:#2a2a4a;padding:2px 6px;border-radius:3px;">{order_number}</code></p>
+
+    <div style="background:#1a1a2e;border-radius:8px;padding:20px;margin:20px 0;border-left:4px solid #e74c3c;">
+      <h3 style="margin-top:0;color:#fff;font-size:15px;">🔑 Acceso de Administrador</h3>
+      <p style="color:#999;font-size:12px;margin-bottom:12px;">Use estas credenciales para la configuración inicial del sistema.</p>
+      <table style="width:100%;border-collapse:collapse;">
+        <tr><td style="padding:6px 0;color:#999;width:100px;">URL:</td>
+            <td style="padding:6px 0;"><a href="{url}" style="color:#e74c3c;font-weight:600;">{url}</a></td></tr>
+        <tr><td style="padding:6px 0;color:#999;">Usuario:</td>
+            <td style="padding:6px 0;font-family:monospace;font-size:14px;">{admin_login}</td></tr>
+        <tr><td style="padding:6px 0;color:#999;">Contraseña:</td>
+            <td style="padding:6px 0;"><code style="background:#2a2a4a;padding:3px 8px;border-radius:4px;font-size:14px;">{admin_password}</code></td></tr>
+      </table>
+    </div>
+
+    <div style="background:#1a1a2e;border-radius:8px;padding:20px;margin:20px 0;border-left:4px solid #2ecc71;">
+      <h3 style="margin-top:0;color:#fff;font-size:15px;">👤 Su acceso de usuario</h3>
+      <p style="color:#999;font-size:12px;margin-bottom:12px;">Este usuario tiene acceso a las aplicaciones de su cuenta (sin módulo de administración del sistema).</p>
+      <table style="width:100%;border-collapse:collapse;">
+        <tr><td style="padding:6px 0;color:#999;width:100px;">Usuario:</td>
+            <td style="padding:6px 0;font-family:monospace;font-size:14px;">{user_login}</td></tr>
+        <tr><td style="padding:6px 0;color:#999;">Contraseña:</td>
+            <td style="padding:6px 0;"><code style="background:#2a2a4a;padding:3px 8px;border-radius:4px;font-size:14px;">{user_password}</code></td></tr>
+      </table>
+    </div>
+
+    {modules_html}
+
+    <div style="background:#1a1a2e;border-radius:8px;padding:16px;margin:16px 0;border-left:4px solid #9b59b6;">
+      <h3 style="margin-top:0;color:#fff;font-size:14px;">Portal de Cliente</h3>
+      <p style="color:#ccc;font-size:13px;">Gestione su suscripción, facturas y usuarios desde el portal.</p>
+      <a href="{portal_url}" style="display:inline-block;background:#e74c3c;color:#fff;padding:10px 22px;border-radius:6px;text-decoration:none;font-weight:600;font-size:14px;">
+        Ir al Portal →
+      </a>
+    </div>
+
+    <p style="color:#f39c12;font-size:13px;margin-top:20px;">⚠️ Por seguridad, cambie su contraseña después del primer inicio de sesión.</p>
+    """
+
+    return send_email(
+        to_email=to_email,
+        subject=f"🚀 Su espacio de trabajo está listo — {company_name} | SAJET",
+        html_body=_base_template(content),
+        text_body=(
+            f"Espacio de trabajo listo — {company_name}\n"
+            f"URL: {url}\n"
+            f"Admin: {admin_login} / {admin_password}\n"
+            f"Usuario: {user_login} / {user_password}\n"
+            f"Orden: {order_number}"
+        ),
+    )
