@@ -328,11 +328,67 @@ class DomainManager:
             return False
     
     # ==================== Domain Verification ====================
-    
+
+    # Rangos de IP de Cloudflare (proxy mode) — actualizado 2024
+    CLOUDFLARE_IP_RANGES = [
+        "173.245.48.0/20", "103.21.244.0/22", "103.22.200.0/22",
+        "103.31.4.0/22", "141.101.64.0/18", "108.162.192.0/18",
+        "190.93.240.0/20", "188.114.96.0/20", "197.234.240.0/22",
+        "198.41.128.0/17", "162.158.0.0/15", "104.16.0.0/13",
+        "104.24.0.0/14", "172.64.0.0/13",
+    ]
+
+    def _is_cloudflare_ip(self, ip: str) -> bool:
+        """Verifica si una IP pertenece a los rangos de Cloudflare."""
+        import ipaddress
+        try:
+            addr = ipaddress.ip_address(ip)
+            return any(
+                addr in ipaddress.ip_network(cidr)
+                for cidr in self.CLOUDFLARE_IP_RANGES
+            )
+        except ValueError:
+            return False
+
+    def _verify_via_cloudflare_api(self, domain_name: str) -> Dict[str, Any]:
+        """Verifica que el dominio exista como registro DNS en nuestra zona de Cloudflare."""
+        import requests
+        try:
+            response = requests.get(
+                f"{CF_API_BASE}/zones/{CF_ZONE_ID}/dns_records",
+                headers=self.cf_headers,
+                params={"name": domain_name, "type": "CNAME,A,AAAA"},
+                timeout=10,
+            )
+            data = response.json()
+            if data.get("success") and data.get("result"):
+                records = data["result"]
+                return {
+                    "found": True,
+                    "records": [
+                        {
+                            "type": r["type"],
+                            "name": r["name"],
+                            "content": r["content"],
+                            "proxied": r.get("proxied", False),
+                        }
+                        for r in records
+                    ],
+                }
+            return {"found": False, "records": []}
+        except Exception as e:
+            logger.warning(f"Error consultando CF API para {domain_name}: {e}")
+            return {"found": False, "records": [], "error": str(e)}
+
     async def verify_domain(self, domain_id: int) -> Dict[str, Any]:
         """
-        Verifica que el CNAME del dominio externo apunte correctamente a sajet.us.
-        Soporta dominios con A record apuntando a nuestra IP (Cloudflare proxy).
+        Verifica que el dominio esté correctamente configurado.
+        
+        Estrategias de verificación (en orden):
+        1. Subdominios internos (.sajet.us): verifica via API de Cloudflare
+        2. CNAME apuntando a .sajet.us o .cfargotunnel.com
+        3. A record apuntando a nuestra IP o a IPs de Cloudflare (proxy mode)
+        4. Verificación via API de Cloudflare como fallback
         """
         domain = self.get_domain(domain_id=domain_id)
         if not domain:
@@ -350,83 +406,135 @@ class DomainManager:
         domain.verification_status = DomainVerificationStatus.verifying
         self.db.commit()
 
+        def _mark_verified(method: str, details: dict = None) -> Dict[str, Any]:
+            domain.verification_status = DomainVerificationStatus.verified
+            domain.verified_at = datetime.utcnow()
+            domain.is_active = True
+            self.db.commit()
+            result = {
+                "success": True,
+                "status": "verified",
+                "message": f"Dominio verificado correctamente ({method})",
+            }
+            if details:
+                result.update(details)
+            return result
+
+        def _mark_failed(message: str, details: dict = None) -> Dict[str, Any]:
+            domain.verification_status = DomainVerificationStatus.failed
+            self.db.commit()
+            result = {"success": False, "status": "failed", "message": message}
+            if details:
+                result.update(details)
+            return result
+
         try:
-            # Intentar CNAME primero
+            is_sajet_subdomain = (
+                domain.external_domain.endswith(".sajet.us")
+                or domain.external_domain == domain.sajet_full_domain
+            )
+
+            # ── Estrategia 1: Subdominio interno de sajet.us ──
+            # Estos dominios están en nuestra zona de Cloudflare con proxy activo.
+            # No tienen CNAME visible (Cloudflare lo enmascara) y las IPs son de CF.
+            # Verificamos directamente via API de Cloudflare.
+            if is_sajet_subdomain or domain.cloudflare_configured:
+                cf_check = self._verify_via_cloudflare_api(domain.external_domain)
+                if cf_check["found"]:
+                    return _mark_verified(
+                        "Cloudflare DNS",
+                        {
+                            "method": "cloudflare_api",
+                            "cf_records": cf_check["records"],
+                        },
+                    )
+                # Si no está en CF pero es subdominio interno, verificar también
+                # el sajet_full_domain (puede diferir del external_domain)
+                if domain.external_domain != domain.sajet_full_domain:
+                    cf_check2 = self._verify_via_cloudflare_api(domain.sajet_full_domain)
+                    if cf_check2["found"]:
+                        return _mark_verified(
+                            "Cloudflare DNS (sajet)",
+                            {
+                                "method": "cloudflare_api",
+                                "cf_records": cf_check2["records"],
+                            },
+                        )
+
+            # ── Estrategia 2: CNAME directo ──
             try:
-                answers = dns.resolver.resolve(domain.external_domain, 'CNAME')
-                cname_target = str(answers[0].target).rstrip('.')
+                answers = dns.resolver.resolve(domain.external_domain, "CNAME")
+                cname_target = str(answers[0].target).rstrip(".")
 
                 expected = domain.sajet_full_domain
-                if cname_target == expected or cname_target.endswith('.sajet.us'):
-                    domain.verification_status = DomainVerificationStatus.verified
-                    domain.verified_at = datetime.utcnow()
-                    domain.is_active = True
-                    self.db.commit()
-                    return {
-                        "success": True,
-                        "status": "verified",
-                        "message": "Dominio verificado correctamente (CNAME)",
-                        "cname_detected": cname_target,
-                        "expected": expected,
-                    }
+                if (
+                    cname_target == expected
+                    or cname_target.endswith(".sajet.us")
+                    or cname_target.endswith(".cfargotunnel.com")
+                ):
+                    return _mark_verified(
+                        "CNAME",
+                        {"cname_detected": cname_target, "expected": expected},
+                    )
                 else:
-                    domain.verification_status = DomainVerificationStatus.failed
-                    self.db.commit()
-                    return {
-                        "success": False,
-                        "status": "failed",
-                        "message": "CNAME no apunta al destino correcto",
-                        "cname_detected": cname_target,
-                        "expected": expected,
-                    }
+                    return _mark_failed(
+                        "CNAME no apunta al destino correcto",
+                        {"cname_detected": cname_target, "expected": expected},
+                    )
 
             except (dns.resolver.NoAnswer, dns.resolver.NoNameservers):
-                # Sin CNAME — verificar A record (dominios con Cloudflare proxy)
-                try:
-                    answers = dns.resolver.resolve(domain.external_domain, 'A')
-                    a_records = [str(r) for r in answers]
-                    # Nuestra IP pública (Cloudflare o directa)
-                    our_ips = {"208.115.125.29"}
-                    if our_ips & set(a_records):
-                        domain.verification_status = DomainVerificationStatus.verified
-                        domain.verified_at = datetime.utcnow()
-                        domain.is_active = True
-                        self.db.commit()
-                        return {
-                            "success": True,
-                            "status": "verified",
-                            "message": "Dominio verificado correctamente (A record)",
-                            "a_records": a_records,
-                        }
-                    else:
-                        domain.verification_status = DomainVerificationStatus.failed
-                        self.db.commit()
-                        return {
-                            "success": False,
-                            "status": "failed",
-                            "message": "No se encontró CNAME ni A record apuntando a sajet.us",
-                            "a_records": a_records,
-                            "instructions": f"Configure: {domain.external_domain} CNAME {domain.sajet_full_domain}",
-                        }
-                except Exception:
-                    domain.verification_status = DomainVerificationStatus.failed
-                    self.db.commit()
-                    return {
-                        "success": False,
-                        "status": "failed",
-                        "message": "No se encontró registro CNAME ni A",
-                        "instructions": f"Configure: {domain.external_domain} CNAME {domain.sajet_full_domain}",
-                    }
+                pass  # Sin CNAME — continuar con A record
 
             except dns.resolver.NXDOMAIN:
-                domain.verification_status = DomainVerificationStatus.failed
-                self.db.commit()
-                return {
-                    "success": False,
-                    "status": "failed",
-                    "message": "El dominio no existe en DNS",
-                    "instructions": "Verifique que el dominio esté correctamente configurado",
-                }
+                return _mark_failed(
+                    "El dominio no existe en DNS",
+                    {"instructions": "Verifique que el dominio esté correctamente configurado"},
+                )
+
+            # ── Estrategia 3: A record ──
+            try:
+                answers = dns.resolver.resolve(domain.external_domain, "A")
+                a_records = [str(r) for r in answers]
+
+                # Nuestra IP pública directa
+                our_ips = {"208.115.125.29"}
+                if our_ips & set(a_records):
+                    return _mark_verified("A record directo", {"a_records": a_records})
+
+                # IPs de Cloudflare (proxy mode activado)
+                cf_ips = [ip for ip in a_records if self._is_cloudflare_ip(ip)]
+                if cf_ips:
+                    return _mark_verified(
+                        "Cloudflare proxy",
+                        {"a_records": a_records, "cloudflare_ips": cf_ips},
+                    )
+
+                return _mark_failed(
+                    "A record no apunta a sajet.us ni a Cloudflare",
+                    {
+                        "a_records": a_records,
+                        "instructions": f"Configure: {domain.external_domain} CNAME {domain.sajet_full_domain}",
+                    },
+                )
+
+            except (dns.resolver.NoAnswer, dns.resolver.NoNameservers, dns.resolver.NXDOMAIN):
+                pass  # Sin A record — continuar con fallback CF API
+
+            # ── Estrategia 4: Fallback — verificar via API de Cloudflare ──
+            if not is_sajet_subdomain and not domain.cloudflare_configured:
+                cf_check = self._verify_via_cloudflare_api(domain.external_domain)
+                if cf_check["found"]:
+                    return _mark_verified(
+                        "Cloudflare DNS (fallback)",
+                        {"method": "cloudflare_api", "cf_records": cf_check["records"]},
+                    )
+
+            return _mark_failed(
+                "No se encontró registro DNS válido",
+                {
+                    "instructions": f"Configure: {domain.external_domain} CNAME {domain.sajet_full_domain}",
+                },
+            )
 
         except Exception as e:
             domain.verification_status = DomainVerificationStatus.pending
