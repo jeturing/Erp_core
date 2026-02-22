@@ -70,6 +70,8 @@
     | 'partner-portal'
     | 'customer-onboarding'
     | 'onboarding-config'
+    | 'communications'
+    | 'reports'
     | 'signup'
     | 'notfound';
 
