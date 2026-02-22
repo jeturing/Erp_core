@@ -33,6 +33,8 @@
   import ServiceCatalog from './pages/ServiceCatalog.svelte';
   import CustomerOnboarding from './pages/CustomerOnboarding.svelte';
   import OnboardingConfig from './pages/OnboardingConfig.svelte';
+  import Communications from './pages/Communications.svelte';
+  import Reports from './pages/Reports.svelte';
   import { Spinner } from './lib/components';
   import Toast from './lib/components/Toast.svelte';
   import OfflineBanner from './lib/components/OfflineBanner.svelte';
@@ -168,6 +170,8 @@
       case 'partner-portal':
       case 'customer-onboarding':
       case 'onboarding-config':
+      case 'communications':
+      case 'reports':
         currentPage = route as AppPage;
         break;
       default:
@@ -272,6 +276,10 @@
       <ServiceCatalog />
     {:else if currentPage === 'onboarding-config'}
       <OnboardingConfig />
+    {:else if currentPage === 'communications'}
+      <Communications />
+    {:else if currentPage === 'reports'}
+      <Reports />
     {:else}
       <div class="p-6">
         <h1 class="page-title">404 - Página no encontrada</h1>

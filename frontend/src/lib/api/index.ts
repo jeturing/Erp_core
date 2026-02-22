@@ -17,3 +17,5 @@ export { reconciliationApi } from './reconciliation';
 export { workOrdersApi } from './workOrders';
 export { auditApi } from './audit';
 export { brandingApi } from './branding';
+export { communicationsApi } from './communications';
+export type { EmailLog, EmailLogsResponse, EmailStats } from './communications';

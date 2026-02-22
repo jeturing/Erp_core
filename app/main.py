@@ -23,6 +23,7 @@ from .routes import blueprints, seats, invoices, settlements, reconciliation, wo
 from .routes import reports, quotas, partner_portal
 from .routes import customer_onboarding
 from .routes import onboarding_config
+from .routes import communications
 
 # Import security middleware
 from .security.middleware import SecurityMiddleware, WAFMiddleware
@@ -205,6 +206,7 @@ app.include_router(reports.router)          # Reportes consolidados / analytics
 app.include_router(quotas.router)           # Resource quotas por cliente/plan
 app.include_router(customer_onboarding.router)  # Customer onboarding + RD e-CF flow
 app.include_router(onboarding_config.router)    # Admin-configurable onboarding config
+app.include_router(communications.router)        # Historial de emails transaccionales
 
 
 # ── Startup log ──

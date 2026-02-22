@@ -5,7 +5,7 @@
     ExternalLink, Package, UserCheck, Handshake, Target,
     Percent, FileSpreadsheet, Boxes, UsersRound, Receipt,
     Scale, GitCompareArrows, ClipboardList, ShieldCheck, Palette,
-    ShoppingBag, ChevronDown, Sliders,
+    ShoppingBag, ChevronDown, Sliders, Mail, BarChart2,
   } from 'lucide-svelte';
   import { auth } from '../stores';
 
@@ -64,6 +64,14 @@
         { id: 'blueprints',  label: 'Blueprints',  icon: Boxes,         href: '#/blueprints' },
         { id: 'commissions', label: 'Comisiones',   icon: Percent,       href: '#/commissions' },
         { id: 'branding',    label: 'Branding',     icon: Palette,       href: '#/branding' },
+      ],
+    },
+
+    {
+      id: 'grp-analytics', label: 'Análisis', icon: BarChart2,
+      children: [
+        { id: 'reports',        label: 'Reportes',        icon: BarChart2, href: '#/reports' },
+        { id: 'communications', label: 'Comunicaciones',  icon: Mail,      href: '#/communications' },
       ],
     },
 

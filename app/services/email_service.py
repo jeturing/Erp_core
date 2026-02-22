@@ -38,16 +38,58 @@ def _get_smtp_connection():
     return server
 
 
+def _log_to_db(
+    recipient: str,
+    subject: str,
+    email_type: str,
+    status: str,
+    error_message: Optional[str] = None,
+    customer_id: Optional[int] = None,
+    partner_id: Optional[int] = None,
+    related_id: Optional[int] = None,
+):
+    """Persiste el registro del email en la tabla email_logs."""
+    try:
+        from ..models.database import EmailLog, SessionLocal
+        from datetime import datetime
+        db = SessionLocal()
+        try:
+            record = EmailLog(
+                recipient=recipient,
+                subject=subject,
+                email_type=email_type,
+                status=status,
+                error_message=error_message,
+                customer_id=customer_id,
+                partner_id=partner_id,
+                related_id=related_id,
+                sent_at=datetime.utcnow(),
+            )
+            db.add(record)
+            db.commit()
+        except Exception as db_err:
+            db.rollback()
+            logger.warning(f"Could not log email to DB: {db_err}")
+        finally:
+            db.close()
+    except Exception:
+        pass  # Never let logging break the send flow
+
+
 def send_email(
     to_email: str,
     subject: str,
     html_body: str,
     text_body: Optional[str] = None,
     reply_to: Optional[str] = None,
+    email_type: str = "generic",
+    customer_id: Optional[int] = None,
+    partner_id: Optional[int] = None,
+    related_id: Optional[int] = None,
 ) -> dict:
     """
-    Envía un email transaccional.
-    
+    Envía un email transaccional y lo registra en email_logs.
+
     Returns:
         {"success": True/False, "message_id": str, "error": str}
     """
@@ -71,13 +113,16 @@ def send_email(
         server.quit()
 
         logger.info(f"✅ Email enviado a {to_email}: {subject}")
+        _log_to_db(to_email, subject, email_type, "sent", customer_id=customer_id, partner_id=partner_id, related_id=related_id)
         return {"success": True, "to": to_email, "subject": subject}
 
     except smtplib.SMTPAuthenticationError as e:
         logger.error(f"Error SMTP auth: {e}")
+        _log_to_db(to_email, subject, email_type, "failed", error_message=str(e), customer_id=customer_id, partner_id=partner_id, related_id=related_id)
         return {"success": False, "error": f"Error de autenticación SMTP: {e}"}
     except Exception as e:
         logger.error(f"Error enviando email a {to_email}: {e}")
+        _log_to_db(to_email, subject, email_type, "failed", error_message=str(e), customer_id=customer_id, partner_id=partner_id, related_id=related_id)
         return {"success": False, "error": str(e)}
 
 
@@ -167,6 +212,7 @@ def send_tenant_credentials(
         subject=f"🔑 Credenciales de acceso — {company_name} | SAJET",
         html_body=_base_template(content),
         text_body=f"Bienvenido a SAJET\n\nURL: {url}\nUsuario: {admin_login}\nContraseña: {admin_password}\nPlan: {plan_name}",
+        email_type="tenant_credentials",
     )
 
 
@@ -205,6 +251,7 @@ def send_password_reset(
         subject=f"🔒 Contraseña restablecida — {company_name} | SAJET",
         html_body=_base_template(content),
         text_body=f"Contraseña restablecida\n\nURL: {url}\nNueva contraseña: {new_password}",
+        email_type="password_reset",
     )
 
 
@@ -244,6 +291,7 @@ def send_commission_notification(
         subject=f"💰 Comisión {status_label} — {period} | SAJET",
         html_body=_base_template(content),
         text_body=f"Comisión {status_label}\nPeríodo: {period}\nMonto: ${partner_amount:,.2f}",
+        email_type="commission_notification",
     )
 
 
@@ -283,6 +331,7 @@ def send_quotation_email(
         html_body=_base_template(content),
         text_body=f"Cotización {quote_number}\nTotal: ${total_monthly:,.2f}/mes",
         reply_to="ventas@sajet.us",
+        email_type="quotation",
     )
 
 def send_work_order_completion(
@@ -369,4 +418,5 @@ def send_work_order_completion(
             f"Usuario: {user_login} / {user_password}\n"
             f"Orden: {order_number}"
         ),
+        email_type="work_order_completion",
     )
