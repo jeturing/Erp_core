@@ -808,6 +808,7 @@ class TenantDeployment(Base):
     id = Column(Integer, primary_key=True, index=True)
     subscription_id = Column(Integer, ForeignKey("subscriptions.id"), nullable=False)
     container_id = Column(Integer, ForeignKey("lxc_containers.id"), nullable=False)
+    customer_id = Column(Integer, ForeignKey("customers.id"), nullable=True, index=True)  # Vínculo directo cliente↔tunnel
     
     # Configuración del tenant
     subdomain = Column(String(100), nullable=False)
@@ -831,6 +832,8 @@ class TenantDeployment(Base):
     
     # Relaciones
     container = relationship("LXCContainer", back_populates="deployments")
+    customer = relationship("Customer", foreign_keys=[customer_id], backref="deployments")
+    subscription = relationship("Subscription", foreign_keys=[subscription_id])
     custom_domains = relationship("CustomDomain", back_populates="deployment")
 
 

@@ -16,6 +16,7 @@ from ..services.stripe_billing import (
     push_invoice_to_stripe,
     create_checkout_for_invoice,
 )
+from ..services.tunnel_lifecycle import get_customer_tunnel_info
 import stripe
 import os
 import hashlib
@@ -562,3 +563,42 @@ async def pay_invoice(invoice_id: int, request: Request, access_token: str = Coo
         raise HTTPException(status_code=500, detail=f"Error generando pago: {str(e)}")
     finally:
         db.close()
+
+
+# ═══════════════════════════════════════════════════════
+# Tunnel Info — Estado del servicio del tenant
+# ═══════════════════════════════════════════════════════
+
+@router.get("/api/tunnel")
+async def get_tenant_tunnel(request: Request, access_token: str = Cookie(None)):
+    """
+    Obtiene información del tunnel/servicio del tenant.
+    El tenant ve: URL de acceso, estado del servicio, plan, próxima factura.
+    """
+    token_data = get_current_tenant(request, access_token)
+    tenant_id = token_data.get("tenant_id")
+
+    if not tenant_id:
+        raise HTTPException(status_code=403, detail="Portal disponible solo para tenants")
+
+    result = await get_customer_tunnel_info(tenant_id)
+
+    if not result.get("success"):
+        raise HTTPException(status_code=400, detail=result.get("error"))
+
+    # Filtrar info sensible — el tenant solo ve lo que necesita
+    deployment = result.get("deployment", {})
+    subscription = result.get("subscription", {})
+    cloudflare = result.get("cloudflare", {})
+
+    return {
+        "has_service": result.get("has_tunnel", False),
+        "service_active": deployment.get("tunnel_active", False),
+        "url": deployment.get("tunnel_url"),
+        "subdomain": deployment.get("subdomain"),
+        "plan": deployment.get("plan_type"),
+        "subscription_status": subscription.get("status") if subscription else None,
+        "plan_name": subscription.get("plan_name") if subscription else None,
+        "next_billing": subscription.get("current_period_end") if subscription else None,
+        "connection_health": cloudflare.get("status") if cloudflare else "unknown",
+    }

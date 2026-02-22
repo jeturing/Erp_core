@@ -14,6 +14,7 @@ from ..models.database import (
     BillingMode, InvoiceIssuer, CollectorType, PayerType,
     Partner, Plan, Lead, LeadStatus,
 )
+from ..services.tunnel_lifecycle import handle_stripe_subscription_event
 from ..services.odoo_provisioner import provision_tenant
 from ..services.spa_shell import render_spa_shell
 import logging
@@ -287,6 +288,35 @@ async def stripe_webhook(request: Request, background_tasks: BackgroundTasks):
                     customer.company_name,
                     subscription.id  # Pasar ID para actualizar estado
                 )
+
+        # ═══ Tunnel Lifecycle — Sincronizar tunnel con estado de suscripción ═══
+        elif event["type"] in (
+            "customer.subscription.updated",
+            "customer.subscription.deleted",
+            "customer.subscription.paused",
+            "customer.subscription.resumed",
+        ):
+            stripe_sub = event["data"]["object"]
+            stripe_sub_id = stripe_sub.get("id")
+            new_status = stripe_sub.get("status", "")
+            if stripe_sub_id:
+                background_tasks.add_task(
+                    handle_stripe_subscription_event,
+                    stripe_sub_id,
+                    new_status,
+                )
+                logger.info(f"📋 Tunnel lifecycle queued: {stripe_sub_id} → {new_status}")
+
+        elif event["type"] == "invoice.payment_failed":
+            invoice_obj = event["data"]["object"]
+            stripe_sub_id = invoice_obj.get("subscription")
+            if stripe_sub_id:
+                background_tasks.add_task(
+                    handle_stripe_subscription_event,
+                    stripe_sub_id,
+                    "past_due",
+                )
+                logger.info(f"📋 Payment failed → tunnel lifecycle queued: {stripe_sub_id}")
 
         return JSONResponse(content={"status": "success"})
     except Exception as e:

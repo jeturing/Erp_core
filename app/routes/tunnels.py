@@ -7,6 +7,13 @@ from typing import Dict, Any, Optional
 import logging
 
 from ..services.cloudflare_manager import CloudflareManager
+from ..services.tunnel_lifecycle import (
+    link_tunnel_to_customer,
+    sync_tunnel_lifecycle,
+    sync_all_tunnels,
+    get_customer_tunnel_info,
+    provision_tunnel_for_customer,
+)
 from ..models.database import SessionLocal, TenantDeployment, Subscription, Customer
 from ..security.tokens import TokenManager
 from pydantic import BaseModel, Field
@@ -42,6 +49,18 @@ class LinkTunnelRequest(BaseModel):
 class LinkStripeRequest(BaseModel):
     """Vincular un deployment a una suscripción Stripe."""
     subscription_id: int = Field(..., description="ID de la Subscription local")
+
+
+class LinkCustomerRequest(BaseModel):
+    """Vincular un tunnel directamente a un cliente."""
+    customer_id: int = Field(..., description="ID del cliente")
+    deployment_id: Optional[int] = Field(None, description="ID del deployment (auto-detecta si no se envía)")
+
+
+class ProvisionTunnelRequest(BaseModel):
+    """Provisionar un tunnel nuevo para un cliente."""
+    customer_id: int = Field(..., description="ID del cliente")
+    tunnel_name: Optional[str] = Field(None, description="Nombre del tunnel (usa subdomain si no se envía)")
 
 
 # ═══════════════════════════════════════════════════════
@@ -94,6 +113,13 @@ async def list_tunnels(access_token: str = Cookie(None)):
                             .first()
                         )
 
+                    # Obtener cliente directo o vía subscription
+                    customer = None
+                    if deployment.customer_id:
+                        customer = db.query(Customer).filter_by(id=deployment.customer_id).first()
+                    elif subscription and subscription.customer_id:
+                        customer = db.query(Customer).filter_by(id=subscription.customer_id).first()
+
                     tunnel["deployment"] = {
                         "id": deployment.id,
                         "subdomain": deployment.subdomain,
@@ -103,6 +129,11 @@ async def list_tunnels(access_token: str = Cookie(None)):
                         "plan": deployment.plan_type,
                         "database_name": deployment.database_name,
                         "subscription_id": deployment.subscription_id,
+                        "customer": {
+                            "id": customer.id,
+                            "company_name": customer.company_name,
+                            "email": customer.email,
+                        } if customer else None,
                         "stripe": {
                             "subscription_id": subscription.stripe_subscription_id
                             if subscription and hasattr(subscription, "stripe_subscription_id")
@@ -383,6 +414,147 @@ async def create_tunnel(
     except Exception as e:
         logger.exception(f"Error creando tunnel: {e}")
         raise HTTPException(status_code=500, detail=str(e))
+
+
+# ═══════════════════════════════════════════════════════
+# CLIENTE ↔ TUNNEL — Vinculación directa + Lifecycle
+# ═══════════════════════════════════════════════════════
+
+@router.post("/{tunnel_id}/link-customer", summary="Vincular tunnel a un cliente")
+async def link_tunnel_customer(
+    tunnel_id: str,
+    payload: LinkCustomerRequest,
+    access_token: str = Cookie(None),
+):
+    """
+    Vincula un Cloudflare Tunnel directamente a un cliente.
+    Activa DNS automáticamente si la suscripción está activa.
+    """
+    verify_admin(access_token)
+    result = await link_tunnel_to_customer(
+        customer_id=payload.customer_id,
+        tunnel_id=tunnel_id,
+        deployment_id=payload.deployment_id,
+    )
+    if not result.get("success"):
+        raise HTTPException(status_code=400, detail=result.get("error"))
+    return result
+
+
+@router.post("/provision-for-customer", summary="Provisionar tunnel nuevo para cliente")
+async def provision_customer_tunnel(
+    payload: ProvisionTunnelRequest,
+    access_token: str = Cookie(None),
+):
+    """
+    Crea un Cloudflare Tunnel nuevo y lo vincula al cliente.
+    End-to-end: crea tunnel → vincula deployment → crea DNS → activa si suscripción activa.
+    """
+    verify_admin(access_token)
+    result = await provision_tunnel_for_customer(
+        customer_id=payload.customer_id,
+        tunnel_name=payload.tunnel_name,
+    )
+    if not result.get("success"):
+        raise HTTPException(status_code=400, detail=result.get("error"))
+    return result
+
+
+@router.get("/customer/{customer_id}", summary="Tunnel de un cliente")
+async def get_customer_tunnel(customer_id: int, access_token: str = Cookie(None)):
+    """
+    Obtiene información completa del tunnel vinculado a un cliente.
+    Incluye: estado Cloudflare, suscripción Stripe, DNS, URLs.
+    """
+    verify_admin(access_token)
+    result = await get_customer_tunnel_info(customer_id)
+    if not result.get("success"):
+        raise HTTPException(status_code=400, detail=result.get("error"))
+    return result
+
+
+@router.post("/sync-lifecycle/{subscription_id}", summary="Sincronizar tunnel con suscripción")
+async def sync_tunnel_subscription(subscription_id: int, access_token: str = Cookie(None)):
+    """
+    Sincroniza el estado del tunnel con el estado de la suscripción.
+    Si activa → tunnel ON + DNS. Si past_due/cancelled → tunnel OFF + DNS removido.
+    """
+    verify_admin(access_token)
+    result = await sync_tunnel_lifecycle(subscription_id)
+    if not result.get("success"):
+        raise HTTPException(status_code=400, detail=result.get("error"))
+    return result
+
+
+@router.post("/sync-all", summary="Sincronizar TODOS los tunnels con Stripe")
+async def sync_all_tunnel_lifecycles(access_token: str = Cookie(None)):
+    """
+    Reconciliación masiva: sincroniza TODOS los tunnels con el estado actual
+    de sus suscripciones Stripe. Activa/suspende según corresponda.
+    """
+    verify_admin(access_token)
+    result = await sync_all_tunnels()
+    if not result.get("success"):
+        raise HTTPException(status_code=500, detail=result.get("error"))
+    return result
+
+
+@router.get("/customer-map", summary="Mapa completo Cliente↔Tunnel")
+async def get_customer_tunnel_map(access_token: str = Cookie(None)):
+    """
+    Dashboard de vinculación: todos los clientes con sus tunnels y estado Stripe.
+    """
+    verify_admin(access_token)
+    db = SessionLocal()
+    try:
+        deployments = db.query(TenantDeployment).filter(
+            TenantDeployment.tunnel_id.isnot(None)
+        ).all()
+
+        items = []
+        for dep in deployments:
+            customer = None
+            subscription = None
+
+            if dep.customer_id:
+                customer = db.query(Customer).filter_by(id=dep.customer_id).first()
+
+            if dep.subscription_id:
+                subscription = db.query(Subscription).filter_by(id=dep.subscription_id).first()
+                if not customer and subscription and subscription.customer_id:
+                    customer = db.query(Customer).filter_by(id=subscription.customer_id).first()
+
+            items.append({
+                "deployment_id": dep.id,
+                "subdomain": dep.subdomain,
+                "tunnel_id": dep.tunnel_id,
+                "tunnel_active": dep.tunnel_active,
+                "tunnel_url": dep.tunnel_url,
+                "plan_type": dep.plan_type.value if dep.plan_type else None,
+                "customer": {
+                    "id": customer.id,
+                    "company_name": customer.company_name,
+                    "email": customer.email,
+                    "subdomain": customer.subdomain,
+                } if customer else None,
+                "subscription": {
+                    "id": subscription.id,
+                    "status": subscription.status.value,
+                    "plan_name": subscription.plan_name,
+                    "stripe_subscription_id": subscription.stripe_subscription_id,
+                } if subscription else None,
+            })
+
+        active_count = sum(1 for i in items if i["tunnel_active"])
+        return {
+            "success": True,
+            "total": len(items),
+            "active": active_count,
+            "suspended": len(items) - active_count,
+            "mappings": items,
+        }
+    finally:
+        db.close()
 
 
 # ═══════════════════════════════════════════════════════
