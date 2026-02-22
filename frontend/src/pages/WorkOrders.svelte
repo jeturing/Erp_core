@@ -1,6 +1,8 @@
 <script lang="ts">
   import { onMount } from 'svelte';
   import { workOrdersApi } from '../lib/api/workOrders';
+  import { billingApi } from '../lib/api/billing';
+  import { blueprintsApi } from '../lib/api/blueprints';
   import type { WorkOrderItem, ModuleDetail } from '../lib/types';
 
   let orders: WorkOrderItem[] = [];
@@ -19,10 +21,20 @@
   let approvalNotes = '';
   let savingApproval = false;
 
+  // Datos para dropdowns
+  let customers: Array<{id: number, name: string, email?: string}> = [];
+  let blueprintPackages: Array<{id: number, name: string, display_name?: string}> = [];
+  let customerSearch = '';
+
   // Modal nueva WO
   let showCreate = false;
-  let newWO = { customer_id: '', description: '', work_type: 'provision', blueprint_package_id: '', selected_modules: '' };
+  let newWO = { customer_id: 0, description: '', work_type: 'provision', blueprint_package_id: 0, selected_modules: '' };
   let creating = false;
+
+  $: filteredCustomers = customers.filter(c => {
+    const q = customerSearch.toLowerCase();
+    return !q || c.name.toLowerCase().includes(q) || (c.email || '').toLowerCase().includes(q);
+  });
 
   const STATUS_LABELS: Record<string, string> = {
     requested: 'Solicitada', approved: 'Aprobada', in_progress: 'En Progreso',
@@ -49,6 +61,21 @@
       orders = res.items; total = res.total;
     } catch { showToast('Error cargando órdenes', 'error'); }
     finally { loading = false; }
+  }
+
+  async function loadFormData() {
+    try {
+      const [custRes, pkgRes] = await Promise.all([
+        billingApi.getCustomers().catch(() => ({ items: [] })),
+        blueprintsApi.getPackages().catch(() => ({ items: [] })),
+      ]);
+      customers = (custRes?.items ?? custRes ?? []).map((c: any) => ({
+        id: c.id, name: c.company_name || c.name || `Cliente #${c.id}`, email: c.email
+      }));
+      blueprintPackages = (pkgRes?.items ?? pkgRes ?? []).map((p: any) => ({
+        id: p.id, name: p.name, display_name: p.display_name
+      }));
+    } catch { /* silencioso */ }
   }
 
   async function openDetail(wo: WorkOrderItem) {
@@ -108,20 +135,21 @@
   }
 
   async function createWO() {
-    if (!newWO.customer_id || !newWO.description) { showToast('Cliente y descripción son requeridos', 'error'); return; }
+    if (!newWO.customer_id || newWO.customer_id <= 0 || !newWO.description) { showToast('Cliente y descripción son requeridos', 'error'); return; }
     creating = true;
     try {
       const payload: any = {
-        customer_id: Number(newWO.customer_id),
+        customer_id: newWO.customer_id,
         description: newWO.description,
         work_type: newWO.work_type,
       };
-      if (newWO.blueprint_package_id) payload.blueprint_package_id = Number(newWO.blueprint_package_id);
+      if (newWO.blueprint_package_id) payload.blueprint_package_id = newWO.blueprint_package_id;
       if (newWO.selected_modules) payload.selected_modules = newWO.selected_modules.split(',').map((s: string) => s.trim()).filter(Boolean);
       await workOrdersApi.create(payload);
       showToast('Work Order creada ✅');
       showCreate = false;
-      newWO = { customer_id: '', description: '', work_type: 'provision', blueprint_package_id: '', selected_modules: '' };
+      newWO = { customer_id: 0, description: '', work_type: 'provision', blueprint_package_id: 0, selected_modules: '' };
+      customerSearch = '';
       await load();
     } catch { showToast('Error creando work order', 'error'); }
     creating = false;
@@ -162,7 +190,7 @@
         <h1 class="text-2xl font-bold text-white">Órdenes de Trabajo</h1>
         <p class="text-sm text-gray-400 mt-0.5">{total} órdenes en total</p>
       </div>
-      <button on:click={() => showCreate = !showCreate}
+      <button on:click={() => { showCreate = !showCreate; if (showCreate) loadFormData(); }}
         class="px-4 py-2 bg-red-600 hover:bg-red-700 text-white rounded-lg text-sm font-medium transition-colors">
         + Nueva Orden
       </button>
@@ -228,27 +256,54 @@
       <div class="bg-gray-800 border border-gray-700 rounded-xl p-5 space-y-3">
         <h3 class="font-semibold text-white">Nueva Orden de Trabajo</h3>
         <div class="grid grid-cols-2 gap-3">
-          <div>
-            <label class="text-xs text-gray-400 block mb-1">Customer ID *</label>
-            <input bind:value={newWO.customer_id} type="number" placeholder="ID del cliente"
-              class="w-full bg-gray-700 border border-gray-600 rounded-lg px-3 py-2 text-sm text-white" />
+          <!-- Cliente con búsqueda -->
+          <div class="col-span-2 md:col-span-1">
+            <label class="text-xs text-gray-400 block mb-1">Cliente *</label>
+            <input bind:value={customerSearch} placeholder="Buscar cliente..."
+              class="w-full bg-gray-700 border border-gray-600 rounded-t-lg px-3 py-2 text-sm text-white" />
+            {#if customerSearch && filteredCustomers.length > 0}
+              <div class="border border-t-0 border-gray-600 rounded-b-lg bg-gray-800 max-h-36 overflow-y-auto">
+                {#each filteredCustomers.slice(0, 8) as c}
+                  <button type="button" class="w-full text-left px-3 py-2 text-sm hover:bg-gray-700 transition-colors
+                    {newWO.customer_id === c.id ? 'bg-red-900/30 text-red-300' : 'text-white'}"
+                    on:click={() => { newWO.customer_id = c.id; customerSearch = c.name; }}>
+                    <span class="font-medium">{c.name}</span>
+                    {#if c.email}<span class="text-gray-400 text-xs ml-2">{c.email}</span>{/if}
+                  </button>
+                {/each}
+              </div>
+            {:else if customerSearch && filteredCustomers.length === 0}
+              <div class="border border-t-0 border-gray-600 rounded-b-lg bg-gray-800 px-3 py-2 text-xs text-gray-500">
+                Sin resultados
+              </div>
+            {/if}
+            {#if newWO.customer_id}
+              <div class="text-[10px] text-green-400 mt-1">✓ Cliente ID: {newWO.customer_id}</div>
+            {/if}
           </div>
+          <!-- Tipo -->
           <div>
             <label class="text-xs text-gray-400 block mb-1">Tipo</label>
             <select bind:value={newWO.work_type} class="w-full bg-gray-700 border border-gray-600 rounded-lg px-3 py-2 text-sm text-white">
-              {#each ['provision', 'module_install', 'migration', 'configuration', 'support'] as t}
-                <option value={t}>{t}</option>
+              {#each [['provision','Provisión'],['module_install','Instalar Módulos'],['migration','Migración'],['configuration','Configuración'],['support','Soporte']] as [v,l]}
+                <option value={v}>{l}</option>
               {/each}
             </select>
           </div>
-          <div>
-            <label class="text-xs text-gray-400 block mb-1">Blueprint Package ID</label>
-            <input bind:value={newWO.blueprint_package_id} type="number" placeholder="ID paquete (opcional)"
-              class="w-full bg-gray-700 border border-gray-600 rounded-lg px-3 py-2 text-sm text-white" />
+          <!-- Blueprint -->
+          <div class="col-span-2 md:col-span-1">
+            <label class="text-xs text-gray-400 block mb-1">Blueprint / Paquete</label>
+            <select bind:value={newWO.blueprint_package_id} class="w-full bg-gray-700 border border-gray-600 rounded-lg px-3 py-2 text-sm text-white">
+              <option value={0}>Sin paquete</option>
+              {#each blueprintPackages as p}
+                <option value={p.id}>{p.display_name || p.name}</option>
+              {/each}
+            </select>
           </div>
+          <!-- Módulos extra -->
           <div>
-            <label class="text-xs text-gray-400 block mb-1">Módulos extra (coma-separados)</label>
-            <input bind:value={newWO.selected_modules} placeholder="crm_dashboard, point_of_sale"
+            <label class="text-xs text-gray-400 block mb-1">Módulos extra (opcional)</label>
+            <input bind:value={newWO.selected_modules} placeholder="crm_dashboard, pos"
               class="w-full bg-gray-700 border border-gray-600 rounded-lg px-3 py-2 text-sm text-white" />
           </div>
         </div>

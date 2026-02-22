@@ -845,9 +845,11 @@ export interface BlueprintPackage {
   base_price_monthly: number;
   is_default: boolean;
   is_active: boolean;
-  module_list: string | null;
-  modules: BlueprintModule[];
-  created_at: string | null;
+  module_list: string[];
+  module_count: number;
+  partner_allowed: boolean;
+  modules?: BlueprintModule[];
+  created_at?: string | null;
 }
 
 export interface BlueprintPackagesResponse {

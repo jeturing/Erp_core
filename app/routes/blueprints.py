@@ -238,7 +238,7 @@ def list_packages(
     if plan_type:
         q = q.filter(ModulePackage.plan_type == plan_type)
     packages = q.order_by(ModulePackage.display_name).all()
-    return [
+    items = [
         {
             "id": p.id,
             "name": p.name,
@@ -249,17 +249,12 @@ def list_packages(
             "is_default": p.is_default,
             "is_active": p.is_active,
             "module_list": p.module_list or [],
-            "items": [
-                {
-                    "module_id": item.module_id,
-                    "technical_name": item.module.technical_name if item.module else None,
-                    "is_optional": item.is_optional,
-                }
-                for item in (p.items or [])
-            ],
+            "module_count": len(p.module_list) if p.module_list else 0,
+            "partner_allowed": getattr(p, "partner_allowed", True),
         }
         for p in packages
     ]
+    return {"total": len(items), "items": items}
 
 
 @router.post("/packages")

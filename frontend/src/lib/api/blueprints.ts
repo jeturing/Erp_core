@@ -8,15 +8,28 @@ import type {
 
 export const blueprintsApi = {
   // ── Module Catalog ──
-  async getModules(): Promise<BlueprintModulesResponse> {
-    return api.get<BlueprintModulesResponse>('/api/blueprints/modules');
+  async getModules(params?: { active_only?: boolean; partner_only?: boolean; category?: string }): Promise<BlueprintModulesResponse> {
+    const qs = new URLSearchParams();
+    if (params?.active_only === false) qs.set('active_only', 'false');
+    if (params?.partner_only) qs.set('partner_only', 'true');
+    if (params?.category) qs.set('category', params.category);
+    const q = qs.toString() ? `?${qs}` : '';
+    return api.get<BlueprintModulesResponse>(`/api/blueprints/modules${q}`);
   },
 
-  async createModule(data: Partial<BlueprintModule>): Promise<{ message: string; module: BlueprintModule }> {
+  async getCategories(): Promise<string[]> {
+    return api.get<string[]>('/api/blueprints/modules/categories');
+  },
+
+  async importFromFilesystem(): Promise<{ status: string; created: number; updated: number; skipped: number; total_in_catalog: number }> {
+    return api.post('/api/blueprints/modules/import-fs', {});
+  },
+
+  async createModule(data: Partial<BlueprintModule>): Promise<{ message: string; id: number }> {
     return api.post('/api/blueprints/modules', data);
   },
 
-  async updateModule(id: number, data: Partial<BlueprintModule>): Promise<{ message: string; module: BlueprintModule }> {
+  async updateModule(id: number, data: Partial<BlueprintModule>): Promise<{ message: string }> {
     return api.put(`/api/blueprints/modules/${id}`, data);
   },
 
@@ -32,12 +45,12 @@ export const blueprintsApi = {
     plan_type?: string;
     base_price_monthly?: number;
     is_default?: boolean;
-    module_ids?: number[];
-  }): Promise<{ message: string; package: BlueprintPackage }> {
+    module_list?: string[];
+  }): Promise<{ message: string; id: number; name: string }> {
     return api.post('/api/blueprints/packages', data);
   },
 
-  async updatePackage(id: number, data: Partial<BlueprintPackage & { module_ids?: number[] }>): Promise<{ message: string; package: BlueprintPackage }> {
+  async updatePackage(id: number, data: Partial<BlueprintPackage & { module_list?: string[] }>): Promise<{ message: string }> {
     return api.put(`/api/blueprints/packages/${id}`, data);
   },
 
