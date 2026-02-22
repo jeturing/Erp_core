@@ -1007,6 +1007,24 @@ export interface ReconciliationListResponse {
 
 export type WorkOrderStatus = 'requested' | 'approved' | 'in_progress' | 'completed' | 'rejected' | 'cancelled';
 
+export interface ModuleDetail {
+  technical_name: string;
+  display_name: string;
+  category: string | null;
+  approved: boolean;
+  rejected: boolean;
+}
+
+export interface BlueprintPackage {
+  id: number;
+  name: string;
+  display_name: string;
+  description: string | null;
+  module_list: string[];
+  module_count: number;
+  partner_allowed: boolean;
+}
+
 export interface WorkOrderItem {
   id: number;
   order_number: string;
@@ -1015,15 +1033,28 @@ export interface WorkOrderItem {
   partner_id: number | null;
   work_type: string;
   description: string;
-  parameters_json: string | null;
+  // Blueprint y módulos (Épica 9)
+  blueprint_package_id: number | null;
+  blueprint_name?: string;
+  selected_modules: string[] | null;
+  approved_modules: string[] | null;
+  rejected_modules: string[] | null;
+  selected_modules_detail?: ModuleDetail[];
+  // Credenciales del tenant
+  tenant_admin_email: string | null;
+  tenant_user_email: string | null;
+  // Estado y actores
   status: WorkOrderStatus;
   requested_by: string | null;
   approved_by: string | null;
   completed_by: string | null;
+  // Nombres enriquecidos (GET /{id})
+  customer_name?: string;
+  customer_subdomain?: string;
+  partner_name?: string;
   requested_at: string | null;
   approved_at: string | null;
   completed_at: string | null;
-  result_json: string | null;
   notes: string | null;
   created_at: string | null;
 }

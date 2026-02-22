@@ -2,7 +2,9 @@
   import { onMount } from 'svelte';
   import { Users, DollarSign, Shield, Edit3, Minus, Plus, RefreshCw, Search, CreditCard, Mail, KeyRound } from 'lucide-svelte';
   import { billingApi } from '../lib/api/billing';
+  import { workOrdersApi } from '../lib/api/workOrders';
   import type { CustomerItem, Plan } from '../lib/types';
+  import type { BlueprintPackage } from '../lib/types';
 
   let customers: CustomerItem[] = $state([]);
   let plans: Plan[] = $state([]);
@@ -14,6 +16,72 @@
 
   // Summary
   let summary = $state({ total_users: 0, total_mrr: 0, admin_accounts: 0, billable_accounts: 0 });
+
+  // Modal Nuevo Cliente + Blueprint
+  let showNewClient = $state(false);
+  let ncStep = $state(1);
+  let blueprints: BlueprintPackage[] = $state([]);
+  let blueprintsLoading = $state(false);
+  let selectedBlueprint: BlueprintPackage | null = $state(null);
+  let creatingClient = $state(false);
+  let ncToast = $state('');
+  let ncForm = $state({
+    company_name: '',
+    email: '',
+    full_name: '',
+    subdomain: '',
+    plan_name: 'basic',
+    user_count: 1,
+    partner_id: '',
+    description: '',
+  });
+
+  async function openNewClient() {
+    ncStep = 1; ncToast = '';
+    selectedBlueprint = null;
+    ncForm = { company_name: '', email: '', full_name: '', subdomain: '', plan_name: 'basic', user_count: 1, partner_id: '', description: '' };
+    showNewClient = true;
+    if (blueprints.length === 0) {
+      blueprintsLoading = true;
+      try { blueprints = await workOrdersApi.getBlueprints(); } catch { }
+      blueprintsLoading = false;
+    }
+  }
+
+  async function createClientWithWO() {
+    if (!ncForm.company_name || !ncForm.email || !ncForm.subdomain) {
+      ncToast = 'Empresa, email y subdominio son obligatorios'; return;
+    }
+    creatingClient = true; ncToast = '';
+    try {
+      // 1. Crear cliente via billing
+      const clientRes = await billingApi.createCustomer({
+        company_name: ncForm.company_name,
+        email: ncForm.email,
+        full_name: ncForm.full_name,
+        subdomain: ncForm.subdomain,
+        plan_name: ncForm.plan_name,
+        user_count: ncForm.user_count,
+        partner_id: ncForm.partner_id ? Number(ncForm.partner_id) : undefined,
+      });
+      const customerId = clientRes.id ?? clientRes.customer?.id;
+      // 2. Crear Work Order si hay blueprint
+      if (customerId && selectedBlueprint) {
+        await workOrdersApi.create({
+          customer_id: customerId,
+          blueprint_package_id: selectedBlueprint.id,
+          selected_modules: selectedBlueprint.module_list,
+          work_type: 'provision',
+          description: ncForm.description || `Aprovisionamiento ${ncForm.company_name} — ${selectedBlueprint.name}`,
+        });
+      }
+      showNewClient = false;
+      await loadData();
+    } catch (e: any) {
+      ncToast = e.message || 'Error creando cliente';
+    }
+    creatingClient = false;
+  }
 
   // Edit modal
   let showEdit = $state(false);
@@ -173,10 +241,15 @@
       <h1 class="page-title">Gestión de Clientes</h1>
       <p class="page-subtitle">Administra clientes, usuarios y montos de facturación</p>
     </div>
-    <button class="btn-secondary flex items-center gap-2" onclick={recalculateAll} disabled={recalculating}>
-      <RefreshCw size={16} class={recalculating ? 'animate-spin' : ''} />
-      {recalculating ? 'Recalculando...' : 'Recalcular Todo'}
-    </button>
+    <div class="flex items-center gap-2">
+      <button class="btn-accent flex items-center gap-2" onclick={openNewClient}>
+        <Plus size={16} /> Nuevo Cliente
+      </button>
+      <button class="btn-secondary flex items-center gap-2" onclick={recalculateAll} disabled={recalculating}>
+        <RefreshCw size={16} class={recalculating ? 'animate-spin' : ''} />
+        {recalculating ? 'Recalculando...' : 'Recalcular'}
+      </button>
+    </div>
   </div>
 
   <!-- Summary Cards -->
@@ -417,6 +490,159 @@
           <button type="button" class="btn-secondary" onclick={() => { showEdit = false; }}>Cancelar</button>
         </div>
       </form>
+    </div>
+  </div>
+{/if}
+
+<!-- Modal Nuevo Cliente + Blueprint -->
+{#if showNewClient}
+  <div class="fixed inset-0 bg-black/70 z-50 flex items-center justify-center p-4" role="dialog">
+    <div class="bg-charcoal rounded-xl border border-border-dark w-full max-w-2xl flex flex-col" style="max-height: 90vh;">
+      <!-- Header -->
+      <div class="flex items-center justify-between p-5 border-b border-border-dark flex-shrink-0">
+        <div>
+          <h2 class="text-lg font-semibold text-text-light">Nuevo Cliente</h2>
+          <div class="flex gap-2 mt-1 items-center">
+            {#each [1,2,3] as step}
+              <span class="w-6 h-6 rounded-full flex items-center justify-center text-xs font-bold
+                {ncStep >= step ? 'bg-terracotta text-white' : 'bg-gray-700 text-gray-500'}">{step}</span>
+            {/each}
+            <span class="text-xs text-gray-500 ml-1">
+              {ncStep === 1 ? 'Datos del cliente' : ncStep === 2 ? 'Selección de blueprint' : 'Confirmación'}
+            </span>
+          </div>
+        </div>
+        <button class="text-gray-400 hover:text-text-light" onclick={() => showNewClient = false}>✕</button>
+      </div>
+
+      <!-- Body -->
+      <div class="p-5 overflow-y-auto flex-1">
+        {#if ncToast}
+          <div class="bg-red-500/10 border border-red-500/30 text-red-400 text-sm rounded-lg p-3 mb-3">{ncToast}</div>
+        {/if}
+
+        {#if ncStep === 1}
+          <div class="grid grid-cols-2 gap-4">
+            <div class="col-span-2">
+              <label class="label">Empresa *</label>
+              <input class="input w-full" bind:value={ncForm.company_name} placeholder="Nombre de la empresa" />
+            </div>
+            <div>
+              <label class="label">Email *</label>
+              <input type="email" class="input w-full" bind:value={ncForm.email} placeholder="contacto@empresa.com" />
+            </div>
+            <div>
+              <label class="label">Nombre completo</label>
+              <input class="input w-full" bind:value={ncForm.full_name} placeholder="Juan Pérez" />
+            </div>
+            <div>
+              <label class="label">Subdominio *</label>
+              <div class="flex items-center">
+                <input class="input flex-1 rounded-r-none" bind:value={ncForm.subdomain} placeholder="miempresa" />
+                <span class="bg-gray-700 border border-l-0 border-border-dark rounded-r-lg px-3 py-2 text-xs text-gray-400 whitespace-nowrap">.sajet.us</span>
+              </div>
+            </div>
+            <div>
+              <label class="label">Plan</label>
+              <select class="input w-full" bind:value={ncForm.plan_name}>
+                {#each plans as pl}
+                  <option value={pl.name}>{pl.display_name}</option>
+                {/each}
+              </select>
+            </div>
+            <div>
+              <label class="label">Usuarios</label>
+              <input type="number" min="1" class="input w-full" bind:value={ncForm.user_count} />
+            </div>
+            <div>
+              <label class="label">Partner ID (opcional)</label>
+              <input type="number" class="input w-full" bind:value={ncForm.partner_id} placeholder="ID del partner" />
+            </div>
+          </div>
+
+        {:else if ncStep === 2}
+          {#if blueprintsLoading}
+            <div class="text-center py-8 text-gray-400">Cargando blueprints...</div>
+          {:else}
+            <p class="text-sm text-gray-400 mb-3">Selecciona el paquete de aplicaciones para este cliente:</p>
+            <div class="grid grid-cols-2 gap-3">
+              {#each blueprints as bp}
+                <button onclick={() => selectedBlueprint = selectedBlueprint?.id === bp.id ? null : bp}
+                  class="text-left p-4 rounded-xl border transition-all
+                    {selectedBlueprint?.id === bp.id
+                      ? 'border-terracotta bg-terracotta/10 ring-1 ring-terracotta'
+                      : 'border-border-dark hover:border-gray-500 bg-gray-800/50'}">
+                  <div class="font-medium text-text-light text-sm">{bp.name}</div>
+                  {#if bp.description}
+                    <div class="text-xs text-gray-400 mt-1 line-clamp-2">{bp.description}</div>
+                  {/if}
+                  <div class="text-xs text-gray-500 mt-2">{bp.module_count} módulos</div>
+                </button>
+              {/each}
+              <button onclick={() => selectedBlueprint = null}
+                class="text-left p-4 rounded-xl border transition-all
+                  {selectedBlueprint === null
+                    ? 'border-gray-500 bg-gray-700/30 ring-1 ring-gray-500'
+                    : 'border-border-dark hover:border-gray-600 bg-gray-800/50'}">
+                <div class="font-medium text-gray-300 text-sm">Sin blueprint</div>
+                <div class="text-xs text-gray-500 mt-1">Solo crear cliente, sin Work Order</div>
+              </button>
+            </div>
+            {#if selectedBlueprint}
+              <div class="mt-4">
+                <label class="label">Descripción de la orden (opcional)</label>
+                <textarea bind:value={ncForm.description} rows="2"
+                  placeholder="Instrucciones adicionales para el equipo técnico..."
+                  class="input w-full resize-none"></textarea>
+              </div>
+            {/if}
+          {/if}
+
+        {:else}
+          <div class="space-y-4">
+            <div class="bg-gray-700/40 rounded-xl p-4 space-y-2 text-sm">
+              <div class="text-xs text-gray-400 uppercase tracking-widest mb-2">Datos del cliente</div>
+              <div><span class="text-gray-400">Empresa:</span> <span class="text-text-light font-medium">{ncForm.company_name}</span></div>
+              <div><span class="text-gray-400">Email:</span> <span class="text-text-light">{ncForm.email}</span></div>
+              <div><span class="text-gray-400">Subdominio:</span> <span class="text-blue-400 font-mono">{ncForm.subdomain}.sajet.us</span></div>
+              <div><span class="text-gray-400">Plan:</span> <span class="text-text-light">{ncForm.plan_name}</span> — <span class="text-gray-400">{ncForm.user_count} usuario(s)</span></div>
+            </div>
+            {#if selectedBlueprint}
+              <div class="bg-terracotta/10 border border-terracotta/30 rounded-xl p-4 text-sm">
+                <div class="text-xs text-terracotta uppercase tracking-widest mb-2">Work Order — Blueprint</div>
+                <div class="font-medium text-text-light">{selectedBlueprint.name}</div>
+                <div class="text-xs text-gray-400 mt-1">{selectedBlueprint.module_count} módulos incluidos</div>
+                {#if ncForm.description}
+                  <div class="text-xs text-gray-400 mt-1 italic">{ncForm.description}</div>
+                {/if}
+              </div>
+            {:else}
+              <div class="bg-gray-700/30 border border-border-dark rounded-xl p-4 text-sm text-gray-400">
+                Solo se creará el cliente sin Work Order de aprovisionamiento.
+              </div>
+            {/if}
+          </div>
+        {/if}
+      </div>
+
+      <!-- Footer -->
+      <div class="flex items-center justify-between p-5 border-t border-border-dark flex-shrink-0">
+        <button onclick={() => { if (ncStep > 1) ncStep--; else showNewClient = false; }}
+          class="btn-secondary">{ncStep > 1 ? '← Atrás' : 'Cancelar'}</button>
+        {#if ncStep < 3}
+          <button onclick={() => {
+            ncToast = '';
+            if (ncStep === 1 && (!ncForm.company_name || !ncForm.email || !ncForm.subdomain)) {
+              ncToast = 'Empresa, email y subdominio son obligatorios'; return;
+            }
+            ncStep++;
+          }} class="btn-accent">Siguiente →</button>
+        {:else}
+          <button onclick={createClientWithWO} disabled={creatingClient} class="btn-accent disabled:opacity-50">
+            {creatingClient ? 'Creando...' : selectedBlueprint ? '✅ Crear Cliente + Work Order' : '✅ Crear Cliente'}
+          </button>
+        {/if}
+      </div>
     </div>
   </div>
 {/if}

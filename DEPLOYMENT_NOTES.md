@@ -1,189 +1,111 @@
-# Notas de Despliegue - Servidor 10.10.10.20
+# Notas de Despliegue - ERP Core
 
-## ✅ Estado Actual (2026-02-18)
+Estado: vigente  
+Validado: 2026-02-22  
+Entorno objetivo: `/opt/Erp_core` (perfil PCT160)
 
-### Configuración
-- **Servidor**: 10.10.10.20 (SRV-Sajet)
-- **Ruta de instalación**: `/var/www/html`
-- **Usuario del servicio**: `www-data`
-- **Base de datos**: SQLite (fallback) en `/var/www/html/app_data/erp_core.db`
+## Topologia objetivo
 
-### Servicios Activos
-1. **FastAPI Backend** (puerto 4443)
-   - Servicio systemd: `erp-core.service`
-   - Estado: ✅ **Activo**
-   - Workers: 2
-   - Timeout inicio: 60s
-   - Reinicio automático: habilitado
+- Aplicacion FastAPI escuchando en puerto `4443`
+- SPA compilada en `static/spa/` y servida por el backend
+- Base de datos PostgreSQL configurada desde `.env.production`
+- Servicio principal esperado: `erp-core` (systemd)
 
-2. **Nginx** (puerto 80)
-   - Sitio: `/etc/nginx/sites-available/erp-core`
-   - Estado: ✅ **Activo**
-   - Función: Reverse proxy + servidor SPA
+## Estructura recomendada en servidor
 
-### Componentes Desplegados
-
-```
-/var/www/html/
-├── app/                    # Backend FastAPI
-├── frontend/dist/          # Frontend Svelte compilado
-├── static/                 # Assets estáticos
-├── app_data/              # Datos SQLite
-├── logs/                  # Logs de aplicación
-├── requirements.txt       # Dependencias Python
-├── venv/                  # Entorno virtual Python
-└── .env.production        # Variables de entorno
+```text
+/opt/Erp_core/
+├── app/
+├── frontend/
+├── static/spa/
+├── scripts/
+├── docs/
+├── requirements.txt
+└── .env.production
 ```
 
-## 🔧 Configuración del Sistema
+## Flujo de deploy recomendado
 
-### Variables de Entorno (`.env.production`)
-```
-ENVIRONMENT=production
-FORCE_HTTPS=false
-ENABLE_WAF=false
-ENABLE_SQLITE_FALLBACK=true
-SQLALCHEMY_DATABASE_URL=sqlite:////var/www/html/app_data/erp_core.db
-ADMIN_USERNAME=admin
-ADMIN_PASSWORD=SecurePass2026!
-```
+Desde el repositorio local:
 
-### Rutas del Nginx
-- `/` → Frontend SPA (index.html con fallback para routing)
-- `/api/*` → Proxy a FastAPI en localhost:4443
-- `/static/*` → Assets estáticos desde `/var/www/html/static/`
-
-## 📊 Flujo de Acceso
-
-```
-Usuario (http://10.10.10.20)
-    ↓
-Nginx:80 (reverse proxy)
-    ├→ /api/* → FastAPI:4443
-    └→ /* → SPA static files
-```
-
-## ⚠️ Problemas Resueltos
-
-### 1. Error 500 Internal Server Error (SOLUCIONADO)
-**Causa**: Permisos incorrectos en directorio `logs/`
-**Solución**: Cambiar owner a `www-data` y permisos 755
-
-### 2. Servicio timeout (SOLUCIONADO)
-**Causa**: Conexión a PostgreSQL remoto fallando
-**Solución**: Usar SQLite como fallback con `ENABLE_SQLITE_FALLBACK=true`
-
-### 3. 404 Not Found en Nginx (SOLUCIONADO)
-**Causa**: Múltiples sitios configurados (conflicto con sitio `erp`)
-**Solución**: Desactivar sitio conflictivo, mantener solo `erp-core`
-
-### 4. Host header no enviado por curl (DETECTADO)
-**Solución**: Sempre usar header `-H "Host: 10.10.10.20"` en pruebas locales
-
-## 🚀 Acceso a la Aplicación
-
-### Desde el cliente
 ```bash
-# Abrir en navegador
-http://10.10.10.20
-
-# Login
-- Usuario: admin
-- Contraseña: SecurePass2026!
+cd /opt/Erp_core
+./scripts/deploy_to_server.sh --profile pct160
 ```
 
-### Verificación de servicios
+Opciones utiles:
+
+- Simular sin cambios remotos:
+
 ```bash
-# SSH al servidor
-ssh root@10.10.10.20
-
-# Backend
-systemctl status erp-core.service
-journalctl -u erp-core.service -f
-
-# Nginx
-systemctl status nginx
-tail -f /var/log/nginx/erp-core-error.log
-
-# Base de datos
-sqlite3 /var/www/html/app_data/erp_core.db ".tables"
+./scripts/deploy_to_server.sh --profile pct160 --dry-run
 ```
 
-## 📦 Actualización del código
+- Omitir build local de SPA:
 
-### Desde MacBook local
 ```bash
-cd /Users/owner/Desktop/jcore/Erp_core
-
-# 1. Compilar frontend si hubo cambios
-npm run build
-
-# 2. Commit y push
-git add -A
-git commit -m "feat: descripción de cambios"
-git push origin main
-
-# 3. Transferir al servidor
-scp -r frontend/dist root@10.10.10.20:/var/www/html/frontend/
-scp -r app root@10.10.10.20:/var/www/html/
-
-# 4. Reiniciar backend
-ssh root@10.10.10.20 "systemctl restart erp-core.service"
+./scripts/deploy_to_server.sh --profile pct160 --skip-build
 ```
 
-## 🔍 Logs y Monitoreo
+## Variables de entorno usadas por el deploy
 
-### Backend FastAPI
+- `SERVER_USER`
+- `SERVER_HOST`
+- `SERVER_PATH` (default: `/opt/Erp_core`)
+- `SSH_PORT` (default: `22`)
+- `SSH_KEY` (opcional)
+- `APP_SERVICE` (ej. `erp-core`)
+- `APP_BASE_URL` (default: `http://127.0.0.1:4443`)
+
+Con `--profile pct160` se aplican defaults:
+
+- `SERVER_USER=root`
+- `SERVER_HOST=${PCT160_HOST:-pct160}`
+- `SERVER_PATH=/opt/Erp_core`
+- `APP_SERVICE=erp-core`
+
+## Verificacion post-deploy
+
+Smoke tests:
+
 ```bash
-ssh root@10.10.10.20 "journalctl -u erp-core.service -f"
+cd /opt/Erp_core
+APP_BASE_URL=http://127.0.0.1:4443 ./scripts/smoke_pct160.sh
 ```
 
-### Nginx
+Validaciones manuales:
+
 ```bash
-ssh root@10.10.10.20 "tail -f /var/log/nginx/erp-core-error.log"
-ssh root@10.10.10.20 "tail -f /var/log/nginx/erp-core-access.log"
+curl -sS http://127.0.0.1:4443/health
+curl -sS http://127.0.0.1:4443/api/env
 ```
 
-### Auditoría
+## Operacion del servicio
+
 ```bash
-ssh root@10.10.10.20 "tail -f /var/www/html/logs/audit.log"
+sudo systemctl status erp-core
+sudo systemctl restart erp-core
+sudo journalctl -u erp-core -f
 ```
 
-## 🛠️ Mantenimiento
+## Errores frecuentes
 
-### Limpiar datos de prueba SQLite
-```bash
-ssh root@10.10.10.20 "rm /var/www/html/app_data/erp_core.db && systemctl restart erp-core.service"
-```
+1. `npm run check` falla durante build  
+   Revisar tipos en `frontend/src/` antes de desplegar.
 
-### Cambiar a PostgreSQL producción
-Modificar `.env.production`:
-```
-DATABASE_URL=postgresql://jeturing:PASSWORD@HOST:5432/erp_core_db
-ENABLE_SQLITE_FALLBACK=false
-```
+2. `smoke_pct160.sh` falla en login  
+   Confirmar `ADMIN_USERNAME` y `ADMIN_PASSWORD` del entorno activo.
 
-Luego reiniciar:
-```bash
-ssh root@10.10.10.20 "systemctl restart erp-core.service"
-```
+3. Fallo de conexion DB  
+   Verificar `DATABASE_URL` o `DB_*` en `.env.production`.
 
-### Habilitar HTTPS (Nginx + Certbot)
-```bash
-ssh root@10.10.10.20 "certbot certonly --nginx -d 10.10.10.20"
-# Actualizar .env.production: FORCE_HTTPS=true
-# Reiniciar: systemctl restart erp-core.service nginx
-```
+4. CORS bloquea peticiones del frontend  
+   Ajustar `ALLOWED_ORIGINS` o `ALLOWED_ORIGIN_REGEX`.
 
-## 📝 Historial
+## Referencias
 
-| Fecha | Cambio | Estado |
-|-------|--------|--------|
-| 2026-02-18 | Despliegue inicial | ✅ |
-| 2026-02-18 | Configuración SQLite fallback | ✅ |
-| 2026-02-18 | Resolver conflictos Nginx | ✅ |
-
----
-
-**Última actualización**: 2026-02-18 06:52 UTC  
-**Responsable**: Jeturing ERP Core Team
+- `README.md`
+- `scripts/deploy_to_server.sh`
+- `scripts/build_static.sh`
+- `scripts/smoke_pct160.sh`
+- `docs/05-deploy-operacion/DEPLOYMENT_RUNBOOK.md`

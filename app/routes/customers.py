@@ -47,13 +47,17 @@ class UserCountUpdate(BaseModel):
 @router.get("")
 async def list_customers(
     request: Request,
-    access_token: str = Cookie(None)
+    access_token: str = Cookie(None),
+    partner_id: int = None,
 ) -> Dict[str, Any]:
     """Lista todos los clientes con sus suscripciones, montos y user_count."""
     _verify_admin(request, access_token)
     db = SessionLocal()
     try:
-        customers = db.query(Customer).order_by(Customer.created_at.desc()).all()
+        q = db.query(Customer)
+        if partner_id is not None:
+            q = q.filter(Customer.partner_id == partner_id)
+        customers = q.order_by(Customer.created_at.desc()).all()
         items = []
 
         for c in customers:
@@ -281,6 +285,71 @@ async def update_user_count(
         raise
     except Exception as e:
         db.rollback()
+        raise HTTPException(status_code=500, detail=str(e))
+    finally:
+        db.close()
+
+
+class CreateCustomerRequest(BaseModel):
+    company_name: str
+    email: str
+    full_name: Optional[str] = ""
+    subdomain: str
+    plan_name: str = "basic"
+    user_count: int = 1
+    partner_id: Optional[int] = None
+
+
+@router.post("")
+async def create_customer(
+    payload: CreateCustomerRequest,
+    request: Request,
+    access_token: str = Cookie(None)
+) -> Dict[str, Any]:
+    """Crear un nuevo cliente con suscripción básica."""
+    _verify_admin(request, access_token)
+    db = SessionLocal()
+    try:
+        # Validar subdominio único
+        existing = db.query(Customer).filter(Customer.subdomain == payload.subdomain).first()
+        if existing:
+            raise HTTPException(status_code=409, detail=f"Subdominio '{payload.subdomain}' ya está en uso")
+
+        # Validar plan
+        plan = db.query(Plan).filter(Plan.name == payload.plan_name, Plan.is_active == True).first()
+        if not plan:
+            raise HTTPException(status_code=400, detail=f"Plan '{payload.plan_name}' no existe o no está activo")
+
+        # Crear cliente
+        customer = Customer(
+            email=payload.email,
+            full_name=payload.full_name or "",
+            company_name=payload.company_name,
+            subdomain=payload.subdomain,
+            user_count=payload.user_count,
+            partner_id=payload.partner_id,
+        )
+        db.add(customer)
+        db.flush()
+
+        # Crear suscripción activa
+        calculated_amount = plan.calculate_monthly(payload.user_count, payload.partner_id)
+        sub = Subscription(
+            customer_id=customer.id,
+            plan_name=payload.plan_name,
+            status=SubscriptionStatus.active,
+            user_count=payload.user_count,
+            monthly_amount=calculated_amount,
+        )
+        db.add(sub)
+        db.commit()
+        db.refresh(customer)
+        return {"id": customer.id, "message": f"Cliente '{payload.company_name}' creado exitosamente"}
+    except HTTPException:
+        raise
+    except Exception as e:
+        db.rollback()
+        logger.error(f"Error creando cliente: {e}")
         raise HTTPException(status_code=500, detail=str(e))
     finally:
         db.close()

@@ -61,8 +61,21 @@ export const billingApi = {
   },
 
   // Customers Management
-  async getCustomers(): Promise<CustomersResponse> {
-    return api.get<CustomersResponse>('/api/customers');
+  async getCustomers(partnerId?: number): Promise<CustomersResponse> {
+    const qs = partnerId ? `?partner_id=${partnerId}` : '';
+    return api.get<CustomersResponse>(`/api/customers${qs}`);
+  },
+
+  async createCustomer(data: {
+    company_name: string;
+    email: string;
+    full_name?: string;
+    subdomain: string;
+    plan_name?: string;
+    user_count?: number;
+    partner_id?: number;
+  }): Promise<{ id: number; message: string }> {
+    return api.post('/api/customers', data);
   },
 
   async updateCustomer(id: number, data: {

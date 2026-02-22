@@ -1,53 +1,38 @@
-# 🚀 PR Tracker — Onboarding SaaS Sajet.us
-# Auto-generado y actualizado por cada épica completada
-# Rama: onboarding | Base: main
+# PR Tracker - ERP Core
 
-## Estado General
-- **Inicio**: 2026-02-18
-- **Rama**: `onboarding`
-- **Stripe Mode**: TEST (sk_test_51G0K5CB1h7Ho...)
-- **DB**: PostgreSQL erp_core_db (10.10.10.137 / 10.10.10.20)
+Estado: vigente  
+Validado: 2026-02-22  
+Base branch recomendada: `main`
 
----
+## Objetivo
 
-## Épicas
+Registro operativo de epicas y entregables consolidados en el backend SaaS de ERP Core.
 
-| # | Épica | Estado | Fecha | Archivos Clave |
-|---|-------|--------|-------|----------------|
-| 0 | Setup: Rama + Alembic + Tracker | ✅ completado | 2026-02-18 | alembic/, .env.test |
-| 1 | Billing Mode + Tenant Origin Rules | ✅ completado | 2026-02-18 | models/database.py (28 tables, 22 enums) |
-| 2 | Blueprints / Module Packages | ✅ completado | 2026-02-18 | routes/blueprints.py (7 endpoints) |
-| 3 | Seats Direct (HWM + Stripe qty) | ✅ completado | 2026-02-18 | routes/seats.py (4 endpoints) |
-| 4 | Seats Partner (metered + grace 8h) | ✅ completado | 2026-02-18 | routes/seats.py (integrated) |
-| 5 | Invoices (TENANT_READY + intercompany) | ✅ completado | 2026-02-18 | routes/invoices.py (4 endpoints) |
-| 6 | Settlement 50/50 + offsets | ✅ completado | 2026-02-18 | routes/settlements.py (4 endpoints) |
-| 7 | Stripe Reconciliation + Assets | ✅ completado | 2026-02-18 | routes/reconciliation.py, services/stripe_reconciliation.py |
-| 8 | Domains temprano + no bloqueante | ✅ completado | 2026-02-18 | routes/domains.py (early-verify), routes/onboarding.py (billing_mode) |
-| 9 | Work Orders + gating | ✅ completado | 2026-02-18 | routes/work_orders.py (4 endpoints) |
-| 10 | Auditoría persistente + White-label | ✅ completado | 2026-02-18 | routes/audit.py, routes/branding.py (8 endpoints) |
-| S | Security: Centralizar credenciales | ✅ completado | 2026-02-18 | app/config.py, .env.example, 17 archivos limpiados |
-| T | Tests Unitarios | ⬜ pendiente | — | tests/ |
-| D | Merge + Deploy | ⬜ pendiente | — | — |
+## Estado general
 
----
+- Epicas funcionales principales: completadas
+- Endpoints SaaS Billing/Partner: activos en `app/main.py`
+- Deuda operativa abierta: mantenimiento de documentacion, pruebas E2E y hardening continuo
 
-## Commits
-<!-- Se actualiza con cada commit -->
-| Hash | Mensaje | Archivos |
-|------|---------|----------|
-| 7059d92 | epic-0: Alembic setup + tracker + .env.test | 8 files |
-| bcc8b12 | feat: Blueprints, Invoices, Seats, Settlements routes + migration + models | 7 files, 2453 insertions |
-| e738a4f | feat(epic1): Reconciliation, Work Orders, Branding, Audit + register routers | 6 files, 816 insertions |
-| e966501 | feat(epic8): Early domain verify + billing_mode routing in onboarding | 2 files, 260 insertions |
-| 0a590c6 | docs: Update tracker — all 11 épicas completed | 1 file |
-| f3e71b6 | security: Centralize ALL credentials in config.py, remove from 17 files | 19 files, 292 ins / 119 del |
+## Epicas clave (resumen)
 
-## Resumen de Endpoints Nuevos (34 total)
-- `/api/blueprints/*` — 7 endpoints (Catálogo módulos + paquetes CRUD)
-- `/api/seats/*` — 4 endpoints (Events, HWM, Stripe sync, Summary)
-- `/api/invoices/*` — 4 endpoints (Generate, List, Detail, Mark-paid)
-- `/api/settlements/*` — 4 endpoints (Create, List, Detail, Close)
-- `/api/reconciliation/*` — 3 endpoints (Run, History, Detail)
-- `/api/work-orders/*` — 4 endpoints (CRUD + gating status)
-- `/api/branding/*` — 5 endpoints (Profiles CRUD + domain resolve)
-- `/api/audit/*` — 3 endpoints (Log, List, Detail)
+| Epica | Estado | Artefactos principales |
+|---|---|---|
+| Blueprints / catalogo de modulos | Completada | `app/routes/blueprints.py` |
+| Seats y sync de cantidades | Completada | `app/routes/seats.py` |
+| Invoices / settlements / reconciliation | Completada | `app/routes/invoices.py`, `app/routes/settlements.py`, `app/routes/reconciliation.py` |
+| Work orders y gating | Completada | `app/routes/work_orders.py` |
+| Branding + auditoria | Completada | `app/routes/branding.py`, `app/routes/audit.py` |
+| Customer onboarding configurable | Completada | `app/routes/customer_onboarding.py`, `app/routes/onboarding_config.py` |
+
+## Pendientes operativos
+
+- Ejecutar regression suite completa antes de cada release mayor
+- Mantener sincronia entre docs funcionales y rutas activas
+- Revisar estado de scripts legacy antes de automatizarlos en CI
+
+## Referencias
+
+- `README.md`
+- `docs/INDICE.md`
+- `app/main.py`

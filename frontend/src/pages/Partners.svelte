@@ -6,8 +6,9 @@
   import {
     Handshake, Plus, Search, Building2, Mail, Phone, Globe,
     CheckCircle, Clock, XCircle, Pencil, Trash2, UserCheck, DollarSign,
-    KeyRound, Eye, EyeOff, Copy, ShieldCheck, Loader2, RefreshCw,
+    KeyRound, Eye, EyeOff, Copy, ShieldCheck, Loader2, RefreshCw, Users,
   } from 'lucide-svelte';
+  import { billingApi } from '../lib/api/billing';
   import type { PartnerPricingOverrideItem } from '../lib/types';
   import { partnerPortalApi } from '../lib/api/partnerPortal';
 
@@ -18,6 +19,27 @@
   let showForm = false;
   let editingId: number | null = null;
   let summary = { active: 0, pending: 0, total_leads: 0 };
+
+  // Ver Clientes state
+  let expandedClientsId: number | null = null;
+  let partnerClients: any[] = [];
+  let clientsLoading = false;
+
+  async function toggleClients(partnerId: number) {
+    if (expandedClientsId === partnerId) { expandedClientsId = null; return; }
+    expandedClientsId = partnerId;
+    expandedPricingId = null; // cerrar pricing si estaba abierto
+    clientsLoading = true;
+    try {
+      const res = await billingApi.getCustomers(partnerId);
+      partnerClients = res.items ?? [];
+    } catch (e: any) {
+      toasts.error(e.message || 'Error cargando clientes');
+      partnerClients = [];
+    } finally {
+      clientsLoading = false;
+    }
+  }
 
   // Pricing overrides state
   let expandedPricingId: number | null = null;
@@ -442,6 +464,9 @@
               </td>
               <td>
                 <div class="flex gap-1">
+                  <button class="btn-sm btn-secondary" title="Ver Clientes" on:click={() => toggleClients(p.id)}>
+                    <Users size={14} />
+                  </button>
                   <button class="btn-sm btn-secondary" title="Asignar Credenciales Portal" on:click={() => openCredentialsModal(p)}>
                     <KeyRound size={14} />
                   </button>
@@ -563,6 +588,55 @@
                               <td>
                                 <button class="btn-sm btn-danger" title="Eliminar" on:click={() => handleDeletePricing(po.id)}><Trash2 size={12} /></button>
                               </td>
+                            </tr>
+                          {/each}
+                        </tbody>
+                      </table>
+                    {/if}
+                  </div>
+                </td>
+              </tr>
+            {/if}
+
+            <!-- Clientes Panel -->
+            {#if expandedClientsId === p.id}
+              <tr>
+                <td colspan="8" class="bg-bg-page border-t border-border-dark p-4">
+                  <div class="space-y-3">
+                    <h3 class="text-sm font-bold uppercase tracking-widest text-blue-400 flex items-center gap-2">
+                      <Users size={14} /> Clientes de {p.company_name}
+                    </h3>
+                    {#if clientsLoading}
+                      <div class="text-center py-4 text-gray-500 text-sm">Cargando clientes...</div>
+                    {:else if partnerClients.length === 0}
+                      <div class="text-center py-4 text-gray-500 text-sm">Sin clientes asociados a este partner.</div>
+                    {:else}
+                      <table class="table w-full text-sm">
+                        <thead>
+                          <tr>
+                            <th>Empresa</th>
+                            <th>Email</th>
+                            <th>Subdominio</th>
+                            <th>Plan</th>
+                            <th>Usuarios</th>
+                            <th>MRR</th>
+                          </tr>
+                        </thead>
+                        <tbody>
+                          {#each partnerClients as c}
+                            <tr>
+                              <td class="font-medium text-text-light">{c.company_name}</td>
+                              <td class="text-xs text-gray-400">{c.email}</td>
+                              <td class="font-mono text-xs text-blue-400">{c.subdomain}.sajet.us</td>
+                              <td>
+                                {#if c.subscription}
+                                  <span class="badge-{c.subscription.plan_name === 'pro' ? 'pro' : c.subscription.plan_name === 'enterprise' ? 'enterprise' : 'basic'}">{c.subscription.plan_name}</span>
+                                {:else}
+                                  <span class="badge-neutral">Sin plan</span>
+                                {/if}
+                              </td>
+                              <td class="font-mono text-center">{c.user_count}</td>
+                              <td class="font-mono text-emerald-400">${(c.subscription?.calculated_amount ?? 0).toFixed(2)}</td>
                             </tr>
                           {/each}
                         </tbody>
