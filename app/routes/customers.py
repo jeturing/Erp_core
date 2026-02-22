@@ -649,3 +649,137 @@ async def bulk_create_stripe_customers(
         raise HTTPException(status_code=500, detail=str(e))
     finally:
         db.close()
+
+
+# ═══════════════════════════════════════════════════════════════
+#  CREDENCIALES DE PORTAL — Admin crea acceso para tenant/partner
+# ═══════════════════════════════════════════════════════════════
+
+class PortalCredentialsRequest(BaseModel):
+    password: str
+    send_email: bool = True
+
+
+@router.post("/{customer_id}/portal-credentials")
+async def create_portal_credentials(
+    customer_id: int,
+    payload: PortalCredentialsRequest,
+    request: Request,
+    access_token: str = Cookie(None),
+) -> Dict[str, Any]:
+    """
+    Admin crea/resetea las credenciales del portal para un cliente.
+    Genera password_hash (bcrypt) y habilita el login del tenant vía secure_auth.
+    Opcionalmente envía email con las credenciales.
+    """
+    _verify_admin(request, access_token)
+    db = SessionLocal()
+    try:
+        customer = db.query(Customer).filter(Customer.id == customer_id).first()
+        if not customer:
+            raise HTTPException(status_code=404, detail="Cliente no encontrado")
+
+        if len(payload.password) < 8:
+            raise HTTPException(status_code=400, detail="La contraseña debe tener al menos 8 caracteres")
+
+        # Generar hash bcrypt
+        import bcrypt
+        password_hash = bcrypt.hashpw(
+            payload.password.encode(), bcrypt.gensalt()
+        ).decode()
+        customer.password_hash = password_hash
+
+        # Marcar onboarding step mínimo 1 si es 0
+        if customer.onboarding_step < 1:
+            customer.onboarding_step = 1
+
+        db.commit()
+
+        result = {
+            "success": True,
+            "message": f"Credenciales de portal creadas para {customer.company_name or customer.email}",
+            "email": customer.email,
+            "login_url": "https://sajet.us/#/login",
+            "onboarding_step": customer.onboarding_step,
+        }
+
+        # Enviar email con credenciales
+        if payload.send_email:
+            try:
+                from ..services.email_service import send_portal_credentials
+                email_result = send_portal_credentials(
+                    to_email=customer.email,
+                    company_name=customer.company_name or customer.full_name or "Cliente",
+                    password=payload.password,
+                    login_url="https://sajet.us/#/login",
+                )
+                result["email_sent"] = email_result.get("success", False)
+            except Exception as e:
+                logger.warning(f"No se pudo enviar email de credenciales: {e}")
+                result["email_sent"] = False
+                result["email_error"] = str(e)
+
+        return result
+
+    except HTTPException:
+        raise
+    except Exception as e:
+        db.rollback()
+        logger.error(f"Error creando credenciales de portal: {e}")
+        raise HTTPException(status_code=500, detail=str(e))
+    finally:
+        db.close()
+
+
+@router.post("/{customer_id}/portal-bypass")
+async def set_portal_bypass(
+    customer_id: int,
+    request: Request,
+    access_token: str = Cookie(None),
+) -> Dict[str, Any]:
+    """
+    Admin activa bypass de onboarding Y crea credenciales temporales en un solo paso.
+    Útil para clientes legacy o que necesitan acceso inmediato.
+    """
+    _verify_admin(request, access_token)
+
+    body = await request.json()
+    password = body.get("password")
+    if not password or len(password) < 8:
+        raise HTTPException(status_code=400, detail="Se requiere password de al menos 8 caracteres")
+
+    db = SessionLocal()
+    try:
+        customer = db.query(Customer).filter(Customer.id == customer_id).first()
+        if not customer:
+            raise HTTPException(status_code=404, detail="Cliente no encontrado")
+
+        # Crear hash bcrypt
+        import bcrypt
+        customer.password_hash = bcrypt.hashpw(password.encode(), bcrypt.gensalt()).decode()
+
+        # Bypass onboarding
+        customer.onboarding_bypass = True
+        customer.onboarding_step = 4
+        from datetime import datetime
+        if not customer.onboarding_completed_at:
+            customer.onboarding_completed_at = datetime.utcnow()
+
+        db.commit()
+
+        return {
+            "success": True,
+            "message": f"Acceso portal completo para {customer.company_name or customer.email}",
+            "email": customer.email,
+            "login_url": "https://sajet.us/#/login",
+            "onboarding_bypass": True,
+            "onboarding_step": 4,
+        }
+
+    except HTTPException:
+        raise
+    except Exception as e:
+        db.rollback()
+        raise HTTPException(status_code=500, detail=str(e))
+    finally:
+        db.close()

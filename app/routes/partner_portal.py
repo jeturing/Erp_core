@@ -17,6 +17,7 @@ from ..models.database import (
     PartnerPricingOverride, Plan, PartnerBrandingProfile,
     SessionLocal, PartnerStatus, LeadStatus, QuotationStatus,
     BillingScenario, CommissionStatus,
+    Invoice, InvoiceStatus,
 )
 from ..services.stripe_connect import (
     create_connect_account,
@@ -24,6 +25,10 @@ from ..services.stripe_connect import (
     create_login_link,
     get_account_status,
     get_partner_balance,
+)
+from ..services.stripe_billing import (
+    push_invoice_to_stripe,
+    create_checkout_for_invoice,
 )
 from .roles import _extract_token, verify_token_with_role
 
@@ -849,5 +854,136 @@ async def get_partner_pricing(
             })
 
         return {"items": result}
+    finally:
+        db.close()
+
+
+# ═══════════════════════════════════════════════
+# FACTURAS — Facturas de clientes del partner
+# ═══════════════════════════════════════════════
+
+@router.get("/invoices")
+async def list_partner_invoices(
+    request: Request,
+    access_token: Optional[str] = Cookie(None),
+    status_filter: Optional[str] = None,
+):
+    """
+    Lista facturas de clientes asignados al partner.
+    Según billing_scenario:
+    - jeturing_collects: Partner ve facturas de sus clientes (referencia)
+    - partner_collects: Partner ve facturas que debe cobrar
+    """
+    auth = _require_partner(request, access_token)
+    db = SessionLocal()
+    try:
+        partner = _get_partner(db, auth)
+
+        q = db.query(Invoice).filter(Invoice.partner_id == partner.id)
+        if status_filter:
+            try:
+                q = q.filter(Invoice.status == InvoiceStatus(status_filter))
+            except ValueError:
+                pass
+
+        invoices = q.order_by(Invoice.created_at.desc()).limit(100).all()
+
+        items = []
+        for inv in invoices:
+            customer = db.query(Customer).filter(Customer.id == inv.customer_id).first()
+            item = {
+                "id": inv.id,
+                "invoice_number": inv.invoice_number,
+                "customer_name": customer.company_name if customer else None,
+                "customer_email": customer.email if customer else None,
+                "total": inv.total,
+                "currency": inv.currency,
+                "status": inv.status.value if inv.status else None,
+                "billing_mode": inv.billing_mode.value if inv.billing_mode else None,
+                "issuer": inv.issuer.value if inv.issuer else None,
+                "issued_at": inv.issued_at.isoformat() if inv.issued_at else None,
+                "due_date": inv.due_date.isoformat() if inv.due_date else None,
+                "paid_at": inv.paid_at.isoformat() if inv.paid_at else None,
+                "stripe_invoice_id": inv.stripe_invoice_id,
+                "payment_url": None,
+            }
+
+            # Si tiene stripe_invoice_id y no está pagada, obtener payment URL
+            if inv.stripe_invoice_id and inv.status != InvoiceStatus.paid:
+                try:
+                    import stripe as _stripe
+                    s_inv = _stripe.Invoice.retrieve(inv.stripe_invoice_id)
+                    item["payment_url"] = s_inv.get("hosted_invoice_url")
+                except Exception:
+                    pass
+
+            items.append(item)
+
+        return {
+            "items": items,
+            "total": len(items),
+            "summary": {
+                "total_billed": sum(i["total"] or 0 for i in items),
+                "total_paid": sum(i["total"] or 0 for i in items if i["status"] == "paid"),
+                "total_pending": sum(i["total"] or 0 for i in items if i["status"] in ("issued", "draft")),
+            },
+        }
+    finally:
+        db.close()
+
+
+@router.post("/invoices/{invoice_id}/pay")
+async def partner_pay_invoice(
+    invoice_id: int,
+    request: Request,
+    access_token: Optional[str] = Cookie(None),
+):
+    """
+    Genera un link de pago para una factura del partner (partner_collects).
+    """
+    auth = _require_partner(request, access_token)
+    db = SessionLocal()
+    try:
+        partner = _get_partner(db, auth)
+
+        inv = db.query(Invoice).filter(
+            Invoice.id == invoice_id,
+            Invoice.partner_id == partner.id,
+        ).first()
+
+        if not inv:
+            raise HTTPException(status_code=404, detail="Factura no encontrada")
+
+        if inv.status == InvoiceStatus.paid:
+            raise HTTPException(status_code=400, detail="La factura ya está pagada")
+
+        # Push a Stripe y obtener link
+        try:
+            result = push_invoice_to_stripe(db, inv)
+            if result.get("hosted_invoice_url"):
+                return {
+                    "payment_url": result["hosted_invoice_url"],
+                    "method": "stripe_invoice",
+                    "invoice_number": inv.invoice_number,
+                }
+        except Exception as e:
+            logger.warning(f"Push to Stripe failed for partner invoice: {e}")
+
+        # Fallback: Checkout Session
+        result = create_checkout_for_invoice(
+            db, inv,
+            success_url=f"https://sajet.us/#/partner/portal?payment_success=true&invoice={inv.invoice_number}",
+            cancel_url=f"https://sajet.us/#/partner/portal",
+        )
+        return {
+            "payment_url": result["checkout_url"],
+            "method": result.get("method", "checkout_session"),
+            "invoice_number": inv.invoice_number,
+        }
+
+    except HTTPException:
+        raise
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Error generando pago: {str(e)}")
     finally:
         db.close()

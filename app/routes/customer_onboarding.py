@@ -146,6 +146,30 @@ async def get_onboarding_status(request: Request, access_token: str = Cookie(Non
         if not customer:
             raise HTTPException(404, "Cliente no encontrado")
 
+        # Si tiene bypass, retornar como completado
+        if customer.onboarding_bypass:
+            return {
+                "customer_id": customer.id,
+                "onboarding_step": 4,
+                "onboarding_completed": True,
+                "onboarding_bypass": True,
+                "full_name": customer.full_name,
+                "company_name": customer.company_name,
+                "email": customer.email,
+                "phone": customer.phone,
+                "country": customer.country,
+                "plan": customer.plan.value if customer.plan else None,
+                "partner_id": customer.partner_id,
+                "is_dominican": False,
+                "needs_ecf_step": False,
+                "requires_ecf": customer.requires_ecf,
+                "ecf_rnc": customer.ecf_rnc,
+                "ecf_business_name": customer.ecf_business_name,
+                "ecf_establishment_type": customer.ecf_establishment_type,
+                "ecf_ncf_series": customer.ecf_ncf_series,
+                "ecf_environment": customer.ecf_environment,
+            }
+
         # Determinar si necesita paso e-CF
         is_dominican = (customer.country or "").upper() in ("DO", "RD", "REPÚBLICA DOMINICANA", "REPUBLICA DOMINICANA", "DOMINICAN REPUBLIC")
         needs_ecf_step = is_dominican and customer.requires_ecf
@@ -154,6 +178,7 @@ async def get_onboarding_status(request: Request, access_token: str = Cookie(Non
             "customer_id": customer.id,
             "onboarding_step": customer.onboarding_step,
             "onboarding_completed": customer.onboarding_completed_at is not None,
+            "onboarding_bypass": customer.onboarding_bypass or False,
             "full_name": customer.full_name,
             "company_name": customer.company_name,
             "email": customer.email,
@@ -423,6 +448,131 @@ async def admin_advance_onboarding(customer_id: int, request: Request, access_to
         return {
             "message": f"Onboarding avanzado a paso {customer.onboarding_step}",
             "onboarding_step": customer.onboarding_step,
+        }
+    finally:
+        db.close()
+
+
+class OnboardingBypassRequest(BaseModel):
+    bypass: bool
+    reason: Optional[str] = None
+
+
+@router.post("/admin/{customer_id}/bypass")
+async def admin_toggle_onboarding_bypass(
+    customer_id: int,
+    payload: OnboardingBypassRequest,
+    request: Request,
+    access_token: str = Cookie(None),
+):
+    """
+    Activa/desactiva el bypass de onboarding para un cliente.
+    - bypass=True: El cliente salta el onboarding completo y va directo al portal.
+    - bypass=False: Reactiva el onboarding (útil para nuevos módulos/encuestas).
+    """
+    _require_admin(request, access_token)
+
+    db = SessionLocal()
+    try:
+        customer = db.query(Customer).filter(Customer.id == customer_id).first()
+        if not customer:
+            raise HTTPException(404, "Cliente no encontrado")
+
+        customer.onboarding_bypass = payload.bypass
+
+        if payload.bypass:
+            # Marcar como completado también
+            if not customer.onboarding_completed_at:
+                customer.onboarding_completed_at = datetime.utcnow()
+            customer.onboarding_step = 4
+            logger.info(
+                f"Onboarding bypass ACTIVADO para customer {customer_id} "
+                f"({customer.company_name}) — Razón: {payload.reason}"
+            )
+        else:
+            # Reactivar onboarding — resetear al paso indicado o al paso actual
+            logger.info(
+                f"Onboarding bypass DESACTIVADO para customer {customer_id} "
+                f"({customer.company_name}) — Razón: {payload.reason}"
+            )
+
+        db.commit()
+        return {
+            "message": f"Bypass {'activado' if payload.bypass else 'desactivado'} para {customer.company_name}",
+            "onboarding_bypass": customer.onboarding_bypass,
+            "onboarding_step": customer.onboarding_step,
+            "onboarding_completed": customer.onboarding_completed_at is not None,
+        }
+    finally:
+        db.close()
+
+
+@router.post("/admin/{customer_id}/reset-onboarding")
+async def admin_reset_onboarding(
+    customer_id: int,
+    request: Request,
+    access_token: str = Cookie(None),
+):
+    """
+    Resetea el onboarding de un cliente: paso=0, bypass=False, completed=None.
+    Útil para requerir que complete nuevos pasos/encuestas/módulos.
+    """
+    _require_admin(request, access_token)
+
+    db = SessionLocal()
+    try:
+        customer = db.query(Customer).filter(Customer.id == customer_id).first()
+        if not customer:
+            raise HTTPException(404, "Cliente no encontrado")
+
+        customer.onboarding_step = 0
+        customer.onboarding_bypass = False
+        customer.onboarding_completed_at = None
+
+        logger.info(f"Onboarding RESETEADO para customer {customer_id} ({customer.company_name})")
+
+        db.commit()
+        return {
+            "message": f"Onboarding reseteado para {customer.company_name}",
+            "onboarding_step": 0,
+            "onboarding_bypass": False,
+            "onboarding_completed": False,
+        }
+    finally:
+        db.close()
+
+
+@router.post("/admin/{customer_id}/set-step")
+async def admin_set_step(
+    customer_id: int,
+    request: Request,
+    access_token: str = Cookie(None),
+):
+    """
+    Establece manualmente un paso específico del onboarding.
+    Body JSON: {"step": 2}
+    """
+    _require_admin(request, access_token)
+
+    body = await request.json()
+    step = body.get("step", 0)
+    if not isinstance(step, int) or step < 0 or step > 4:
+        raise HTTPException(400, "Step debe ser 0-4")
+
+    db = SessionLocal()
+    try:
+        customer = db.query(Customer).filter(Customer.id == customer_id).first()
+        if not customer:
+            raise HTTPException(404, "Cliente no encontrado")
+
+        customer.onboarding_step = step
+        if step >= 4 and not customer.onboarding_completed_at:
+            customer.onboarding_completed_at = datetime.utcnow()
+
+        db.commit()
+        return {
+            "message": f"Onboarding paso {step} establecido",
+            "onboarding_step": step,
         }
     finally:
         db.close()

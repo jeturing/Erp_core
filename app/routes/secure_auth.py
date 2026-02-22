@@ -442,6 +442,8 @@ async def get_current_user(request: Request):
                     user_data["company_name"] = customer.company_name
                     user_data["plan"] = customer.plan
                     user_data["onboarding_step"] = customer.onboarding_step
+                    user_data["onboarding_bypass"] = customer.onboarding_bypass or False
+                    user_data["onboarding_completed"] = customer.onboarding_completed_at is not None
                     user_data["country"] = customer.country
                     user_data["requires_ecf"] = customer.requires_ecf
             finally:
@@ -458,6 +460,8 @@ async def get_current_user(request: Request):
                     user_data["company_name"] = partner.company_name
                     user_data["partner_id"] = partner.id
                     user_data["onboarding_step"] = partner.onboarding_step
+                    user_data["onboarding_bypass"] = partner.onboarding_bypass or False
+                    user_data["onboarding_completed"] = partner.onboarding_completed_at is not None
                     user_data["stripe_onboarding_complete"] = partner.stripe_onboarding_complete
                     user_data["stripe_charges_enabled"] = partner.stripe_charges_enabled
                     user_data["commission_rate"] = partner.commission_rate

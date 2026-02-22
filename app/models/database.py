@@ -337,6 +337,7 @@ class Customer(Base):
     # ── Onboarding flow ──
     onboarding_step = Column(Integer, default=0)         # 0=nuevo, 1=perfil, 2=ecf(si RD), 3=pago, 4=completo
     onboarding_completed_at = Column(DateTime, nullable=True)
+    onboarding_bypass = Column(Boolean, default=False)   # True = salta onboarding, va directo al portal
     country = Column(String(100), nullable=True)
     partner_id = Column(Integer, ForeignKey("partners.id"), nullable=True)
 
@@ -539,6 +540,7 @@ class Partner(Base):
     portal_email = Column(String(200), nullable=True, unique=True, index=True)  # Email de login (default=contact_email)
     onboarding_step = Column(Integer, default=0)         # 0=invited, 1=credentials, 2=profile, 3=stripe_kyc, 4=complete
     onboarding_completed_at = Column(DateTime, nullable=True)
+    onboarding_bypass = Column(Boolean, default=False)   # True = salta onboarding, va directo al portal
     last_login_at = Column(DateTime, nullable=True)
     login_count = Column(Integer, default=0)
     invited_at = Column(DateTime, nullable=True)

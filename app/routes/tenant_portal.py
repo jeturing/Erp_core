@@ -4,18 +4,28 @@ Portal del Tenant - Vista de facturación y gestión de suscripción
 from fastapi import APIRouter, HTTPException, Request, status, Depends, Cookie
 from fastapi.responses import HTMLResponse, JSONResponse, RedirectResponse
 from pydantic import BaseModel, Field
+from typing import Optional
 from sqlalchemy.orm import Session
-from ..models.database import Customer, Subscription, SessionLocal, SubscriptionStatus, CustomDomain, SeatEvent
+from ..models.database import (
+    Customer, Subscription, SessionLocal, SubscriptionStatus,
+    CustomDomain, SeatEvent, Invoice, InvoiceStatus,
+)
 from .roles import verify_token_with_role
 from ..services.spa_shell import render_spa_shell
+from ..services.stripe_billing import (
+    push_invoice_to_stripe,
+    create_checkout_for_invoice,
+)
 import stripe
 import os
 import hashlib
 import secrets
+import logging
 from datetime import datetime
 from ..services.domain_manager import DomainManager
 
 router = APIRouter(prefix="/tenant", tags=["Tenant Portal"])
+logger = logging.getLogger(__name__)
 
 # Stripe config
 stripe.api_key = os.getenv("STRIPE_SECRET_KEY")
@@ -442,5 +452,113 @@ async def get_tenant_users(request: Request, access_token: str = Cookie(None)):
             "plan_user_limit": subscription.user_count if subscription else 1,
             "seat_events": seat_events,
         }
+    finally:
+        db.close()
+
+
+# ─────────────────────────────────────────────────────────
+# Facturas ERP (BD local) con payment links
+# ─────────────────────────────────────────────────────────
+
+@router.get("/api/invoices")
+async def get_tenant_invoices(request: Request, access_token: str = Cookie(None)):
+    """
+    Lista facturas del ERP (BD local) del tenant.
+    Incluye payment_url de Stripe para facturas pendientes.
+    """
+    token_data = get_current_tenant(request, access_token)
+    tenant_id = token_data.get("tenant_id")
+
+    if not tenant_id:
+        raise HTTPException(status_code=403, detail="Contexto de tenant requerido")
+
+    db = SessionLocal()
+    try:
+        invoices = db.query(Invoice).filter(
+            Invoice.customer_id == tenant_id
+        ).order_by(Invoice.created_at.desc()).limit(50).all()
+
+        result = []
+        for inv in invoices:
+            item = {
+                "id": inv.id,
+                "invoice_number": inv.invoice_number,
+                "total": inv.total,
+                "currency": inv.currency,
+                "status": inv.status.value if inv.status else None,
+                "issued_at": inv.issued_at.isoformat() if inv.issued_at else None,
+                "due_date": inv.due_date.isoformat() if inv.due_date else None,
+                "paid_at": inv.paid_at.isoformat() if inv.paid_at else None,
+                "stripe_invoice_id": inv.stripe_invoice_id,
+                "payment_url": None,
+                "pdf_url": None,
+            }
+
+            # Si tiene stripe_invoice_id, obtener URLs actualizadas
+            if inv.stripe_invoice_id and inv.status != InvoiceStatus.paid:
+                try:
+                    s_inv = stripe.Invoice.retrieve(inv.stripe_invoice_id)
+                    item["payment_url"] = s_inv.get("hosted_invoice_url")
+                    item["pdf_url"] = s_inv.get("invoice_pdf")
+                except Exception:
+                    pass
+
+            result.append(item)
+
+        return {"invoices": result, "total": len(result)}
+    finally:
+        db.close()
+
+
+@router.post("/api/invoices/{invoice_id}/pay")
+async def pay_invoice(invoice_id: int, request: Request, access_token: str = Cookie(None)):
+    """
+    Genera un link de pago para una factura pendiente del tenant.
+    Si la factura ya está en Stripe, retorna hosted_invoice_url.
+    Si no, crea la factura en Stripe y devuelve el link.
+    """
+    token_data = get_current_tenant(request, access_token)
+    tenant_id = token_data.get("tenant_id")
+
+    if not tenant_id:
+        raise HTTPException(status_code=403, detail="Contexto de tenant requerido")
+
+    db = SessionLocal()
+    try:
+        inv = db.query(Invoice).filter(
+            Invoice.id == invoice_id,
+            Invoice.customer_id == tenant_id,
+        ).first()
+
+        if not inv:
+            raise HTTPException(status_code=404, detail="Factura no encontrada")
+
+        if inv.status == InvoiceStatus.paid:
+            raise HTTPException(status_code=400, detail="La factura ya está pagada")
+
+        # Intentar generar payment link via Stripe Invoice
+        try:
+            result = push_invoice_to_stripe(db, inv)
+            if result.get("hosted_invoice_url"):
+                return {
+                    "payment_url": result["hosted_invoice_url"],
+                    "method": "stripe_invoice",
+                    "invoice_number": inv.invoice_number,
+                }
+        except Exception as e:
+            logger.warning(f"Push to Stripe failed, trying checkout: {e}")
+
+        # Fallback: Checkout Session
+        result = create_checkout_for_invoice(db, inv)
+        return {
+            "payment_url": result["checkout_url"],
+            "method": result.get("method", "checkout_session"),
+            "invoice_number": inv.invoice_number,
+        }
+
+    except HTTPException:
+        raise
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Error generando pago: {str(e)}")
     finally:
         db.close()

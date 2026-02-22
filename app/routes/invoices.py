@@ -1,9 +1,13 @@
 """
-Invoices Routes — Épica 5: Facturas en TENANT_READY + Intercompany
-- POST /api/invoices/generate-on-ready → Genera factura cuando lead llega a tenant_ready
-- GET  /api/invoices                   → Lista facturas
-- GET  /api/invoices/{id}              → Detalle de factura
-- POST /api/invoices/{id}/mark-paid    → Marcar como pagada
+Invoices Routes — Épica 5: Facturas bidireccionales + Payment Links
+- POST /api/invoices/generate-on-ready    → Genera factura cuando lead llega a tenant_ready
+- POST /api/invoices/generate-consumption → Genera factura por consumo real (plan + usuarios)
+- GET  /api/invoices                      → Lista facturas
+- GET  /api/invoices/{id}                 → Detalle de factura
+- POST /api/invoices/{id}/mark-paid       → Marcar como pagada
+- POST /api/invoices/{id}/payment-link    → Genera payment link en Stripe
+- POST /api/invoices/{id}/push-to-stripe  → Crea factura en Stripe desde BD
+- POST /api/invoices/{id}/checkout        → Checkout Session para pago
 """
 from fastapi import APIRouter, HTTPException, Depends
 from pydantic import BaseModel
@@ -16,6 +20,13 @@ from ..models.database import (
     Invoice, InvoiceStatus, InvoiceType, InvoiceIssuer,
     Subscription, Customer, Partner, Plan, BillingMode,
     get_db
+)
+from ..services.stripe_billing import (
+    push_invoice_to_stripe,
+    create_checkout_for_invoice,
+    generate_consumption_invoice,
+    sync_subscription_quantity,
+    change_subscription_plan,
 )
 
 router = APIRouter(prefix="/api/invoices", tags=["Invoices"])
@@ -257,3 +268,173 @@ def mark_invoice_paid(invoice_id: int, payload: InvoiceMarkPaid, db: Session = D
         inv.notes = payload.notes
     db.commit()
     return {"invoice_number": inv.invoice_number, "status": "paid"}
+
+
+# ═══════════════════════════════════════════════════════════════
+#  PAYMENT LINK — genera enlace de pago Stripe
+# ═══════════════════════════════════════════════════════════════
+
+@router.post("/{invoice_id}/payment-link")
+def get_payment_link(invoice_id: int, db: Session = Depends(get_db)):
+    """
+    Genera/obtiene el payment link de Stripe para una factura.
+    Si la factura no existe en Stripe, la crea primero.
+    Retorna la URL de pago hosted de Stripe.
+    """
+    inv = db.query(Invoice).filter(Invoice.id == invoice_id).first()
+    if not inv:
+        raise HTTPException(404, "Invoice not found")
+
+    if inv.status == InvoiceStatus.paid:
+        raise HTTPException(400, "La factura ya está pagada")
+
+    try:
+        result = push_invoice_to_stripe(db, inv)
+        return {
+            "invoice_number": inv.invoice_number,
+            "payment_url": result.get("hosted_invoice_url"),
+            "pdf_url": result.get("pdf_url"),
+            "stripe_invoice_id": result.get("stripe_invoice_id"),
+            "status": result.get("status"),
+        }
+    except Exception as e:
+        logger.error(f"Error generating payment link: {e}")
+        raise HTTPException(500, f"Error generando enlace de pago: {str(e)}")
+
+
+@router.post("/{invoice_id}/push-to-stripe")
+def push_to_stripe(invoice_id: int, db: Session = Depends(get_db)):
+    """
+    Crea la factura en Stripe desde la BD local (push bidireccional).
+    """
+    inv = db.query(Invoice).filter(Invoice.id == invoice_id).first()
+    if not inv:
+        raise HTTPException(404, "Invoice not found")
+
+    try:
+        result = push_invoice_to_stripe(db, inv)
+        return {
+            "invoice_number": inv.invoice_number,
+            **result,
+        }
+    except Exception as e:
+        logger.error(f"Error pushing invoice to Stripe: {e}")
+        raise HTTPException(500, f"Error enviando factura a Stripe: {str(e)}")
+
+
+class CheckoutRequest(BaseModel):
+    success_url: Optional[str] = None
+    cancel_url: Optional[str] = None
+
+
+@router.post("/{invoice_id}/checkout")
+def create_checkout(
+    invoice_id: int,
+    payload: CheckoutRequest = CheckoutRequest(),
+    db: Session = Depends(get_db),
+):
+    """
+    Crea un Stripe Checkout Session para pagar una factura.
+    Alternativa al hosted_invoice_url — útil para partners.
+    """
+    inv = db.query(Invoice).filter(Invoice.id == invoice_id).first()
+    if not inv:
+        raise HTTPException(404, "Invoice not found")
+
+    if inv.status == InvoiceStatus.paid:
+        raise HTTPException(400, "La factura ya está pagada")
+
+    try:
+        result = create_checkout_for_invoice(
+            db, inv,
+            success_url=payload.success_url,
+            cancel_url=payload.cancel_url,
+        )
+        return {
+            "invoice_number": inv.invoice_number,
+            **result,
+        }
+    except Exception as e:
+        logger.error(f"Error creating checkout: {e}")
+        raise HTTPException(500, f"Error creando checkout: {str(e)}")
+
+
+# ═══════════════════════════════════════════════════════════════
+#  FACTURA POR CONSUMO REAL (plan + usuarios)
+# ═══════════════════════════════════════════════════════════════
+
+class ConsumptionInvoiceRequest(BaseModel):
+    subscription_id: int
+
+
+@router.post("/generate-consumption")
+def generate_consumption(
+    payload: ConsumptionInvoiceRequest,
+    db: Session = Depends(get_db),
+):
+    """
+    Genera factura basada en consumo real: plan base + usuarios adicionales.
+    La crea en BD local Y en Stripe simultáneamente.
+    """
+    try:
+        result = generate_consumption_invoice(db, payload.subscription_id)
+        return result
+    except ValueError as e:
+        raise HTTPException(404, str(e))
+    except Exception as e:
+        logger.error(f"Error generating consumption invoice: {e}")
+        raise HTTPException(500, f"Error generando factura: {str(e)}")
+
+
+# ═══════════════════════════════════════════════════════════════
+#  SYNC BIDIRECCIONAL — qty y plan
+# ═══════════════════════════════════════════════════════════════
+
+class SyncQtyRequest(BaseModel):
+    subscription_id: int
+    new_quantity: Optional[int] = None
+
+
+@router.post("/sync-quantity")
+def sync_qty_to_stripe(
+    payload: SyncQtyRequest,
+    db: Session = Depends(get_db),
+):
+    """
+    Sincroniza la cantidad de usuarios de una suscripción a Stripe (DB → Stripe).
+    Se llama cuando se agregan/eliminan usuarios en el ERP.
+    """
+    sub = db.query(Subscription).filter(Subscription.id == payload.subscription_id).first()
+    if not sub:
+        raise HTTPException(404, "Subscription not found")
+
+    result = sync_subscription_quantity(db, sub, payload.new_quantity)
+    return result
+
+
+class ChangePlanRequest(BaseModel):
+    subscription_id: int
+    new_plan_name: str
+
+
+@router.post("/change-plan")
+def change_plan(
+    payload: ChangePlanRequest,
+    db: Session = Depends(get_db),
+):
+    """
+    Cambia el plan de una suscripción en Stripe con proration.
+    """
+    sub = db.query(Subscription).filter(Subscription.id == payload.subscription_id).first()
+    if not sub:
+        raise HTTPException(404, "Subscription not found")
+
+    plan = db.query(Plan).filter(
+        Plan.name == payload.new_plan_name,
+        Plan.is_active == True,
+    ).first()
+    if not plan:
+        raise HTTPException(404, f"Plan '{payload.new_plan_name}' not found")
+
+    result = change_subscription_plan(db, sub, plan)
+    return result
