@@ -73,6 +73,10 @@ JWT_ACCESS_TOKEN_EXPIRE_MINUTES = int(os.getenv("JWT_ACCESS_TOKEN_EXPIRE_MINUTES
 ADMIN_USERNAME = os.getenv("ADMIN_USERNAME", "admin@sajet.us")
 ADMIN_PASSWORD = os.getenv("ADMIN_PASSWORD", "")
 
+# Clave Fernet para cifrar campos sensibles en BD (work order credentials, etc.)
+# Generar con: python3 -c "from cryptography.fernet import Fernet; print(Fernet.generate_key().decode())"
+FIELD_ENCRYPT_KEY = os.getenv("FIELD_ENCRYPT_KEY", "")
+
 
 # ═══════════════════════════════════════════════════════
 # Odoo

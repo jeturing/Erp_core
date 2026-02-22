@@ -129,6 +129,26 @@ async def secure_login(request: Request, login_data: LoginRequest):
         else:
             # Login con email (@) — puede ser partner o tenant
             import hashlib
+            import bcrypt as _bcrypt
+
+            def _verify_and_migrate_password(password: str, stored_hash: str):
+                """
+                Verifica password y migra transparentemente de SHA256 a bcrypt.
+                Retorna (ok: bool, nuevo_hash: str|None).
+                El nuevo_hash != None indica que hay que persistir el hash migrado.
+                """
+                if stored_hash.startswith("$2b$") or stored_hash.startswith("$2a$"):
+                    ok = _bcrypt.checkpw(password.encode(), stored_hash.encode())
+                    return ok, None
+                # Formato legacy: 'salt:sha256hex'
+                parts = stored_hash.split(":", 1)
+                if len(parts) == 2:
+                    salt, sha_hash = parts
+                    computed = hashlib.sha256((password + salt).encode()).hexdigest()
+                    if computed == sha_hash:
+                        new_hash = _bcrypt.hashpw(password.encode(), _bcrypt.gensalt()).decode()
+                        return True, new_hash
+                return False, None
 
             # ── Intentar login como partner primero ──
             partner = db.query(Partner).filter(
@@ -138,34 +158,29 @@ async def secure_login(request: Request, login_data: LoginRequest):
 
             partner_authenticated = False
             if partner and partner.password_hash and partner.portal_access and partner.status in (PartnerStatus.active, PartnerStatus.pending):
-                parts = partner.password_hash.split(':')
-                if len(parts) == 2:
-                    salt, stored_hash = parts
-                    computed_hash = hashlib.sha256((login_data.password + salt).encode()).hexdigest()
-                    if computed_hash == stored_hash:
-                        # Login partner exitoso
-                        username = partner.portal_email or partner.contact_email
-                        role = "partner"
-                        user_id = partner.id
-                        tenant_id = None
-                        redirect_url = "/partner/portal"
-                        partner_authenticated = True
-
-                        # Actualizar stats de login
-                        partner.last_login_at = datetime.utcnow()
-                        partner.login_count = (partner.login_count or 0) + 1
-                        db.commit()
-                    else:
-                        # Password incorrecta del partner
-                        AuditLogger.log_login_failed(
-                            username=login_data.email,
-                            reason="Invalid partner password",
-                            request=request
-                        )
-                        raise HTTPException(
-                            status_code=status.HTTP_401_UNAUTHORIZED,
-                            detail="Credenciales inválidas"
-                        )
+                ok, migrated_hash = _verify_and_migrate_password(login_data.password, partner.password_hash)
+                if ok:
+                    if migrated_hash:
+                        partner.password_hash = migrated_hash
+                    username = partner.portal_email or partner.contact_email
+                    role = "partner"
+                    user_id = partner.id
+                    tenant_id = None
+                    redirect_url = "/partner/portal"
+                    partner_authenticated = True
+                    partner.last_login_at = datetime.utcnow()
+                    partner.login_count = (partner.login_count or 0) + 1
+                    db.commit()
+                else:
+                    AuditLogger.log_login_failed(
+                        username=login_data.email,
+                        reason="Invalid partner password",
+                        request=request
+                    )
+                    raise HTTPException(
+                        status_code=status.HTTP_401_UNAUTHORIZED,
+                        detail="Credenciales inválidas"
+                    )
 
             # ── Si no es partner, intentar como tenant ──
             if not partner_authenticated:
@@ -182,27 +197,21 @@ async def secure_login(request: Request, login_data: LoginRequest):
                         detail="Credenciales inválidas"
                     )
 
-                # Verificar password hasheado (formato: salt:hash)
                 if customer.password_hash:
-                    parts = customer.password_hash.split(':')
-                    if len(parts) == 2:
-                        salt, stored_hash = parts
-                        computed_hash = hashlib.sha256((login_data.password + salt).encode()).hexdigest()
-                        if computed_hash != stored_hash:
-                            AuditLogger.log_login_failed(
-                                username=login_data.email,
-                                reason="Invalid password",
-                                request=request
-                            )
-                            raise HTTPException(
-                                status_code=status.HTTP_401_UNAUTHORIZED,
-                                detail="Credenciales inválidas"
-                            )
-                    else:
+                    ok, migrated_hash = _verify_and_migrate_password(login_data.password, customer.password_hash)
+                    if not ok:
+                        AuditLogger.log_login_failed(
+                            username=login_data.email,
+                            reason="Invalid password",
+                            request=request
+                        )
                         raise HTTPException(
                             status_code=status.HTTP_401_UNAUTHORIZED,
                             detail="Credenciales inválidas"
                         )
+                    if migrated_hash:
+                        customer.password_hash = migrated_hash
+                        db.commit()
                 else:
                     AuditLogger.log_login_failed(
                         username=login_data.email,

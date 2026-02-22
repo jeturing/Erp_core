@@ -1,5 +1,6 @@
 """
-Token Management - Access tokens and Refresh tokens
+Token Management - Access tokens and Refresh tokens.
+Refresh tokens se persisten en BD (tabla refresh_tokens) para sobrevivir reinicios.
 """
 from datetime import datetime, timedelta
 from typing import Optional, Tuple
@@ -17,6 +18,12 @@ from ..config import (
 )
 
 logger = logging.getLogger(__name__)
+
+
+def _db():
+    """Retorna (RefreshToken model, session) — import lazy para evitar circular imports."""
+    from ..models.database import RefreshToken, SessionLocal
+    return RefreshToken, SessionLocal()
 
 # Token expiry config
 ACCESS_TOKEN_EXPIRE_MINUTES = JWT_ACCESS_TOKEN_EXPIRE_MINUTES
@@ -135,13 +142,10 @@ class TokenManager:
 
 class RefreshTokenManager:
     """
-    Gestiona refresh tokens.
-    Los refresh tokens se almacenan como hash en la base de datos.
+    Gestiona refresh tokens persistidos en base de datos.
+    Los tokens en claro NUNCA se almacenan — solo su SHA-256.
     """
-    
-    # Almacenamiento en memoria (usar DB en producción)
-    _refresh_tokens = {}  # token_hash -> {user_id, role, expires_at, revoked}
-    
+
     @classmethod
     def create_refresh_token(
         cls,
@@ -150,92 +154,101 @@ class RefreshTokenManager:
         user_id: int = None,
         tenant_id: int = None
     ) -> Tuple[str, datetime]:
-        """
-        Crea un refresh token opaco de larga duración.
-        
-        Returns:
-            Tuple[token, expires_at]
-        """
-        # Generar token opaco seguro
+        """Crea un refresh token opaco de larga duración y lo persiste en BD."""
         token = secrets.token_urlsafe(64)
         token_hash = hashlib.sha256(token.encode()).hexdigest()
-        
         expires_at = datetime.utcnow() + timedelta(days=REFRESH_TOKEN_EXPIRE_DAYS)
-        
-        # Almacenar hash del token
-        cls._refresh_tokens[token_hash] = {
-            "username": username,
-            "role": role,
-            "user_id": user_id,
-            "tenant_id": tenant_id,
-            "expires_at": expires_at,
-            "revoked": False,
-            "created_at": datetime.utcnow()
-        }
-        
-        logger.info(f"Refresh token created for user {username}")
-        
+
+        RefreshToken, session = _db()
+        try:
+            record = RefreshToken(
+                token_hash=token_hash,
+                username=username,
+                role=role,
+                user_id=user_id,
+                tenant_id=tenant_id,
+                expires_at=expires_at,
+            )
+            session.add(record)
+            session.commit()
+            logger.info(f"Refresh token created for user {username}")
+        except Exception as e:
+            session.rollback()
+            logger.error(f"Error creating refresh token: {e}")
+            raise
+        finally:
+            session.close()
+
         return token, expires_at
-    
+
     @classmethod
     def verify_refresh_token(cls, token: str) -> dict:
-        """
-        Verifica un refresh token.
-        
-        Returns:
-            Datos del usuario asociado al token
-        
-        Raises:
-            ValueError: Token inválido, expirado o revocado
-        """
+        """Verifica un refresh token contra la BD."""
         token_hash = hashlib.sha256(token.encode()).hexdigest()
-        
-        if token_hash not in cls._refresh_tokens:
-            raise ValueError("Refresh token inválido")
-        
-        token_data = cls._refresh_tokens[token_hash]
-        
-        if token_data["revoked"]:
-            # Token revocado - posible robo, revocar toda la familia
-            logger.warning(f"Attempted use of revoked refresh token for {token_data['username']}")
-            raise ValueError("Refresh token revocado")
-        
-        if datetime.utcnow() > token_data["expires_at"]:
-            # Limpiar token expirado
-            del cls._refresh_tokens[token_hash]
-            raise ValueError("Refresh token expirado")
-        
-        return {
-            "username": token_data["username"],
-            "role": token_data["role"],
-            "user_id": token_data["user_id"],
-            "tenant_id": token_data["tenant_id"]
-        }
-    
+        RefreshToken, session = _db()
+        try:
+            record = session.query(RefreshToken).filter(
+                RefreshToken.token_hash == token_hash
+            ).first()
+
+            if not record:
+                raise ValueError("Refresh token inválido")
+            if record.revoked:
+                logger.warning(f"Attempted use of revoked token for {record.username}")
+                raise ValueError("Refresh token revocado")
+            if datetime.utcnow() > record.expires_at:
+                session.delete(record)
+                session.commit()
+                raise ValueError("Refresh token expirado")
+
+            return {
+                "username": record.username,
+                "role": record.role,
+                "user_id": record.user_id,
+                "tenant_id": record.tenant_id,
+            }
+        finally:
+            session.close()
+
     @classmethod
     def revoke_refresh_token(cls, token: str) -> bool:
         """Revoca un refresh token específico."""
         token_hash = hashlib.sha256(token.encode()).hexdigest()
-        
-        if token_hash in cls._refresh_tokens:
-            cls._refresh_tokens[token_hash]["revoked"] = True
-            logger.info(f"Refresh token revoked for {cls._refresh_tokens[token_hash]['username']}")
-            return True
-        
-        return False
-    
+        RefreshToken, session = _db()
+        try:
+            record = session.query(RefreshToken).filter(
+                RefreshToken.token_hash == token_hash
+            ).first()
+            if record:
+                record.revoked = True
+                session.commit()
+                logger.info(f"Refresh token revoked for {record.username}")
+                return True
+            return False
+        except Exception:
+            session.rollback()
+            return False
+        finally:
+            session.close()
+
     @classmethod
     def revoke_all_user_tokens(cls, username: str) -> int:
         """Revoca todos los refresh tokens de un usuario."""
-        count = 0
-        for token_hash, data in cls._refresh_tokens.items():
-            if data["username"] == username and not data["revoked"]:
-                data["revoked"] = True
-                count += 1
-        
-        logger.info(f"Revoked {count} refresh tokens for user {username}")
-        return count
-    
+        RefreshToken, session = _db()
+        try:
+            count = session.query(RefreshToken).filter(
+                RefreshToken.username == username,
+                RefreshToken.revoked == False
+            ).update({"revoked": True})
+            session.commit()
+            logger.info(f"Revoked {count} refresh tokens for user {username}")
+            return count
+        except Exception:
+            session.rollback()
+            return 0
+        finally:
+            session.close()
+
     @classmethod
     def rotate_refresh_token(
         cls,
@@ -245,21 +258,14 @@ class RefreshTokenManager:
         user_id: int = None,
         tenant_id: int = None
     ) -> Tuple[str, datetime]:
-        """
-        Rota un refresh token (revoca el viejo, crea uno nuevo).
-        Implementa refresh token rotation para mayor seguridad.
-        """
-        # Revocar token antiguo
+        """Rota un refresh token: revoca el viejo, crea uno nuevo."""
         cls.revoke_refresh_token(old_token)
-        
-        # Crear nuevo token
         return cls.create_refresh_token(username, role, user_id, tenant_id)
-    
+
     @classmethod
     def set_refresh_token_cookie(cls, response, token: str):
         """Configura la cookie httpOnly con el refresh token."""
         max_age = REFRESH_TOKEN_EXPIRE_DAYS * 24 * 60 * 60
-        
         response.set_cookie(
             key="refresh_token",
             value=token,
@@ -267,9 +273,9 @@ class RefreshTokenManager:
             secure=USE_SECURE_COOKIES,
             samesite="lax",
             max_age=max_age,
-            path="/api/auth"  # Accesible en endpoints de auth (refresh, logout)
+            path="/api/auth",
         )
-    
+
     @classmethod
     def delete_refresh_token_cookie(cls, response):
         """Elimina la cookie del refresh token."""
@@ -278,20 +284,21 @@ class RefreshTokenManager:
             path="/api/auth",
             httponly=True,
             secure=USE_SECURE_COOKIES,
-            samesite="lax"
+            samesite="lax",
         )
-    
+
     @classmethod
     def cleanup_expired_tokens(cls):
-        """Limpia tokens expirados de la memoria."""
-        now = datetime.utcnow()
-        expired = [
-            token_hash for token_hash, data in cls._refresh_tokens.items()
-            if data["expires_at"] < now
-        ]
-        
-        for token_hash in expired:
-            del cls._refresh_tokens[token_hash]
-        
-        if expired:
-            logger.info(f"Cleaned up {len(expired)} expired refresh tokens")
+        """Elimina tokens expirados de la BD (para mantenimiento periódico)."""
+        RefreshToken, session = _db()
+        try:
+            deleted = session.query(RefreshToken).filter(
+                RefreshToken.expires_at < datetime.utcnow()
+            ).delete()
+            session.commit()
+            if deleted:
+                logger.info(f"Cleaned up {deleted} expired refresh tokens from DB")
+        except Exception:
+            session.rollback()
+        finally:
+            session.close()

@@ -2,9 +2,10 @@
 Tenants Routes - Tenant management endpoints
 Integrado con OdooDatabaseManager para provisioning real
 """
-from fastapi import APIRouter, HTTPException, Header, Query
-from pydantic import BaseModel, Field
+from fastapi import APIRouter, HTTPException, Header, Query, Request
+from pydantic import BaseModel, Field, field_validator
 from typing import Optional, List
+import re
 from ..models.database import Customer, Subscription, SubscriptionStatus, SessionLocal, Partner, Plan, BillingMode, PayerType, CollectorType, InvoiceIssuer
 from ..services.odoo_database_manager import (
     get_available_servers,
@@ -20,6 +21,7 @@ from ..services.odoo_database_manager import (
     query_admin_login_pg,
 )
 from .auth import verify_token
+from .roles import verify_token_with_role, _extract_token
 import httpx
 import logging
 import psycopg
@@ -30,11 +32,32 @@ from ..config import PROVISIONING_API_KEY, ODOO_DB_USER, ODOO_DB_PASSWORD
 router = APIRouter(prefix="/api/tenants", tags=["Tenants"])
 logger = logging.getLogger(__name__)
 
+_SUBDOMAIN_RE = re.compile(r'^[a-z0-9][a-z0-9_]{1,28}[a-z0-9]$')
+
+
+def _require_admin(request: Request, authorization: Optional[str] = None):
+    """Verifica que la request tenga un token de admin válido."""
+    token = _extract_token(request, authorization)
+    if not token:
+        raise HTTPException(status_code=401, detail="No autenticado")
+    payload = verify_token_with_role(token)
+    if payload.get("role") != "admin":
+        raise HTTPException(status_code=403, detail="Acceso solo para administradores")
+    return payload
+
 
 # DTOs
 class TenantCreateRequest(BaseModel):
     """Request para crear un nuevo tenant"""
     subdomain: str = Field(..., min_length=3, max_length=30, description="Nombre del tenant (será subdominio y BD)")
+
+    @field_validator("subdomain")
+    @classmethod
+    def validate_subdomain(cls, v: str) -> str:
+        v = v.lower()
+        if not _SUBDOMAIN_RE.match(v):
+            raise ValueError("El subdominio solo puede contener letras minúsculas, números y guiones bajos, y debe empezar y terminar con alfanumérico")
+        return v
     company_name: Optional[str] = Field(None, description="Nombre de la empresa")
     admin_email: Optional[str] = Field(DEFAULT_ADMIN_LOGIN, description="Email del admin")
     admin_password: Optional[str] = Field(DEFAULT_ADMIN_PASSWORD, description="Password del admin")
@@ -343,16 +366,9 @@ async def list_server_databases(server_id: str):
 # =====================================================
 
 @router.get("")
-async def list_tenants(authorization: Optional[str] = Header(None)):
+async def list_tenants(request: Request, authorization: Optional[str] = Header(None)):
     """Listado de tenants desde todos los servidores"""
-    # Validar token si se proporciona
-    try:
-        if authorization is not None and authorization.startswith("Bearer "):
-            token = authorization[7:]
-            verify_token(token)
-    except HTTPException:
-        raise
-    
+    _require_admin(request, authorization)
     try:
         items = await get_all_tenants_from_servers()
         if not items:
@@ -376,24 +392,26 @@ async def list_tenants(authorization: Optional[str] = Header(None)):
 
 @router.post("")
 async def create_tenant(
-    payload: TenantCreateRequest, 
+    payload: TenantCreateRequest,
+    request: Request,
     authorization: Optional[str] = Header(None)
 ):
     """
-    Crear un nuevo tenant (base de datos Odoo).
-    
+    Crear un nuevo tenant (base de datos Odoo). Requiere rol admin.
+
     - Si no se especifica server_id, se selecciona automáticamente el mejor servidor
     - Credenciales por defecto: configuradas en variables de entorno
     - Por defecto usa método SQL rápido (duplica template_tenant)
     """
-    # Validar token
+    _require_admin(request, authorization)
+    # Verificar idempotencia: si el subdominio ya existe en BD local, rechazar
+    db = SessionLocal()
     try:
-        if authorization is not None and authorization.startswith("Bearer "):
-            token = authorization[7:]
-            verify_token(token)
-    except HTTPException:
-        raise
-    
+        existing = db.query(Customer).filter(Customer.subdomain == payload.subdomain).first()
+        if existing:
+            raise HTTPException(status_code=409, detail=f"El subdominio '{payload.subdomain}' ya existe")
+    finally:
+        db.close()
     try:
         # Usar método rápido por defecto
         if payload.use_fast_method:
@@ -483,24 +501,18 @@ async def create_tenant(
 @router.delete("/{subdomain}")
 async def delete_tenant_endpoint(
     subdomain: str,
+    request: Request,
     server_id: Optional[str] = Query(None, description="ID del servidor"),
     confirm: bool = Query(False, description="Confirmar eliminación"),
     authorization: Optional[str] = Header(None)
 ):
     """
-    Eliminar un tenant (base de datos Odoo).
-    
+    Eliminar un tenant (base de datos Odoo). Requiere rol admin.
+
     - Requiere confirm=true para ejecutar
     - Si no se especifica server_id, busca en todos los servidores
     """
-    # Validar token
-    try:
-        if authorization is not None and authorization.startswith("Bearer "):
-            token = authorization[7:]
-            verify_token(token)
-    except HTTPException:
-        raise
-    
+    _require_admin(request, authorization)
     if not confirm:
         return {
             "success": False,
@@ -548,17 +560,11 @@ async def delete_tenant_endpoint(
 @router.get("/{subdomain}")
 async def get_tenant_details(
     subdomain: str,
+    request: Request,
     authorization: Optional[str] = Header(None)
 ):
-    """Obtener detalles de un tenant específico"""
-    # Validar token
-    try:
-        if authorization is not None and authorization.startswith("Bearer "):
-            token = authorization[7:]
-            verify_token(token)
-    except HTTPException:
-        raise
-    
+    """Obtener detalles de un tenant específico. Requiere autenticación."""
+    _require_admin(request, authorization)
     try:
         all_tenants = await get_all_tenants_from_servers()
         if not all_tenants:

@@ -224,9 +224,15 @@ class Customer(Base):
     ecf_certificate_expiry = Column(DateTime, nullable=True)         # Vencimiento certificado digital DGII
     ecf_authorized_sequences = Column(Text, nullable=True)           # JSON: rangos autorizados DGII
 
+    # ── 2FA / TOTP (persistido en BD) ──
+    totp_secret = Column(String(64), nullable=True)          # Base32 secret cifrado
+    totp_enabled = Column(Boolean, default=False)
+    totp_backup_codes = Column(Text, nullable=True)          # JSON list de códigos de respaldo
+    totp_backup_codes_used = Column(Text, nullable=True)     # JSON list de códigos ya usados
+
     created_at = Column(DateTime, default=datetime.utcnow)
     updated_at = Column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
-    
+
     # Relaciones
     custom_domains = relationship("CustomDomain", back_populates="customer", cascade="all, delete-orphan")
     subscriptions = relationship("Subscription", back_populates="customer")
@@ -400,7 +406,7 @@ class Partner(Base):
     contract_reference = Column(String(100))             # Nro de contrato
 
     # ── Portal Auth (Épica Partners) ──
-    password_hash = Column(String(255), nullable=True)   # Hash salt:sha256 para login propio
+    password_hash = Column(String(255), nullable=True)   # Hash bcrypt (migrado desde salt:sha256)
     portal_email = Column(String(200), nullable=True, unique=True, index=True)  # Email de login (default=contact_email)
     onboarding_step = Column(Integer, default=0)         # 0=invited, 1=credentials, 2=profile, 3=stripe_kyc, 4=complete
     onboarding_completed_at = Column(DateTime, nullable=True)
@@ -408,6 +414,12 @@ class Partner(Base):
     login_count = Column(Integer, default=0)
     invited_at = Column(DateTime, nullable=True)
     invited_by = Column(String(150), nullable=True)
+
+    # ── 2FA / TOTP (persistido en BD) ──
+    totp_secret = Column(String(64), nullable=True)
+    totp_enabled = Column(Boolean, default=False)
+    totp_backup_codes = Column(Text, nullable=True)
+    totp_backup_codes_used = Column(Text, nullable=True)
 
     notes = Column(Text)
     created_at = Column(DateTime, default=datetime.utcnow)
@@ -1231,6 +1243,55 @@ class OnboardingConfig(Base):
     is_active = Column(Boolean, default=True)
     created_at = Column(DateTime, default=datetime.utcnow)
     updated_at = Column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
+
+
+# ═══════════════════════════════════════════════════════
+# REFRESH TOKENS — Persistencia en BD (reemplaza memoria)
+# ═══════════════════════════════════════════════════════
+
+class RefreshToken(Base):
+    """
+    Refresh tokens almacenados en BD para sobrevivir reinicios.
+    Se guarda el SHA-256 del token opaco, nunca el token en claro.
+    """
+    __tablename__ = "refresh_tokens"
+
+    id = Column(Integer, primary_key=True, index=True)
+    token_hash = Column(String(64), unique=True, nullable=False, index=True)
+    username = Column(String(150), nullable=False, index=True)
+    role = Column(String(30), nullable=False)
+    user_id = Column(Integer, nullable=True)
+    tenant_id = Column(Integer, nullable=True)
+    expires_at = Column(DateTime, nullable=False)
+    revoked = Column(Boolean, default=False, nullable=False)
+    created_at = Column(DateTime, default=datetime.utcnow)
+
+
+# ═══════════════════════════════════════════════════════
+# EMAIL LOG — Historial de emails transaccionales
+# ═══════════════════════════════════════════════════════
+
+class EmailLog(Base):
+    """
+    Registro de cada email transaccional enviado por el sistema.
+    Permite historial, reenvío y diagnóstico de entregas.
+    """
+    __tablename__ = "email_logs"
+
+    id = Column(Integer, primary_key=True, index=True)
+    recipient = Column(String(255), nullable=False, index=True)
+    subject = Column(String(500))
+    email_type = Column(String(80), nullable=False)   # credentials, reset, commission, work_order, quotation, etc.
+    status = Column(String(20), default="sent")        # sent, failed, pending
+    error_message = Column(Text, nullable=True)
+    customer_id = Column(Integer, ForeignKey("customers.id"), nullable=True)
+    partner_id = Column(Integer, ForeignKey("partners.id"), nullable=True)
+    related_id = Column(Integer, nullable=True)        # ID del objeto relacionado (work_order, commission, etc.)
+    sent_at = Column(DateTime, default=datetime.utcnow)
+    created_at = Column(DateTime, default=datetime.utcnow)
+
+    customer = relationship("Customer", foreign_keys=[customer_id])
+    partner = relationship("Partner", foreign_keys=[partner_id])
 
 
 # ===== HELPER FUNCTIONS PARA CONFIGURACIÓN =====

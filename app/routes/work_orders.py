@@ -28,7 +28,42 @@ router = APIRouter(prefix="/api/work-orders", tags=["WorkOrders"])
 logger = logging.getLogger(__name__)
 
 ADMIN_TENANT_LOGIN = os.getenv("ODOO_DEFAULT_ADMIN_LOGIN", "admin@sajet.us")
-ADMIN_TENANT_PASSWORD = os.getenv("ODOO_DEFAULT_ADMIN_PASSWORD", "321Abcd.")
+ADMIN_TENANT_PASSWORD = os.getenv("ODOO_DEFAULT_ADMIN_PASSWORD", "")
+
+# ─── Cifrado Fernet para credenciales sensibles ───────────────────────────────
+
+def _get_fernet():
+    """Devuelve instancia Fernet si FIELD_ENCRYPT_KEY está configurada."""
+    key = os.getenv("FIELD_ENCRYPT_KEY", "")
+    if not key:
+        return None
+    try:
+        from cryptography.fernet import Fernet
+        return Fernet(key.encode())
+    except Exception as e:
+        logger.warning(f"Fernet init failed: {e}")
+        return None
+
+def _encrypt(value: str) -> str:
+    """Cifra un string con Fernet. Devuelve el valor original si no hay clave."""
+    if not value:
+        return value
+    f = _get_fernet()
+    if f is None:
+        return value
+    return f.encrypt(value.encode()).decode()
+
+def _decrypt(value: str) -> str:
+    """Descifra un string con Fernet. Devuelve el valor original si no hay clave."""
+    if not value:
+        return value
+    f = _get_fernet()
+    if f is None:
+        return value
+    try:
+        return f.decrypt(value.encode()).decode()
+    except Exception:
+        return value  # Devuelve crudo si no puede descifrar (ej: valores legacy)
 
 # ─── Helpers ──────────────────────────────────────────────────────────────────
 
@@ -86,9 +121,9 @@ def _send_completion_email(wo: WorkOrder, db):
             company_name=customer.company_name or customer.subdomain or str(customer.id),
             subdomain=customer.subdomain or "",
             admin_login=wo.tenant_admin_email or ADMIN_TENANT_LOGIN,
-            admin_password=ADMIN_TENANT_PASSWORD,
+            admin_password=_decrypt(wo.tenant_admin_password or ADMIN_TENANT_PASSWORD),
             user_login=wo.tenant_user_email or f"usuario@{customer.subdomain}.sajet.us",
-            user_password=wo.tenant_user_password or "",
+            user_password=_decrypt(wo.tenant_user_password or ""),
             approved_modules=wo.approved_modules or [],
             order_number=wo.order_number,
         )
@@ -220,9 +255,9 @@ async def create_work_order(
         status=WorkOrderStatus.requested,
         requested_by=payload.requested_by or auth.get("sub", "system"),
         tenant_admin_email=ADMIN_TENANT_LOGIN,
-        tenant_admin_password=ADMIN_TENANT_PASSWORD,
+        tenant_admin_password=_encrypt(ADMIN_TENANT_PASSWORD),
         tenant_user_email=tenant_user_email,
-        tenant_user_password=user_password,
+        tenant_user_password=_encrypt(user_password),
     )
     db.add(wo)
     db.commit()
