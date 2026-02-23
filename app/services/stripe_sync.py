@@ -87,10 +87,10 @@ def _find_customer_by_stripe_id(db: Session, stripe_cust_id: str) -> Optional[Cu
 
 
 def _find_partner_by_email(db: Session, email: str) -> Optional[Partner]:
-    """Busca partner por email para vincular facturas."""
+    """Busca partner por contact_email para vincular facturas."""
     if not email:
         return None
-    return db.query(Partner).filter(Partner.email == email).first()
+    return db.query(Partner).filter(Partner.contact_email == email).first()
 
 
 def _next_invoice_number(db: Session) -> str:

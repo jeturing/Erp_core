@@ -15,6 +15,7 @@ Base = declarative_base()
 class SubscriptionStatus(enum.Enum):
     pending = "pending"
     active = "active"
+    trialing = "trialing"
     cancelled = "cancelled"
     past_due = "past_due"
     suspended = "suspended"

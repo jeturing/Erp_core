@@ -201,26 +201,39 @@ def list_invoices(
     total = q.count()
     invoices = q.order_by(Invoice.created_at.desc()).offset(offset).limit(limit).all()
 
+    # Precargar relaciones customer para evitar N+1
+    items = []
+    for inv in invoices:
+        customer = db.query(Customer).filter(Customer.id == inv.customer_id).first() if inv.customer_id else None
+        items.append({
+            "id": inv.id,
+            "invoice_number": inv.invoice_number,
+            "subscription_id": inv.subscription_id,
+            "customer_id": inv.customer_id,
+            "partner_id": inv.partner_id,
+            "company_name": customer.company_name if customer else None,
+            "email": customer.email if customer else None,
+            "subdomain": customer.subdomain if customer else None,
+            "invoice_type": inv.invoice_type.value if inv.invoice_type else None,
+            "billing_mode": inv.billing_mode.value if inv.billing_mode else None,
+            "issuer": inv.issuer.value if inv.issuer else None,
+            "subtotal": inv.subtotal or 0,
+            "tax_amount": inv.tax_amount or 0,
+            "total": inv.total or 0,
+            "currency": inv.currency,
+            "stripe_invoice_id": inv.stripe_invoice_id,
+            "stripe_payment_intent_id": inv.stripe_payment_intent_id,
+            "status": inv.status.value if inv.status else None,
+            "issued_at": inv.issued_at.isoformat() if inv.issued_at else None,
+            "due_date": inv.due_date.isoformat() if inv.due_date else None,
+            "paid_at": inv.paid_at.isoformat() if inv.paid_at else None,
+            "created_at": inv.created_at.isoformat() if inv.created_at else None,
+            "notes": inv.notes,
+        })
+
     return {
         "total": total,
-        "invoices": [
-            {
-                "id": inv.id,
-                "invoice_number": inv.invoice_number,
-                "customer_id": inv.customer_id,
-                "partner_id": inv.partner_id,
-                "invoice_type": inv.invoice_type.value if inv.invoice_type else None,
-                "billing_mode": inv.billing_mode.value if inv.billing_mode else None,
-                "issuer": inv.issuer.value if inv.issuer else None,
-                "total": inv.total,
-                "currency": inv.currency,
-                "status": inv.status.value if inv.status else None,
-                "issued_at": inv.issued_at.isoformat() if inv.issued_at else None,
-                "due_date": inv.due_date.isoformat() if inv.due_date else None,
-                "paid_at": inv.paid_at.isoformat() if inv.paid_at else None,
-            }
-            for inv in invoices
-        ],
+        "invoices": items,
     }
 
 

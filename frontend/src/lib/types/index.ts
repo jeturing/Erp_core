@@ -963,6 +963,9 @@ export interface InvoiceItem {
   subscription_id: number | null;
   customer_id: number | null;
   partner_id: number | null;
+  company_name: string | null;
+  email: string | null;
+  subdomain: string | null;
   invoice_type: InvoiceType;
   billing_mode: string | null;
   issuer: string | null;
@@ -982,7 +985,7 @@ export interface InvoiceItem {
 }
 
 export interface InvoicesListResponse {
-  items: InvoiceItem[];
+  invoices: InvoiceItem[];
   total: number;
 }
 

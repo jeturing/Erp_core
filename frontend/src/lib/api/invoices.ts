@@ -10,7 +10,7 @@ export const invoicesApi = {
     period_start?: string;
     period_end?: string;
   }): Promise<{ message: string; invoice: InvoiceItem }> {
-    return api.post('/api/invoices/generate', data);
+    return api.post('/api/invoices/generate-on-ready', data);
   },
 
   async list(params?: {
@@ -39,7 +39,7 @@ export const invoicesApi = {
   async markPaid(id: number, data?: {
     stripe_payment_intent_id?: string;
   }): Promise<{ message: string; invoice: InvoiceItem }> {
-    return api.post(`/api/invoices/${id}/pay`, data || {});
+    return api.post(`/api/invoices/${id}/mark-paid`, data || {});
   },
 };
 

@@ -39,7 +39,7 @@
         limit: PAGE_SIZE,
         offset: page * PAGE_SIZE,
       });
-      invoices = res?.items ?? [];
+      invoices = res?.invoices ?? [];
       total = res?.total ?? 0;
     } catch (e: any) {
       toasts.error(e.message);
@@ -356,10 +356,9 @@
           <thead>
             <tr>
               <th>Número</th>
+              <th>Cliente / Tenant</th>
               <th>Tipo</th>
               <th>Emisor</th>
-              <th>Subtotal</th>
-              <th>Tax</th>
               <th>Total</th>
               <th>Estado</th>
               <th>Stripe</th>
@@ -371,10 +370,21 @@
             {#each filtered as inv}
               <tr>
                 <td class="font-mono font-semibold text-text-primary">{inv.invoice_number}</td>
+                <td>
+                  <div class="flex flex-col">
+                    <span class="text-sm text-text-primary font-medium">{inv.company_name || '—'}</span>
+                    {#if inv.subdomain}
+                      <a href="https://{inv.subdomain}.sajet.us" target="_blank" rel="noopener"
+                         class="text-[11px] text-indigo-400 hover:text-indigo-300 flex items-center gap-0.5">
+                        <ExternalLink size={9} />{inv.subdomain}.sajet.us
+                      </a>
+                    {:else if inv.email}
+                      <span class="text-[11px] text-gray-500">{inv.email}</span>
+                    {/if}
+                  </div>
+                </td>
                 <td><span class={typeBadge(inv.invoice_type)}>{inv.invoice_type}</span></td>
                 <td class="text-sm">{inv.issuer || '—'}</td>
-                <td class="text-sm">{formatCurrency(inv.subtotal)}</td>
-                <td class="text-sm text-gray-500">{formatCurrency(inv.tax_amount)}</td>
                 <td class="font-semibold">{formatCurrency(inv.total)}</td>
                 <td><span class={statusBadge(inv.status)}>{inv.status}</span></td>
                 <td>
@@ -408,7 +418,7 @@
               </tr>
             {:else}
               <tr>
-                <td colspan="10" class="text-center text-gray-500 py-12">No hay facturas</td>
+                <td colspan="9" class="text-center text-gray-500 py-12">No hay facturas</td>
               </tr>
             {/each}
           </tbody>
