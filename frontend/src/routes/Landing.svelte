@@ -34,9 +34,18 @@
         fetch('/api/public/testimonials'),
       ]);
 
-      if (statsRes.ok) stats = await statsRes.json();
-      if (plansRes.ok) plans = await plansRes.json();
-      if (testimonialsRes.ok) testimonials = await testimonialsRes.json();
+      if (statsRes.ok) {
+        const sd = await statsRes.json();
+        stats = sd.stats || sd;
+      }
+      if (plansRes.ok) {
+        const pd = await plansRes.json();
+        plans = pd.plans || pd;
+      }
+      if (testimonialsRes.ok) {
+        const td = await testimonialsRes.json();
+        testimonials = td.testimonials || td;
+      }
     } catch (e) {
       console.warn('[Landing] API unavailable, using fallback data', e);
     } finally {

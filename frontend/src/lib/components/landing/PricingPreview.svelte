@@ -35,7 +35,17 @@
     },
   ];
 
-  $: displayPlans = plans.length > 0 ? plans : fallbackPlans;
+  // Map backend fields to frontend-expected shape
+  function normalizePlan(p: any): any {
+    return {
+      ...p,
+      name: p.display_name || p.name,
+      monthly_price: p.price_per_user ?? p.monthly_price ?? p.base_price ?? 0,
+      included_users: p.included_users ?? 1,
+    };
+  }
+
+  $: displayPlans = plans.length > 0 ? plans.map(normalizePlan) : fallbackPlans;
 
   function getPrice(plan: any): number {
     const base = plan.monthly_price || 0;
