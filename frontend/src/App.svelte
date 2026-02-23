@@ -2,8 +2,7 @@
   import { onMount } from 'svelte';
   import './app.css';
   import { auth, isAuthenticated, currentUser, localeStore } from './lib/stores';
-  import { initializeI18n, getInitialLocale } from './lib/i18n';
-  import { locale as i18nLocale } from 'svelte-i18n';
+  import { getInitialLocale } from './lib/i18n';
   import Layout from './lib/components/Layout.svelte';
   import Login from './routes/Login.svelte';
   import Landing from './routes/Landing.svelte';
@@ -231,10 +230,8 @@
   onMount(() => {
     let active = true;
 
-    // Initialize i18n with auto-detected locale
-    initializeI18n();
+    // Sync locale store (i18n already initialized in main.ts)
     const initialLocale = getInitialLocale();
-    i18nLocale.set(initialLocale as any);
     localeStore.set(initialLocale as any);
 
     const init = async () => {
