@@ -10,22 +10,21 @@
       {$t('final_cta.headline_highlight')}
     </h2>
     <p class="text-lg font-inter text-white/80 mb-10 max-w-xl mx-auto">
-      {$t('final_cta.description')}
+      {$t('final_cta.subheading')}
     </p>
     <div class="flex flex-col sm:flex-row items-center justify-center gap-4">
       <a
         href="#/customer-onboarding"
         class="inline-flex items-center gap-2 bg-white text-primary font-jakarta font-semibold text-sm px-8 py-3.5 rounded-btn shadow-medium hover:shadow-elevated hover:bg-cloud transition-all"
       >
-        {$t('common.start_free_trial')}
+        {$t('final_cta.cta_primary')}
         <ArrowRight class="w-4 h-4" />
       </a>
       <a
-        href="#/demo"
+        href="#/contact"
         class="inline-flex items-center gap-2 border border-white/40 text-white font-jakarta font-semibold text-sm px-8 py-3.5 rounded-btn hover:bg-white/10 transition-all"
       >
-        <Play class="w-4 h-4" />
-        {$t('final_cta.demo_cta')}
+        {$t('final_cta.cta_secondary')}
       </a>
     </div>
   </div>

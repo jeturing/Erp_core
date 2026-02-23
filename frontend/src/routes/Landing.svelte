@@ -8,6 +8,7 @@
   import FeaturesGrid from '../lib/components/landing/FeaturesGrid.svelte';
   import HowItWorks from '../lib/components/landing/HowItWorks.svelte';
   import ForPartners from '../lib/components/landing/ForPartners.svelte';
+  import AccountantsSummary from '../lib/components/landing/AccountantsSummary.svelte';
   import Testimonials from '../lib/components/landing/Testimonials.svelte';
   import PricingPreview from '../lib/components/landing/PricingPreview.svelte';
   import FinalCTA from '../lib/components/landing/FinalCTA.svelte';
@@ -103,6 +104,7 @@
   <HowItWorks />
   <PricingPreview {plans} {partnerCode} />
   <ForPartners />
+  <AccountantsSummary />
   <Testimonials {testimonials} />
   <FinalCTA />
   <Footer />

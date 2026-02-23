@@ -49,7 +49,7 @@
           </span>
         </a>
         <p class="text-sm font-inter text-slate-400 leading-relaxed mb-6">
-          Cloud ERP built for growing businesses. Finance, operations, and sales — unified.
+          {$t('footer.brand_description')}
         </p>
         <div class="flex items-center gap-3">
           <a href="https://linkedin.com" target="_blank" rel="noopener" class="w-8 h-8 rounded-lg bg-white/10 flex items-center justify-center text-slate-400 hover:bg-primary hover:text-white transition-all" aria-label="LinkedIn">
@@ -84,10 +84,10 @@
     <!-- Bottom bar -->
     <div class="border-t border-white/10 pt-6 flex flex-col md:flex-row items-center justify-between gap-3">
       <p class="text-xs font-inter text-slate-500">
-        {$t('footer.copyright', { year: year })}
+        {$t('footer.copyright')}
       </p>
       <p class="text-xs font-inter text-slate-600">
-        {$t('footer.tagline')}
+        {$t('footer.powered_by')} {$t('footer.company_name')}
       </p>
     </div>
   </div>

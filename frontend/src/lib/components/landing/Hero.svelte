@@ -7,10 +7,10 @@
 
   // Fallback stats
   $: displayStats = stats.length > 0 ? stats : [
-    { value: '500+', label: 'Companies' },
-    { value: '99.9%', label: 'Uptime' },
-    { value: '24/7', label: 'Support' },
-    { value: '50+', label: 'Partners' },
+    { value: '500+', label: $t('hero.stat_companies') },
+    { value: '99.9%', label: $t('hero.stat_uptime') },
+    { value: '24/7', label: $t('hero.stat_support') },
+    { value: '50+', label: $t('hero.stat_partners') },
   ];
 
   $: bgColor = partnerBranding?.primary_color || '#1B4FD8';
@@ -67,13 +67,82 @@
     </p>
 
     <!-- Stats badges -->
-    <div class="flex flex-wrap justify-center gap-4">
+    <div class="flex flex-wrap justify-center gap-4 mb-14">
       {#each displayStats as stat}
         <div class="flex items-center gap-2 rounded-full border border-white/15 bg-white/5 backdrop-blur-sm px-5 py-2.5">
           <span class="text-base font-jakarta font-bold text-white">{stat.value}</span>
           <span class="text-xs font-inter text-blue-200/70">{stat.label}</span>
         </div>
       {/each}
+    </div>
+
+    <!-- Browser-frame mockup placeholder -->
+    <div class="max-w-3xl mx-auto">
+      <div class="rounded-xl border border-white/15 bg-white/5 backdrop-blur-md shadow-elevated overflow-hidden">
+        <!-- Title bar -->
+        <div class="flex items-center gap-2 px-4 py-2.5 bg-white/10 border-b border-white/10">
+          <span class="w-3 h-3 rounded-full bg-red-400/80"></span>
+          <span class="w-3 h-3 rounded-full bg-yellow-400/80"></span>
+          <span class="w-3 h-3 rounded-full bg-green-400/80"></span>
+          <span class="flex-1 mx-4 rounded-md bg-white/10 h-5 flex items-center px-3">
+            <span class="text-[10px] text-blue-200/50 font-mono">app.sajet.us/dashboard</span>
+          </span>
+        </div>
+        <!-- Content area — placeholder skeleton -->
+        <div class="p-6 space-y-4">
+          <!-- Top bar -->
+          <div class="flex items-center justify-between">
+            <div class="h-4 w-32 rounded bg-white/10"></div>
+            <div class="flex gap-2">
+              <div class="h-4 w-16 rounded bg-white/10"></div>
+              <div class="h-4 w-16 rounded bg-secondary/30"></div>
+            </div>
+          </div>
+          <!-- Metric cards row -->
+          <div class="grid grid-cols-4 gap-3">
+            <div class="rounded-lg bg-white/10 p-4 space-y-2">
+              <div class="h-3 w-14 rounded bg-white/15"></div>
+              <div class="h-6 w-20 rounded bg-secondary/25"></div>
+            </div>
+            <div class="rounded-lg bg-white/10 p-4 space-y-2">
+              <div class="h-3 w-14 rounded bg-white/15"></div>
+              <div class="h-6 w-16 rounded bg-emerald-400/25"></div>
+            </div>
+            <div class="rounded-lg bg-white/10 p-4 space-y-2">
+              <div class="h-3 w-14 rounded bg-white/15"></div>
+              <div class="h-6 w-18 rounded bg-amber-400/25"></div>
+            </div>
+            <div class="rounded-lg bg-white/10 p-4 space-y-2">
+              <div class="h-3 w-14 rounded bg-white/15"></div>
+              <div class="h-6 w-14 rounded bg-violet-400/25"></div>
+            </div>
+          </div>
+          <!-- Chart area -->
+          <div class="rounded-lg bg-white/10 h-32 flex items-end px-4 pb-3 gap-2">
+            <div class="w-8 bg-secondary/30 rounded-t" style="height: 40%"></div>
+            <div class="w-8 bg-secondary/30 rounded-t" style="height: 65%"></div>
+            <div class="w-8 bg-secondary/30 rounded-t" style="height: 50%"></div>
+            <div class="w-8 bg-secondary/30 rounded-t" style="height: 80%"></div>
+            <div class="w-8 bg-secondary/30 rounded-t" style="height: 55%"></div>
+            <div class="w-8 bg-secondary/30 rounded-t" style="height: 90%"></div>
+            <div class="w-8 bg-secondary/30 rounded-t" style="height: 70%"></div>
+            <div class="w-8 bg-secondary/40 rounded-t" style="height: 95%"></div>
+          </div>
+          <!-- Table rows -->
+          <div class="space-y-2">
+            <div class="flex gap-3 items-center">
+              <div class="h-3 w-24 rounded bg-white/10"></div>
+              <div class="h-3 flex-1 rounded bg-white/5"></div>
+              <div class="h-3 w-16 rounded bg-emerald-400/20"></div>
+            </div>
+            <div class="flex gap-3 items-center">
+              <div class="h-3 w-20 rounded bg-white/10"></div>
+              <div class="h-3 flex-1 rounded bg-white/5"></div>
+              <div class="h-3 w-16 rounded bg-amber-400/20"></div>
+            </div>
+          </div>
+        </div>
+      </div>
     </div>
   </div>
 </section>

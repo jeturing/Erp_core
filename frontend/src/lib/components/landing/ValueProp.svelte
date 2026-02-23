@@ -24,13 +24,14 @@
 <section class="bg-white py-24">
   <div class="max-w-6xl mx-auto px-6">
     <div class="text-center mb-16">
-      <h2 class="text-4xl font-jakarta font-bold text-slate-dark mb-4">
-        Everything your team needs.<br />
-        Nothing they don't.
+      <span class="inline-flex items-center gap-2 rounded-full bg-primary-light text-primary text-[13px] font-inter font-medium tracking-[0.08em] uppercase px-4 py-1.5 mb-4">
+        {$t('value_prop.badge')}
+      </span>
+      <h2 class="text-4xl font-jakarta font-bold text-slate-dark mb-4 whitespace-pre-line">
+        {$t('value_prop.headline')}
       </h2>
       <p class="text-lg font-inter text-slate max-w-xl mx-auto leading-relaxed">
-        Sajet replaces disconnected tools with a single platform designed to work
-        the way your business actually works.
+        {$t('value_prop.subheading')}
       </p>
     </div>
 

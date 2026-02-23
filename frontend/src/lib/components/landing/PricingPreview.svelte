@@ -10,23 +10,26 @@
 
   const fallbackPlans = [
     {
-      name: $t('pricing.starter'),
+      name: $t('pricing.starter_name'),
+      description: $t('pricing.starter_desc'),
       monthly_price: 29,
-      features: ['Invoicing & Payments', 'CRM', 'Inventory', '1 user included', 'Community support'],
+      features: [$t('pricing.starter_users'), $t('pricing.starter_companies'), $t('pricing.starter_modules')],
       is_highlighted: false,
       trial_days: 14,
     },
     {
-      name: 'Growth',
+      name: $t('pricing.growth_name'),
+      description: $t('pricing.growth_desc'),
       monthly_price: 79,
-      features: ['Everything in Starter', 'Multi-warehouse', 'HR & Attendance', 'Up to 10 users', 'Priority support', 'API access'],
+      features: [$t('pricing.growth_users'), $t('pricing.growth_companies'), $t('pricing.growth_modules')],
       is_highlighted: true,
       trial_days: 14,
     },
     {
-      name: 'Enterprise',
+      name: $t('pricing.enterprise_name'),
+      description: $t('pricing.enterprise_desc'),
       monthly_price: 199,
-      features: ['Everything in Growth', 'Unlimited users', 'Custom modules', 'Multi-company', 'Dedicated CSM', 'SLA 99.9%'],
+      features: [$t('pricing.enterprise_users'), $t('pricing.enterprise_companies'), $t('pricing.enterprise_modules')],
       is_highlighted: false,
       trial_days: 14,
     },
@@ -61,9 +64,12 @@
       <span class="inline-flex items-center gap-2 rounded-full bg-primary-light text-primary text-[13px] font-inter font-medium tracking-[0.08em] uppercase px-4 py-1.5 mb-4">
         {$t('pricing.title')}
       </span>
-      <h2 class="text-4xl font-jakarta font-bold text-slate-dark mb-4">
-        {$t('pricing.subtitle')}
+      <h2 class="text-4xl font-jakarta font-bold text-slate-dark mb-4 whitespace-pre-line">
+        {$t('pricing.headline')}
       </h2>
+      <p class="text-base font-inter text-slate max-w-lg mx-auto">
+        {$t('pricing.subtitle')}
+      </p>
     </div>
 
     <!-- Controls -->
@@ -123,7 +129,7 @@
           {#if userCount > 1}
             <p class="text-xs font-inter text-slate mb-4">{userCount} users × ${plan.monthly_price}{annual ? ' (−20%)' : ''}</p>
           {:else}
-            <p class="text-xs font-inter text-slate mb-4">per user / month</p>
+            <p class="text-xs font-inter text-slate mb-4">{$t('pricing.per_user_month')}</p>
           {/if}
 
           {#if plan.trial_days}
@@ -153,6 +159,9 @@
 
     <p class="text-center text-xs font-inter text-slate mt-8">
       {$t('pricing.all_prices_usd')}
+    </p>
+    <p class="text-center text-xs font-inter text-slate-400 mt-2">
+      {$t('pricing.billing_note')}
     </p>
   </div>
 </section>
