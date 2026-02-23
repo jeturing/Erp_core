@@ -2,6 +2,7 @@
 Main application entry point
 Onboarding System API - Modular architecture with production security
 """
+from contextlib import asynccontextmanager
 from fastapi import FastAPI
 from fastapi.staticfiles import StaticFiles
 from starlette.middleware.base import BaseHTTPMiddleware
@@ -15,6 +16,9 @@ import os
 # Config loads the correct .env file based on ERP_ENV
 from .config import validate_required, ENVIRONMENT, FORCE_HTTPS, ENABLE_WAF, APP_URL, get_env_info, ACTIVE_ENV_FILE
 validate_required()
+
+# Background scheduler
+from .services.background_scheduler import scheduler
 
 # Import routers
 from .routes import auth, dashboard, tenants, onboarding, roles, tenant_portal, secure_auth, nodes, tunnels, provisioning, settings, billing, logs, domains, plans, customers, partners, leads, commissions, quotations, stripe_connect, suspension
@@ -40,8 +44,21 @@ logger = logging.getLogger(__name__)
 # Base directory for static files
 BASE_DIR = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 
+
+# ── Lifespan: startup/shutdown hooks ──
+@asynccontextmanager
+async def lifespan(app: FastAPI):
+    """Startup & shutdown lifecycle."""
+    logger.info("🚀 Starting background scheduler...")
+    await scheduler.start()
+    yield
+    logger.info("🛑 Stopping background scheduler...")
+    await scheduler.stop()
+
+
 app = FastAPI(
     title="Sajet ERP API",
+    lifespan=lifespan,
     description=(
         "## API del Sistema ERP Sajet\n\n"
         "Plataforma SaaS multi-tenant sobre con facturación Stripe, "

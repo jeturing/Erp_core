@@ -492,3 +492,143 @@ def send_work_order_completion(
         ),
         email_type="work_order_completion",
     )
+
+
+def send_payment_failed_email(
+    to_email: str,
+    company_name: str,
+    plan_name: str,
+    amount: float,
+    attempt_count: int = 1,
+    next_retry_date: Optional[str] = None,
+    update_payment_url: Optional[str] = None,
+    customer_id: Optional[int] = None,
+) -> dict:
+    """
+    Email de dunning — Notifica al cliente que su pago falló.
+    Escala urgencia según número de intento.
+    """
+    if not update_payment_url:
+        update_payment_url = f"{APP_URL}/#/billing"
+
+    # Escalar urgencia según intento
+    if attempt_count <= 1:
+        urgency_color = "#f39c12"  # Amarillo
+        urgency_icon = "⚠️"
+        urgency_title = "Problema con su pago"
+        urgency_message = "Hemos detectado un problema al procesar su pago. Por favor, actualice su método de pago para evitar interrupciones en su servicio."
+    elif attempt_count == 2:
+        urgency_color = "#e67e22"  # Naranja
+        urgency_icon = "🔴"
+        urgency_title = "Segundo intento de cobro fallido"
+        urgency_message = "Este es el segundo intento fallido de cobro. Si no actualiza su método de pago pronto, su servicio podría ser suspendido."
+    else:
+        urgency_color = "#e74c3c"  # Rojo
+        urgency_icon = "🚨"
+        urgency_title = "Acción urgente requerida — Servicio en riesgo"
+        urgency_message = "Se han agotado los intentos automáticos de cobro. Su servicio será suspendido en las próximas 24 horas si no actualiza su método de pago."
+
+    retry_info = ""
+    if next_retry_date:
+        retry_info = f"""
+        <p style="color:#aaa;font-size:13px;margin-top:12px;">
+            📅 Próximo intento automático: <strong style="color:#fff;">{next_retry_date}</strong>
+        </p>
+        """
+
+    content = f"""
+    <div style="background:{urgency_color};border-radius:8px;padding:16px;margin-bottom:16px;">
+      <h2 style="margin:0;color:#fff;font-size:18px;">{urgency_icon} {urgency_title}</h2>
+    </div>
+
+    <p style="color:#ccc;font-size:14px;">{urgency_message}</p>
+
+    <div style="background:#1a1a2e;border-radius:8px;padding:16px;margin:16px 0;">
+      <table style="width:100%;color:#ccc;font-size:14px;">
+        <tr><td style="padding:6px 0;color:#aaa;">Empresa:</td>
+            <td style="padding:6px 0;"><strong style="color:#fff;">{company_name}</strong></td></tr>
+        <tr><td style="padding:6px 0;color:#aaa;">Plan:</td>
+            <td style="padding:6px 0;"><strong style="color:#fff;">{plan_name.upper()}</strong></td></tr>
+        <tr><td style="padding:6px 0;color:#aaa;">Monto:</td>
+            <td style="padding:6px 0;"><strong style="color:#e74c3c;">${amount:.2f} USD</strong></td></tr>
+        <tr><td style="padding:6px 0;color:#aaa;">Intento:</td>
+            <td style="padding:6px 0;"><strong style="color:#fff;">#{attempt_count}</strong></td></tr>
+      </table>
+    </div>
+
+    {retry_info}
+
+    <div style="text-align:center;margin:24px 0;">
+      <a href="{update_payment_url}" style="display:inline-block;background:#e74c3c;color:#fff;padding:14px 32px;border-radius:8px;text-decoration:none;font-weight:700;font-size:16px;">
+        Actualizar Método de Pago →
+      </a>
+    </div>
+
+    <p style="color:#888;font-size:12px;margin-top:20px;">
+      Si ya actualizó su método de pago, puede ignorar este mensaje. El cobro se reintentará automáticamente.
+      Si necesita ayuda, contacte a <a href="mailto:soporte@sajet.us" style="color:#e74c3c;">soporte@sajet.us</a>.
+    </p>
+    """
+
+    return send_email(
+        to_email=to_email,
+        subject=f"{urgency_icon} {urgency_title} — {company_name} | SAJET",
+        html_body=_base_template(content),
+        text_body=(
+            f"{urgency_title}\n\n"
+            f"Empresa: {company_name}\n"
+            f"Plan: {plan_name}\n"
+            f"Monto: ${amount:.2f} USD\n"
+            f"Intento: #{attempt_count}\n\n"
+            f"Actualice su método de pago: {update_payment_url}\n"
+        ),
+        email_type="payment_failed_dunning",
+        customer_id=customer_id,
+    )
+
+
+def send_subscription_cancelled_email(
+    to_email: str,
+    company_name: str,
+    plan_name: str,
+    customer_id: Optional[int] = None,
+) -> dict:
+    """Email de notificación de suscripción cancelada."""
+    content = f"""
+    <div style="background:#e74c3c;border-radius:8px;padding:16px;margin-bottom:16px;">
+      <h2 style="margin:0;color:#fff;font-size:18px;">🔒 Suscripción Cancelada</h2>
+    </div>
+
+    <p style="color:#ccc;font-size:14px;">
+      Su suscripción al plan <strong style="color:#fff;">{plan_name.upper()}</strong> 
+      para <strong style="color:#fff;">{company_name}</strong> ha sido cancelada.
+    </p>
+
+    <p style="color:#ccc;font-size:14px;">
+      Su acceso a los servicios permanecerá activo hasta el final del período de facturación actual.
+      Después de eso, su espacio de trabajo será archivado.
+    </p>
+
+    <div style="text-align:center;margin:24px 0;">
+      <a href="{APP_URL}/#/billing" style="display:inline-block;background:#27ae60;color:#fff;padding:14px 32px;border-radius:8px;text-decoration:none;font-weight:700;font-size:16px;">
+        Reactivar Suscripción →
+      </a>
+    </div>
+
+    <p style="color:#888;font-size:12px;margin-top:20px;">
+      Si esto fue un error o necesita ayuda, contacte a <a href="mailto:soporte@sajet.us" style="color:#e74c3c;">soporte@sajet.us</a>.
+    </p>
+    """
+
+    return send_email(
+        to_email=to_email,
+        subject=f"🔒 Suscripción Cancelada — {company_name} | SAJET",
+        html_body=_base_template(content),
+        text_body=(
+            f"Suscripción Cancelada\n\n"
+            f"Su plan {plan_name} para {company_name} ha sido cancelado.\n"
+            f"Reactivar: {APP_URL}/#/billing\n"
+        ),
+        email_type="subscription_cancelled",
+        customer_id=customer_id,
+    )

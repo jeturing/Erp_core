@@ -17,6 +17,7 @@ from ..models.database import (
 from ..services.tunnel_lifecycle import handle_stripe_subscription_event
 from ..services.odoo_provisioner import provision_tenant
 from ..services.spa_shell import render_spa_shell
+from ..services.email_service import send_payment_failed_email, send_subscription_cancelled_email
 import logging
 
 router = APIRouter(tags=["Onboarding"])
@@ -106,23 +107,27 @@ async def create_checkout_session(payload: CheckoutRequest, background_tasks: Ba
         ).first()
 
         if not plan:
-            # Fallback: usar price_map legacy
-            price_map = {
-                "basic": "price_1234_basic",
-                "pro": "price_1234_pro",
-                "enterprise": "price_1234_enterprise",
-            }
-            price_id = price_map.get(payload.plan, "price_1234_basic")
-            monthly_amount = 0
-            user_count = payload.user_count
-        else:
-            price_id = plan.stripe_price_id or f"price_{plan.name}"
-            user_count = max(payload.user_count, plan.included_users)
-            # Calcular precio mensual dinámico con partner override
-            monthly_amount = plan.calculate_monthly(
-                user_count,
-                partner.id if partner else None
+            # No fallback con IDs ficticios — el plan debe existir en BD con stripe_price_id
+            logger.error(f"Plan '{payload.plan}' not found or inactive in DB")
+            raise HTTPException(
+                status_code=400,
+                detail=f"El plan '{payload.plan}' no está disponible. Contacte soporte."
             )
+        # Validar que el plan tenga un stripe_price_id real
+        if not plan.stripe_price_id:
+            logger.error(f"Plan '{plan.name}' exists but has no stripe_price_id configured")
+            raise HTTPException(
+                status_code=500,
+                detail=f"Plan '{plan.name}' no tiene precio configurado en Stripe. Contacte soporte."
+            )
+        
+        price_id = plan.stripe_price_id
+        user_count = max(payload.user_count, plan.included_users)
+        # Calcular precio mensual dinámico con partner override
+        monthly_amount = plan.calculate_monthly(
+            user_count,
+            partner.id if partner else None
+        )
 
         # ── Crear customer en BD ──
         customer = Customer(
@@ -306,7 +311,6 @@ async def stripe_webhook(request: Request, background_tasks: BackgroundTasks):
         # ═══ Tunnel Lifecycle — Sincronizar tunnel con estado de suscripción ═══
         elif event["type"] in (
             "customer.subscription.updated",
-            "customer.subscription.deleted",
             "customer.subscription.paused",
             "customer.subscription.resumed",
         ):
@@ -324,13 +328,64 @@ async def stripe_webhook(request: Request, background_tasks: BackgroundTasks):
         elif event["type"] == "invoice.payment_failed":
             invoice_obj = event["data"]["object"]
             stripe_sub_id = invoice_obj.get("subscription")
+            attempt_count = invoice_obj.get("attempt_count", 1)
+            next_payment_attempt = invoice_obj.get("next_payment_attempt")
+            amount_due = (invoice_obj.get("amount_due", 0) / 100)  # cents → dollars
+
             if stripe_sub_id:
+                # Tunnel lifecycle — marcar como past_due
                 background_tasks.add_task(
                     handle_stripe_subscription_event,
                     stripe_sub_id,
                     "past_due",
                 )
                 logger.info(f"📋 Payment failed → tunnel lifecycle queued: {stripe_sub_id}")
+
+                # Dunning email — notificar al cliente
+                sub = db.query(Subscription).filter_by(
+                    stripe_subscription_id=stripe_sub_id
+                ).first()
+                if sub and sub.customer:
+                    next_retry = None
+                    if next_payment_attempt:
+                        from datetime import datetime
+                        next_retry = datetime.fromtimestamp(next_payment_attempt).strftime("%d/%m/%Y %H:%M")
+
+                    background_tasks.add_task(
+                        send_payment_failed_email,
+                        to_email=sub.customer.email,
+                        company_name=sub.customer.company_name or "Su empresa",
+                        plan_name=sub.plan_name or "pro",
+                        amount=amount_due if amount_due > 0 else 49.0,
+                        attempt_count=attempt_count,
+                        next_retry_date=next_retry,
+                        customer_id=sub.customer.id,
+                    )
+                    logger.info(f"📧 Dunning email queued for {sub.customer.email} (attempt #{attempt_count})")
+
+        # ═══ Suscripción cancelada — notificar al cliente ═══
+        elif event["type"] == "customer.subscription.deleted":
+            stripe_sub = event["data"]["object"]
+            stripe_sub_id = stripe_sub.get("id")
+            if stripe_sub_id:
+                background_tasks.add_task(
+                    handle_stripe_subscription_event,
+                    stripe_sub_id,
+                    "canceled",
+                )
+
+                sub = db.query(Subscription).filter_by(
+                    stripe_subscription_id=stripe_sub_id
+                ).first()
+                if sub and sub.customer:
+                    background_tasks.add_task(
+                        send_subscription_cancelled_email,
+                        to_email=sub.customer.email,
+                        company_name=sub.customer.company_name or "Su empresa",
+                        plan_name=sub.plan_name or "pro",
+                        customer_id=sub.customer.id,
+                    )
+                    logger.info(f"📧 Cancellation email queued for {sub.customer.email}")
 
         return JSONResponse(content={"status": "success"})
     except Exception as e:
