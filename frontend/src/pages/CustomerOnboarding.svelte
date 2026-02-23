@@ -6,7 +6,7 @@
   import type { OnboardingStatus } from '../lib/api/customerOnboarding';
   import type { OnboardingConfig, OnboardingStep } from '../lib/api/onboardingConfig';
   import type { Plan, AgreementTemplate } from '../lib/types';
-  import { toasts } from '../lib/stores';
+  import { toasts, isAuthenticated } from '../lib/stores';
   import { api } from '../lib/api';
   import {
     CheckCircle, User, Building2, Globe, Phone, Mail, Lock,
@@ -20,6 +20,7 @@
   let loading = true;
   let saving = false;
   let currentStep = 0;
+  let loadError = '';
 
   // Derived: steps visible and filtered by country condition
   let visibleSteps: OnboardingStep[] = [];
@@ -100,7 +101,14 @@
 
   async function loadStatus() {
     loading = true;
+    loadError = '';
     try {
+      // Guard: if not authenticated, redirect to login
+      if (!$isAuthenticated) {
+        window.location.hash = '#/login';
+        return;
+      }
+
       // Load both in parallel
       const [s, cfg] = await Promise.all([
         customerOnboardingApi.getStatus(),
@@ -135,7 +143,15 @@
       if (s.ecf_ncf_series) ecfForm.ecf_ncf_series = s.ecf_ncf_series;
       if (s.ecf_environment) ecfForm.ecf_environment = s.ecf_environment;
     } catch (e: any) {
-      toasts.error(e.message || 'Error cargando onboarding');
+      const msg = e.message || '';
+      // Session expired or not authenticated — redirect to login
+      if (msg.includes('expirada') || msg.includes('401') || msg.includes('No autenticado')) {
+        toasts.error('Su sesión ha expirado. Por favor, inicie sesión nuevamente.');
+        window.location.hash = '#/login';
+        return;
+      }
+      loadError = msg || 'Error cargando el estado del onboarding';
+      toasts.error(loadError);
     } finally {
       loading = false;
     }
@@ -338,9 +354,13 @@
         <Loader2 size={32} class="animate-spin text-terracotta" />
       </div>
     {:else if !status}
-      <div class="card p-8 text-center">
+      <div class="card p-8 text-center space-y-4">
         <AlertTriangle size={48} class="mx-auto text-amber-400 mb-4" />
-        <p class="text-gray-400">No se pudo cargar el estado del onboarding.</p>
+        <p class="text-gray-400">{loadError || 'No se pudo cargar el estado del onboarding.'}</p>
+        <div class="flex justify-center gap-3">
+          <button class="btn-accent px-4 py-2 text-sm" on:click={loadStatus}>Reintentar</button>
+          <a href="#/login" class="btn-secondary px-4 py-2 text-sm">Iniciar Sesión</a>
+        </div>
       </div>
     {:else if currentStep >= 4}
       <!-- ═══ COMPLETED STATE ═══ -->
