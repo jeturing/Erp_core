@@ -359,14 +359,16 @@ async def secure_login(request: Request, login_data: LoginRequest):
             request=request
         )
         
-        # Crear respuesta con cookies
+        # Crear respuesta con cookies Y token en JSON (para sincronización frontend)
         response = JSONResponse(content={
             "message": "Login exitoso",
             "role": role,
             "requires_totp": False,
             "requires_email_verify": False,
             "redirect_url": redirect_url,
-            "user_id": user_id
+            "user_id": user_id,
+            "access_token": access_token,
+            "token_type": "bearer"
         })
         
         # Configurar cookies httpOnly
@@ -521,9 +523,11 @@ async def refresh_token(request: Request):
             request=request
         )
         
-        # Respuesta con nuevos tokens en cookies
+        # Respuesta con nuevos tokens en cookies Y en JSON (para sincronización frontend)
         response = JSONResponse(content={
-            "message": "Token renovado exitosamente"
+            "message": "Token renovado exitosamente",
+            "access_token": new_access_token,
+            "token_type": "bearer"
         })
         
         TokenManager.set_token_cookie(response, new_access_token)

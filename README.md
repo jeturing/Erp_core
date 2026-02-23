@@ -5,12 +5,36 @@
 [![Version](https://img.shields.io/badge/version-2.0.0-blue.svg)](DEPLOYMENT_NOTES.md)
 [![Backend](https://img.shields.io/badge/backend-FastAPI_0.115-009688.svg?logo=fastapi&logoColor=white)](app/)
 [![Frontend](https://img.shields.io/badge/frontend-Svelte_5-FF3E00.svg?logo=svelte&logoColor=white)](frontend/)
+[![i18n](https://img.shields.io/badge/i18n-EN%2FES-green.svg)](I18N_STATUS_REPORT.md)
 [![Python](https://img.shields.io/badge/python-3.11+-blue?logo=python&logoColor=white)]()
 [![PostgreSQL](https://img.shields.io/badge/PostgreSQL-16+-4169E1?logo=postgresql&logoColor=white)]()
 [![TypeScript](https://img.shields.io/badge/TypeScript-5.x-3178C6?logo=typescript&logoColor=white)]()
 [![License](https://img.shields.io/badge/license-Propietario-red)]()
 
 **Validado:** 2026-06-14 · **Entorno objetivo:** `/opt/Erp_core` → PCT 160
+
+---
+
+## 🆕 Novedades v2.1.0 — Internacionalización Completa
+
+**Nueva funcionalidad**: Soporte i18n híbrido (svelte-i18n estática + CMS dinámico en BD), auto-detect de idioma, selector de idioma en navbar, testimonios multiidioma, secciones de landing traducibles.
+
+### Características i18n:
+- 🌍 **Auto-detect de Idioma** — Detecta `navigator.language` automáticamente, persiste en localStorage
+- 🔄 **Selector de Idioma** — Globo terráqueo + toggle EN/ES en NavBar, cambio instantáneo
+- 📖 **Diccionarios Estáticos** — 185 keys en en.json/es.json para UI (svelte-i18n)
+- 💬 **Testimonios Multiidioma** — Tabla `testimonials` con soporte es/en, CRUD desde admin
+- 📰 **Secciones CMS** — Tabla `landing_sections` con unique constraint (section_key, locale)
+- 🔤 **Traducciones Editable** — Tabla `translations` para strings dinámicos, workflow de aprobación
+- 📡 **API Locale-Aware** — Endpoints públicos filtran por locale: `/api/public/testimonials?locale=es`
+- 🏷️ **Meta Tags Dinámicos** — OG tags, canonical, hreflang por idioma (en desarrollo)
+
+**Archivos clave i18n:**
+- Frontend: `lib/i18n/{index.ts, en.json, es.json}`, `lib/stores/locale.ts`
+- Backend: `models/database.py` (3 nuevos modelos), `routes/public_landing.py` (endpoints mejorados)
+- Migración: `alembic/versions/.../013_landing_i18n_internationalization.py`
+- Scripts: `scripts/seed_landing_i18n.py`, `scripts/verify_i18n.sh`
+- Documentación: [I18N_STATUS_REPORT.md](I18N_STATUS_REPORT.md), [I18N_IMPLEMENTATION_SUMMARY.md](I18N_IMPLEMENTATION_SUMMARY.md)
 
 ---
 
@@ -40,6 +64,7 @@
 - [Características](#-características)
 - [Estructura del Repositorio](#-estructura-del-repositorio)
 - [Módulos API Activos](#-módulos-api-activos)
+- [i18n — Internacionalización](#-i18n--internacionalización)
 - [Requisitos](#-requisitos)
 - [Configuración Local](#-configuración-local)
 - [Entornos](#-entornos-erp_env)
@@ -58,12 +83,13 @@
 |------|-----------|
 | **Backend** | FastAPI 0.115 + SQLAlchemy + PostgreSQL 16 |
 | **Frontend** | Svelte 5 (runes mode) + TypeScript + Vite 7 + Tailwind CSS 3 |
+| **i18n** | svelte-i18n 3.x (static dicts) + Backend Translation CMS (dynamic) |
 | **Autenticación** | JWT (cookies httpOnly) + TOTP 2FA + Email Verify + Roles granulares |
 | **Pagos** | Stripe (Direct + Connect Express) |
 | **Infraestructura** | Proxmox LXC + Cloudflare Tunnels + Nginx |
 | **Seguridad** | Dynamic CORS + WAF Middleware + Rate Limiting + Audit Logging |
 | **Contratos** | NDA/TOS digitales + weasyprint PDF + Firma cursiva |
-| **Migraciones** | Alembic (12 versiones) |
+| **Migraciones** | Alembic (13 versiones) |
 | **Email** | SMTP ipzmarketing (SSL/TLS :465) |
 
 ---
@@ -109,7 +135,8 @@
 | Módulo | Descripción | Estado |
 |--------|-------------|--------|
 | 🔐 **Auth Multi-layer** | Password → TOTP → Email Verify (configurable por rol) | ✅ |
-| 🌐 **CORS Dinámico** | Orígenes desde BD con caché TTL + regex fallback | ✅ |
+| � **i18n Multiidioma** | Auto-detect ES/EN, selector en navbar, testimonios + CMS traducibles | ✅ |
+| �🌐 **CORS Dinámico** | Orígenes desde BD con caché TTL + regex fallback | ✅ |
 | 📝 **Firma Digital** | NDA/TOS Stripe-style → PDF weasyprint + hash SHA256 | ✅ |
 | ⚖️ **Templates Admin** | Editor HTML de acuerdos con variables, CRUD completo | ✅ |
 | 👥 **Admin Users** | Multi-admin con roles (admin/operator/viewer) | ✅ |

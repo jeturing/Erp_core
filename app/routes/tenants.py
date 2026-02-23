@@ -2,7 +2,7 @@
 Tenants Routes - Tenant management endpoints
 Integrado con OdooDatabaseManager para provisioning real
 """
-from fastapi import APIRouter, HTTPException, Header, Query, Request
+from fastapi import APIRouter, Cookie, HTTPException, Header, Query, Request
 from pydantic import BaseModel, Field, field_validator
 from typing import Optional, List
 import re
@@ -21,7 +21,7 @@ from ..services.odoo_database_manager import (
     query_admin_login_pg,
 )
 from .auth import verify_token
-from .roles import verify_token_with_role, _extract_token
+from .roles import verify_token_with_role, _extract_token, _require_admin as _require_admin_base
 import httpx
 import logging
 import psycopg
@@ -33,17 +33,6 @@ router = APIRouter(prefix="/api/tenants", tags=["Tenants"])
 logger = logging.getLogger(__name__)
 
 _SUBDOMAIN_RE = re.compile(r'^[a-z0-9][a-z0-9_]{1,28}[a-z0-9]$')
-
-
-def _require_admin(request: Request, authorization: Optional[str] = None):
-    """Verifica que la request tenga un token de admin válido."""
-    token = _extract_token(request, authorization)
-    if not token:
-        raise HTTPException(status_code=401, detail="No autenticado")
-    payload = verify_token_with_role(token)
-    if payload.get("role") != "admin":
-        raise HTTPException(status_code=403, detail="Acceso solo para administradores")
-    return payload
 
 
 # DTOs
@@ -366,9 +355,9 @@ async def list_server_databases(server_id: str):
 # =====================================================
 
 @router.get("")
-async def list_tenants(request: Request, authorization: Optional[str] = Header(None)):
+async def list_tenants(request: Request, access_token: str = Cookie(None)):
     """Listado de tenants desde todos los servidores"""
-    _require_admin(request, authorization)
+    _require_admin_base(request, access_token)
     try:
         items = await get_all_tenants_from_servers()
         if not items:
@@ -394,7 +383,7 @@ async def list_tenants(request: Request, authorization: Optional[str] = Header(N
 async def create_tenant(
     payload: TenantCreateRequest,
     request: Request,
-    authorization: Optional[str] = Header(None)
+    access_token: str = Cookie(None)
 ):
     """
     Crear un nuevo tenant (base de datos Odoo). Requiere rol admin.
@@ -403,7 +392,7 @@ async def create_tenant(
     - Credenciales por defecto: configuradas en variables de entorno
     - Por defecto usa método SQL rápido (duplica template_tenant)
     """
-    _require_admin(request, authorization)
+    _require_admin_base(request, access_token)
     # Verificar idempotencia: si el subdominio ya existe en BD local, rechazar
     db = SessionLocal()
     try:
@@ -504,7 +493,7 @@ async def delete_tenant_endpoint(
     request: Request,
     server_id: Optional[str] = Query(None, description="ID del servidor"),
     confirm: bool = Query(False, description="Confirmar eliminación"),
-    authorization: Optional[str] = Header(None)
+    access_token: str = Cookie(None)
 ):
     """
     Eliminar un tenant (base de datos Odoo). Requiere rol admin.
@@ -512,7 +501,7 @@ async def delete_tenant_endpoint(
     - Requiere confirm=true para ejecutar
     - Si no se especifica server_id, busca en todos los servidores
     """
-    _require_admin(request, authorization)
+    _require_admin_base(request, access_token)
     if not confirm:
         return {
             "success": False,
@@ -561,10 +550,10 @@ async def delete_tenant_endpoint(
 async def get_tenant_details(
     subdomain: str,
     request: Request,
-    authorization: Optional[str] = Header(None)
+    access_token: str = Cookie(None)
 ):
     """Obtener detalles de un tenant específico. Requiere autenticación."""
-    _require_admin(request, authorization)
+    _require_admin_base(request, access_token)
     try:
         all_tenants = await get_all_tenants_from_servers()
         if not all_tenants:

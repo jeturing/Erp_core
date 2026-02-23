@@ -333,6 +333,8 @@ class Customer(Base):
     notes = Column(Text)
     user_count = Column(Integer, default=1)              # Usuarios Odoo del tenant
     is_admin_account = Column(Boolean, default=False)    # True = admin@sajet.us (no se cobra)
+    is_accountant = Column(Boolean, default=False)       # True = Contador/CPA con acceso multi-tenant
+    accountant_firm_name = Column(String(200), nullable=True)  # Nombre de la firma contable
 
     # ── Onboarding flow ──
     onboarding_step = Column(Integer, default=0)         # 0=nuevo, 1=perfil, 2=ecf(si RD), 3=pago, 4=completo
@@ -438,6 +440,10 @@ class Plan(Base):
     stripe_product_id = Column(String(100))                      # Product ID de Stripe
     features = Column(Text)                                      # JSON con features del plan
     is_active = Column(Boolean, default=True)
+    is_public = Column(Boolean, default=True)                    # Visible en landing page pricing
+    is_highlighted = Column(Boolean, default=False)              # "Most Popular" badge en pricing
+    trial_days = Column(Integer, default=14)                     # Días de prueba gratis
+    annual_discount_percent = Column(Float, default=20)          # Descuento por pago anual
     sort_order = Column(Integer, default=0)                      # Orden de visualización
     created_at = Column(DateTime, default=datetime.utcnow)
     updated_at = Column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
@@ -525,6 +531,8 @@ class Partner(Base):
 
     # Código único de partner (visible en dashboard, clientes lo usan para solicitar cambio)
     partner_code = Column(String(20), unique=True, index=True, nullable=True)
+    # Slug amigable para URLs públicas: sajet.us/plt/{slug} — fallback a partner_code
+    slug = Column(String(100), unique=True, index=True, nullable=True)
 
     # Stripe Connect Express
     stripe_account_id = Column(String(100))              # acct_XXXX — Stripe Connected Account ID
@@ -1426,6 +1434,135 @@ class EmailLog(Base):
 
     customer = relationship("Customer", foreign_keys=[customer_id])
     partner = relationship("Partner", foreign_keys=[partner_id])
+
+
+# ═══════════════════════════════════════════════════════
+# TESTIMONIALS — Gestionables desde Admin
+# ═══════════════════════════════════════════════════════
+
+# ═══════════════════════════════════════════════════════
+# ACCOUNTANT TENANT ACCESS — Multi-empresa para contadores
+# ═══════════════════════════════════════════════════════
+
+class AccountantAccessLevel(enum.Enum):
+    readonly = "readonly"           # Solo lectura de contabilidad
+    readwrite = "readwrite"         # Lectura/escritura (conciliación, asientos)
+    full = "full"                   # Acceso completo al módulo contable
+
+
+class AccountantTenantAccess(Base):
+    """
+    Tabla N:N que vincula un usuario-contador con múltiples tenants (clientes).
+    Permite al contador acceder a la contabilidad de sus clientes sin ser
+    usuario directo del tenant.
+    """
+    __tablename__ = "accountant_tenant_access"
+
+    id = Column(Integer, primary_key=True, index=True)
+    accountant_id = Column(Integer, ForeignKey("customers.id", ondelete="CASCADE"), nullable=False)
+    tenant_id = Column(Integer, ForeignKey("customers.id", ondelete="CASCADE"), nullable=False)
+    access_level = Column(Enum(AccountantAccessLevel), default=AccountantAccessLevel.readonly)
+    granted_by = Column(String(200), nullable=True)          # Quién otorgó el acceso
+    is_active = Column(Boolean, default=True)
+    granted_at = Column(DateTime, default=datetime.utcnow)
+    revoked_at = Column(DateTime, nullable=True)
+    notes = Column(Text, nullable=True)
+
+    __table_args__ = (
+        UniqueConstraint("accountant_id", "tenant_id", name="uq_accountant_tenant"),
+    )
+
+    accountant = relationship("Customer", foreign_keys=[accountant_id], backref="accountant_clients")
+    tenant = relationship("Customer", foreign_keys=[tenant_id], backref="accountant_advisors")
+
+
+# ═══════════════════════════════════════════════════════
+# LANDING PAGE i18n — Testimonials, Sections, Translations
+# ═══════════════════════════════════════════════════════
+
+class Testimonial(Base):
+    """
+    Testimonios de clientes — versiones en diferentes idiomas.
+    Gestionables desde panel admin, con soporte para múltiples idiomas.
+    """
+    __tablename__ = "testimonials"
+
+    id = Column(Integer, primary_key=True, index=True)
+    name = Column(String(150), nullable=False)
+    role = Column(String(150), nullable=True)
+    company = Column(String(200), nullable=True)
+    text = Column(Text, nullable=False)
+    avatar_url = Column(String(500), nullable=True)
+    locale = Column(String(10), nullable=False, default="en")  # "en" | "es"
+    featured = Column(Boolean, default=False)
+    sort_order = Column(Integer, default=0)
+    created_at = Column(DateTime, default=datetime.utcnow)
+    updated_at = Column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
+
+    __table_args__ = (
+        Index('ix_testimonials_locale', 'locale'),
+        Index('ix_testimonials_featured', 'featured'),
+    )
+
+
+class LandingSection(Base):
+    """
+    Secciones de contenido para la landing page — gestionables desde admin.
+    Permite al equipo de marketing cambiar textos, CTAs, badges sin tocar código.
+    
+    Estructura: (section_key, locale) = unique composite
+    Ej: ("hero", "en"), ("hero", "es"), ("features", "en"), etc.
+    """
+    __tablename__ = "landing_sections"
+
+    id = Column(Integer, primary_key=True, index=True)
+    section_key = Column(String(100), nullable=False)  # "hero", "features", "pricing", "accountants", etc.
+    locale = Column(String(10), nullable=False, default="en")  # "en" | "es"
+    title = Column(String(300), nullable=True)
+    content = Column(Text, nullable=True)
+    meta_description = Column(String(500), nullable=True)
+    meta_keywords = Column(String(300), nullable=True)
+    og_title = Column(String(300), nullable=True)
+    og_description = Column(String(500), nullable=True)
+    og_image_url = Column(String(500), nullable=True)
+    structured_data = Column(JSON, nullable=True)  # schema.org JSON-LD
+    created_at = Column(DateTime, default=datetime.utcnow)
+    updated_at = Column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
+
+    __table_args__ = (
+        UniqueConstraint('section_key', 'locale', name='uq_landing_section_key_locale'),
+        Index('ix_landing_sections_key', 'section_key'),
+        Index('ix_landing_sections_locale', 'locale'),
+    )
+
+
+class Translation(Base):
+    """
+    Traducciones gestionables por admin — para strings CMS que vayan más allá del archivo estático.
+    Estructura: (key, locale) = unique composite
+    Ej: ("landing.hero.badge", "en"), ("landing.hero.badge", "es")
+    """
+    __tablename__ = "translations"
+
+    id = Column(Integer, primary_key=True, index=True)
+    key = Column(String(255), nullable=False)  # Ej: "landing.hero.badge", "landing.seo.title"
+    locale = Column(String(10), nullable=False, default="en")  # "en" | "es"
+    value = Column(Text, nullable=False)
+    context = Column(String(100), nullable=True)  # "landing" | "seo" | "footer" | "pricing" para agrupar
+    is_approved = Column(Boolean, default=False)
+    approved_by = Column(String(150), nullable=True)
+    created_by = Column(String(150), nullable=True)
+    created_at = Column(DateTime, default=datetime.utcnow)
+    updated_at = Column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
+
+    __table_args__ = (
+        UniqueConstraint('key', 'locale', name='uq_translation_key_locale'),
+        Index('ix_translations_key', 'key'),
+        Index('ix_translations_locale', 'locale'),
+        Index('ix_translations_context', 'context'),
+        Index('ix_translations_approved', 'is_approved'),
+        Index('ix_translations_updated', 'updated_at'),
+    )
 
 
 # ===== HELPER FUNCTIONS PARA CONFIGURACIÓN =====

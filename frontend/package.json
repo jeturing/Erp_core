@@ -27,7 +27,8 @@
     "workbox-window": "^7.4.0"
   },
   "dependencies": {
-    "lucide-svelte": "^0.563.0"
+    "lucide-svelte": "^0.563.0",
+    "svelte-i18n": "^4.0.1"
   },
   "overrides": {
     "cookie": "^0.7.0"

@@ -39,6 +39,10 @@ function createAuthStore() {
           update((state) => ({ ...state, isLoading: false, error: null }));
           return { requires_email_verify: true, message: result.message };
         }
+        // Si el servidor devuelve el token en JSON, guardarlo en localStorage
+        if ((result as any).access_token) {
+          api.setToken((result as any).access_token);
+        }
         const user = await api.get<User>('/api/auth/me');
         update((state) => ({ ...state, user, isLoading: false, error: null }));
         return { success: true };

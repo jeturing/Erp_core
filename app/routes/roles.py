@@ -372,11 +372,27 @@ def verify_token_with_role(token: str, required_role: str = None) -> dict:
 
 
 def _extract_token(request: Request, access_token: Optional[str] = None) -> Optional[str]:
+    """
+    Extrae el token de autenticación en este orden:
+    1. Si access_token viene como parámetro (ej: Cookie), usa eso
+    2. Si no, intenta extraer del header Authorization (Bearer)
+    3. Si tampoco, intenta leer directamente de cookies
+    Esto permite compatibilidad con tanto cookies como headers Bearer.
+    """
     token = access_token
-    if token is None:
-        auth_header = request.headers.get("Authorization", "")
-        if auth_header.startswith("Bearer "):
-            token = auth_header[7:]
+    if token:
+        # Si viene como parámetro, asumir que es el token puro (sin "Bearer")
+        return token
+    
+    # Intentar extraer del header Authorization
+    auth_header = request.headers.get("Authorization", "")
+    if auth_header.startswith("Bearer "):
+        token = auth_header[7:]
+    
+    # Si aún no tenemos token, intentar leer de cookie directamente
+    if not token:
+        token = request.cookies.get("access_token")
+    
     return token
 
 

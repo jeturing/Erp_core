@@ -40,6 +40,7 @@ class ApiClient {
 
   /**
    * Intenta renovar el access token usando el refresh token (cookie httpOnly).
+   * Si el servidor devuelve un nuevo token en JSON, lo guarda en localStorage.
    * Retorna true si se renovó exitosamente.
    */
   private async tryRefresh(): Promise<boolean> {
@@ -49,7 +50,14 @@ class ApiClient {
         credentials: 'include',
         headers: { 'Content-Type': 'application/json' },
       });
-      return res.ok;
+      if (!res.ok) return false;
+      
+      const data = await res.json() as { access_token?: string };
+      // Si el servidor devuelve el token en JSON, actualizar localStorage
+      if (data.access_token) {
+        this.setToken(data.access_token);
+      }
+      return true;
     } catch {
       return false;
     }

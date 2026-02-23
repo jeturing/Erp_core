@@ -35,8 +35,11 @@ class CheckoutRequest(BaseModel):
     company_name: str
     subdomain: str
     plan: str
+    user_count: int = 1                  # Cantidad de usuarios (asientos)
+    billing_period: str = "monthly"      # "monthly" | "annual"
     partner_code: Optional[str] = None      # Si viene de un partner
     custom_domain: Optional[str] = None      # Épica 8: dominio temprano
+    is_accountant: bool = False              # True = registro como contador/CPA
 
 
 @router.get("/", response_class=HTMLResponse)
@@ -111,9 +114,15 @@ async def create_checkout_session(payload: CheckoutRequest, background_tasks: Ba
             }
             price_id = price_map.get(payload.plan, "price_1234_basic")
             monthly_amount = 0
+            user_count = payload.user_count
         else:
             price_id = plan.stripe_price_id or f"price_{plan.name}"
-            monthly_amount = plan.monthly_price or 0
+            user_count = max(payload.user_count, plan.included_users)
+            # Calcular precio mensual dinámico con partner override
+            monthly_amount = plan.calculate_monthly(
+                user_count,
+                partner.id if partner else None
+            )
 
         # ── Crear customer en BD ──
         customer = Customer(
@@ -121,6 +130,9 @@ async def create_checkout_session(payload: CheckoutRequest, background_tasks: Ba
             full_name=payload.full_name,
             company_name=payload.company_name,
             subdomain=payload.subdomain,
+            user_count=user_count,
+            is_accountant=payload.is_accountant,
+            accountant_firm_name=payload.company_name if payload.is_accountant else None,
         )
         db.add(customer)
         db.flush()
@@ -160,7 +172,7 @@ async def create_checkout_session(payload: CheckoutRequest, background_tasks: Ba
         # ── Crear Stripe Checkout Session ──
         checkout_params = {
             "payment_method_types": ["card"],
-            "line_items": [{"price": price_id, "quantity": 1}],
+            "line_items": [{"price": price_id, "quantity": user_count}],
             "mode": "subscription",
             "success_url": f"{APP_URL}/success?session_id={{CHECKOUT_SESSION_ID}}",
             "cancel_url": f"{APP_URL}/signup",
@@ -171,6 +183,8 @@ async def create_checkout_session(payload: CheckoutRequest, background_tasks: Ba
                 "partner_id": str(partner.id) if partner else "",
                 "lead_id": str(lead.id),
                 "plan": payload.plan,
+                "user_count": str(user_count),
+                "is_accountant": str(payload.is_accountant),
             },
         }
 

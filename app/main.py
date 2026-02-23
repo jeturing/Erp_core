@@ -26,6 +26,9 @@ from .routes import communications
 from .routes import admin_users
 from .routes import agreements
 from .routes import stripe_sync
+from .routes import public_landing
+from .routes import accountant_portal
+from .routes import admin_landing
 
 # Import security middleware
 from .security.middleware import SecurityMiddleware, WAFMiddleware
@@ -185,6 +188,9 @@ app.include_router(communications.router)        # Historial de emails transacci
 app.include_router(admin_users.router)           # CRUD usuarios administrativos
 app.include_router(agreements.router)            # NDA/TOS templates + signing flow
 app.include_router(stripe_sync.router)           # Stripe → BD sync (source of truth)
+app.include_router(public_landing.router)        # Endpoints públicos para landing page (sin auth)
+app.include_router(accountant_portal.router)     # Portal para contadores/CPA multi-empresa
+app.include_router(admin_landing.router)         # Admin CRUD para i18n content (testimonios, landing, traducciones)
 
 
 # ── CORS Cache Refresh endpoint ──

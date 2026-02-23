@@ -196,7 +196,7 @@ class WAFMiddleware(BaseHTTPMiddleware):
     XSS_PATTERNS = [
         r"<script[^>]*>",
         r"javascript:",
-        r"on\w+\s*=",
+        r"\bon\w+\s*=",
         r"<iframe",
         r"<object",
         r"<embed",

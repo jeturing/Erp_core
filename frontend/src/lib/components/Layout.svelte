@@ -6,6 +6,7 @@
     Percent, FileSpreadsheet, Boxes, UsersRound, Receipt,
     Scale, GitCompareArrows, ClipboardList, ShieldCheck, Palette,
     ShoppingBag, ChevronDown, Sliders, Mail, BarChart2,
+    Languages, MessageCircle, FileType,
   } from 'lucide-svelte';
   import { auth } from '../stores';
 
@@ -72,6 +73,15 @@
       children: [
         { id: 'reports',        label: 'Reportes',        icon: BarChart2, href: '#/reports' },
         { id: 'communications', label: 'Comunicaciones',  icon: Mail,      href: '#/communications' },
+      ],
+    },
+
+    {
+      id: 'grp-landing', label: 'Landing / i18n', icon: Languages,
+      children: [
+        { id: 'testimonials',     label: 'Testimonios',      icon: MessageCircle, href: '#/testimonials' },
+        { id: 'landing-sections', label: 'Secciones Landing', icon: FileType,      href: '#/landing-sections' },
+        { id: 'translations',     label: 'Traducciones',      icon: Languages,     href: '#/translations' },
       ],
     },
 

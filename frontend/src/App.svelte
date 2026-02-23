@@ -1,10 +1,15 @@
 <script lang="ts">
   import { onMount } from 'svelte';
   import './app.css';
-  import { auth, isAuthenticated, currentUser } from './lib/stores';
+  import { auth, isAuthenticated, currentUser, localeStore } from './lib/stores';
+  import { initializeI18n, getInitialLocale } from './lib/i18n';
+  import { locale as i18nLocale } from 'svelte-i18n';
   import Layout from './lib/components/Layout.svelte';
   import Login from './routes/Login.svelte';
   import Landing from './routes/Landing.svelte';
+  import AccountantsLanding from './routes/AccountantsLanding.svelte';
+  import PartnerLanding from './routes/PartnerLanding.svelte';
+  import AccountantPortal from './routes/AccountantPortal.svelte';
   import Dashboard from './routes/Dashboard.svelte';
   import TenantPortal from './routes/TenantPortal.svelte';
   import PartnerPortal from './routes/PartnerPortal.svelte';
@@ -37,6 +42,9 @@
   import Reports from './pages/Reports.svelte';
   import AdminUsers from './pages/AdminUsers.svelte';
   import Agreements from './pages/Agreements.svelte';
+  import Testimonials from './pages/Testimonials.svelte';
+  import LandingSections from './pages/LandingSections.svelte';
+  import Translations from './pages/Translations.svelte';
   import { Spinner } from './lib/components';
   import Toast from './lib/components/Toast.svelte';
   import OfflineBanner from './lib/components/OfflineBanner.svelte';
@@ -76,11 +84,18 @@
     | 'reports'
     | 'admin-users'
     | 'agreements'
+    | 'testimonials'
+    | 'landing-sections'
+    | 'translations'
     | 'signup'
+    | 'accountants'
+    | 'plt'
+    | 'accountant-portal'
     | 'notfound';
 
   let currentRoute = 'landing';
   let currentPage: AppPage = 'landing';
+  let partnerSlug = '';
 
   function getRouteFromLocation(): string {
     const hash = window.location.hash.replace(/^#\/?/, '');
@@ -96,6 +111,16 @@
     return 'landing';
   }
 
+  function getPartnerSlugFromHash(): string {
+    const hash = window.location.hash.replace(/^#\/?/, '');
+    const parts = hash.split('?')[0].split('/');
+    // #/plt/{slug}
+    if (parts[0] === 'plt' && parts[1]) {
+      return parts[1];
+    }
+    return '';
+  }
+
   function setRouteHash(route: string) {
     window.location.hash = `#/${route}`;
   }
@@ -106,6 +131,17 @@
 
     if (route === 'landing' || route === 'home' || route === '') {
       currentPage = 'landing';
+      return;
+    }
+
+    if (route === 'accountants') {
+      currentPage = 'accountants';
+      return;
+    }
+
+    if (route === 'plt') {
+      partnerSlug = getPartnerSlugFromHash();
+      currentPage = 'plt';
       return;
     }
 
@@ -180,6 +216,10 @@
       case 'reports':
       case 'admin-users':
       case 'agreements':
+      case 'testimonials':
+      case 'landing-sections':
+      case 'translations':
+      case 'accountant-portal':
         currentPage = route as AppPage;
         break;
       default:
@@ -190,6 +230,12 @@
 
   onMount(() => {
     let active = true;
+
+    // Initialize i18n with auto-detected locale
+    initializeI18n();
+    const initialLocale = getInitialLocale();
+    i18nLocale.set(initialLocale as any);
+    localeStore.set(initialLocale as any);
 
     const init = async () => {
       await auth.init();
@@ -224,6 +270,10 @@
   </div>
 {:else if currentPage === 'landing'}
   <Landing />
+{:else if currentPage === 'accountants'}
+  <AccountantsLanding />
+{:else if currentPage === 'plt'}
+  <PartnerLanding code={partnerSlug} />
 {:else if currentPage === 'login'}
   <Login />
 {:else if currentPage === 'portal'}
@@ -232,6 +282,8 @@
   <PartnerPortal />
 {:else if currentPage === 'customer-onboarding'}
   <CustomerOnboarding />
+{:else if currentPage === 'accountant-portal'}
+  <AccountantPortal />
 {:else}
   <Layout currentRoute={currentPage === 'notfound' ? currentRoute : currentPage}>
     {#if currentPage === 'dashboard'}
@@ -292,6 +344,12 @@
       <AdminUsers />
     {:else if currentPage === 'agreements'}
       <Agreements />
+    {:else if currentPage === 'testimonials'}
+      <Testimonials />
+    {:else if currentPage === 'landing-sections'}
+      <LandingSections />
+    {:else if currentPage === 'translations'}
+      <Translations />
     {:else}
       <div class="p-6">
         <h1 class="page-title">404 - Página no encontrada</h1>
