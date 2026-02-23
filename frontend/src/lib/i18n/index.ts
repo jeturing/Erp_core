@@ -1,15 +1,15 @@
-import { init, getLocaleFromNavigator } from 'svelte-i18n';
+import { init, addMessages, getLocaleFromNavigator } from 'svelte-i18n';
 import en from './en.json';
 import es from './es.json';
 
 export function initializeI18n() {
+  // Register messages BEFORE init — ensures they are available on first render
+  addMessages('en', en);
+  addMessages('es', es);
+
   init({
     fallbackLocale: 'en',
     initialLocale: getInitialLocale(),
-    messages: {
-      en,
-      es,
-    },
   });
 }
 
