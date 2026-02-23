@@ -424,15 +424,15 @@ async def create_tenant(
             )
         
         if result.get("success"):
-            # Registrar en BD local (opcional)
+            already_existed = result.get("already_existed", False)
+            # Registrar en BD local
             db = SessionLocal()
             try:
-                # Verificar si ya existe
                 existing = db.query(Customer).filter(Customer.subdomain == payload.subdomain).first()
                 if not existing:
                     customer = Customer(
-                        company_name=payload.company_name or payload.subdomain.title(),
-                        full_name=payload.company_name or payload.subdomain.title(),
+                        company_name=payload.company_name or result.get("company_name") or payload.subdomain.title(),
+                        full_name=payload.company_name or result.get("company_name") or payload.subdomain.title(),
                         email=payload.admin_email or DEFAULT_ADMIN_LOGIN,
                         subdomain=payload.subdomain
                     )
@@ -440,7 +440,6 @@ async def create_tenant(
                     db.commit()
                     db.refresh(customer)
                     
-                    # Crear suscripción
                     subscription = Subscription(
                         customer_id=customer.id,
                         plan_name=payload.plan or "basic",
@@ -457,14 +456,40 @@ async def create_tenant(
                     
                     result["customer_id"] = customer.id
                     result["subscription_id"] = subscription.id
+                    logger.info(f"Tenant '{payload.subdomain}' registrado en BD local (customer={customer.id})")
+                else:
+                    result["customer_id"] = existing.id
+                    # Verificar que tenga suscripción activa
+                    sub = db.query(Subscription).filter(
+                        Subscription.customer_id == existing.id,
+                        Subscription.status == SubscriptionStatus.active
+                    ).first()
+                    if sub:
+                        result["subscription_id"] = sub.id
+                    else:
+                        # Crear suscripción si no existe
+                        new_sub = Subscription(
+                            customer_id=existing.id,
+                            plan_name=payload.plan or "basic",
+                            status=SubscriptionStatus.active,
+                            billing_mode=BillingMode.JETURING_DIRECT_SUBSCRIPTION,
+                        )
+                        db.add(new_sub)
+                        db.commit()
+                        db.refresh(new_sub)
+                        result["subscription_id"] = new_sub.id
+                        logger.info(f"Suscripción creada para tenant existente '{payload.subdomain}'")
             except Exception as db_err:
                 logger.warning(f"No se pudo registrar tenant en BD local: {db_err}")
+                db.rollback()
             finally:
                 db.close()
             
+            status_msg = "vinculado" if already_existed else "creado"
             return {
                 "success": True,
-                "message": f"Tenant '{payload.subdomain}' creado exitosamente",
+                "already_existed": already_existed,
+                "message": f"Tenant '{payload.subdomain}' {status_msg} exitosamente",
                 "tenant": {
                     "subdomain": payload.subdomain,
                     "url": result.get("url"),
@@ -475,10 +500,11 @@ async def create_tenant(
                 "details": result
             }
         else:
-            raise HTTPException(
-                status_code=400, 
-                detail=result.get("error", "Error creando tenant")
-            )
+            error_msg = result.get("error", "Error creando tenant")
+            # Si el error indica que ya existe, dar 409 (no 400)
+            if "ya existe" in error_msg.lower():
+                raise HTTPException(status_code=409, detail=error_msg)
+            raise HTTPException(status_code=400, detail=error_msg)
     
     except HTTPException:
         raise

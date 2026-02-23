@@ -796,11 +796,28 @@ async def create_tenant_from_template(
     pct_id = server.pct_id
     
     try:
-        # 1. Verificar que no existe
+        # 1. Verificar si ya existe
         check_sql = f"SELECT 1 FROM pg_database WHERE datname = '{subdomain}'"
         success, output = _run_pct_sql(pct_id, "postgres", check_sql)
         if "1" in output:
-            return {"success": False, "error": f"BD '{subdomain}' ya existe"}
+            # BD ya existe — verificar si es funcional (tiene tabla res_company)
+            verify_sql = "SELECT name FROM res_company WHERE id = 1 LIMIT 1"
+            v_ok, v_out = _run_pct_sql(pct_id, subdomain, verify_sql)
+            existing_name = v_out.strip().split('\n')[-1].strip() if v_ok and v_out.strip() else company_name
+            base_url = f"https://{subdomain}.{BASE_DOMAIN}"
+            logger.info(f"BD '{subdomain}' ya existe y es funcional — retornando éxito idempotente")
+            return {
+                "success": True,
+                "already_existed": True,
+                "database": subdomain,
+                "company_name": existing_name or company_name,
+                "server": server.id,
+                "server_name": server.name,
+                "url": base_url,
+                "admin_login": final_login,
+                "admin_password": final_password,
+                "created_at": datetime.utcnow().isoformat(),
+            }
         
         # 2. Verificar template existe
         check_template = f"SELECT 1 FROM pg_database WHERE datname = '{TEMPLATE_DB}'"
