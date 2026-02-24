@@ -720,17 +720,28 @@ async def get_servers_status() -> Dict[str, Any]:
 
 
 def _run_pct_sql(pct_id: int, database: str, sql: str, timeout: int = 60) -> tuple:
-    """Ejecuta SQL via pct exec (síncrono, para operaciones críticas)"""
+    """Ejecuta SQL directamente via psycopg2 (conexión directa TCP, sin pct exec)"""
     try:
-        # Construir comando como lista para evitar problemas de escapado
-        # Usar BD de producción (10.10.10.137:5432) NO la local del CT
-        bash_cmd = f'export PGPASSWORD="{DEFAULT_DB_PASSWORD}"; psql -h {DEFAULT_DB_HOST} -p {DEFAULT_DB_PORT} -U {DEFAULT_DB_USER} -d {database} -c {shlex.quote(sql)}'
-        cmd = ['pct', 'exec', str(pct_id), '--', 'bash', '-c', bash_cmd]
-        
-        result = subprocess.run(cmd, capture_output=True, text=True, timeout=timeout)
-        return result.returncode == 0, result.stdout + result.stderr
-    except subprocess.TimeoutExpired:
-        return False, "Timeout"
+        import psycopg2
+        conn = psycopg2.connect(
+            host=DEFAULT_DB_HOST,
+            port=DEFAULT_DB_PORT,
+            dbname=database,
+            user=DEFAULT_DB_USER,
+            password=DEFAULT_DB_PASSWORD,
+            connect_timeout=timeout,
+        )
+        conn.set_isolation_level(0)  # AUTOCOMMIT para CREATE DATABASE
+        cur = conn.cursor()
+        cur.execute(sql)
+        try:
+            rows = cur.fetchall()
+            output = "\n".join(str(r) for r in rows)
+        except Exception:
+            output = "OK"
+        cur.close()
+        conn.close()
+        return True, output
     except Exception as e:
         return False, str(e)
 
@@ -846,24 +857,37 @@ async def create_tenant_from_template(
         terminate_sql = f"SELECT pg_terminate_backend(pid) FROM pg_stat_activity WHERE datname = '{TEMPLATE_DB}' AND pid <> pg_backend_pid()"
         _run_pct_sql(pct_id, "postgres", terminate_sql)
         
-        # 4. Duplicar BD (en PostgreSQL de producción 10.10.10.137:5432)
-        create_cmd = f'''pct exec {pct_id} -- bash -c 'export PGPASSWORD="{DEFAULT_DB_PASSWORD}"; psql -h {DEFAULT_DB_HOST} -p {DEFAULT_DB_PORT} -U {DEFAULT_DB_USER} -d postgres -c "CREATE DATABASE \"{subdomain}\" WITH TEMPLATE \"{TEMPLATE_DB}\" OWNER \"{DEFAULT_DB_USER}\";"' '''
-        
-        result = subprocess.run(create_cmd, shell=True, capture_output=True, text=True, timeout=120)
-        
-        if result.returncode != 0 or "ERROR" in result.stderr:
-            logger.error(f"Error creando BD: {result.stderr}")
-            return {"success": False, "error": f"Error duplicando BD: {result.stderr}"}
+        # 4. Duplicar BD directamente via psycopg2 con AUTOCOMMIT
+        try:
+            import psycopg2
+            conn_create = psycopg2.connect(
+                host=DEFAULT_DB_HOST,
+                port=DEFAULT_DB_PORT,
+                dbname="postgres",
+                user=DEFAULT_DB_USER,
+                password=DEFAULT_DB_PASSWORD,
+                connect_timeout=30,
+            )
+            conn_create.set_isolation_level(0)  # AUTOCOMMIT requerido para CREATE DATABASE
+            cur_create = conn_create.cursor()
+            cur_create.execute(f'CREATE DATABASE "{subdomain}" WITH TEMPLATE "{TEMPLATE_DB}" OWNER "{DEFAULT_DB_USER}"')
+            cur_create.close()
+            conn_create.close()
+            logger.info(f"BD '{subdomain}' creada exitosamente")
+        except Exception as e:
+            logger.error(f"Error creando BD: {e}")
+            return {"success": False, "error": f"Error duplicando BD: {str(e)}"}
         
         logger.info(f"BD '{subdomain}' duplicada, copiando filestore...")
         
-        # 4.5 Copiar filestore del template al nuevo tenant
-        # CREATE DATABASE WITH TEMPLATE solo copia datos PostgreSQL,
-        # pero Odoo almacena iconos/imágenes en el filesystem
+        # 4.5 Copiar filestore del template al nuevo tenant via SSH/pct desde el host
+        # El filestore está en LXC 105, se copia via pct exec desde el host Proxmox
+        # Si no está disponible pct (corriendo en VM), se intenta via SSH
+        import shutil as _shutil
         filestore_cmd = (
             f'pct exec {pct_id} -- bash -c \''
             f'mkdir -p {FILESTORE_PATH}/{subdomain} && '
-            f'cp -an {FILESTORE_PATH}/{TEMPLATE_DB}/* {FILESTORE_PATH}/{subdomain}/ && '
+            f'cp -an {FILESTORE_PATH}/{TEMPLATE_DB}/. {FILESTORE_PATH}/{subdomain}/ && '
             f'chown -R odoo:odoo {FILESTORE_PATH}/{subdomain} && '
             f'echo "filestore_ok"\''
         )

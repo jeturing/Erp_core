@@ -22,7 +22,7 @@ from pydantic import BaseModel, Field
 from sqlalchemy.orm import Session
 from datetime import datetime
 
-from ..config import get_db
+from ..models.database import get_db
 from ..services.mercury_client import get_mercury_client, MercuryAPIException, BankAccount
 from ..services.payment_processor import PaymentProcessor, PaymentEventType
 from ..services.treasury_manager import TreasuryManager
@@ -810,14 +810,18 @@ def get_dual_account_status(db: Session = Depends(get_db)):
         raise HTTPException(status_code=500, detail=str(e))
 
 
+class TransferToCheckingRequest(BaseModel):
+    amount: float = Field(..., gt=0, description="Monto a transferir en USD")
+    reason: str = Field(default="Funds for provider dispersal", description="Motivo de la transferencia")
+
+
 @router.post(
     "/treasury/accounts/transfer-to-checking",
     summary="Transferir de SAVINGS a CHECKING",
     description="Admin puede transferir fondos manualmente de SAVINGS a CHECKING."
 )
 def transfer_to_checking(
-    amount: float = Field(..., gt=0, description="Monto a transferir en USD"),
-    reason: str = Field(default="Funds for provider dispersal", description="Motivo de la transferencia"),
+    body: TransferToCheckingRequest,
     db: Session = Depends(get_db)
 ):
     """
@@ -841,8 +845,8 @@ def transfer_to_checking(
         
         # Ejecutar transferencia
         transfer = manager.transfer_to_checking(
-            amount=amount,
-            reason=reason
+            amount=body.amount,
+            reason=body.reason
         )
         
         return {
@@ -856,13 +860,17 @@ def transfer_to_checking(
         raise HTTPException(status_code=400, detail=str(e))
 
 
+class AutoReplenishRequest(BaseModel):
+    target_balance: Optional[float] = Field(default=None, description="Balance objetivo (default: 2x minimum)")
+
+
 @router.post(
     "/treasury/accounts/auto-replenish",
     summary="Auto-Replenish CHECKING",
     description="Forzar auto-replenish de CHECKING desde SAVINGS (normalmente es automático)."
 )
 def trigger_auto_replenish(
-    target_balance: float = Field(default=None, description="Balance objetivo (default: 2x minimum)"),
+    body: AutoReplenishRequest = AutoReplenishRequest(),
     db: Session = Depends(get_db)
 ):
     """
@@ -880,7 +888,7 @@ def trigger_auto_replenish(
         manager = get_account_manager()
         
         # Ejecutar auto-replenish
-        result = manager.auto_replenish_checking(target_balance=target_balance)
+        result = manager.auto_replenish_checking(target_balance=body.target_balance)
         
         return {
             "success": True,

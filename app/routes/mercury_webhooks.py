@@ -6,7 +6,7 @@ import logging
 from fastapi import APIRouter, Depends, HTTPException, Request
 from sqlalchemy.orm import Session
 
-from ..config import get_db
+from ..models.database import get_db
 from ..services.mercury_client import get_mercury_client
 from ..services.payment_processor import PaymentProcessor
 
