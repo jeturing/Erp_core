@@ -40,6 +40,8 @@ from ..config import (
     ODOO_DEFAULT_ADMIN_LOGIN as DEFAULT_ADMIN_LOGIN,
     ODOO_DEFAULT_ADMIN_PASSWORD as DEFAULT_ADMIN_PASSWORD,
     ODOO_MASTER_PASSWORD as DEFAULT_MASTER_PASSWORD,
+    ODOO_DB_HOST as DEFAULT_DB_HOST,
+    ODOO_DB_PORT as DEFAULT_DB_PORT,
     ODOO_DB_USER as DEFAULT_DB_USER,
     ODOO_DB_PASSWORD as DEFAULT_DB_PASSWORD,
     ODOO_DEFAULT_LANG as DEFAULT_LANG,
@@ -293,7 +295,7 @@ class OdooDatabaseManager:
             UPDATE ir_config_parameter SET value = '{db_name}.{BASE_DOMAIN}' WHERE key = 'mail.catchall.domain';
             """
             
-            cmd = f'''pct exec {self.server.pct_id} -- bash -c 'export PGPASSWORD="{DEFAULT_DB_PASSWORD}"; psql -h 127.0.0.1 -U {DEFAULT_DB_USER} -d {db_name} -c "{sql_commands}"' '''
+            cmd = f'''pct exec {self.server.pct_id} -- bash -c 'export PGPASSWORD="{DEFAULT_DB_PASSWORD}"; psql -h {DEFAULT_DB_HOST} -p {DEFAULT_DB_PORT} -U {DEFAULT_DB_USER} -d {db_name} -c "{sql_commands}"' '''
             
             result = subprocess.run(cmd, shell=True, capture_output=True, text=True, timeout=30)
             
@@ -398,7 +400,7 @@ class OdooDatabaseManager:
             UPDATE ir_config_parameter SET value = '{base_url}' WHERE key = 'web.base.url';
             """
             
-            cmd = f'''pct exec {self.server.pct_id} -- bash -c 'export PGPASSWORD="{DEFAULT_DB_PASSWORD}"; psql -h 127.0.0.1 -U {DEFAULT_DB_USER} -d {db_name} -c "{sql_commands}"' '''
+            cmd = f'''pct exec {self.server.pct_id} -- bash -c 'export PGPASSWORD="{DEFAULT_DB_PASSWORD}"; psql -h {DEFAULT_DB_HOST} -p {DEFAULT_DB_PORT} -U {DEFAULT_DB_USER} -d {db_name} -c "{sql_commands}"' '''
             
             result = subprocess.run(cmd, shell=True, capture_output=True, text=True, timeout=30)
             
@@ -454,7 +456,7 @@ class OdooDatabaseManager:
                 (SELECT count(*) FROM res_company) as companies
             """
             
-            cmd = f'''pct exec {self.server.pct_id} -- bash -c 'export PGPASSWORD="{DEFAULT_DB_PASSWORD}"; psql -h 127.0.0.1 -U {DEFAULT_DB_USER} -d {db_name} -t -A -F"," -c "{sql}"' '''
+            cmd = f'''pct exec {self.server.pct_id} -- bash -c 'export PGPASSWORD="{DEFAULT_DB_PASSWORD}"; psql -h {DEFAULT_DB_HOST} -p {DEFAULT_DB_PORT} -U {DEFAULT_DB_USER} -d {db_name} -t -A -F"," -c "{sql}"' '''
             
             result = subprocess.run(cmd, shell=True, capture_output=True, text=True, timeout=30)
             
@@ -721,7 +723,8 @@ def _run_pct_sql(pct_id: int, database: str, sql: str, timeout: int = 60) -> tup
     """Ejecuta SQL via pct exec (síncrono, para operaciones críticas)"""
     try:
         # Construir comando como lista para evitar problemas de escapado
-        bash_cmd = f'export PGPASSWORD="{DEFAULT_DB_PASSWORD}"; psql -h 127.0.0.1 -U {DEFAULT_DB_USER} -d {database} -c {shlex.quote(sql)}'
+        # Usar BD de producción (10.10.10.137:5432) NO la local del CT
+        bash_cmd = f'export PGPASSWORD="{DEFAULT_DB_PASSWORD}"; psql -h {DEFAULT_DB_HOST} -p {DEFAULT_DB_PORT} -U {DEFAULT_DB_USER} -d {database} -c {shlex.quote(sql)}'
         cmd = ['pct', 'exec', str(pct_id), '--', 'bash', '-c', bash_cmd]
         
         result = subprocess.run(cmd, capture_output=True, text=True, timeout=timeout)
@@ -740,8 +743,8 @@ def query_admin_login_pg(server_ip: str, db_name: str, db_port: int = 5432) -> O
     try:
         import psycopg
         with psycopg.connect(
-            host=server_ip,
-            port=db_port,
+            host=DEFAULT_DB_HOST,
+            port=DEFAULT_DB_PORT,
             dbname=db_name,
             user=DEFAULT_DB_USER,
             password=DEFAULT_DB_PASSWORD,
@@ -843,8 +846,8 @@ async def create_tenant_from_template(
         terminate_sql = f"SELECT pg_terminate_backend(pid) FROM pg_stat_activity WHERE datname = '{TEMPLATE_DB}' AND pid <> pg_backend_pid()"
         _run_pct_sql(pct_id, "postgres", terminate_sql)
         
-        # 4. Duplicar BD
-        create_cmd = f'''pct exec {pct_id} -- bash -c 'export PGPASSWORD="{DEFAULT_DB_PASSWORD}"; psql -h 127.0.0.1 -U {DEFAULT_DB_USER} -d postgres -c "CREATE DATABASE \\"{subdomain}\\" WITH TEMPLATE \\"{TEMPLATE_DB}\\" OWNER \\"{DEFAULT_DB_USER}\\";"' '''
+        # 4. Duplicar BD (en PostgreSQL de producción 10.10.10.137:5432)
+        create_cmd = f'''pct exec {pct_id} -- bash -c 'export PGPASSWORD="{DEFAULT_DB_PASSWORD}"; psql -h {DEFAULT_DB_HOST} -p {DEFAULT_DB_PORT} -U {DEFAULT_DB_USER} -d postgres -c "CREATE DATABASE \"{subdomain}\" WITH TEMPLATE \"{TEMPLATE_DB}\" OWNER \"{DEFAULT_DB_USER}\";"' '''
         
         result = subprocess.run(create_cmd, shell=True, capture_output=True, text=True, timeout=120)
         
