@@ -5,6 +5,7 @@ Integra directamente con /web/database/* endpoints de Odoo para gestión de BDs
 import httpx
 import logging
 import subprocess
+import shlex
 import os
 from typing import Dict, Any, List, Optional
 from datetime import datetime
@@ -719,11 +720,11 @@ async def get_servers_status() -> Dict[str, Any]:
 def _run_pct_sql(pct_id: int, database: str, sql: str, timeout: int = 60) -> tuple:
     """Ejecuta SQL via pct exec (síncrono, para operaciones críticas)"""
     try:
-        # Escapar comillas simples
-        sql_safe = sql.replace("'", "''")
-        cmd = f'''pct exec {pct_id} -- bash -c 'export PGPASSWORD="{DEFAULT_DB_PASSWORD}"; psql -h 127.0.0.1 -U {DEFAULT_DB_USER} -d {database} -c "{sql}"' '''
+        # Construir comando como lista para evitar problemas de escapado
+        bash_cmd = f'export PGPASSWORD="{DEFAULT_DB_PASSWORD}"; psql -h 127.0.0.1 -U {DEFAULT_DB_USER} -d {database} -c {shlex.quote(sql)}'
+        cmd = ['pct', 'exec', str(pct_id), '--', 'bash', '-c', bash_cmd]
         
-        result = subprocess.run(cmd, shell=True, capture_output=True, text=True, timeout=timeout)
+        result = subprocess.run(cmd, capture_output=True, text=True, timeout=timeout)
         return result.returncode == 0, result.stdout + result.stderr
     except subprocess.TimeoutExpired:
         return False, "Timeout"
@@ -858,8 +859,9 @@ async def create_tenant_from_template(
         # pero Odoo almacena iconos/imágenes en el filesystem
         filestore_cmd = (
             f'pct exec {pct_id} -- bash -c \''
-            f'cp -an {FILESTORE_PATH}/{TEMPLATE_DB}/* {FILESTORE_PATH}/{subdomain}/ 2>/dev/null; '
-            f'chown -R odoo:odoo {FILESTORE_PATH}/{subdomain}/; '
+            f'mkdir -p {FILESTORE_PATH}/{subdomain} && '
+            f'cp -an {FILESTORE_PATH}/{TEMPLATE_DB}/* {FILESTORE_PATH}/{subdomain}/ && '
+            f'chown -R odoo:odoo {FILESTORE_PATH}/{subdomain} && '
             f'echo "filestore_ok"\''
         )
         
