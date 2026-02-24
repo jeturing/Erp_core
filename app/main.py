@@ -34,6 +34,7 @@ from .routes import public_landing
 from .routes import accountant_portal
 from .routes import admin_landing
 from .routes import payments  # Nuevo: Pagos y dispersión a proveedores
+from .routes import mercury_webhooks  # Webhooks Mercury para conciliación
 
 # Import security middleware
 from .security.middleware import SecurityMiddleware, WAFMiddleware
@@ -104,6 +105,7 @@ app = FastAPI(
         {"name": "Audit", "description": "Registro de auditoría"},
         {"name": "Reports", "description": "Analytics y reportes consolidados"},
         {"name": "Dashboard", "description": "Métricas del dashboard admin"},
+        {"name": "Mercury", "description": "Webhooks y conciliación Mercury"},
     ],
 )
 
@@ -210,6 +212,7 @@ app.include_router(public_landing.router)        # Endpoints públicos para land
 app.include_router(accountant_portal.router)     # Portal para contadores/CPA multi-empresa
 app.include_router(admin_landing.router)         # Admin CRUD para i18n content (testimonios, landing, traducciones)
 app.include_router(payments.router)              # Pagos, dispersión a proveedores, Mercury, tesorería
+app.include_router(mercury_webhooks.router)      # Webhooks Mercury para conciliación
 
 
 # ── CORS Cache Refresh endpoint ──

@@ -111,7 +111,7 @@
     const action = isActive ? 'suspender' : 'reactivar';
     if (!window.confirm(`¿Deseas ${action} el tenant "${tenant.subdomain}"?`)) return;
     try {
-      await tenantsApi.suspend({ subdomain: tenant.subdomain, suspend: isActive, server: tenant.server });
+      await tenantsApi.suspend({ subdomain: tenant.subdomain, suspend: isActive, server: tenant.server || tenant.server_id || 'primary' });
       toasts.success(`Tenant ${isActive ? 'suspendido' : 'reactivado'}`);
       await loadTenants();
     } catch (e: any) {

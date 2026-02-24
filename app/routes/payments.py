@@ -74,6 +74,14 @@ class VerifyBankAccountRequest(BaseModel):
     account_type: str = "checking"
 
 
+class DirectPaymentInstructionsRequest(BaseModel):
+    """Instrucciones para pago directo (ACH/Wire) a Mercury SAVINGS."""
+    invoice_id: int
+    method: str = Field("ach", description="ach | wire")
+    country: str = Field("US", description="ISO country code, default US")
+    payer_name: Optional[str] = None
+
+
 # ═══════════════════════════════════════════════════════════════
 # 1. Invoice Payments
 # ═══════════════════════════════════════════════════════════════
@@ -122,6 +130,53 @@ def process_invoice_payment(
     
     except Exception as e:
         logger.error(f"Error processing invoice payment: {e}")
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+@router.post("/payments/direct/instructions")
+def get_direct_payment_instructions(
+    payload: DirectPaymentInstructionsRequest,
+    db: Session = Depends(get_db),
+):
+    """
+    Generar instrucciones de pago directo a Mercury (ACH/Wire).
+
+    Response:
+    ```json
+    {
+        "success": true,
+        "invoice_id": 123,
+        "amount_due": 5000.00,
+        "currency": "USD",
+        "method": "ach",
+        "routing_number": "091311229",
+        "account_number": "202559492947",
+        "payment_reference": "JTINV-123-12",
+        "memo": "Invoice INV-2026-0001 | Ref JTINV-123-12"
+    }
+    ```
+    """
+    try:
+        processor = PaymentProcessor(db)
+        result = processor.get_direct_payment_instructions(
+            invoice_id=payload.invoice_id,
+            method=payload.method,
+            country=payload.country,
+            payer_name=payload.payer_name,
+        )
+
+        if not result.get("success"):
+            raise HTTPException(
+                status_code=400,
+                detail=result.get("error", "Failed to generate instructions"),
+            )
+
+        return result
+
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.error(f"Error generating direct payment instructions: {e}")
         raise HTTPException(status_code=500, detail=str(e))
 
 

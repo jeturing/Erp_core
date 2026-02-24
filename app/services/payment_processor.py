@@ -23,6 +23,7 @@ from typing import Dict, List, Any, Optional, Tuple
 from datetime import datetime, timezone
 from enum import Enum
 from decimal import Decimal
+import re
 
 from sqlalchemy.orm import Session
 from .mercury_account_manager import get_account_manager, AccountType
@@ -49,6 +50,8 @@ class PaymentEventType(Enum):
     PAYOUT_COMPLETED = "payout_completed"   # Fondos llegaron
     PAYOUT_FAILED = "payout_failed"         # Transferencia falló
     BALANCE_SYNC = "balance_sync"           # Balance sincronizado
+    DIRECT_PAYMENT_INSTRUCTIONS = "direct_payment_instructions"  # Instrucciones de pago directo
+    DIRECT_PAYMENT_RECONCILED = "direct_payment_reconciled"       # Pago directo conciliado
 
 
 class PaymentProcessor:
@@ -173,6 +176,264 @@ class PaymentProcessor:
                 "success": False,
                 "error": str(e),
                 "error_code": "PAYMENT_PROCESSING_ERROR",
+            }
+
+    # ═══════════════════════════════════════════════════════════════
+    # 1.1 Pagos Directos (ACH/Wire) a Mercury SAVINGS
+    # ═══════════════════════════════════════════════════════════════
+
+    def get_direct_payment_instructions(
+        self,
+        invoice_id: int,
+        method: str = "ach",
+        country: str = "US",
+        payer_name: Optional[str] = None,
+    ) -> Dict[str, Any]:
+        """
+        Generar instrucciones para pago directo a Mercury (SAVINGS).
+
+        Usa un código de referencia automático basado en el ID único.
+
+        Args:
+            invoice_id: ID de factura
+            method: "ach" | "wire"
+            country: Código país (default US)
+            payer_name: Nombre del pagador (opcional)
+
+        Returns:
+            Instrucciones bancarias + referencia de conciliación
+        """
+        try:
+            from ..models.database import Invoice, InvoiceStatus
+
+            invoice = self.db.query(Invoice).filter(Invoice.id == invoice_id).first()
+            if not invoice:
+                return {
+                    "success": False,
+                    "error": f"Invoice {invoice_id} not found",
+                    "error_code": "INVOICE_NOT_FOUND",
+                }
+
+            if invoice.status not in {InvoiceStatus.issued, InvoiceStatus.overdue}:
+                return {
+                    "success": False,
+                    "error": f"Invoice status is {invoice.status.value}, expected issued/overdue",
+                    "error_code": "INVALID_INVOICE_STATUS",
+                }
+
+            normalized_method = method.lower().strip()
+            normalized_country = country.upper().strip()
+
+            if normalized_method not in {"ach", "wire"}:
+                return {
+                    "success": False,
+                    "error": "Invalid method. Use 'ach' or 'wire'",
+                    "error_code": "INVALID_METHOD",
+                }
+
+            if normalized_method == "ach" and normalized_country != "US":
+                return {
+                    "success": False,
+                    "error": "ACH solo disponible para pagos en USA. Use 'wire' para internacional.",
+                    "error_code": "ACH_NOT_ALLOWED",
+                }
+
+            routing_number = os.getenv("MERCURY_SAVINGS_ROUTING_NUMBER", "")
+            account_number = os.getenv("MERCURY_SAVINGS_ACCOUNT_NUMBER", "")
+            beneficiary_name = os.getenv("MERCURY_SAVINGS_BENEFICIARY_NAME", "Jeturing Reserve")
+            bank_name = os.getenv("MERCURY_SAVINGS_BANK_NAME", "Choice Financial Group")
+            bank_address = os.getenv("MERCURY_SAVINGS_BANK_ADDRESS", "")
+            beneficiary_address = os.getenv("MERCURY_SAVINGS_BENEFICIARY_ADDRESS", "")
+            swift_code = os.getenv("MERCURY_SAVINGS_SWIFT_CODE", "")
+            fx_ffc = os.getenv("MERCURY_SAVINGS_INTL_FX_FFC", "")
+            fx_intermediary = {
+                "swift": os.getenv("MERCURY_SAVINGS_INTL_FX_INTERMEDIARY_SWIFT", ""),
+                "aba": os.getenv("MERCURY_SAVINGS_INTL_FX_INTERMEDIARY_ABA", ""),
+                "bank_name": os.getenv("MERCURY_SAVINGS_INTL_FX_INTERMEDIARY_BANK", ""),
+                "bank_address": os.getenv("MERCURY_SAVINGS_INTL_FX_INTERMEDIARY_ADDRESS", ""),
+            }
+            fx_beneficiary = {
+                "bank_name": os.getenv("MERCURY_SAVINGS_INTL_FX_BENEFICIARY_BANK", ""),
+                "account_number": os.getenv("MERCURY_SAVINGS_INTL_FX_BENEFICIARY_ACCOUNT", ""),
+                "bank_address": os.getenv("MERCURY_SAVINGS_INTL_FX_BENEFICIARY_ADDRESS", ""),
+            }
+
+            if not routing_number or not account_number:
+                return {
+                    "success": False,
+                    "error": "SAVINGS account no configurada completamente en .env",
+                    "error_code": "SAVINGS_NOT_CONFIGURED",
+                }
+
+            if normalized_method == "wire" and normalized_country != "US" and not swift_code:
+                return {
+                    "success": False,
+                    "error": "SWIFT code requerido para wire internacional. Configure MERCURY_SAVINGS_SWIFT_CODE.",
+                    "error_code": "SWIFT_REQUIRED",
+                }
+
+            reference = self._generate_direct_payment_reference(invoice)
+
+            instructions = {
+                "success": True,
+                "invoice_id": invoice.id,
+                "invoice_number": invoice.invoice_number,
+                "amount_due": invoice.total,
+                "currency": invoice.currency,
+                "method": normalized_method,
+                "country": normalized_country,
+                "beneficiary_name": beneficiary_name,
+                "beneficiary_address": beneficiary_address,
+                "bank_name": bank_name,
+                "bank_address": bank_address,
+                "routing_number": routing_number,
+                "account_number": account_number,
+                "swift_code": swift_code if normalized_method == "wire" else None,
+                "payment_reference": reference,
+                "memo": f"Invoice {invoice.invoice_number} | Ref {reference}",
+                "payer_name": payer_name,
+                "fx_instructions": None,
+                "issued_at": datetime.now(timezone.utc).isoformat(),
+            }
+
+            if normalized_method == "wire" and normalized_country != "US" and invoice.currency.upper() != "USD":
+                instructions["fx_instructions"] = {
+                    "ffc_memo": fx_ffc,
+                    "intermediary_bank": fx_intermediary,
+                    "beneficiary_bank": fx_beneficiary,
+                }
+
+            self._log_payment_event(
+                event_type=PaymentEventType.DIRECT_PAYMENT_INSTRUCTIONS,
+                invoice_id=invoice.id,
+                amount=invoice.total,
+                metadata={
+                    "method": normalized_method,
+                    "country": normalized_country,
+                    "reference": reference,
+                    "payer_name": payer_name,
+                },
+            )
+
+            return instructions
+
+        except Exception as e:
+            logger.error(f"Error generating direct payment instructions: {e}")
+            return {
+                "success": False,
+                "error": str(e),
+                "error_code": "DIRECT_PAYMENT_INSTRUCTIONS_ERROR",
+            }
+
+    def reconcile_direct_payment_webhook(self, payload: Dict[str, Any]) -> Dict[str, Any]:
+        """
+        Conciliar un pago directo a SAVINGS recibido via webhook Mercury.
+
+        Busca la referencia JTINV-<invoice_id>-<check> en el payload y marca
+        la factura como pagada si el monto es suficiente.
+        """
+        try:
+            from ..models.database import Invoice, InvoiceStatus
+
+            reference = self._extract_direct_payment_reference(payload)
+            if not reference:
+                return {
+                    "success": True,
+                    "action": "ignored",
+                    "reason": "reference_not_found",
+                }
+
+            invoice_id = self._parse_reference_invoice_id(reference)
+            if not invoice_id:
+                return {
+                    "success": True,
+                    "action": "ignored",
+                    "reason": "reference_invalid",
+                    "reference": reference,
+                }
+
+            invoice = self.db.query(Invoice).filter(Invoice.id == invoice_id).first()
+            if not invoice:
+                return {
+                    "success": False,
+                    "error": f"Invoice {invoice_id} not found",
+                    "error_code": "INVOICE_NOT_FOUND",
+                }
+
+            if invoice.status == InvoiceStatus.paid:
+                return {
+                    "success": True,
+                    "action": "noop",
+                    "reason": "already_paid",
+                    "invoice_id": invoice.id,
+                }
+
+            if invoice.status not in {InvoiceStatus.issued, InvoiceStatus.overdue}:
+                return {
+                    "success": False,
+                    "error": f"Invoice status is {invoice.status.value}, expected issued/overdue",
+                    "error_code": "INVALID_INVOICE_STATUS",
+                }
+
+            if not self._is_incoming_credit(payload):
+                return {
+                    "success": True,
+                    "action": "ignored",
+                    "reason": "not_incoming_credit",
+                    "reference": reference,
+                }
+
+            amount = self._extract_amount(payload)
+            if amount is None:
+                return {
+                    "success": False,
+                    "error": "Unable to parse amount from webhook",
+                    "error_code": "AMOUNT_NOT_FOUND",
+                }
+
+            if amount + 0.01 < float(invoice.total):
+                return {
+                    "success": True,
+                    "action": "ignored",
+                    "reason": "insufficient_amount",
+                    "invoice_id": invoice.id,
+                    "amount": amount,
+                    "invoice_total": float(invoice.total),
+                }
+
+            invoice.status = InvoiceStatus.paid
+            invoice.paid_at = datetime.now(timezone.utc)
+            note = f"Paid via Mercury direct transfer. Ref {reference}. Amount ${amount:.2f}"
+            invoice.notes = f"{invoice.notes}\n{note}" if invoice.notes else note
+            self.db.add(invoice)
+
+            self._log_payment_event(
+                event_type=PaymentEventType.DIRECT_PAYMENT_RECONCILED,
+                invoice_id=invoice.id,
+                amount=amount,
+                metadata={
+                    "reference": reference,
+                    "payload_event": payload.get("type") or payload.get("eventType"),
+                },
+            )
+
+            self.db.commit()
+
+            return {
+                "success": True,
+                "action": "invoice_paid",
+                "invoice_id": invoice.id,
+                "amount": amount,
+                "reference": reference,
+            }
+
+        except Exception as e:
+            logger.error(f"Error reconciling direct payment webhook: {e}")
+            self.db.rollback()
+            return {
+                "success": False,
+                "error": str(e),
+                "error_code": "DIRECT_PAYMENT_RECONCILE_ERROR",
             }
     
     # ═══════════════════════════════════════════════════════════════
@@ -553,3 +814,82 @@ class PaymentProcessor:
             # TODO: Guardar en BD
         except Exception as e:
             logger.error(f"Error logging payment event: {e}")
+
+    def _generate_direct_payment_reference(self, invoice: Any) -> str:
+        """
+        Generar referencia única automática basada en ID.
+
+        Formato: JTINV-<invoice_id>-<check>
+        """
+        invoice_id = int(invoice.id)
+        check = (invoice_id * 97) % 97
+        return f"JTINV-{invoice_id}-{check:02d}"
+
+    def _extract_direct_payment_reference(self, payload: Dict[str, Any]) -> Optional[str]:
+        """Buscar referencia JTINV-<id>-<check> en el payload completo."""
+        payload_text = str(payload)
+        match = re.search(r"JTINV-(\d+)-(\d{2})", payload_text)
+        return match.group(0) if match else None
+
+    def _parse_reference_invoice_id(self, reference: str) -> Optional[int]:
+        """Validar referencia y extraer invoice_id."""
+        match = re.match(r"JTINV-(\d+)-(\d{2})", reference)
+        if not match:
+            return None
+        invoice_id = int(match.group(1))
+        check = int(match.group(2))
+        expected_check = (invoice_id * 97) % 97
+        return invoice_id if check == expected_check else None
+
+    def _extract_amount(self, payload: Dict[str, Any]) -> Optional[float]:
+        """Intentar extraer monto del webhook Mercury."""
+        candidates = [
+            payload.get("amount"),
+            payload.get("amountUsd"),
+            payload.get("amount_usd"),
+            payload.get("amount_cents"),
+        ]
+        for value in candidates:
+            if value is None:
+                continue
+            try:
+                if isinstance(value, (int, float)):
+                    if "cents" in str(value).lower():
+                        return float(value) / 100
+                    return float(value)
+                if isinstance(value, str) and value.strip():
+                    return float(value.replace(",", ""))
+            except Exception:
+                continue
+
+        data = payload.get("data") or {}
+        for key in ("amount", "amountUsd", "amount_usd", "amount_cents"):
+            value = data.get(key)
+            if value is None:
+                continue
+            try:
+                if key.endswith("_cents"):
+                    return float(value) / 100
+                return float(value)
+            except Exception:
+                continue
+
+        return None
+
+    def _is_incoming_credit(self, payload: Dict[str, Any]) -> bool:
+        """Determinar si el evento es un crédito entrante."""
+        direction = (
+            payload.get("direction")
+            or payload.get("type")
+            or payload.get("transactionType")
+            or payload.get("transaction_type")
+            or ""
+        ).lower()
+        if any(token in direction for token in ["credit", "incoming", "deposit"]):
+            return True
+        data = payload.get("data") or {}
+        data_direction = (data.get("direction") or data.get("type") or "").lower()
+        if any(token in data_direction for token in ["credit", "incoming", "deposit"]):
+            return True
+        amount = self._extract_amount(payload)
+        return amount is not None and amount > 0

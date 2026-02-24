@@ -455,9 +455,10 @@ async def suspend_tenant(
     if x_api_key != PROVISIONING_API_KEY:
         raise HTTPException(status_code=401, detail="API key inválida")
     
-    server_config = ODOO_SERVERS.get(request.server)
+    server_key = request.server if request.server in ODOO_SERVERS else "primary"
+    server_config = ODOO_SERVERS.get(server_key)
     if not server_config:
-        raise HTTPException(status_code=400, detail=f"Servidor {request.server} no existe")
+        raise HTTPException(status_code=400, detail=f"Servidor {server_key} no existe")
     
     try:
         subdomain = request.subdomain.lower()
