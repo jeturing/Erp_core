@@ -52,16 +52,19 @@ class MercuryAccountManager:
     
     def __init__(self):
         """Inicializar con credenciales de ambas cuentas."""
-        # Cuenta Savings (Ahorros) — donde llegan fondos de clientes
-        self.savings_account_id = os.getenv("MERCURY_SAVINGS_ACCOUNT_ID", "")
-        self.savings_api_key = os.getenv("MERCURY_SAVINGS_API_KEY", "")
+        # Token de Mercury (single token para ambas cuentas)
+        self.mercury_token = os.getenv("MERCURY_API_TOKEN", "")
+        self.api_url = os.getenv("MERCURY_API_URL", "https://api.mercury.com/api/v1")
         
         # Cuenta Checking (Transaccional) — donde se dispersa a proveedores
         self.checking_account_id = os.getenv("MERCURY_CHECKING_ACCOUNT_ID", "")
-        self.checking_api_key = os.getenv("MERCURY_CHECKING_API_KEY", "")
+        self.checking_routing_number = os.getenv("MERCURY_CHECKING_ROUTING_NUMBER", "")
+        self.checking_account_number = os.getenv("MERCURY_CHECKING_ACCOUNT_NUMBER", "")
         
-        # API URL común
-        self.api_url = os.getenv("MERCURY_API_URL", "https://api.mercury.com/api/v1")
+        # Cuenta Savings (Ahorros) — donde llegan fondos de clientes
+        self.savings_account_id = os.getenv("MERCURY_SAVINGS_ACCOUNT_ID", "")
+        self.savings_routing_number = os.getenv("MERCURY_SAVINGS_ROUTING_NUMBER", "")
+        self.savings_account_number = os.getenv("MERCURY_SAVINGS_ACCOUNT_NUMBER", "")
         
         # Límites operacionales
         self.min_transfer_to_checking = float(os.getenv("MERCURY_MIN_TRANSFER_TO_CHECKING", "1000"))
@@ -69,17 +72,16 @@ class MercuryAccountManager:
         self.checking_minimum_balance = float(os.getenv("MERCURY_CHECKING_MIN_BALANCE", "5000"))
         
         # Crear clientes para cada cuenta
-        self.savings_client = self._create_client(self.savings_account_id, self.savings_api_key, "SAVINGS")
-        self.checking_client = self._create_client(self.checking_account_id, self.checking_api_key, "CHECKING")
+        self.savings_client = self._create_client(self.savings_account_id, "SAVINGS")
+        self.checking_client = self._create_client(self.checking_account_id, "CHECKING")
         
         logger.info(f"✅ Mercury Account Manager initialized")
-        logger.info(f"   SAVINGS Account: {self.savings_account_id[:20]}...")
-        logger.info(f"   CHECKING Account: {self.checking_account_id[:20]}...")
+        logger.info(f"   CHECKING Account: {self.checking_account_id} (Provedores-Sajet)")
+        logger.info(f"   SAVINGS Account: {self.savings_account_id if self.savings_account_id else '(Not configured yet)'}")
     
     def _create_client(
         self,
         account_id: str,
-        api_key: str,
         account_name: str
     ) -> Optional[MercuryClient]:
         """
@@ -87,24 +89,27 @@ class MercuryAccountManager:
         
         Args:
             account_id: ID de la cuenta en Mercury
-            api_key: API key para esa cuenta
             account_name: Nombre legible (SAVINGS o CHECKING)
         
         Returns:
             MercuryClient configurado o None si credenciales faltantes
         """
-        if not account_id or not api_key:
-            logger.warning(f"⚠️ {account_name} account credentials not configured")
+        if not account_id:
+            logger.warning(f"⚠️ {account_name} account ID not configured")
             return None
         
-        # Crear cliente con credenciales específicas
+        if not self.mercury_token:
+            logger.warning(f"⚠️ Mercury API token not configured")
+            return None
+        
+        # Crear cliente con token único
         client = MercuryClient()
         client.account_id = account_id
-        client.api_key = api_key
+        client.api_key = self.mercury_token
         
-        # Actualizar sesión con nuevas credenciales
+        # Actualizar sesión con credenciales
         client.session.headers.update({
-            "Authorization": f"Bearer {api_key}",
+            "Authorization": f"Bearer {self.mercury_token}",
             "Content-Type": "application/json",
         })
         
