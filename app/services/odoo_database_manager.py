@@ -45,6 +45,7 @@ from ..config import (
     ODOO_DEFAULT_COUNTRY as DEFAULT_COUNTRY,
     ODOO_BASE_DOMAIN as BASE_DOMAIN,
     ODOO_TEMPLATE_DB as TEMPLATE_DB,
+    ODOO_FILESTORE_PATH as FILESTORE_PATH,
     ODOO_PRIMARY_IP, ODOO_PRIMARY_PCT_ID, ODOO_PRIMARY_PORT,
 )
 
@@ -805,6 +806,16 @@ async def create_tenant_from_template(
             v_ok, v_out = _run_pct_sql(pct_id, subdomain, verify_sql)
             existing_name = v_out.strip().split('\n')[-1].strip() if v_ok and v_out.strip() else company_name
             base_url = f"https://{subdomain}.{BASE_DOMAIN}"
+            
+            # Asegurar filestore completo incluso si BD ya existía
+            fs_fix_cmd = (
+                f'pct exec {pct_id} -- bash -c \''
+                f'mkdir -p {FILESTORE_PATH}/{subdomain}; '
+                f'cp -an {FILESTORE_PATH}/{TEMPLATE_DB}/* {FILESTORE_PATH}/{subdomain}/ 2>/dev/null; '
+                f'chown -R odoo:odoo {FILESTORE_PATH}/{subdomain}/\''
+            )
+            subprocess.run(fs_fix_cmd, shell=True, capture_output=True, text=True, timeout=60)
+            
             logger.info(f"BD '{subdomain}' ya existe y es funcional — retornando éxito idempotente")
             return {
                 "success": True,
@@ -840,7 +851,23 @@ async def create_tenant_from_template(
             logger.error(f"Error creando BD: {result.stderr}")
             return {"success": False, "error": f"Error duplicando BD: {result.stderr}"}
         
-        logger.info(f"BD '{subdomain}' duplicada, configurando...")
+        logger.info(f"BD '{subdomain}' duplicada, copiando filestore...")
+        
+        # 4.5 Copiar filestore del template al nuevo tenant
+        # CREATE DATABASE WITH TEMPLATE solo copia datos PostgreSQL,
+        # pero Odoo almacena iconos/imágenes en el filesystem
+        filestore_cmd = (
+            f'pct exec {pct_id} -- bash -c \''
+            f'cp -an {FILESTORE_PATH}/{TEMPLATE_DB}/* {FILESTORE_PATH}/{subdomain}/ 2>/dev/null; '
+            f'chown -R odoo:odoo {FILESTORE_PATH}/{subdomain}/; '
+            f'echo "filestore_ok"\''
+        )
+        
+        fs_result = subprocess.run(filestore_cmd, shell=True, capture_output=True, text=True, timeout=60)
+        if "filestore_ok" in fs_result.stdout:
+            logger.info(f"✅ Filestore copiado para '{subdomain}'")
+        else:
+            logger.warning(f"⚠️ No se pudo copiar filestore: {fs_result.stderr} — iconos podrían no funcionar")
         
         # 5. Configurar nueva BD
         base_url = f"https://{subdomain}.{BASE_DOMAIN}"
