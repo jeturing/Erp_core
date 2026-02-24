@@ -5,6 +5,8 @@ import re
 from typing import Dict, Any, Optional
 from datetime import datetime
 
+from sqlalchemy import text
+
 logger = logging.getLogger(__name__)
 
 
@@ -237,10 +239,14 @@ async def provision_tenant(
         else:
             logger.info("⏭️  Cloudflare tunnel deshabilitado, saltando")
         
-        # 7. Actualizar estado de suscripción en BD
+        # 7. Actualizar suscripción + crear TenantDeployment en BD
+        deployment_id = None
         if subscription_id:
             try:
-                from ..models.database import SessionLocal, Subscription, SubscriptionStatus
+                from ..models.database import (
+                    SessionLocal, Subscription, SubscriptionStatus,
+                    TenantDeployment, LXCContainer, PlanType
+                )
                 db = SessionLocal()
                 
                 subscription = db.query(Subscription).filter_by(id=subscription_id).first()
@@ -248,6 +254,65 @@ async def provision_tenant(
                     subscription.status = SubscriptionStatus.active
                     subscription.tenant_provisioned = True
                     subscription.updated_at = datetime.utcnow()
+                    
+                    # Determinar plan_type desde plan_name de la suscripción
+                    plan_map = {
+                        "basic": PlanType.basic,
+                        "pro": PlanType.pro,
+                        "enterprise": PlanType.enterprise,
+                    }
+                    plan_name = getattr(subscription, "plan_name", "basic") or "basic"
+                    plan_type = plan_map.get(plan_name.split("_")[0], PlanType.basic)
+                    
+                    # Buscar container por IP (o usar el primero disponible)
+                    container = db.query(LXCContainer).filter(
+                        LXCContainer.ip_address == container_ip
+                    ).first()
+                    if not container:
+                        container = db.query(LXCContainer).first()
+                    
+                    if container:
+                        # Evitar duplicados: verificar si ya existe deployment para esta suscripción
+                        existing = db.query(TenantDeployment).filter_by(
+                            subscription_id=subscription_id
+                        ).first()
+                        
+                        if not existing:
+                            cf_tunnel_id = os.getenv("CLOUDFLARE_TUNNEL_ID", "")
+                            actual_tunnel_id = (
+                                tunnel_info.get("tunnel_id", cf_tunnel_id)
+                                if tunnel_info and tunnel_info.get("success")
+                                else cf_tunnel_id
+                            )
+                            
+                            deployment = TenantDeployment(
+                                subscription_id=subscription_id,
+                                container_id=container.id,
+                                customer_id=subscription.customer_id,
+                                subdomain=subdomain,
+                                database_name=subdomain,
+                                odoo_port=local_port if isinstance(local_port, int) else 8069,
+                                tunnel_url=f"https://{subdomain}.{domain}",
+                                direct_url=f"http://{container_ip}:{local_port}",
+                                tunnel_active=bool(actual_tunnel_id),
+                                tunnel_id=actual_tunnel_id or None,
+                                plan_type=plan_type,
+                                deployed_at=datetime.utcnow(),
+                            )
+                            db.add(deployment)
+                            db.flush()
+                            deployment_id = deployment.id
+                            logger.info(
+                                f"✅ TenantDeployment #{deployment_id} creado: "
+                                f"{subdomain} → container {container.id}, "
+                                f"customer {subscription.customer_id}"
+                            )
+                        else:
+                            deployment_id = existing.id
+                            logger.info(f"ℹ️  TenantDeployment ya existe (id={existing.id}) para sub {subscription_id}")
+                    else:
+                        logger.warning("⚠️  No hay LXCContainer registrado — TenantDeployment NO creado")
+                    
                     db.commit()
                     logger.info(f"✅ Suscripción {subscription_id} actualizada a active")
                 else:
@@ -255,7 +320,7 @@ async def provision_tenant(
                 
                 db.close()
             except Exception as db_error:
-                logger.error(f"❌ Error actualizando suscripción: {db_error}")
+                logger.error(f"❌ Error actualizando suscripción/deployment: {db_error}")
                 # No fallar el provisioning si falla la actualización de BD
         
         # 8. Preparar respuesta
@@ -267,6 +332,7 @@ async def provision_tenant(
             "container_ip": container_ip,
             "local_port": local_port,
             "subscription_id": subscription_id,
+            "deployment_id": deployment_id,
             "created_at": datetime.utcnow().isoformat()
         }
         
@@ -436,6 +502,19 @@ async def delete_tenant(
             except Exception as e:
                 logger.warning(f"⚠️  Error eliminando tunnel (continuando): {e}")
         
+        # 3. Eliminar TenantDeployment de la BD
+        try:
+            from ..models.database import SessionLocal, TenantDeployment
+            db = SessionLocal()
+            deployment = db.query(TenantDeployment).filter_by(subdomain=subdomain).first()
+            if deployment:
+                db.delete(deployment)
+                db.commit()
+                logger.info(f"✅ TenantDeployment eliminado: {subdomain}")
+            db.close()
+        except Exception as e:
+            logger.warning(f"⚠️  Error eliminando TenantDeployment: {e}")
+        
         logger.info(f"✅ Tenant eliminado completamente: {subdomain}")
         return {
             "success": True,
@@ -466,3 +545,121 @@ async def delete_tenant(
         }
 
 
+async def repair_missing_deployments() -> Dict[str, Any]:
+    """
+    Busca suscripciones con tenant_provisioned=True que NO tienen TenantDeployment
+    y las crea automáticamente usando los datos del customer y la infraestructura existente.
+    
+    Útil para reparar el estado después de migraciones o si provision_tenant() no creó el deployment.
+    
+    Returns:
+        Dict con lista de deployments creados/errores
+    """
+    from ..models.database import (
+        SessionLocal, Subscription, Customer, TenantDeployment,
+        LXCContainer, PlanType
+    )
+    
+    created = []
+    errors = []
+    
+    try:
+        db = SessionLocal()
+        
+        # Buscar suscripciones provisioned sin deployment
+        subs_without_deployment = (
+            db.query(Subscription)
+            .outerjoin(
+                TenantDeployment,
+                TenantDeployment.subscription_id == Subscription.id
+            )
+            .filter(
+                Subscription.tenant_provisioned == True,
+                TenantDeployment.id == None
+            )
+            .all()
+        )
+        
+        if not subs_without_deployment:
+            db.close()
+            return {"success": True, "message": "No hay deployments faltantes", "created": [], "errors": []}
+        
+        # Buscar container por defecto
+        container = db.query(LXCContainer).first()
+        if not container:
+            db.close()
+            return {
+                "success": False,
+                "error": "No hay LXCContainer registrado en la BD",
+                "created": [],
+                "errors": ["No LXCContainer found"]
+            }
+        
+        cf_tunnel_id = os.getenv("CLOUDFLARE_TUNNEL_ID", "")
+        domain = os.getenv("ODOO_BASE_DOMAIN", "sajet.us")
+        
+        plan_map = {
+            "basic": PlanType.basic,
+            "pro": PlanType.pro,
+            "enterprise": PlanType.enterprise,
+        }
+        
+        for sub in subs_without_deployment:
+            try:
+                customer = db.query(Customer).filter_by(id=sub.customer_id).first()
+                if not customer or not customer.subdomain:
+                    errors.append(f"Sub {sub.id}: customer {sub.customer_id} sin subdomain")
+                    continue
+                
+                plan_name = getattr(sub, "plan_name", "basic") or "basic"
+                plan_type = plan_map.get(plan_name.split("_")[0], PlanType.basic)
+                
+                deployment = TenantDeployment(
+                    subscription_id=sub.id,
+                    container_id=container.id,
+                    customer_id=sub.customer_id,
+                    subdomain=customer.subdomain,
+                    database_name=customer.subdomain,
+                    odoo_port=8069,
+                    tunnel_url=f"https://{customer.subdomain}.{domain}",
+                    direct_url=f"http://{container.ip_address}:{8069}",
+                    tunnel_active=bool(cf_tunnel_id),
+                    tunnel_id=cf_tunnel_id or None,
+                    plan_type=plan_type,
+                    deployed_at=datetime.utcnow(),
+                )
+                db.add(deployment)
+                db.flush()
+                
+                created.append({
+                    "deployment_id": deployment.id,
+                    "subdomain": customer.subdomain,
+                    "subscription_id": sub.id,
+                    "customer_id": sub.customer_id,
+                })
+                logger.info(
+                    f"🔧 Repaired: TenantDeployment #{deployment.id} "
+                    f"for {customer.subdomain} (sub {sub.id})"
+                )
+            except Exception as e:
+                errors.append(f"Sub {sub.id}: {str(e)}")
+                logger.error(f"❌ Error reparando sub {sub.id}: {e}")
+        
+        db.commit()
+        db.close()
+        
+        return {
+            "success": True,
+            "message": f"Reparados {len(created)} deployments, {len(errors)} errores",
+            "created": created,
+            "errors": errors,
+        }
+        
+    except Exception as e:
+        logger.exception(f"❌ Error en repair_missing_deployments: {e}")
+        return {
+            "success": False,
+            "error": str(e),
+            "created": created,
+            "errors": errors,
+        }

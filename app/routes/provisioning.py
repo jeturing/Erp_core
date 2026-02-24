@@ -533,3 +533,78 @@ async def suspend_tenant(
     except Exception as e:
         logger.error(f"Error suspendiendo tenant: {e}")
         raise HTTPException(status_code=500, detail=str(e))
+
+
+@router.post("/repair-deployments")
+async def repair_deployments(x_api_key: str = Header(None)):
+    """
+    Repara TenantDeployments faltantes.
+    Busca suscripciones con tenant_provisioned=True que no tienen
+    un registro TenantDeployment y los crea automáticamente.
+    """
+    if x_api_key != PROVISIONING_API_KEY:
+        raise HTTPException(status_code=401, detail="API key inválida")
+    
+    from ..services.odoo_provisioner import repair_missing_deployments
+    
+    result = await repair_missing_deployments()
+    
+    if not result.get("success"):
+        raise HTTPException(status_code=500, detail=result.get("error", "Error desconocido"))
+    
+    return result
+
+
+@router.get("/deployment-status")
+async def deployment_status(x_api_key: str = Header(None)):
+    """
+    Muestra el estado completo de todos los deployments,
+    incluyendo suscripciones sin deployment y deployments sin tunnel.
+    """
+    if x_api_key != PROVISIONING_API_KEY:
+        raise HTTPException(status_code=401, detail="API key inválida")
+    
+    from ..models.database import (
+        SessionLocal, Subscription, Customer, TenantDeployment, LXCContainer
+    )
+    
+    db = SessionLocal()
+    try:
+        deployments = db.query(TenantDeployment).all()
+        subscriptions = db.query(Subscription).all()
+        
+        deployment_sub_ids = {d.subscription_id for d in deployments}
+        
+        result = {
+            "deployments": [
+                {
+                    "id": d.id,
+                    "subdomain": d.subdomain,
+                    "subscription_id": d.subscription_id,
+                    "container_id": d.container_id,
+                    "customer_id": d.customer_id,
+                    "tunnel_active": d.tunnel_active,
+                    "tunnel_id": d.tunnel_id,
+                    "tunnel_url": d.tunnel_url,
+                    "plan_type": d.plan_type.value if d.plan_type else None,
+                }
+                for d in deployments
+            ],
+            "orphan_subscriptions": [
+                {
+                    "subscription_id": s.id,
+                    "customer_id": s.customer_id,
+                    "status": s.status.value if s.status else None,
+                    "tenant_provisioned": s.tenant_provisioned,
+                    "plan_name": s.plan_name,
+                }
+                for s in subscriptions
+                if s.id not in deployment_sub_ids and s.tenant_provisioned
+            ],
+            "total_deployments": len(deployments),
+            "total_subscriptions": len(subscriptions),
+        }
+        
+        return result
+    finally:
+        db.close()

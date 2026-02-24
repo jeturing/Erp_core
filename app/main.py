@@ -33,6 +33,7 @@ from .routes import stripe_sync
 from .routes import public_landing
 from .routes import accountant_portal
 from .routes import admin_landing
+from .routes import payments  # Nuevo: Pagos y dispersión a proveedores
 
 # Import security middleware
 from .security.middleware import SecurityMiddleware, WAFMiddleware
@@ -208,6 +209,7 @@ app.include_router(stripe_sync.router)           # Stripe → BD sync (source of
 app.include_router(public_landing.router)        # Endpoints públicos para landing page (sin auth)
 app.include_router(accountant_portal.router)     # Portal para contadores/CPA multi-empresa
 app.include_router(admin_landing.router)         # Admin CRUD para i18n content (testimonios, landing, traducciones)
+app.include_router(payments.router)              # Pagos, dispersión a proveedores, Mercury, tesorería
 
 
 # ── CORS Cache Refresh endpoint ──
