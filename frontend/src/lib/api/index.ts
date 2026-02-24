@@ -22,3 +22,7 @@ export type { EmailLog, EmailLogsResponse, EmailStats } from './communications';
 export { agreementsApi } from './agreements';
 export { stripeSyncApi } from './stripeSync';
 export type { SyncResult, SyncStatus } from './stripeSync';
+export { dispersionApi } from './dispersion';
+export type { DispersionStatus, PayoutRequest, CreatePayoutBody } from './dispersion';
+export { plansApi } from './plans';
+export type { Plan } from './plans';

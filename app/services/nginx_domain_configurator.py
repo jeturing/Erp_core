@@ -522,3 +522,126 @@ class NginxDomainConfigurator:
             pass
 
         logger.warning("Rollback completado")
+
+
+# ── Subdominio .sajet.us automático (para nuevos tenants) ─────────────────────
+
+def provision_sajet_subdomain(subdomain: str) -> Dict[str, Any]:
+    """
+    Registra un nuevo subdominio.sajet.us en los nginx maps de LXC 160 y LXC 105.
+    Solo para el subdominio propio del tenant (no dominios externos).
+
+    Modifica:
+      - PCT160 /etc/nginx/conf.d/odoo_http_routes.map  → subdomain.sajet.us → 10.10.10.100:8080
+      - PCT160 /etc/nginx/conf.d/odoo_chat_routes.map  → subdomain.sajet.us → 10.10.10.100:8072
+      - CT105 /etc/nginx/sites-enabled/odoo → map $tenant_db + $odoo_proxy_host
+
+    Returns:
+        {"success": True/False, "steps": [...], "error": str}
+    """
+    steps = []
+    backend_http = f"{CT105_IP}:{CT105_NGINX_PORT}"
+    backend_chat = f"{CT105_IP}:8072"
+    full_domain = f"{subdomain}.sajet.us"
+    www_domain = f"www.{full_domain}"
+
+    try:
+        # ── PCT160: agregar a route maps ──────────────────────────────────
+        for map_path, backend in [(PCT160_HTTP_MAP, backend_http), (PCT160_CHAT_MAP, backend_chat)]:
+            _add_to_route_map(map_path, full_domain, backend)
+            _add_to_route_map(map_path, www_domain, backend)
+
+        rc, _, err = _run_local("nginx -t")
+        if rc != 0:
+            raise RuntimeError(f"nginx -t PCT160 falló: {err}")
+        _run_local("systemctl reload nginx")
+        steps.append({"step": "pct160_maps", "status": "ok"})
+
+        # ── CT105: agregar a maps tenant_db y odoo_proxy_host ─────────────
+        ct105_content = _read_file_ct105(CT105_ODOO_CONF)
+
+        # Map $tenant_db: subdomain.sajet.us → subdomain
+        ct105_content = _add_to_map(ct105_content, "tenant_db", full_domain, subdomain)
+        # Map $odoo_proxy_host: subdomain.sajet.us → subdomain.sajet.us (pasa tal cual)
+        ct105_content = _add_to_map(ct105_content, "odoo_proxy_host", full_domain, f"{subdomain}.sajet.us")
+        # Agregar a server_name
+        ct105_content = _add_to_server_name(ct105_content, "listen 8080", full_domain)
+
+        _write_file_ct105(CT105_ODOO_CONF, ct105_content)
+
+        rc105, _, err105 = _run_ct105("nginx -t && systemctl reload nginx")
+        if rc105 != 0:
+            logger.warning(f"nginx reload CT105 warning (no fatal): {err105}")
+        steps.append({"step": "ct105_maps", "status": "ok"})
+
+        logger.info(f"✅ Subdominio {full_domain} registrado en nginx")
+        return {"success": True, "subdomain": full_domain, "steps": steps}
+
+    except Exception as e:
+        logger.error(f"Error provisionando subdominio {full_domain}: {e}")
+        return {"success": False, "subdomain": full_domain, "error": str(e), "steps": steps}
+
+
+def remove_sajet_subdomain(subdomain: str) -> Dict[str, Any]:
+    """
+    Elimina un subdominio.sajet.us de los nginx maps (al borrar un tenant).
+    """
+    steps = []
+    full_domain = f"{subdomain}.sajet.us"
+    www_domain = f"www.{full_domain}"
+
+    try:
+        for map_path in [PCT160_HTTP_MAP, PCT160_CHAT_MAP]:
+            content = _read_file_local(map_path)
+            content = _remove_from_route_map_content(content, full_domain)
+            content = _remove_from_route_map_content(content, www_domain)
+            _write_file_local(map_path, content)
+
+        _run_local("nginx -t && systemctl reload nginx")
+        steps.append({"step": "pct160_maps", "status": "ok"})
+
+        ct105_content = _read_file_ct105(CT105_ODOO_CONF)
+        ct105_content = _remove_from_map(ct105_content, "tenant_db", full_domain)
+        ct105_content = _remove_from_map(ct105_content, "odoo_proxy_host", full_domain)
+        ct105_content = _remove_from_server_name(ct105_content, "listen 8080", full_domain)
+        _write_file_ct105(CT105_ODOO_CONF, ct105_content)
+        _run_ct105("nginx -t && systemctl reload nginx")
+        steps.append({"step": "ct105_maps", "status": "ok"})
+
+        logger.info(f"✅ Subdominio {full_domain} eliminado de nginx")
+        return {"success": True, "subdomain": full_domain, "steps": steps}
+
+    except Exception as e:
+        logger.error(f"Error eliminando subdominio {full_domain}: {e}")
+        return {"success": False, "error": str(e), "steps": steps}
+
+
+def _add_to_route_map_content(content: str, domain: str, backend: str) -> str:
+    """Agrega dominio→backend a un archivo de route map."""
+    if re.search(rf"^\s*{re.escape(domain)}\s", content, re.MULTILINE):
+        return content
+    new_line = f"    {domain}    {backend};\n"
+    # Insertar antes del cierre del último bloque }
+    if "}" in content:
+        last_brace = content.rfind("}")
+        return content[:last_brace] + new_line + content[last_brace:]
+    return content + new_line
+
+
+def _remove_from_route_map_content(content: str, domain: str) -> str:
+    """Elimina una entrada de dominio de un route map."""
+    return re.sub(rf"^\s*{re.escape(domain)}\s+[^\n]+\n?", "", content, flags=re.MULTILINE)
+
+
+def _remove_from_map(content: str, map_var: str, domain: str) -> str:
+    """Elimina entrada de un bloque map."""
+    return re.sub(rf"^\s*{re.escape(domain)}\s+[^\n]+\n?", "", content, flags=re.MULTILINE)
+
+
+def _remove_from_server_name(content: str, listen_hint: str, domain: str) -> str:
+    """Elimina un dominio de la directiva server_name."""
+    def replacer(m):
+        line = m.group(0)
+        return re.sub(rf"\s+{re.escape(domain)}", "", line)
+    block_pattern = rf"(listen {re.escape(listen_hint.replace('listen ', ''))}[^;]*;.*?server_name[^\n]*\n)"
+    return re.sub(r"(server_name[^\n]*\n)", replacer, content)

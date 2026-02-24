@@ -3,11 +3,12 @@
   import { domainsStore, domainStats } from '../lib/stores';
   import { toasts } from '../lib/stores/toast';
   import { api } from '../lib/api/client';
+  import { plansApi, type Plan } from '../lib/api/plans';
   import { formatDate } from '../lib/utils/formatters';
   import {
     Plus, Check, X, CircleCheck, CircleX, Globe, Shield, ShieldCheck,
     Server, RefreshCw, Trash2, ChevronDown, ExternalLink, Info, Zap,
-    AlertTriangle
+    AlertTriangle, Pencil
   } from 'lucide-svelte';
   import type { Domain } from '../lib/types';
 
@@ -33,6 +34,12 @@
   let selectedCustomerId = $state<number | null>(null);
   let loadingCustomers = $state(false);
 
+  // Plans (for quota editing)
+  let plans = $state<Plan[]>([]);
+  let editingQuotaCustomerId = $state<number | null>(null);
+  let editingMaxDomains = $state<number>(0);
+  let savingQuota = $state(false);
+
   // Selected customer quota
   let selectedCustomer = $derived(customers.find(c => c.id === selectedCustomerId) ?? null);
 
@@ -54,9 +61,50 @@
 
   onMount(() => {
     loadCustomers();
+    loadPlans();
     domainsStore.load();
     return unsubscribe;
   });
+
+  async function loadPlans() {
+    try {
+      plans = await plansApi.list();
+    } catch (e) {
+      console.error('Error loading plans:', e);
+    }
+  }
+
+  function startEditQuota(c: CustomerOption) {
+    editingQuotaCustomerId = c.id;
+    // plan_key coincide con Plan.name; usar max_domains actual del customer
+    editingMaxDomains = c.max_domains;
+  }
+
+  function cancelEditQuota() {
+    editingQuotaCustomerId = null;
+    editingMaxDomains = 0;
+  }
+
+  async function saveQuota(c: CustomerOption) {
+    // Buscar el plan por plan_key
+    const plan = plans.find(p => p.name === c.plan_key);
+    if (!plan) {
+      toasts.error(`No se encontró el plan "${c.plan_key}"`);
+      return;
+    }
+    savingQuota = true;
+    try {
+      await plansApi.setMaxDomains(plan.id, editingMaxDomains);
+      toasts.success(`Cuota actualizada para plan ${plan.name}: ${editingMaxDomains === -1 ? '∞ (ilimitado)' : editingMaxDomains} dominio(s)`);
+      editingQuotaCustomerId = null;
+      // Refresh para reflejar el cambio
+      await Promise.all([loadCustomers(), loadPlans()]);
+    } catch (e: any) {
+      toasts.error(e?.message ?? 'Error al guardar cuota');
+    } finally {
+      savingQuota = false;
+    }
+  }
 
   async function loadCustomers() {
     loadingCustomers = true;
@@ -629,29 +677,69 @@
       <h3 class="section-heading mb-3 flex items-center gap-2">
         <Info size={14} />
         CUOTA DE DOMINIOS POR PLAN
+        <span class="ml-auto text-[10px] text-gray-400 font-normal normal-case">-1 = ilimitado · 0 = sin dominios</span>
       </h3>
       <div class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3">
         {#each customers as c (c.id)}
           <div class="flex items-center justify-between p-3 border border-border-light rounded-md {!c.can_add && c.max_domains !== 0 ? 'border-red-200 bg-red-50/50' : ''}">
-            <div>
-              <div class="text-sm font-medium">{c.company_name}</div>
+            <div class="flex-1 min-w-0">
+              <div class="text-sm font-medium truncate">{c.company_name}</div>
               <div class="text-xs text-gray-500 font-mono">{c.plan_name}</div>
             </div>
-            <div class="text-right">
-              {#if c.unlimited}
-                <span class="text-emerald-600 text-sm font-semibold">∞</span>
-                <div class="text-[10px] text-gray-400">{c.used_domains} usado(s)</div>
-              {:else if c.max_domains === 0}
-                <span class="text-gray-400 text-xs">No disponible</span>
-              {:else}
-                <div class="text-sm font-mono font-semibold {c.can_add ? 'text-emerald-600' : 'text-red-600'}">{c.used_domains}/{c.max_domains}</div>
-                {#if !c.can_add}
-                  <div class="text-[10px] text-red-500 flex items-center gap-0.5">
-                    <AlertTriangle size={8} /> Límite
-                  </div>
-                {/if}
-              {/if}
-            </div>
+
+            {#if editingQuotaCustomerId === c.id}
+              <!-- Inline editor -->
+              <div class="flex items-center gap-1 ml-2">
+                <input
+                  type="number"
+                  min="-1"
+                  class="w-16 border border-border-light rounded px-1.5 py-0.5 text-xs font-mono text-center focus:outline-none focus:ring-1 focus:ring-primary"
+                  bind:value={editingMaxDomains}
+                  onkeydown={(e) => { if (e.key === 'Enter') saveQuota(c); if (e.key === 'Escape') cancelEditQuota(); }}
+                />
+                <button
+                  class="p-1 rounded text-emerald-600 hover:bg-emerald-50 disabled:opacity-50"
+                  onclick={() => saveQuota(c)}
+                  disabled={savingQuota}
+                  title="Guardar"
+                >
+                  <Check size={13} />
+                </button>
+                <button
+                  class="p-1 rounded text-gray-400 hover:bg-gray-100"
+                  onclick={cancelEditQuota}
+                  title="Cancelar"
+                >
+                  <X size={13} />
+                </button>
+              </div>
+            {:else}
+              <!-- Read-only display + edit button -->
+              <div class="flex items-center gap-2 ml-2">
+                <div class="text-right">
+                  {#if c.unlimited}
+                    <span class="text-emerald-600 text-sm font-semibold">∞</span>
+                    <div class="text-[10px] text-gray-400">{c.used_domains} usado(s)</div>
+                  {:else if c.max_domains === 0}
+                    <span class="text-gray-400 text-xs">No disponible</span>
+                  {:else}
+                    <div class="text-sm font-mono font-semibold {c.can_add ? 'text-emerald-600' : 'text-red-600'}">{c.used_domains}/{c.max_domains}</div>
+                    {#if !c.can_add}
+                      <div class="text-[10px] text-red-500 flex items-center gap-0.5">
+                        <AlertTriangle size={8} /> Límite
+                      </div>
+                    {/if}
+                  {/if}
+                </div>
+                <button
+                  class="p-1 rounded text-gray-400 hover:text-primary hover:bg-gray-100 transition-colors"
+                  onclick={() => startEditQuota(c)}
+                  title="Editar cuota del plan"
+                >
+                  <Pencil size={12} />
+                </button>
+              </div>
+            {/if}
           </div>
         {/each}
       </div>

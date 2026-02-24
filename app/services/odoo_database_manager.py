@@ -170,9 +170,24 @@ class OdooDatabaseManager:
             return []
     
     async def database_exists(self, db_name: str) -> bool:
-        """Verifica si una base de datos existe"""
-        databases = await self.list_databases()
-        return db_name.lower() in [db.lower() for db in databases]
+        """Verifica si una base de datos existe (directo a postgres, sin Odoo HTTP)"""
+        try:
+            import psycopg2
+            conn = psycopg2.connect(
+                host=DEFAULT_DB_HOST, port=DEFAULT_DB_PORT,
+                dbname="postgres", user=DEFAULT_DB_USER,
+                password=DEFAULT_DB_PASSWORD, connect_timeout=5,
+            )
+            cur = conn.cursor()
+            cur.execute("SELECT 1 FROM pg_database WHERE datname = %s", (db_name,))
+            exists = cur.fetchone() is not None
+            cur.close()
+            conn.close()
+            return exists
+        except Exception as e:
+            logger.warning(f"database_exists fallback to list: {e}")
+            databases = await self.list_databases()
+            return db_name.lower() in [db.lower() for db in databases]
     
     async def create_database(
         self,
@@ -413,34 +428,50 @@ class OdooDatabaseManager:
             logger.warning(f"Error reseteando BD {db_name}: {e}")
     
     async def drop_database(self, db_name: str) -> Dict[str, Any]:
-        """Elimina una base de datos"""
+        """Elimina una base de datos directamente via psycopg2 + limpia filestore"""
         try:
-            # Proteger BDs del sistema
-            protected_dbs = ['postgres', 'template0', 'template1', 'cliente1']
+            protected_dbs = ['postgres', 'template0', 'template1', 'template_tenant', 'cliente1', 'erp_core_db']
             if db_name.lower() in protected_dbs:
                 return {"success": False, "error": f"BD '{db_name}' está protegida"}
-            
-            response = await self.client.post(
-                f"{self.server.base_url}/web/database/drop",
-                json={
-                    "jsonrpc": "2.0",
-                    "params": {
-                        "master_pwd": self.master_password,
-                        "name": db_name
-                    }
-                }
+
+            import psycopg2
+            # 1. Terminar conexiones activas
+            conn_term = psycopg2.connect(
+                host=DEFAULT_DB_HOST, port=DEFAULT_DB_PORT,
+                dbname="postgres", user=DEFAULT_DB_USER,
+                password=DEFAULT_DB_PASSWORD, connect_timeout=10,
             )
-            
-            if response.status_code == 200:
-                data = response.json()
-                if "error" in data:
-                    return {"success": False, "error": str(data["error"])}
-                
-                logger.info(f"✅ BD '{db_name}' eliminada")
-                return {"success": True, "database": db_name, "deleted_at": datetime.utcnow().isoformat()}
-            else:
-                return {"success": False, "error": f"HTTP {response.status_code}"}
-                
+            conn_term.set_isolation_level(0)
+            cur = conn_term.cursor()
+            cur.execute(
+                "SELECT pg_terminate_backend(pid) FROM pg_stat_activity "
+                "WHERE datname = %s AND pid <> pg_backend_pid()",
+                (db_name,)
+            )
+            cur.close()
+            conn_term.close()
+
+            # 2. DROP DATABASE
+            conn_drop = psycopg2.connect(
+                host=DEFAULT_DB_HOST, port=DEFAULT_DB_PORT,
+                dbname="postgres", user=DEFAULT_DB_USER,
+                password=DEFAULT_DB_PASSWORD, connect_timeout=10,
+            )
+            conn_drop.set_isolation_level(0)
+            cur2 = conn_drop.cursor()
+            cur2.execute(f'DROP DATABASE IF EXISTS "{db_name}"')
+            cur2.close()
+            conn_drop.close()
+
+            # 3. Limpiar filestore en LXC 105 via SSH→pct
+            _run_pct_shell(
+                self.server.pct_id,
+                f'rm -rf {FILESTORE_PATH}/{db_name}'
+            )
+
+            logger.info(f"✅ BD '{db_name}' eliminada")
+            return {"success": True, "database": db_name, "deleted_at": datetime.utcnow().isoformat()}
+
         except Exception as e:
             logger.exception(f"Error eliminando BD: {e}")
             return {"success": False, "error": str(e)}
@@ -720,28 +751,57 @@ async def get_servers_status() -> Dict[str, Any]:
 
 
 def _run_pct_sql(pct_id: int, database: str, sql: str, timeout: int = 60) -> tuple:
-    """Ejecuta SQL directamente via psycopg2 (conexión directa TCP, sin pct exec)"""
+    """
+    Ejecuta SQL en PostgreSQL de Odoo (10.10.10.137) via:
+      LXC 160  →SSH→  Proxmox host  →pct exec 105→  psql -h 10.10.10.137
+    
+    Esto garantiza que el SQL corra en el contexto correcto del LXC de Odoo.
+    Para queries de administración de BD (CREATE DATABASE etc.) se usa psycopg2 directo.
+    """
     try:
-        import psycopg2
-        conn = psycopg2.connect(
-            host=DEFAULT_DB_HOST,
-            port=DEFAULT_DB_PORT,
-            dbname=database,
-            user=DEFAULT_DB_USER,
-            password=DEFAULT_DB_PASSWORD,
-            connect_timeout=timeout,
+        from ..config import PROXMOX_SSH_HOST, PROXMOX_SSH_USER, PROXMOX_SSH_KEY
+        # Escapar SQL para pasar por shell remota doble (SSH → pct exec → bash)
+        sql_escaped = sql.replace("'", "'\\''").replace('"', '\\"')
+        remote_cmd = (
+            f'pct exec {pct_id} -- bash -c '
+            f'"PGPASSWORD={DEFAULT_DB_PASSWORD} psql -h {DEFAULT_DB_HOST} -p {DEFAULT_DB_PORT} '
+            f'-U {DEFAULT_DB_USER} -d {database} -t -A -c \\"{sql_escaped}\\""'
         )
-        conn.set_isolation_level(0)  # AUTOCOMMIT para CREATE DATABASE
-        cur = conn.cursor()
-        cur.execute(sql)
-        try:
-            rows = cur.fetchall()
-            output = "\n".join(str(r) for r in rows)
-        except Exception:
-            output = "OK"
-        cur.close()
-        conn.close()
-        return True, output
+        cmd = [
+            'ssh', '-i', PROXMOX_SSH_KEY,
+            '-o', 'StrictHostKeyChecking=no',
+            '-o', 'ConnectTimeout=10',
+            f'{PROXMOX_SSH_USER}@{PROXMOX_SSH_HOST}',
+            remote_cmd
+        ]
+        result = subprocess.run(cmd, capture_output=True, text=True, timeout=timeout)
+        output = result.stdout + result.stderr
+        return result.returncode == 0, output
+    except subprocess.TimeoutExpired:
+        return False, "Timeout SSH→pct"
+    except Exception as e:
+        return False, str(e)
+
+
+def _run_pct_shell(pct_id: int, bash_cmd: str, timeout: int = 60) -> tuple:
+    """
+    Ejecuta un comando de shell arbitrario dentro del LXC via SSH al host Proxmox.
+    Usado para operaciones de filestore (cp, mkdir, chown).
+    """
+    try:
+        from ..config import PROXMOX_SSH_HOST, PROXMOX_SSH_USER, PROXMOX_SSH_KEY
+        remote_cmd = f"pct exec {pct_id} -- bash -c {shlex.quote(bash_cmd)}"
+        cmd = [
+            'ssh', '-i', PROXMOX_SSH_KEY,
+            '-o', 'StrictHostKeyChecking=no',
+            '-o', 'ConnectTimeout=10',
+            f'{PROXMOX_SSH_USER}@{PROXMOX_SSH_HOST}',
+            remote_cmd
+        ]
+        result = subprocess.run(cmd, capture_output=True, text=True, timeout=timeout)
+        return result.returncode == 0, result.stdout + result.stderr
+    except subprocess.TimeoutExpired:
+        return False, "Timeout SSH→pct shell"
     except Exception as e:
         return False, str(e)
 
@@ -824,12 +884,11 @@ async def create_tenant_from_template(
             
             # Asegurar filestore completo incluso si BD ya existía
             fs_fix_cmd = (
-                f'pct exec {pct_id} -- bash -c \''
                 f'mkdir -p {FILESTORE_PATH}/{subdomain}; '
-                f'cp -an {FILESTORE_PATH}/{TEMPLATE_DB}/* {FILESTORE_PATH}/{subdomain}/ 2>/dev/null; '
-                f'chown -R odoo:odoo {FILESTORE_PATH}/{subdomain}/\''
+                f'cp -an {FILESTORE_PATH}/{TEMPLATE_DB}/. {FILESTORE_PATH}/{subdomain}/ 2>/dev/null; '
+                f'chown -R odoo:odoo {FILESTORE_PATH}/{subdomain}/'
             )
-            subprocess.run(fs_fix_cmd, shell=True, capture_output=True, text=True, timeout=60)
+            _run_pct_shell(pct_id, fs_fix_cmd, timeout=60)
             
             logger.info(f"BD '{subdomain}' ya existe y es funcional — retornando éxito idempotente")
             return {
@@ -880,23 +939,19 @@ async def create_tenant_from_template(
         
         logger.info(f"BD '{subdomain}' duplicada, copiando filestore...")
         
-        # 4.5 Copiar filestore del template al nuevo tenant via SSH/pct desde el host
-        # El filestore está en LXC 105, se copia via pct exec desde el host Proxmox
-        # Si no está disponible pct (corriendo en VM), se intenta via SSH
-        import shutil as _shutil
-        filestore_cmd = (
-            f'pct exec {pct_id} -- bash -c \''
+        # 4.5 Copiar filestore del template al nuevo tenant
+        # El filestore está en el filesystem del LXC 105 — se accede via SSH→pct exec
+        fs_cmd = (
             f'mkdir -p {FILESTORE_PATH}/{subdomain} && '
             f'cp -an {FILESTORE_PATH}/{TEMPLATE_DB}/. {FILESTORE_PATH}/{subdomain}/ && '
             f'chown -R odoo:odoo {FILESTORE_PATH}/{subdomain} && '
-            f'echo "filestore_ok"\''
+            f'echo filestore_ok'
         )
-        
-        fs_result = subprocess.run(filestore_cmd, shell=True, capture_output=True, text=True, timeout=60)
-        if "filestore_ok" in fs_result.stdout:
+        fs_ok, fs_out = _run_pct_shell(pct_id, fs_cmd, timeout=90)
+        if fs_ok and "filestore_ok" in fs_out:
             logger.info(f"✅ Filestore copiado para '{subdomain}'")
         else:
-            logger.warning(f"⚠️ No se pudo copiar filestore: {fs_result.stderr} — iconos podrían no funcionar")
+            logger.warning(f"⚠️ No se pudo copiar filestore: {fs_out} — iconos podrían no funcionar")
         
         # 5. Configurar nueva BD
         base_url = f"https://{subdomain}.{BASE_DOMAIN}"

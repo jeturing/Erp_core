@@ -22,6 +22,7 @@ from ..services.odoo_database_manager import (
 )
 from .auth import verify_token
 from .roles import verify_token_with_role, _extract_token, _require_admin as _require_admin_base
+from ..services.nginx_domain_configurator import provision_sajet_subdomain, remove_sajet_subdomain
 import httpx
 import logging
 import psycopg
@@ -486,6 +487,22 @@ async def create_tenant(
                 db.close()
             
             status_msg = "vinculado" if already_existed else "creado"
+
+            # Provisionar subdominio .sajet.us en nginx automáticamente
+            if not already_existed:
+                try:
+                    nginx_result = provision_sajet_subdomain(payload.subdomain)
+                    if nginx_result.get("success"):
+                        logger.info(f"✅ Subdominio {payload.subdomain}.sajet.us provisionado en nginx")
+                        result["nginx_provisioned"] = True
+                    else:
+                        logger.warning(f"⚠️ Nginx no provisionado: {nginx_result.get('error')} — se puede hacer manual desde Dominios")
+                        result["nginx_provisioned"] = False
+                        result["nginx_warning"] = nginx_result.get("error")
+                except Exception as ng_err:
+                    logger.warning(f"⚠️ Error provisionando nginx: {ng_err}")
+                    result["nginx_provisioned"] = False
+
             return {
                 "success": True,
                 "already_existed": already_existed,
@@ -539,6 +556,13 @@ async def delete_tenant_endpoint(
         result = await delete_tenant(subdomain, server_id)
         
         if result.get("success"):
+            # Eliminar subdominio de nginx
+            try:
+                remove_sajet_subdomain(subdomain)
+                logger.info(f"Subdominio {subdomain}.sajet.us eliminado de nginx")
+            except Exception as ng_err:
+                logger.warning(f"No se pudo limpiar nginx para {subdomain}: {ng_err}")
+
             # Eliminar de BD local si existe
             db = SessionLocal()
             try:
