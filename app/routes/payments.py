@@ -689,3 +689,151 @@ def get_treasury_transactions(
     except Exception as e:
         logger.error(f"Error getting treasury transactions: {e}")
         raise HTTPException(status_code=500, detail=str(e))
+
+# ═══════════════════════════════════════════════════════════════
+# Dual Mercury Account Management (NEW)
+# ═══════════════════════════════════════════════════════════════
+
+@router.get(
+    "/treasury/accounts/dual-status",
+    summary="Estado de Cuentas Dual (Savings + Checking)",
+    description="Obtener balances y estado de salud de ambas cuentas Mercury."
+)
+def get_dual_account_status(db: Session = Depends(get_db)):
+    """
+    Obtener estado completo de cuentas dual (SAVINGS + CHECKING).
+    
+    Retorna:
+    - Balance de SAVINGS (ahorros)
+    - Balance de CHECKING (operativo)
+    - Estado de salud general
+    - Alertas activas
+    - Necesidad de replenish
+    """
+    try:
+        from ..services.mercury_account_manager import get_account_manager
+        
+        manager = get_account_manager()
+        
+        # Obtener balances de ambas cuentas
+        balances = manager.get_both_balances()
+        
+        # Obtener estado de salud
+        health = manager.get_account_health()
+        
+        return {
+            "status": health.get("status"),
+            "accounts": {
+                "savings": {
+                    "account_type": "savings",
+                    "balance": balances.get("savings", {}).get("balance", 0),
+                    "available": balances.get("savings", {}).get("available", 0),
+                    "currency": "USD",
+                    "purpose": "Reserve for customer funds"
+                },
+                "checking": {
+                    "account_type": "checking",
+                    "balance": balances.get("checking", {}).get("balance", 0),
+                    "available": balances.get("checking", {}).get("available", 0),
+                    "currency": "USD",
+                    "purpose": "Operational for provider payouts"
+                }
+            },
+            "totals": {
+                "total_balance": balances.get("total", 0),
+                "total_available": (
+                    balances.get("savings", {}).get("available", 0) +
+                    balances.get("checking", {}).get("available", 0)
+                )
+            },
+            "health": health,
+            "timestamp": datetime.now().isoformat()
+        }
+    
+    except Exception as e:
+        logger.error(f"Error getting dual account status: {e}")
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+@router.post(
+    "/treasury/accounts/transfer-to-checking",
+    summary="Transferir de SAVINGS a CHECKING",
+    description="Admin puede transferir fondos manualmente de SAVINGS a CHECKING."
+)
+def transfer_to_checking(
+    amount: float = Field(..., gt=0, description="Monto a transferir en USD"),
+    reason: str = Field(default="Funds for provider dispersal", description="Motivo de la transferencia"),
+    db: Session = Depends(get_db)
+):
+    """
+    Transferir fondos de SAVINGS → CHECKING.
+    
+    Requisitos:
+    - Amount debe estar entre min y max configurados
+    - SAVINGS debe tener balance suficiente
+    - Admin debe estar autenticado (TODO: agregar auth)
+    
+    Retorna:
+    - transfer_id de Mercury
+    - Estado de la transferencia
+    - Monto transferido
+    - Tiempo esperado de entrega
+    """
+    try:
+        from ..services.mercury_account_manager import get_account_manager
+        
+        manager = get_account_manager()
+        
+        # Ejecutar transferencia
+        transfer = manager.transfer_to_checking(
+            amount=amount,
+            reason=reason
+        )
+        
+        return {
+            "success": True,
+            "transfer": transfer,
+            "timestamp": datetime.now().isoformat()
+        }
+    
+    except Exception as e:
+        logger.error(f"Error transferring to CHECKING: {e}")
+        raise HTTPException(status_code=400, detail=str(e))
+
+
+@router.post(
+    "/treasury/accounts/auto-replenish",
+    summary="Auto-Replenish CHECKING",
+    description="Forzar auto-replenish de CHECKING desde SAVINGS (normalmente es automático)."
+)
+def trigger_auto_replenish(
+    target_balance: float = Field(default=None, description="Balance objetivo (default: 2x minimum)"),
+    db: Session = Depends(get_db)
+):
+    """
+    Forzar replenishment automático de CHECKING.
+    
+    Si CHECKING cae bajo el mínimo configurado, transfiere desde SAVINGS.
+    
+    Retorna:
+    - Detalles de transferencia (si fue necesaria)
+    - None (si no fue necesaria)
+    """
+    try:
+        from ..services.mercury_account_manager import get_account_manager
+        
+        manager = get_account_manager()
+        
+        # Ejecutar auto-replenish
+        result = manager.auto_replenish_checking(target_balance=target_balance)
+        
+        return {
+            "success": True,
+            "replenished": result is not None,
+            "transfer": result,
+            "timestamp": datetime.now().isoformat()
+        }
+    
+    except Exception as e:
+        logger.error(f"Error triggering auto-replenish: {e}")
+        raise HTTPException(status_code=500, detail=str(e))

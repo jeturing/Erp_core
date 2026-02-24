@@ -6,10 +6,15 @@ Responsabilidades:
 2. Cálculo de comisiones y montos netos
 3. Validación de reglas de negocio
 4. Logging y auditoría de transacciones
-5. Reconciliación Stripe ↔ Mercury
+5. Reconciliación Stripe ↔ Mercury con soporte para Dual Account
+
+Arquitectura de Cuentas:
+- SAVINGS: Acumula fondos de clientes
+- CHECKING: Dispersa a proveedores
+- Auto-replenish: CHECKING se repone automáticamente desde SAVINGS
 
 Flujo:
-  Cliente paga → Stripe recibe → Mercury obtiene fondos → Dispersa a proveedores
+  Cliente paga → Stripe → SAVINGS Mercury → Auto-replenish → CHECKING → Proveedor
 """
 
 import logging
@@ -20,6 +25,7 @@ from enum import Enum
 from decimal import Decimal
 
 from sqlalchemy.orm import Session
+from .mercury_account_manager import get_account_manager, AccountType
 
 logger = logging.getLogger(__name__)
 
@@ -330,15 +336,16 @@ class PaymentProcessor:
         payout_request_id: int,
     ) -> Dict[str, Any]:
         """
-        Ejecutar transferencia vía Mercury.
+        Ejecutar transferencia vía Mercury (desde CHECKING account).
         
         Pasos:
         1. Obtener detalles del payout_request
-        2. Validar una última vez que está autorizado
-        3. Llamar mercury_client.create_ach_transfer() o create_wire_transfer()
-        4. Guardar mercury_transfer_id
-        5. Marcar como "processing"
-        6. Log evento
+        2. Validar que está autorizado
+        3. Auto-replenish CHECKING desde SAVINGS si es necesario
+        4. Llamar account_manager.create_provider_payout()
+        5. Guardar mercury_transfer_id
+        6. Marcar como "processing"
+        7. Log evento
         
         Args:
             payout_request_id: ID del payout_request
@@ -350,30 +357,56 @@ class PaymentProcessor:
                 "mercury_transfer_id": "xfr_abc123",
                 "amount": 4250.00,
                 "status": "processing",
-                "created_at": "2026-02-24T15:30:00Z"
+                "created_at": "2026-02-24T15:30:00Z",
+                "auto_replenished": False | True,
+                "replenish_amount": 25000 (si aplica)
             }
         """
         try:
-            if not self.mercury_client:
-                return {
-                    "executed": False,
-                    "error": "Mercury client not configured",
-                }
+            # Obtener gestor de cuentas dual
+            account_manager = get_account_manager()
             
             # TODO: Obtener payout_request desde BD
-            # TODO: Validar status = "authorized"
-            # TODO: Llamar mercury_client.create_ach_transfer()
-            # TODO: Guardar mercury_transfer_id
-            # TODO: Actualizar estado a "processing"
+            # payout_request = self.db.query(PayoutRequest).filter(...).first()
+            
+            # Auto-replenish CHECKING desde SAVINGS si es necesario
+            replenish_result = account_manager.auto_replenish_checking()
+            auto_replenished = replenish_result is not None
+            replenish_amount = replenish_result.get("amount", 0) if auto_replenished else 0
+            
+            if auto_replenished:
+                logger.info(f"✅ Auto-replenished CHECKING with ${replenish_amount}")
+            
+            # TODO: Crear BankAccount para proveedor desde BD
+            # beneficiary = BankAccount(
+            #     account_number=payout_request.provider_account.account_number,
+            #     routing_number=payout_request.provider_account.routing_number,
+            #     account_holder=payout_request.provider_account.account_holder_name,
+            #     account_type=payout_request.provider_account.account_type,
+            # )
+            
+            # Ejecutar dispersión desde CHECKING
+            # transfer = account_manager.create_provider_payout(
+            #     amount=payout_request.net_amount,
+            #     provider_name=payout_request.provider.name,
+            #     beneficiary=beneficiary,
+            #     transfer_type=payout_request.transfer_type,
+            #     invoice_ref=f"INV-{payout_request.invoice.id}"
+            # )
+            
+            # TODO: Actualizar payout_request con mercury_transfer_id
+            # TODO: Marcar como "processing"
             # TODO: Log evento
             
             return {
                 "executed": True,
                 "payout_id": payout_request_id,
-                "mercury_transfer_id": "xfr_abc123",
-                "amount": 4250.00,
+                "mercury_transfer_id": "xfr_abc123",  # TODO: Use actual transfer ID
+                "amount": 4250.00,  # TODO: Get from payout_request
                 "status": "processing",
                 "created_at": datetime.now(timezone.utc).isoformat(),
+                "auto_replenished": auto_replenished,
+                "replenish_amount": replenish_amount,
             }
         
         except Exception as e:
@@ -389,12 +422,12 @@ class PaymentProcessor:
     
     def reconcile_stripe_mercury(self) -> Dict[str, Any]:
         """
-        Sincronizar saldos entre Stripe y Mercury.
+        Sincronizar saldos entre Stripe y Mercury (ambas cuentas).
         
         Pasos:
         1. Obtener balance de Stripe (via stripe_client)
-        2. Obtener balance de Mercury (via mercury_client)
-        3. Comparar saldos y calcular discrepancias
+        2. Obtener balances de SAVINGS y CHECKING (via account_manager)
+        3. Comparar Stripe con (SAVINGS + CHECKING)
         4. Si discrepancia > 0.01%, registrar alerta
         5. Actualizar tabla de transacciones Mercury
         6. Log evento
@@ -403,31 +436,52 @@ class PaymentProcessor:
             {
                 "reconciled": True,
                 "stripe_balance": 25000.00,
-                "mercury_balance": 24999.50,
-                "discrepancy": 0.50,
-                "discrepancy_pct": 0.002,
+                "mercury_savings": 150000.00,
+                "mercury_checking": 50000.00,
+                "mercury_total": 200000.00,
+                "discrepancy": 25000.00,
+                "discrepancy_pct": 0.012,
                 "status": "balanced" | "warning" | "critical",
+                "account_manager_health": {...},
                 "last_sync": "2026-02-24T15:30:00Z"
             }
         """
         try:
-            stripe_balance = 0  # TODO: Llamar stripe API
-            mercury_balance = 0  # TODO: Llamar mercury_client.get_account_balance()
+            # Obtener gestor de cuentas
+            account_manager = get_account_manager()
             
-            discrepancy = abs(stripe_balance - mercury_balance)
+            # Obtener balances de ambas cuentas Mercury
+            both_balances = account_manager.get_both_balances()
+            
+            mercury_savings = both_balances.get("savings", {}).get("balance", 0)
+            mercury_checking = both_balances.get("checking", {}).get("balance", 0)
+            mercury_total = mercury_savings + mercury_checking
+            
+            # TODO: Obtener balance de Stripe
+            stripe_balance = 0  # stripe_client.get_account_balance()
+            
+            discrepancy = abs(stripe_balance - mercury_total)
             discrepancy_pct = (discrepancy / stripe_balance) * 100 if stripe_balance > 0 else 0
             
             if discrepancy_pct > 0.1:  # Más del 0.1% de discrepancia
                 status = "critical" if discrepancy_pct > 1 else "warning"
-                logger.warning(f"Reconciliation discrepancy: {discrepancy_pct:.2f}%")
+                logger.warning(
+                    f"Reconciliation discrepancy: {discrepancy_pct:.2f}% "
+                    f"(${discrepancy} difference)"
+                )
             else:
                 status = "balanced"
+            
+            # Obtener estado de salud de cuentas
+            account_health = account_manager.get_account_health()
             
             self._log_payment_event(
                 event_type=PaymentEventType.BALANCE_SYNC,
                 metadata={
                     "stripe_balance": stripe_balance,
-                    "mercury_balance": mercury_balance,
+                    "mercury_savings": mercury_savings,
+                    "mercury_checking": mercury_checking,
+                    "mercury_total": mercury_total,
                     "discrepancy": discrepancy,
                     "status": status,
                 }
@@ -436,10 +490,13 @@ class PaymentProcessor:
             return {
                 "reconciled": True,
                 "stripe_balance": stripe_balance,
-                "mercury_balance": mercury_balance,
+                "mercury_savings": mercury_savings,
+                "mercury_checking": mercury_checking,
+                "mercury_total": mercury_total,
                 "discrepancy": round(discrepancy, 2),
                 "discrepancy_pct": round(discrepancy_pct, 3),
                 "status": status,
+                "account_manager_health": account_health,
                 "last_sync": datetime.now(timezone.utc).isoformat(),
             }
         
