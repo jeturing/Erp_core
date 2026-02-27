@@ -7,7 +7,9 @@ import logging
 import os
 from email.mime.text import MIMEText
 from email.mime.multipart import MIMEMultipart
-from typing import Optional
+from email.mime.base import MIMEBase
+from email import encoders
+from typing import Optional, List, Dict, Any
 
 logger = logging.getLogger(__name__)
 
@@ -82,6 +84,7 @@ def send_email(
     html_body: str,
     text_body: Optional[str] = None,
     reply_to: Optional[str] = None,
+    attachments: Optional[List[Dict[str, Any]]] = None,
     email_type: str = "generic",
     customer_id: Optional[int] = None,
     partner_id: Optional[int] = None,
@@ -94,19 +97,41 @@ def send_email(
         {"success": True/False, "message_id": str, "error": str}
     """
     try:
-        msg = MIMEMultipart("alternative")
+        msg = MIMEMultipart("mixed")
         msg["From"] = f"{SMTP_FROM_NAME} <{SMTP_FROM_EMAIL}>"
         msg["To"] = to_email
         msg["Subject"] = subject
         if reply_to:
             msg["Reply-To"] = reply_to
 
-        # Texto plano como fallback
+        # Cuerpo del correo (plain + html)
+        body = MIMEMultipart("alternative")
         if text_body:
-            msg.attach(MIMEText(text_body, "plain", "utf-8"))
+            body.attach(MIMEText(text_body, "plain", "utf-8"))
 
-        # HTML principal
-        msg.attach(MIMEText(html_body, "html", "utf-8"))
+        body.attach(MIMEText(html_body, "html", "utf-8"))
+        msg.attach(body)
+
+        # Adjuntos opcionales
+        if attachments:
+            for attachment in attachments:
+                path = attachment.get("path")
+                filename = attachment.get("filename") or (os.path.basename(path) if path else None)
+                mime_type = attachment.get("mime_type", "application/octet-stream")
+                content = attachment.get("content")
+
+                if content is None:
+                    if not path:
+                        raise ValueError("Adjunto inválido: falta 'path' o 'content'")
+                    with open(path, "rb") as f:
+                        content = f.read()
+
+                main_type, sub_type = mime_type.split("/", 1) if "/" in mime_type else ("application", "octet-stream")
+                part = MIMEBase(main_type, sub_type)
+                part.set_payload(content)
+                encoders.encode_base64(part)
+                part.add_header("Content-Disposition", f'attachment; filename="{filename or "adjunto.bin"}"')
+                msg.attach(part)
 
         server = _get_smtp_connection()
         server.sendmail(SMTP_FROM_EMAIL, to_email, msg.as_string())
@@ -252,6 +277,48 @@ def send_password_reset(
         html_body=_base_template(content),
         text_body=f"Contraseña restablecida\n\nURL: {url}\nNueva contraseña: {new_password}",
         email_type="password_reset",
+    )
+
+
+def send_tenant_backup_deleted(
+    to_email: str,
+    company_name: str,
+    subdomain: str,
+    backup_path: str,
+    backup_filename: Optional[str] = None,
+) -> dict:
+    """Envía al cliente el backup de su tenant al momento de la eliminación."""
+    file_name = backup_filename or os.path.basename(backup_path)
+    content = f"""
+    <h2 style="color: #e74c3c; margin-top: 0;">Tenant eliminado con respaldo</h2>
+    <p>Hola, se completó la eliminación del tenant <strong>{subdomain}</strong> ({company_name}).</p>
+    <p>Adjuntamos el respaldo de la base de datos para su archivo.</p>
+
+    <div style="background: #1a1a2e; border-radius: 8px; padding: 20px; margin: 20px 0; 
+                border-left: 4px solid #3498db;">
+      <h3 style="margin-top: 0; color: #fff;">Detalle del respaldo</h3>
+      <p style="margin: 4px 0;"><strong>Archivo:</strong> {file_name}</p>
+      <p style="margin: 4px 0;"><strong>Tenant:</strong> {subdomain}</p>
+    </div>
+
+    <p style="color: #999; font-size: 13px;">
+      Si no solicitó esta acción, contacte soporte inmediatamente.
+    </p>
+    """
+
+    return send_email(
+        to_email=to_email,
+        subject=f"📦 Backup tenant eliminado — {subdomain} | SAJET",
+        html_body=_base_template(content),
+        text_body=f"Tenant eliminado: {subdomain}\nArchivo backup: {file_name}",
+        attachments=[
+            {
+                "path": backup_path,
+                "filename": file_name,
+                "mime_type": "application/octet-stream",
+            }
+        ],
+        email_type="tenant_backup_deleted",
     )
 
 

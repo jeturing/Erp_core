@@ -56,13 +56,16 @@ class SecurityMiddleware(BaseHTTPMiddleware):
         response.headers["Content-Security-Policy"] = (
             "default-src 'self'; "
             "script-src 'self' 'unsafe-inline' 'unsafe-eval' https://cdn.jsdelivr.net https://js.stripe.com "
-            "https://static.cloudflareinsights.com https://challenges.cloudflare.com; "
+            "https://static.cloudflareinsights.com https://challenges.cloudflare.com "
+            "https://www.googletagmanager.com; "
             "style-src 'self' 'unsafe-inline' https://cdn.jsdelivr.net https://fonts.googleapis.com; "
             "font-src 'self' https://fonts.gstatic.com https://cdn.jsdelivr.net https://r2cdn.perplexity.ai data:; "
             "img-src 'self' data: blob: https:; "
             "frame-src https://js.stripe.com https://challenges.cloudflare.com; "
             "connect-src 'self' https://api.stripe.com https://cloudflareinsights.com "
-            "https://challenges.cloudflare.com https://*.sajet.us"
+            "https://challenges.cloudflare.com https://*.sajet.us "
+            "https://stats.g.doubleclick.net https://analytics.google.com "
+            "https://www.google-analytics.com"
         )
         
         return response

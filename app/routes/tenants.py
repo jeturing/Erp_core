@@ -12,6 +12,7 @@ from ..services.odoo_database_manager import (
     get_servers_status,
     provision_tenant,
     delete_tenant,
+    backup_tenant,
     create_tenant_from_template,
     create_tenant_api,
     OdooDatabaseManager,
@@ -20,6 +21,7 @@ from ..services.odoo_database_manager import (
     DEFAULT_ADMIN_PASSWORD,
     query_admin_login_pg,
 )
+from ..services.email_service import send_tenant_backup_deleted
 from .auth import verify_token
 from .roles import verify_token_with_role, _extract_token, _require_admin as _require_admin_base
 from ..services.nginx_domain_configurator import provision_sajet_subdomain, remove_sajet_subdomain
@@ -536,12 +538,14 @@ async def delete_tenant_endpoint(
     request: Request,
     server_id: Optional[str] = Query(None, description="ID del servidor"),
     confirm: bool = Query(False, description="Confirmar eliminación"),
+    confirm_name: Optional[str] = Query(None, description="Escriba el subdominio para confirmar"),
     access_token: str = Cookie(None)
 ):
     """
     Eliminar un tenant (base de datos Odoo). Requiere rol admin.
 
     - Requiere confirm=true para ejecutar
+    - Requiere confirm_name igual al subdominio
     - Si no se especifica server_id, busca en todos los servidores
     """
     _require_admin_base(request, access_token)
@@ -551,43 +555,93 @@ async def delete_tenant_endpoint(
             "message": f"Debe confirmar la eliminación con ?confirm=true",
             "warning": f"Esta acción eliminará permanentemente la base de datos '{subdomain}'"
         }
+    if not confirm_name or confirm_name.strip().lower() != subdomain.strip().lower():
+        raise HTTPException(
+            status_code=400,
+            detail=f"Confirmación inválida. Debe escribir exactamente '{subdomain}'"
+        )
     
     try:
+        # 1) Eliminar primero registro local (BDA), conservando datos para respaldo/email
+        local_deleted = False
+        tenant_email = None
+        tenant_company = subdomain
+        db = SessionLocal()
+        try:
+            customer = db.query(Customer).filter(Customer.subdomain == subdomain).first()
+            if customer:
+                tenant_email = customer.email
+                tenant_company = customer.company_name or subdomain
+                db.query(Subscription).filter(Subscription.customer_id == customer.id).delete()
+                db.delete(customer)
+                db.commit()
+                local_deleted = True
+                logger.info(f"Eliminado registro local de tenant: {subdomain}")
+        except Exception as db_err:
+            db.rollback()
+            logger.warning(f"No se pudo eliminar registro local: {db_err}")
+        finally:
+            db.close()
+
+        # 2) Crear backup de la BD Odoo antes de borrarla
+        backup_result = await backup_tenant(subdomain, server_id)
+
+        # 3) Enviar backup al correo del cliente (si existe y se generó)
+        email_result = None
+        if backup_result.get("success") and tenant_email:
+            try:
+                email_result = send_tenant_backup_deleted(
+                    to_email=tenant_email,
+                    company_name=tenant_company,
+                    subdomain=subdomain,
+                    backup_path=backup_result["backup_path"],
+                    backup_filename=backup_result.get("backup_file"),
+                )
+            except Exception as mail_err:
+                logger.warning(f"No se pudo enviar backup por email para {subdomain}: {mail_err}")
+                email_result = {"success": False, "error": str(mail_err)}
+
+        # 4) Eliminar BD del tenant en Odoo
         result = await delete_tenant(subdomain, server_id)
-        
-        if result.get("success"):
-            # Eliminar subdominio de nginx
+        deleted_remote = bool(result.get("success"))
+
+        # 5) Limpiar nginx solo si se eliminó la BD remota
+        if deleted_remote:
             try:
                 remove_sajet_subdomain(subdomain)
                 logger.info(f"Subdominio {subdomain}.sajet.us eliminado de nginx")
             except Exception as ng_err:
                 logger.warning(f"No se pudo limpiar nginx para {subdomain}: {ng_err}")
 
-            # Eliminar de BD local si existe
-            db = SessionLocal()
-            try:
-                customer = db.query(Customer).filter(Customer.subdomain == subdomain).first()
-                if customer:
-                    # Eliminar suscripciones asociadas
-                    db.query(Subscription).filter(Subscription.customer_id == customer.id).delete()
-                    db.delete(customer)
-                    db.commit()
-                    logger.info(f"Eliminado registro local de tenant: {subdomain}")
-            except Exception as db_err:
-                logger.warning(f"No se pudo eliminar registro local: {db_err}")
-            finally:
-                db.close()
-            
+        # 6) Respuesta final idempotente
+        if deleted_remote:
             return {
                 "success": True,
                 "message": f"Tenant '{subdomain}' eliminado exitosamente",
-                "details": result
+                "details": result,
+                "local_deleted": local_deleted,
+                "backup": backup_result,
+                "email": email_result,
             }
-        else:
-            raise HTTPException(
-                status_code=400,
-                detail=result.get("error", "Error eliminando tenant")
-            )
+
+        # Si la BD remota no existe pero el registro local sí se limpió, tratar como éxito parcial
+        err = (result.get("error") or "Error eliminando tenant").strip()
+        if "no encontrado" in err.lower() and local_deleted:
+            return {
+                "success": True,
+                "message": f"Registro local de '{subdomain}' eliminado. La BD remota ya no existía.",
+                "warning": err,
+                "details": result,
+                "local_deleted": local_deleted,
+                "backup": backup_result,
+                "email": email_result,
+            }
+
+        # Si no existe en local ni remoto, devolver 404
+        if "no encontrado" in err.lower() and not local_deleted:
+            raise HTTPException(status_code=404, detail=err)
+
+        raise HTTPException(status_code=400, detail=err)
     
     except HTTPException:
         raise

@@ -7,6 +7,7 @@ import logging
 import subprocess
 import shlex
 import os
+from pathlib import Path
 from typing import Dict, Any, List, Optional
 from datetime import datetime
 from dataclasses import dataclass
@@ -475,6 +476,60 @@ class OdooDatabaseManager:
         except Exception as e:
             logger.exception(f"Error eliminando BD: {e}")
             return {"success": False, "error": str(e)}
+
+    async def create_database_backup(
+        self,
+        db_name: str,
+        backup_dir: Optional[str] = None,
+    ) -> Dict[str, Any]:
+        """Genera un backup lógico (.dump) de la BD en el nodo de API."""
+        try:
+            if not await self.database_exists(db_name):
+                return {"success": False, "error": f"Tenant '{db_name}' no encontrado para backup"}
+
+            target_dir = backup_dir or os.getenv("TENANT_BACKUP_DIR", "/tmp/sajet_tenant_backups")
+            Path(target_dir).mkdir(parents=True, exist_ok=True)
+
+            ts = datetime.utcnow().strftime("%Y%m%d_%H%M%S")
+            backup_file = f"{db_name}_{ts}.dump"
+            backup_path = str(Path(target_dir) / backup_file)
+
+            env = os.environ.copy()
+            env["PGPASSWORD"] = DEFAULT_DB_PASSWORD
+            cmd = [
+                "pg_dump",
+                "-h", DEFAULT_DB_HOST,
+                "-p", str(DEFAULT_DB_PORT),
+                "-U", DEFAULT_DB_USER,
+                "-Fc",
+                "-f", backup_path,
+                db_name,
+            ]
+
+            result = subprocess.run(cmd, capture_output=True, text=True, timeout=900, env=env)
+            if result.returncode != 0:
+                return {
+                    "success": False,
+                    "error": result.stderr.strip() or result.stdout.strip() or "pg_dump falló",
+                }
+
+            size = os.path.getsize(backup_path) if os.path.exists(backup_path) else 0
+            if size <= 0:
+                return {"success": False, "error": "Backup generado sin contenido"}
+
+            return {
+                "success": True,
+                "database": db_name,
+                "backup_path": backup_path,
+                "backup_file": backup_file,
+                "backup_size": size,
+                "created_at": datetime.utcnow().isoformat(),
+                "server": self.server.id,
+                "server_name": self.server.name,
+            }
+        except Exception as e:
+            logger.exception(f"Error generando backup de {db_name}: {e}")
+            return {"success": False, "error": str(e)}
     
     async def get_database_info(self, db_name: str) -> Dict[str, Any]:
         """Obtiene información de una base de datos"""
@@ -725,6 +780,26 @@ async def delete_tenant(subdomain: str, server_id: Optional[str] = None) -> Dict
             logger.error(f"Error buscando en {server.id}: {e}")
     
     return {"success": False, "error": f"Tenant '{subdomain}' no encontrado"}
+
+
+async def backup_tenant(subdomain: str, server_id: Optional[str] = None) -> Dict[str, Any]:
+    """Genera backup de un tenant buscando automáticamente su servidor."""
+    if server_id:
+        servers_to_check = [ODOO_SERVERS.get(server_id)] if server_id in ODOO_SERVERS else []
+    else:
+        servers_to_check = list(ODOO_SERVERS.values())
+
+    for server in servers_to_check:
+        if not server:
+            continue
+        try:
+            async with OdooDatabaseManager(server) as manager:
+                if await manager.database_exists(subdomain):
+                    return await manager.create_database_backup(subdomain)
+        except Exception as e:
+            logger.error(f"Error generando backup en {server.id}: {e}")
+
+    return {"success": False, "error": f"Tenant '{subdomain}' no encontrado para backup"}
 
 
 # =====================================================
@@ -1036,4 +1111,3 @@ async def create_tenant_api(
             admin_password=admin_password,
             server_id=server_id
         )
-

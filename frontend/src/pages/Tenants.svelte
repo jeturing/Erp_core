@@ -1,6 +1,6 @@
 <script lang="ts">
   import { onMount } from 'svelte';
-  import { tenantsApi, api } from '../lib/api';
+  import { tenantsApi } from '../lib/api';
   import { partnersApi } from '../lib/api/partners';
   import { toasts } from '../lib/stores/toast';
   import { formatDate } from '../lib/utils/formatters';
@@ -120,9 +120,20 @@
   }
 
   async function handleDelete(tenant: Tenant) {
-    if (!window.confirm(`¿Eliminar permanentemente el tenant "${tenant.subdomain}"? Esta acción no se puede deshacer.`)) return;
+    const firstConfirm = window.confirm(`¿Eliminar permanentemente el tenant "${tenant.subdomain}"? Esta acción no se puede deshacer.`);
+    if (!firstConfirm) return;
+
+    const typed = window.prompt(
+      `Para confirmar la eliminación, escribe exactamente el tenant:\n${tenant.subdomain}`
+    );
+    if (typed === null) return;
+    if (typed.trim().toLowerCase() !== tenant.subdomain.toLowerCase()) {
+      toasts.error('Confirmación incorrecta. No se eliminó el tenant.');
+      return;
+    }
+
     try {
-      await api.delete(`/api/tenants/${tenant.subdomain}?confirm=true`);
+      await tenantsApi.delete(tenant.subdomain, typed.trim());
       toasts.success('Tenant eliminado');
       await loadTenants();
     } catch (e: any) {

@@ -9,6 +9,7 @@ import os
 import secrets
 import hashlib
 import logging
+from jwt import ExpiredSignatureError, InvalidTokenError
 
 from ..config import (
     JWT_SECRET_KEY,
@@ -95,7 +96,12 @@ class TokenManager:
             jwt.InvalidTokenError: Token inválido
             ValueError: Tipo de token incorrecto o rol no autorizado
         """
-        payload = jwt.decode(token, JWT_SECRET_KEY, algorithms=[JWT_ALGORITHM])
+        try:
+            payload = jwt.decode(token, JWT_SECRET_KEY, algorithms=[JWT_ALGORITHM])
+        except ExpiredSignatureError as e:
+            raise ValueError("Token expirado") from e
+        except InvalidTokenError as e:
+            raise ValueError("Token inválido") from e
         
         # Verificar tipo de token
         if payload.get("type") != "access":

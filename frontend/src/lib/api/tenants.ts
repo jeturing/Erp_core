@@ -36,8 +36,12 @@ export const tenantsApi = {
     return api.post('/api/tenants', payload);
   },
 
-  async delete(subdomain: string): Promise<{ success: boolean; message: string }> {
-    return api.delete(`/api/tenants/${encodeURIComponent(subdomain)}?confirm=true`);
+  async delete(subdomain: string, confirmName: string): Promise<{ success: boolean; message: string }> {
+    const qs = new URLSearchParams({
+      confirm: 'true',
+      confirm_name: confirmName,
+    });
+    return api.delete(`/api/tenants/${encodeURIComponent(subdomain)}?${qs.toString()}`);
   },
 
   async changePassword(payload: ChangeTenantPasswordRequest): Promise<{ success: boolean; message: string }> {
