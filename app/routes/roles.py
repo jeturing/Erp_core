@@ -190,6 +190,7 @@ DEFAULT_ROLES: List[Dict[str, Any]] = [
         "updated_at": None,
         "color": "#e74c3c",
         "assigned_tenants": [],
+        "assigned_users": [],
     },
     {
         "id": 2,
@@ -205,6 +206,7 @@ DEFAULT_ROLES: List[Dict[str, Any]] = [
         "updated_at": None,
         "color": "#f39c12",
         "assigned_tenants": [],
+        "assigned_users": [],
     },
     {
         "id": 3,
@@ -218,6 +220,7 @@ DEFAULT_ROLES: List[Dict[str, Any]] = [
         "updated_at": None,
         "color": "#3498db",
         "assigned_tenants": [],
+        "assigned_users": [],
     },
     {
         "id": 4,
@@ -228,6 +231,7 @@ DEFAULT_ROLES: List[Dict[str, Any]] = [
         "updated_at": None,
         "color": "#2ecc71",
         "assigned_tenants": [],
+        "assigned_users": [],
     },
     {
         "id": 5,
@@ -244,6 +248,7 @@ DEFAULT_ROLES: List[Dict[str, Any]] = [
         "updated_at": None,
         "color": "#8e44ad",
         "assigned_tenants": [],
+        "assigned_users": [],
     },
 ]
 
@@ -270,6 +275,11 @@ class RolePayload(BaseModel):
     permissions: List[str] = []
     color: str = "#6b7280"
     assigned_tenants: List[int] = []
+    assigned_users: List[int] = []
+
+
+class RoleUserAssign(BaseModel):
+    user_ids: List[int]
 
 
 # ── Plantillas predefinidas para nuevos roles ──
@@ -412,6 +422,10 @@ def _normalize_role(raw: Dict[str, Any], fallback_id: int) -> Dict[str, Any]:
     if not isinstance(assigned_tenants, list):
         assigned_tenants = []
 
+    assigned_users = raw.get("assigned_users") or []
+    if not isinstance(assigned_users, list):
+        assigned_users = []
+
     return {
         "id": int(raw.get("id", fallback_id)),
         "name": str(raw.get("name", f"role-{fallback_id}")).strip(),
@@ -421,6 +435,7 @@ def _normalize_role(raw: Dict[str, Any], fallback_id: int) -> Dict[str, Any]:
         "updated_at": raw.get("updated_at"),
         "color": raw.get("color", "#6b7280"),
         "assigned_tenants": [int(t) for t in assigned_tenants if str(t).isdigit()],
+        "assigned_users": [int(u) for u in assigned_users if str(u).isdigit()],
     }
 
 
@@ -525,6 +540,7 @@ async def create_role(payload: RolePayload, request: Request, access_token: Opti
             "updated_at": datetime.utcnow().isoformat(),
             "color": payload.color or "#6b7280",
             "assigned_tenants": payload.assigned_tenants or [],
+            "assigned_users": payload.assigned_users or [],
         }
         roles.append(new_role)
 
@@ -566,6 +582,7 @@ async def update_role(role_id: int, payload: RolePayload, request: Request, acce
         target["updated_at"] = datetime.utcnow().isoformat()
         target["color"] = payload.color or target.get("color", "#6b7280")
         target["assigned_tenants"] = payload.assigned_tenants if payload.assigned_tenants is not None else target.get("assigned_tenants", [])
+        target["assigned_users"] = payload.assigned_users if payload.assigned_users is not None else target.get("assigned_users", [])
 
         _save_roles(db, roles, updated_by=auth_data.get("sub", "admin"))
         return {"success": True, "role": target}
@@ -614,6 +631,122 @@ async def available_tenants(request: Request, access_token: Optional[str] = Cook
                 "customer_id": sub.customer_id if sub else None,
             })
         return {"tenants": tenants, "total": len(tenants)}
+    finally:
+        db.close()
+
+
+@router.get("/api/roles/available-users")
+async def available_users(request: Request, access_token: Optional[str] = Cookie(None)):
+    """Lista de usuarios admin disponibles para asignar a roles."""
+    _require_admin(request, access_token)
+    from ..models.database import AdminUser
+    db = SessionLocal()
+    try:
+        users = db.query(AdminUser).filter(AdminUser.is_active == True).order_by(AdminUser.display_name).all()
+        result = [
+            {
+                "id": u.id,
+                "email": u.email,
+                "display_name": u.display_name,
+                "role": u.role.value if u.role else "admin",
+            }
+            for u in users
+        ]
+        return {"users": result, "total": len(result)}
+    finally:
+        db.close()
+
+
+@router.get("/api/roles/{role_id}/users")
+async def get_role_users(role_id: int, request: Request, access_token: Optional[str] = Cookie(None)):
+    """Obtiene los usuarios asignados a un rol."""
+    _require_admin(request, access_token)
+    from ..models.database import AdminUser
+    db = SessionLocal()
+    try:
+        roles = _load_roles(db)
+        target = next((r for r in roles if int(r["id"]) == role_id), None)
+        if not target:
+            raise HTTPException(status_code=404, detail="Rol no encontrado")
+        user_ids = target.get("assigned_users", [])
+        users = []
+        if user_ids:
+            users_db = db.query(AdminUser).filter(AdminUser.id.in_(user_ids)).all()
+            users = [
+                {
+                    "id": u.id,
+                    "email": u.email,
+                    "display_name": u.display_name,
+                    "role": u.role.value if u.role else "admin",
+                    "is_active": u.is_active,
+                }
+                for u in users_db
+            ]
+        return {"users": users, "total": len(users), "role_id": role_id}
+    finally:
+        db.close()
+
+
+@router.post("/api/roles/{role_id}/users")
+async def assign_users_to_role(
+    role_id: int,
+    payload: RoleUserAssign,
+    request: Request,
+    access_token: Optional[str] = Cookie(None),
+):
+    """Asigna usuarios a un rol (reemplaza la lista completa)."""
+    auth_data = _require_admin(request, access_token)
+    from ..models.database import AdminUser
+    db = SessionLocal()
+    try:
+        roles = _load_roles(db)
+        target = next((r for r in roles if int(r["id"]) == role_id), None)
+        if not target:
+            raise HTTPException(status_code=404, detail="Rol no encontrado")
+
+        # Validar que los user_ids existen
+        if payload.user_ids:
+            existing = db.query(AdminUser.id).filter(AdminUser.id.in_(payload.user_ids)).all()
+            existing_ids = {row.id for row in existing}
+            invalid = set(payload.user_ids) - existing_ids
+            if invalid:
+                raise HTTPException(
+                    status_code=400,
+                    detail=f"Usuarios no encontrados: {list(invalid)}",
+                )
+
+        target["assigned_users"] = list(set(payload.user_ids))
+        target["updated_at"] = datetime.utcnow().isoformat()
+        _save_roles(db, roles, updated_by=auth_data.get("sub", "admin"))
+        return {"success": True, "role_id": role_id, "assigned_users": target["assigned_users"]}
+    finally:
+        db.close()
+
+
+@router.delete("/api/roles/{role_id}/users/{user_id}")
+async def remove_user_from_role(
+    role_id: int,
+    user_id: int,
+    request: Request,
+    access_token: Optional[str] = Cookie(None),
+):
+    """Quita un usuario de un rol."""
+    auth_data = _require_admin(request, access_token)
+    db = SessionLocal()
+    try:
+        roles = _load_roles(db)
+        target = next((r for r in roles if int(r["id"]) == role_id), None)
+        if not target:
+            raise HTTPException(status_code=404, detail="Rol no encontrado")
+
+        current = target.get("assigned_users", [])
+        if user_id not in current:
+            raise HTTPException(status_code=404, detail="Usuario no asignado a este rol")
+
+        target["assigned_users"] = [uid for uid in current if uid != user_id]
+        target["updated_at"] = datetime.utcnow().isoformat()
+        _save_roles(db, roles, updated_by=auth_data.get("sub", "admin"))
+        return {"success": True, "role_id": role_id, "removed_user_id": user_id}
     finally:
         db.close()
 

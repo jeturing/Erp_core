@@ -94,6 +94,17 @@ ODOO_BASE_DOMAIN = os.getenv("ODOO_BASE_DOMAIN", "sajet.us")
 ODOO_TEMPLATE_DB = os.getenv("ODOO_TEMPLATE_DB", "template_tenant")
 ODOO_FILESTORE_PATH = os.getenv("ODOO_FILESTORE_PATH", "/var/lib/odoo/filestore")
 
+# Proxmox host SSH — para operaciones pct exec desde LXC API
+PROXMOX_SSH_HOST = os.getenv("PROXMOX_SSH_HOST", "10.10.10.1")
+PROXMOX_SSH_USER = os.getenv("PROXMOX_SSH_USER", "root")
+PROXMOX_SSH_KEY = os.getenv("PROXMOX_SSH_KEY", "/root/.ssh/id_ed25519")
+
+# ═══════════════════════════════════════════════════════
+# Dispersión Mercury — Feature Flags
+# ═══════════════════════════════════════════════════════
+MERCURY_DISPERSION_ENABLED = os.getenv("MERCURY_DISPERSION_ENABLED", "false").lower() == "true"
+MERCURY_DISPERSION_REQUIRE_ADMIN_AUTH = os.getenv("MERCURY_DISPERSION_REQUIRE_ADMIN_AUTH", "true").lower() == "true"
+MERCURY_DISPERSION_MAX_AUTO_USD = float(os.getenv("MERCURY_DISPERSION_MAX_AUTO_USD", "0"))  # 0 = siempre requiere auth
 
 # ═══════════════════════════════════════════════════════
 # Infrastructure IPs

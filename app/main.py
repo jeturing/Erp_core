@@ -35,6 +35,7 @@ from .routes import accountant_portal
 from .routes import admin_landing
 from .routes import payments  # Nuevo: Pagos y dispersión a proveedores
 from .routes import mercury_webhooks  # Webhooks Mercury para conciliación
+from .routes import dispersion  # Dispersión Mercury con feature flag y auth 4-ojos
 
 # Import security middleware
 from .security.middleware import SecurityMiddleware, WAFMiddleware
@@ -213,6 +214,7 @@ app.include_router(accountant_portal.router)     # Portal para contadores/CPA mu
 app.include_router(admin_landing.router)         # Admin CRUD para i18n content (testimonios, landing, traducciones)
 app.include_router(payments.router)              # Pagos, dispersión a proveedores, Mercury, tesorería
 app.include_router(mercury_webhooks.router)      # Webhooks Mercury para conciliación
+app.include_router(dispersion.router)            # Dispersión Mercury (feature flag + 4-ojos)
 
 
 # ── CORS Cache Refresh endpoint ──

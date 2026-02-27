@@ -6,7 +6,7 @@
     Percent, FileSpreadsheet, Boxes, UsersRound, Receipt,
     Scale, GitCompareArrows, ClipboardList, ShieldCheck, Palette,
     ShoppingBag, ChevronDown, Sliders, Mail, BarChart2,
-    Languages, MessageCircle, FileType,
+    Languages, MessageCircle, FileType, ArrowRightLeft,
   } from 'lucide-svelte';
   import { auth } from '../stores';
 
@@ -54,7 +54,8 @@
         { id: 'invoices',       label: 'Facturas',      icon: Receipt,          href: '#/invoices' },
         { id: 'seats',          label: 'Seats',         icon: UsersRound,       href: '#/seats' },
         { id: 'settlements',    label: 'Liquidaciones', icon: Scale,            href: '#/settlements' },
-        { id: 'reconciliation', label: 'Conciliación',  icon: GitCompareArrows, href: '#/reconciliation' },
+        { id: 'reconciliation', label: 'Conciliación',  icon: GitCompareArrows,  href: '#/reconciliation' },
+        { id: 'dispersion',    label: 'Dispersión',    icon: ArrowRightLeft,    href: '#/dispersion' },
       ],
     },
 

@@ -31,6 +31,7 @@
   import Invoices from './pages/Invoices.svelte';
   import Settlements from './pages/Settlements.svelte';
   import Reconciliation from './pages/Reconciliation.svelte';
+  import Dispersion from './pages/Dispersion.svelte';
   import WorkOrders from './pages/WorkOrders.svelte';
   import Audit from './pages/Audit.svelte';
   import Branding from './pages/Branding.svelte';
@@ -72,6 +73,7 @@
     | 'invoices'
     | 'settlements'
     | 'reconciliation'
+    | 'dispersion'
     | 'workorders'
     | 'audit'
     | 'branding'
@@ -204,6 +206,7 @@
       case 'invoices':
       case 'settlements':
       case 'reconciliation':
+      case 'dispersion':
       case 'workorders':
       case 'audit':
       case 'branding':
@@ -323,6 +326,8 @@
       <Settlements />
     {:else if currentPage === 'reconciliation'}
       <Reconciliation />
+    {:else if currentPage === 'dispersion'}
+      <Dispersion />
     {:else if currentPage === 'workorders'}
       <WorkOrders />
     {:else if currentPage === 'audit'}

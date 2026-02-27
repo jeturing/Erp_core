@@ -400,6 +400,10 @@ async def get_current_user(request: Request):
     Obtiene información del usuario autenticado actual.
     """
     access_token = request.cookies.get("access_token")
+    if not access_token:
+        auth_header = request.headers.get("Authorization", "")
+        if auth_header.startswith("Bearer "):
+            access_token = auth_header[7:]
     
     if not access_token:
         raise HTTPException(

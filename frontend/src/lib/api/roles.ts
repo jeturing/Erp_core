@@ -29,6 +29,21 @@ export interface AvailableTenant {
   customer_id: number;
 }
 
+export interface AvailableUser {
+  id: number;
+  email: string;
+  display_name: string;
+  role: string;
+}
+
+export interface RoleUser {
+  id: number;
+  email: string;
+  display_name: string;
+  role: string;
+  is_active: boolean;
+}
+
 export interface Role {
   id: number;
   name: string;
@@ -39,6 +54,7 @@ export interface Role {
   updated_at?: string;
   color?: string;
   assigned_tenants?: number[];
+  assigned_users?: number[];
 }
 
 export interface RolesListResponse {
@@ -52,6 +68,7 @@ export interface RolePayload {
   permissions: string[];
   color?: string;
   assigned_tenants?: number[];
+  assigned_users?: number[];
 }
 
 export const rolesApi = {
@@ -81,5 +98,21 @@ export const rolesApi = {
 
   getAvailableTenants(): Promise<{ tenants: AvailableTenant[]; total: number }> {
     return api.get('/api/roles/available-tenants');
+  },
+
+  getAvailableUsers(): Promise<{ users: AvailableUser[]; total: number }> {
+    return api.get('/api/roles/available-users');
+  },
+
+  getRoleUsers(roleId: number): Promise<{ users: RoleUser[]; total: number; role_id: number }> {
+    return api.get(`/api/roles/${roleId}/users`);
+  },
+
+  assignUsers(roleId: number, userIds: number[]): Promise<{ success: boolean; role_id: number; assigned_users: number[] }> {
+    return api.post(`/api/roles/${roleId}/users`, { user_ids: userIds });
+  },
+
+  removeUser(roleId: number, userId: number): Promise<{ success: boolean; role_id: number; removed_user_id: number }> {
+    return api.delete(`/api/roles/${roleId}/users/${userId}`);
   },
 };

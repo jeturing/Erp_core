@@ -142,6 +142,12 @@
     }
   }
 
+  function tenantRowKey(tenant: Tenant, index: number): string {
+    const subdomain = tenant.subdomain || 'tenant';
+    const server = tenant.server_id || tenant.server || 'local';
+    return `${subdomain}:${server}:${tenant.id}:${index}`;
+  }
+
   let filteredTenants = $derived(
     tenants.filter(t => {
       // Text search
@@ -332,7 +338,7 @@
           </tr>
         </thead>
         <tbody>
-          {#each filteredTenants as tenant (tenant.id)}
+          {#each filteredTenants as tenant, i (tenantRowKey(tenant, i))}
             <tr>
               <td>
                 <div class="font-medium text-text-primary text-sm">{tenant.company_name ?? '-'}</div>

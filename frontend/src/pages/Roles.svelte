@@ -1,11 +1,12 @@
 <script lang="ts">
   import { onMount } from 'svelte';
   import { rolesApi } from '../lib/api';
-  import type { Role, PermissionModule, RolePreset, AvailableTenant } from '../lib/api/roles';
+  import type { Role, PermissionModule, RolePreset, AvailableTenant, AvailableUser } from '../lib/api/roles';
   import { toasts } from '../lib/stores/toast';
   import {
     Shield, Plus, Trash2, Edit3, X, ChevronDown, ChevronUp,
-    Copy, Lock, Building2, Users, Check, Sparkles, ToggleLeft, ToggleRight
+    Copy, Lock, Building2, Users, Check, Sparkles, ToggleLeft, ToggleRight,
+    UserPlus, UserMinus, Mail
   } from 'lucide-svelte';
 
   // ── State ──
@@ -13,6 +14,7 @@
   let permCatalog = $state<Record<string, PermissionModule>>({});
   let presets = $state<Record<string, RolePreset>>({});
   let availableTenants = $state<AvailableTenant[]>([]);
+  let availableUsers = $state<AvailableUser[]>([]);
   let loading = $state(true);
 
   // ── Modal state ──
@@ -26,6 +28,7 @@
   let formColor = $state('#6b7280');
   let formPermissions = $state<Set<string>>(new Set());
   let formTenants = $state<Set<number>>(new Set());
+  let formUsers = $state<Set<number>>(new Set());
   let editingRoleId = $state<number | null>(null);
 
   // ── UI toggles ──
@@ -33,11 +36,20 @@
   let showPresets = $state(false);
   let confirmDeleteId = $state<number | null>(null);
   let showTenantPicker = $state(false);
+  let showUserPicker = $state(false);
+  let userSearchQuery = $state('');
 
   // ── Derived ──
   let sortedModules = $derived(Object.entries(permCatalog));
   let totalPermsAvailable = $derived(
     Object.values(permCatalog).reduce((sum, m) => sum + Object.keys(m.permissions).length, 0)
+  );
+  let filteredUsers = $derived(
+    availableUsers.filter(u =>
+      !userSearchQuery ||
+      u.display_name.toLowerCase().includes(userSearchQuery.toLowerCase()) ||
+      u.email.toLowerCase().includes(userSearchQuery.toLowerCase())
+    )
   );
 
   const COLORS = [
@@ -50,16 +62,18 @@
   async function loadAll() {
     loading = true;
     try {
-      const [rolesRes, catalogRes, presetsRes, tenantsRes] = await Promise.all([
+      const [rolesRes, catalogRes, presetsRes, tenantsRes, usersRes] = await Promise.all([
         rolesApi.list(),
         rolesApi.getPermissionsCatalog(),
         rolesApi.getPresets(),
         rolesApi.getAvailableTenants(),
+        rolesApi.getAvailableUsers(),
       ]);
       roles = rolesRes.items ?? [];
       permCatalog = catalogRes.modules ?? {};
       presets = presetsRes.presets ?? {};
       availableTenants = tenantsRes.tenants ?? [];
+      availableUsers = usersRes.users ?? [];
     } catch (e: any) {
       toasts.error(e?.message ?? 'Error al cargar datos');
     } finally {
@@ -76,9 +90,12 @@
     formColor = '#6b7280';
     formPermissions = new Set();
     formTenants = new Set();
+    formUsers = new Set();
     expandedModules = new Set();
     showPresets = true;
     showTenantPicker = false;
+    showUserPicker = false;
+    userSearchQuery = '';
     showModal = true;
   }
 
@@ -90,9 +107,12 @@
     formColor = role.color ?? '#6b7280';
     formPermissions = new Set(role.permissions ?? []);
     formTenants = new Set(role.assigned_tenants ?? []);
+    formUsers = new Set(role.assigned_users ?? []);
     expandedModules = new Set();
     showPresets = false;
     showTenantPicker = false;
+    showUserPicker = false;
+    userSearchQuery = '';
     showModal = true;
   }
 
@@ -159,6 +179,20 @@
     formTenants = next;
   }
 
+  // ── User helpers ──
+  function toggleUser(id: number) {
+    const next = new Set(formUsers);
+    if (next.has(id)) next.delete(id);
+    else next.add(id);
+    formUsers = next;
+  }
+
+  function userNames(role: Role): string[] {
+    if (!role.assigned_users?.length) return [];
+    return role.assigned_users
+      .map(id => availableUsers.find(u => u.id === id)?.display_name ?? `#${id}`);
+  }
+
   // ── CRUD ──
   async function handleSave() {
     if (!formName.trim()) {
@@ -173,6 +207,7 @@
         permissions: Array.from(formPermissions),
         color: formColor,
         assigned_tenants: Array.from(formTenants),
+        assigned_users: Array.from(formUsers),
       };
       if (modalMode === 'create') {
         await rolesApi.create(payload);
@@ -258,6 +293,7 @@
     <div class="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-4">
       {#each roles as role (role.id)}
         {@const assignedNames = tenantNames(role)}
+        {@const assignedUserNames = userNames(role)}
         <div class="card relative overflow-hidden group">
           <!-- Color bar top -->
           <div class="absolute top-0 left-0 right-0 h-1" style="background:{role.color ?? '#6b7280'}"></div>
@@ -341,6 +377,24 @@
                   {/each}
                   {#if assignedNames.length > 3}
                     <span class="text-[9px] text-gray-500">+{assignedNames.length - 3}</span>
+                  {/if}
+                </div>
+              </div>
+            {/if}
+
+            <!-- Assigned Users -->
+            {#if assignedUserNames.length > 0}
+              <div class="border-t border-white/5 pt-2 mt-2">
+                <div class="flex items-center gap-1.5 mb-1">
+                  <Users size={11} class="text-gray-500" />
+                  <span class="text-[10px] text-gray-500 uppercase tracking-wide">Usuarios asignados</span>
+                </div>
+                <div class="flex flex-wrap gap-1">
+                  {#each assignedUserNames.slice(0, 3) as un}
+                    <span class="badge-neutral text-[9px]">{un}</span>
+                  {/each}
+                  {#if assignedUserNames.length > 3}
+                    <span class="text-[9px] text-gray-500">+{assignedUserNames.length - 3}</span>
                   {/if}
                 </div>
               </div>
@@ -573,6 +627,81 @@
                   </button>
                 {/each}
               </div>
+            {/if}
+          {/if}
+        </div>
+
+        <!-- ── User assignment ── -->
+        <div>
+          <button
+            class="flex items-center gap-2 text-xs text-gray-400 hover:text-white transition-colors mb-3"
+            onclick={() => { showUserPicker = !showUserPicker; userSearchQuery = ''; }}
+          >
+            <Users size={13} />
+            <span>Asignar usuarios al rol ({formUsers.size} seleccionados)</span>
+            {#if showUserPicker}<ChevronUp size={13} />{:else}<ChevronDown size={13} />{/if}
+          </button>
+          {#if showUserPicker}
+            {#if availableUsers.length === 0}
+              <p class="text-xs text-gray-500">No hay usuarios disponibles</p>
+            {:else}
+              <!-- Search -->
+              <div class="relative mb-3">
+                <input
+                  type="text"
+                  class="input w-full px-3 py-2 text-xs pl-8"
+                  placeholder="Buscar usuario por nombre o email..."
+                  bind:value={userSearchQuery}
+                />
+                <Users size={13} class="absolute left-2.5 top-1/2 -translate-y-1/2 text-gray-500 pointer-events-none" />
+              </div>
+              <div class="space-y-1.5 max-h-52 overflow-y-auto pr-1">
+                {#each filteredUsers as user}
+                  {@const selected = formUsers.has(user.id)}
+                  <button
+                    class="w-full flex items-center gap-3 p-2.5 rounded-lg border text-left transition-all
+                      {selected ? 'border-blue-500/40 bg-blue-500/10' : 'border-white/10 hover:border-white/20 hover:bg-white/5'}"
+                    onclick={() => toggleUser(user.id)}
+                  >
+                    <div class="w-7 h-7 rounded-full flex items-center justify-center shrink-0 text-xs font-bold
+                      {selected ? 'bg-blue-500/30 text-blue-300' : 'bg-white/5 text-gray-400'}">
+                      {user.display_name.charAt(0).toUpperCase()}
+                    </div>
+                    <div class="min-w-0 flex-1">
+                      <div class="text-xs font-medium truncate {selected ? 'text-white' : 'text-gray-300'}">{user.display_name}</div>
+                      <div class="text-[10px] text-gray-500 truncate flex items-center gap-1">
+                        <Mail size={9} />
+                        {user.email}
+                      </div>
+                    </div>
+                    <div class="shrink-0">
+                      {#if selected}
+                        <div class="w-5 h-5 rounded-full bg-blue-500/30 flex items-center justify-center">
+                          <Check size={11} class="text-blue-300" />
+                        </div>
+                      {/if}
+                    </div>
+                  </button>
+                {/each}
+                {#if filteredUsers.length === 0}
+                  <p class="text-xs text-gray-500 text-center py-3">Sin resultados para "{userSearchQuery}"</p>
+                {/if}
+              </div>
+              {#if formUsers.size > 0}
+                <div class="mt-2 flex flex-wrap gap-1">
+                  {#each Array.from(formUsers) as uid}
+                    {@const u = availableUsers.find(x => x.id === uid)}
+                    {#if u}
+                      <span class="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[10px] bg-blue-500/20 text-blue-300 border border-blue-500/30">
+                        {u.display_name}
+                        <button onclick={() => toggleUser(uid)} class="hover:text-white transition-colors ml-0.5">
+                          <X size={9} />
+                        </button>
+                      </span>
+                    {/if}
+                  {/each}
+                </div>
+              {/if}
             {/if}
           {/if}
         </div>
