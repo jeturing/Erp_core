@@ -195,7 +195,7 @@
               {activeTab === tab.key
                 ? 'text-[#C05A3C] border-[#C05A3C]'
                 : 'text-gray-500 border-transparent hover:text-gray-700 hover:border-gray-300'}"
-            on:click={() => switchTab(tab.key)}
+            on:click={() => switchTab(tab.key as typeof activeTab)}
           >
             <svelte:component this={tab.icon} class="w-4 h-4" />
             {tab.label}

@@ -1209,3 +1209,16 @@ export interface PricingSimulation {
   ecf_monthly_cost?: number | null;
   partner: string;
 }
+
+
+export interface Testimonial {
+  id: number;
+  name: string;
+  role: string;
+  company: string;
+  text: string;
+  avatar_url: string;
+  locale: string;
+  featured: boolean;
+  sort_order: number;
+}

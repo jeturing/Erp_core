@@ -3,6 +3,8 @@
  * Endpoints under /api/onboarding-config/
  */
 
+import type { ComponentType } from 'svelte';
+
 const BASE = '/api/onboarding-config';
 
 export interface OnboardingStep {
@@ -12,6 +14,7 @@ export interface OnboardingStep {
   required: boolean;
   visible: boolean;
   condition: { country_in?: string[] } | null;
+  icon?: ComponentType;
 }
 
 export interface PortalMenuItem {

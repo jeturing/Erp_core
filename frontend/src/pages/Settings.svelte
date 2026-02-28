@@ -606,7 +606,7 @@
     {/if}
 
   <!-- ═══════════ TAB: ODOO ═══════════ -->
-  {:else if activeTab === 'odoo'}
+  {:else if activeTab === 'Sajet'}
     <div class="card">
       <div class="flex items-center justify-between mb-5">
         <h3 class="section-heading">CONFIGURACIÓN Sajet</h3>

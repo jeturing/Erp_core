@@ -62,7 +62,7 @@ export const dispersionApi = {
   listPayouts: (status?: string): Promise<{ payouts: PayoutRequest[]; total: number }> =>
     api.get('/api/dispersion/payouts' + (status ? `?status=${status}` : '')),
 
-  createPayout: (body: CreatePayoutBody) =>
+  createPayout: (body: CreatePayoutBody): Promise<{ payout_id: number }> =>
     api.post('/api/dispersion/payouts/create', body),
 
   authorizePayout: (payout_id: number, authorization_note?: string) =>

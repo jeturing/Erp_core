@@ -67,7 +67,7 @@
         user_count: ncForm.user_count,
         partner_id: ncForm.partner_id ? Number(ncForm.partner_id) : undefined,
       });
-      const customerId = clientRes.id ?? clientRes.customer?.id;
+      const customerId = clientRes.id;
       // 2. Crear Work Order si hay blueprint
       if (customerId && selectedBlueprint) {
         await workOrdersApi.create({
