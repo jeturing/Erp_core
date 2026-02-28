@@ -59,6 +59,8 @@ class LoginResponse(BaseModel):
     requires_totp: bool = False
     requires_email_verify: bool = False
     redirect_url: Optional[str] = None
+    email: Optional[str] = None
+    email_domain: Optional[str] = None
 
 
 class TokenResponse(BaseModel):
@@ -263,10 +265,16 @@ async def secure_login(request: Request, login_data: LoginRequest):
         effective_user_id = user_id if user_id else 0  # 0 para admin
         if TOTPManager.is_enabled(effective_user_id):
             if not login_data.totp_code:
+                email_value = username if username and "@" in username else None
+                email_domain = (
+                    email_value.rsplit("@", 1)[1].strip().lower() if email_value and "@" in email_value else None
+                )
                 return LoginResponse(
                     message="Se requiere código 2FA",
                     role=role,
-                    requires_totp=True
+                    requires_totp=True,
+                    email=email_value,
+                    email_domain=email_domain,
                 )
             
             # Verificar código TOTP o código de respaldo
@@ -319,6 +327,12 @@ async def secure_login(request: Request, login_data: LoginRequest):
                     message="Código de verificación enviado a tu email",
                     role=role,
                     requires_email_verify=True,
+                    email=username if username and "@" in username else None,
+                    email_domain=(
+                        username.rsplit("@", 1)[1].strip().lower()
+                        if username and "@" in username
+                        else None
+                    ),
                 )
             else:
                 # Verify the code
@@ -335,6 +349,13 @@ async def secure_login(request: Request, login_data: LoginRequest):
 
         # Login exitoso - resetear rate limiter
         login_rate_limiter.reset(request)
+
+        email_value = username if username and "@" in username else None
+        email_domain = (
+            email_value.rsplit("@", 1)[1].strip().lower()
+            if email_value and "@" in email_value
+            else None
+        )
         
         # Crear tokens
         access_token = TokenManager.create_access_token(
@@ -367,6 +388,8 @@ async def secure_login(request: Request, login_data: LoginRequest):
             "requires_email_verify": False,
             "redirect_url": redirect_url,
             "user_id": user_id,
+            "email": email_value,
+            "email_domain": email_domain,
             "access_token": access_token,
             "token_type": "bearer"
         })

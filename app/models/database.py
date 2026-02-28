@@ -196,6 +196,8 @@ class AdminUserRole(enum.Enum):
     admin = "admin"
     operator = "operator"
     viewer = "viewer"
+    segrd_admin = "segrd-admin"
+    segrd_user = "segrd-user"
 
 
 class AdminUser(Base):
@@ -210,7 +212,15 @@ class AdminUser(Base):
     email = Column(String(200), unique=True, nullable=False, index=True)
     password_hash = Column(String(255), nullable=False)
     display_name = Column(String(200), nullable=False)
-    role = Column(Enum(AdminUserRole), default=AdminUserRole.admin, nullable=False)
+    role = Column(
+        Enum(
+            AdminUserRole,
+            name="adminuserrole",
+            values_callable=lambda enum_cls: [member.value for member in enum_cls],
+        ),
+        default=AdminUserRole.admin.value,
+        nullable=False,
+    )
     is_active = Column(Boolean, default=True, nullable=False)
     require_email_verify = Column(Boolean, default=False, nullable=False)
     last_login_at = Column(DateTime, nullable=True)

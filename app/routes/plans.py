@@ -26,6 +26,11 @@ def _verify_admin(request: Request, token: str = None):
     verify_token_with_role(token, required_role="admin")
 
 
+def _quota_or_default(value: Optional[int], default: int) -> int:
+    """Normaliza cuotas legacy nulas hacia valores por defecto esperados por UI/API."""
+    return default if value is None else int(value)
+
+
 # DTOs
 class PlanCreate(BaseModel):
     name: str
@@ -106,12 +111,12 @@ async def list_plans(
                 "price_per_user": p.price_per_user,
                 "included_users": p.included_users,
                 "max_users": p.max_users,
-                "max_domains": p.max_domains,
-                "max_storage_mb": p.max_storage_mb,
-                "max_websites": p.max_websites,
-                "max_companies": p.max_companies,
-                "max_backups": p.max_backups,
-                "max_api_calls_day": p.max_api_calls_day,
+                "max_domains": _quota_or_default(p.max_domains, 0),
+                "max_storage_mb": _quota_or_default(p.max_storage_mb, 0),
+                "max_websites": _quota_or_default(p.max_websites, 1),
+                "max_companies": _quota_or_default(p.max_companies, 1),
+                "max_backups": _quota_or_default(p.max_backups, 0),
+                "max_api_calls_day": _quota_or_default(p.max_api_calls_day, 0),
                 "currency": p.currency,
                 "stripe_price_id": p.stripe_price_id,
                 "stripe_product_id": p.stripe_product_id,
@@ -192,7 +197,7 @@ async def update_plan(
         if not plan:
             raise HTTPException(status_code=404, detail="Plan no encontrado")
 
-        update_data = payload.dict(exclude_unset=True)
+        update_data = payload.model_dump(exclude_unset=True)
         for key, value in update_data.items():
             setattr(plan, key, value)
 

@@ -263,6 +263,75 @@ def _list_databases_via_postgres(server_id: Optional[str]) -> List[str]:
         return []
 
 
+async def _verify_remote_tenant_absence(
+    subdomain: str,
+    server_id: Optional[str],
+) -> dict:
+    """
+    Verifica de forma estricta si la BD del tenant sigue existiendo en PostgreSQL remoto.
+    Retorna:
+      - exists: True/False
+      - verified: si al menos un servidor pudo ser consultado
+      - errors: lista de errores por servidor
+      - server_id: id donde se encontró (si aplica)
+    """
+    normalized = (subdomain or "").strip().lower()
+    servers_to_check = []
+
+    if server_id:
+        server = ODOO_SERVERS.get(server_id)
+        if not server:
+            return {
+                "exists": False,
+                "verified": False,
+                "errors": [f"Servidor '{server_id}' no encontrado"],
+                "server_id": None,
+            }
+        servers_to_check = [server]
+    else:
+        servers_to_check = list(ODOO_SERVERS.values())
+
+    db_port = int(os.getenv("ODOO_DB_PORT", "5432"))
+    verified = False
+    errors: List[str] = []
+
+    for server in servers_to_check:
+        if not server:
+            continue
+        try:
+            with psycopg.connect(
+                host=server.ip,
+                port=db_port,
+                dbname="postgres",
+                user=ODOO_DB_USER,
+                password=ODOO_DB_PASSWORD,
+                connect_timeout=5,
+            ) as conn:
+                with conn.cursor() as cur:
+                    cur.execute(
+                        "SELECT 1 FROM pg_database WHERE datname = %s LIMIT 1",
+                        (normalized,),
+                    )
+                    exists = cur.fetchone() is not None
+                    verified = True
+                    if exists:
+                        return {
+                            "exists": True,
+                            "verified": True,
+                            "errors": errors,
+                            "server_id": server.id,
+                        }
+        except Exception as check_err:
+            errors.append(f"{server.id}: {check_err}")
+
+    return {
+        "exists": False,
+        "verified": verified,
+        "errors": errors,
+        "server_id": None,
+    }
+
+
 async def get_all_tenants_from_local_db():
     """Obtiene tenants desde la BD local como fallback cuando Odoo no responde."""
     items = []
@@ -406,16 +475,46 @@ async def create_tenant(
     finally:
         db.close()
     try:
-        # Usar método rápido por defecto
+        creation_mode: Optional[str] = None
+        fallback_reason: Optional[str] = None
+
+        # Usar método rápido por defecto con fallback automático
         if payload.use_fast_method:
-            # Método SQL directo - más rápido (duplica template_tenant)
-            result = await create_tenant_from_template(
+            fast_result = await create_tenant_from_template(
                 subdomain=payload.subdomain,
                 company_name=payload.company_name,
                 server_id=payload.server_id,
                 admin_login=payload.admin_email,
                 admin_password=payload.admin_password,
             )
+            fast_error_code = str(fast_result.get("error_code") or "")
+
+            # Si fast path falla por causas recuperables, usar ruta estándar automáticamente
+            recoverable_fast_failures = {
+                "template_missing",
+                "template_check_failed",
+                "proxmox_ssh_unavailable",
+                "fast_path_unavailable",
+            }
+            if not fast_result.get("success") and fast_error_code in recoverable_fast_failures:
+                fallback_reason = fast_result.get("error") or "Fast path no disponible"
+                logger.warning(
+                    f"Fast path falló para '{payload.subdomain}' ({fast_error_code}). "
+                    f"Aplicando fallback estándar. Detalle: {fallback_reason}"
+                )
+                result = await provision_tenant(
+                    subdomain=payload.subdomain,
+                    admin_login=payload.admin_email or DEFAULT_ADMIN_LOGIN,
+                    admin_password=payload.admin_password or DEFAULT_ADMIN_PASSWORD,
+                    server_id=payload.server_id,
+                    demo=False,
+                    lang="es_MX"
+                )
+                creation_mode = "fallback_standard"
+            else:
+                result = fast_result
+                if result.get("success"):
+                    creation_mode = "fast"
         else:
             # Método tradicional via HTTP API de Odoo
             result = await provision_tenant(
@@ -426,6 +525,7 @@ async def create_tenant(
                 demo=False,
                 lang="es_MX"
             )
+            creation_mode = "fallback_standard"
         
         if result.get("success"):
             already_existed = result.get("already_existed", False)
@@ -506,7 +606,7 @@ async def create_tenant(
                     logger.warning(f"⚠️ Error provisionando nginx: {ng_err}")
                     result["nginx_provisioned"] = False
 
-            return {
+            response_payload = {
                 "success": True,
                 "already_existed": already_existed,
                 "message": f"Tenant '{payload.subdomain}' {status_msg} exitosamente",
@@ -519,6 +619,11 @@ async def create_tenant(
                 },
                 "details": result
             }
+            if creation_mode:
+                response_payload["creation_mode"] = creation_mode
+            if fallback_reason:
+                response_payload["fallback_reason"] = fallback_reason
+            return response_payload
         else:
             error_msg = result.get("error", "Error creando tenant")
             # Si el error indica que ya existe, dar 409 (no 400)
@@ -608,6 +713,20 @@ async def delete_tenant_endpoint(
         result = await delete_tenant(subdomain, server_id)
         deleted_remote = bool(result.get("success"))
 
+        # 4.1) Verificar estrictamente que la BD ya no exista en remoto.
+        verification = await _verify_remote_tenant_absence(subdomain, server_id)
+        if verification.get("exists"):
+            srv = verification.get("server_id") or "servidor remoto"
+            raise HTTPException(
+                status_code=409,
+                detail=f"No se confirmó eliminación remota. La BD '{subdomain}' aún existe en {srv}",
+            )
+        if not verification.get("verified"):
+            detail = "No se pudo verificar la eliminación remota"
+            if verification.get("errors"):
+                detail = f"{detail}: {'; '.join(verification['errors'])}"
+            raise HTTPException(status_code=503, detail=detail)
+
         # 5) Limpiar nginx solo si se eliminó la BD remota
         if deleted_remote:
             try:
@@ -625,6 +744,7 @@ async def delete_tenant_endpoint(
                 "local_deleted": local_deleted,
                 "backup": backup_result,
                 "email": email_result,
+                "verified_remote_absence": True,
             }
 
         # Si la BD remota no existe pero el registro local sí se limpió, tratar como éxito parcial
@@ -638,6 +758,7 @@ async def delete_tenant_endpoint(
                 "local_deleted": local_deleted,
                 "backup": backup_result,
                 "email": email_result,
+                "verified_remote_absence": True,
             }
 
         # Si no existe en local ni remoto, devolver 404

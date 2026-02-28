@@ -33,9 +33,39 @@ ODOO_SERVERS = {
     }
 }
 
+SERVER_ALIASES = {
+    "primary": "primary",
+    "pct-105": "primary",
+    "pct105": "primary",
+    "servidor principal (pct 105)": "primary",
+    "servidor principal pct 105": "primary",
+    "srv-odoo-server": "primary",
+}
+
 # Cloudflare zones — from env via config.py
 CF_API_TOKEN = CLOUDFLARE_API_TOKEN
 CF_ZONES = CLOUDFLARE_ZONES
+
+
+def _normalize_server_key(raw_server: Optional[str]) -> str:
+    if not raw_server:
+        return "primary"
+    normalized = raw_server.strip().lower()
+    if normalized in ODOO_SERVERS:
+        return normalized
+    return SERVER_ALIASES.get(normalized, normalized)
+
+
+def _resolve_server_config(raw_server: Optional[str]) -> tuple[str, dict]:
+    server_key = _normalize_server_key(raw_server)
+    server_config = ODOO_SERVERS.get(server_key)
+    if not server_config:
+        supported = ", ".join(sorted(ODOO_SERVERS.keys()))
+        raise HTTPException(
+            status_code=400,
+            detail=f"Servidor '{raw_server}' no existe. Soportados: {supported}",
+        )
+    return server_key, server_config
 
 
 # DTOs
@@ -221,9 +251,7 @@ async def provision_tenant(
         raise HTTPException(status_code=401, detail="API key inválida")
     
     # Validar servidor
-    server_config = ODOO_SERVERS.get(request.server)
-    if not server_config:
-        raise HTTPException(status_code=400, detail=f"Servidor '{request.server}' no encontrado")
+    server_key, server_config = _resolve_server_config(request.server)
     
     # Validar dominio
     if request.domain not in CF_ZONES:
@@ -251,7 +279,7 @@ async def provision_tenant(
         message=f"Tenant {subdomain} creado exitosamente",
         database=result.get("database", subdomain),
         dns_created=result.get("dns_created", False),
-        server=request.server
+        server=server_key
     )
 
 
@@ -372,15 +400,13 @@ async def change_tenant_password(
     if x_api_key != PROVISIONING_API_KEY:
         raise HTTPException(status_code=401, detail="API key inválida")
     
-    server_config = ODOO_SERVERS.get(request.server)
-    if not server_config:
-        raise HTTPException(status_code=400, detail=f"Servidor {request.server} no existe")
+    server_key, server_config = _resolve_server_config(request.server)
     
     try:
         subdomain = request.subdomain.lower()
         new_password = request.new_password
         
-        logger.info(f"Cambiando contraseña para tenant: {subdomain}")
+        logger.info(f"Cambiando contraseña para tenant: {subdomain} (server={server_key})")
         
         # Intentar conectar directamente a PostgreSQL
         try:
@@ -455,10 +481,7 @@ async def suspend_tenant(
     if x_api_key != PROVISIONING_API_KEY:
         raise HTTPException(status_code=401, detail="API key inválida")
     
-    server_key = request.server if request.server in ODOO_SERVERS else "primary"
-    server_config = ODOO_SERVERS.get(server_key)
-    if not server_config:
-        raise HTTPException(status_code=400, detail=f"Servidor {server_key} no existe")
+    server_key, server_config = _resolve_server_config(request.server)
     
     try:
         subdomain = request.subdomain.lower()

@@ -17,6 +17,7 @@ export interface CreateTenantRequest {
 export interface ChangeTenantPasswordRequest {
   subdomain: string;
   new_password: string;
+  server_id?: string;
   server?: string;
 }
 
@@ -24,6 +25,7 @@ export interface SuspendTenantRequest {
   subdomain: string;
   suspend: boolean;
   reason?: string;
+  server_id?: string;
   server?: string;
 }
 
@@ -36,11 +38,12 @@ export const tenantsApi = {
     return api.post('/api/tenants', payload);
   },
 
-  async delete(subdomain: string, confirmName: string): Promise<{ success: boolean; message: string }> {
+  async delete(subdomain: string, confirmName: string, serverId?: string): Promise<{ success: boolean; message: string }> {
     const qs = new URLSearchParams({
       confirm: 'true',
       confirm_name: confirmName,
     });
+    if (serverId) qs.set('server_id', serverId);
     return api.delete(`/api/tenants/${encodeURIComponent(subdomain)}?${qs.toString()}`);
   },
 
@@ -50,7 +53,7 @@ export const tenantsApi = {
       {
         subdomain: payload.subdomain,
         new_password: payload.new_password,
-        server: payload.server || 'primary',
+        server: payload.server_id || payload.server || 'primary',
       },
       { 'X-API-KEY': PROVISIONING_API_KEY },
     );
@@ -63,7 +66,7 @@ export const tenantsApi = {
         subdomain: payload.subdomain,
         suspend: payload.suspend,
         reason: payload.reason || (payload.suspend ? 'Suspension manual desde admin SPA' : 'Reactivacion manual desde admin SPA'),
-        server: payload.server || 'primary',
+        server: payload.server_id || payload.server || 'primary',
       },
       { 'X-API-KEY': PROVISIONING_API_KEY },
     );

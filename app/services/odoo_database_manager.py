@@ -964,10 +964,47 @@ async def create_tenant_from_template(
     
     pct_id = server.pct_id
     
+    def _fast_error(code: str, message: str, raw: Optional[str] = None) -> Dict[str, Any]:
+        payload: Dict[str, Any] = {
+            "success": False,
+            "error": message,
+            "error_code": code,
+        }
+        if raw:
+            payload["raw_error"] = raw
+        return payload
+
+    def _classify_fast_path_error(raw_error: str) -> str:
+        text = (raw_error or "").lower()
+        if "template" in text and ("no existe" in text or "does not exist" in text):
+            return "template_missing"
+        if (
+            "cannot import name 'proxmox_ssh_host'" in text
+            or 'cannot import name "proxmox_ssh_host"' in text
+            or "permission denied" in text
+            or "ssh:" in text
+            or "timeout ssh" in text
+            or "pct exec" in text
+            or "pct shell" in text
+        ):
+            return "proxmox_ssh_unavailable"
+        if (
+            "authentication failed" in text
+            or "connection failed" in text
+            or "could not connect" in text
+            or "timeout" in text
+        ):
+            return "template_check_failed"
+        return "fast_path_unavailable"
+
     try:
         # 1. Verificar si ya existe
         check_sql = f"SELECT 1 FROM pg_database WHERE datname = '{subdomain}'"
         success, output = _run_pct_sql(pct_id, "postgres", check_sql)
+        if not success:
+            code = _classify_fast_path_error(output)
+            msg = "Fast path no disponible para validar existencia del tenant"
+            return _fast_error(code, msg, output)
         if "1" in output:
             # BD ya existe — verificar si es funcional (tiene tabla res_company)
             verify_sql = "SELECT name FROM res_company WHERE id = 1 LIMIT 1"
@@ -1000,8 +1037,14 @@ async def create_tenant_from_template(
         # 2. Verificar template existe
         check_template = f"SELECT 1 FROM pg_database WHERE datname = '{TEMPLATE_DB}'"
         success, output = _run_pct_sql(pct_id, "postgres", check_template)
+        if not success:
+            return _fast_error(
+                "template_check_failed",
+                f"No se pudo validar el template '{TEMPLATE_DB}'",
+                output,
+            )
         if "1" not in output:
-            return {"success": False, "error": f"Template '{TEMPLATE_DB}' no existe"}
+            return _fast_error("template_missing", f"Template '{TEMPLATE_DB}' no existe")
         
         logger.info(f"Creando tenant '{subdomain}' desde template...")
         
@@ -1028,7 +1071,8 @@ async def create_tenant_from_template(
             logger.info(f"BD '{subdomain}' creada exitosamente")
         except Exception as e:
             logger.error(f"Error creando BD: {e}")
-            return {"success": False, "error": f"Error duplicando BD: {str(e)}"}
+            code = _classify_fast_path_error(str(e))
+            return _fast_error(code, f"Error duplicando BD: {str(e)}")
         
         logger.info(f"BD '{subdomain}' duplicada, copiando filestore...")
         
@@ -1088,7 +1132,8 @@ async def create_tenant_from_template(
         
     except Exception as e:
         logger.exception(f"Error creando tenant: {e}")
-        return {"success": False, "error": str(e)}
+        code = _classify_fast_path_error(str(e))
+        return _fast_error(code, str(e))
 
 
 async def create_tenant_api(

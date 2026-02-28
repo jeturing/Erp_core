@@ -40,7 +40,7 @@ class AdminUserCreate(BaseModel):
     email: str
     password: str
     display_name: str
-    role: str = "admin"  # admin | operator | viewer
+    role: str = "admin"  # admin | operator | viewer | segrd-admin | segrd-user
     notes: Optional[str] = None
 
 
@@ -116,7 +116,13 @@ async def create_admin_user(payload: AdminUserCreate, request: Request):
         try:
             role_enum = AdminUserRole(payload.role)
         except ValueError:
-            raise HTTPException(status_code=400, detail=f"Rol inválido: {payload.role}. Valores válidos: admin, operator, viewer")
+            raise HTTPException(
+                status_code=400,
+                detail=(
+                    f"Rol inválido: {payload.role}. "
+                    "Valores válidos: admin, operator, viewer, segrd-admin, segrd-user"
+                ),
+            )
 
         # Hash password
         pw_hash = bcrypt.hashpw(payload.password.encode(), bcrypt.gensalt()).decode()

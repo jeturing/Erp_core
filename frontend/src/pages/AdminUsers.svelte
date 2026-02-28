@@ -16,7 +16,7 @@
   let formEmail = $state('');
   let formDisplayName = $state('');
   let formPassword = $state('');
-  let formRole = $state<'admin' | 'operator' | 'viewer'>('admin');
+  let formRole = $state<'admin' | 'operator' | 'viewer' | 'segrd-admin' | 'segrd-user'>('admin');
   let formNotes = $state('');
   let formLoading = $state(false);
 
@@ -29,18 +29,24 @@
     admin: 'Administrador',
     operator: 'Operador',
     viewer: 'Visor',
+    'segrd-admin': 'SEGRD Admin',
+    'segrd-user': 'SEGRD User',
   };
 
   const roleIcons: Record<string, any> = {
     admin: Shield,
     operator: Wrench,
     viewer: Eye,
+    'segrd-admin': Shield,
+    'segrd-user': UserCheck,
   };
 
   const roleColors: Record<string, string> = {
     admin: 'bg-terracotta/20 text-terracotta',
     operator: 'bg-blue-500/20 text-blue-400',
     viewer: 'bg-gray-500/20 text-gray-400',
+    'segrd-admin': 'bg-emerald-500/20 text-emerald-300',
+    'segrd-user': 'bg-cyan-500/20 text-cyan-300',
   };
 
   async function loadUsers() {
@@ -343,6 +349,8 @@
             <option value="admin">👑 Administrador — acceso total</option>
             <option value="operator">🔧 Operador — operación diaria</option>
             <option value="viewer">👁️ Visor — solo lectura</option>
+            <option value="segrd-admin">🛡️ SEGRD Admin — integración SEGRD</option>
+            <option value="segrd-user">👤 SEGRD User — integración SEGRD</option>
           </select>
         </div>
 

@@ -4,7 +4,7 @@ export interface AdminUserItem {
   id: number;
   email: string;
   display_name: string;
-  role: 'admin' | 'operator' | 'viewer';
+  role: 'admin' | 'operator' | 'viewer' | 'segrd-admin' | 'segrd-user';
   is_active: boolean;
   last_login_at: string | null;
   login_count: number;
@@ -32,7 +32,7 @@ export const adminUsersApi = {
     email: string;
     password: string;
     display_name: string;
-    role: string;
+    role: 'admin' | 'operator' | 'viewer' | 'segrd-admin' | 'segrd-user';
     notes?: string;
   }): Promise<AdminUserItem> {
     return api.post<AdminUserItem>('/api/admin-users', data);
@@ -40,7 +40,7 @@ export const adminUsersApi = {
 
   async update(id: number, data: {
     display_name?: string;
-    role?: string;
+    role?: 'admin' | 'operator' | 'viewer' | 'segrd-admin' | 'segrd-user';
     is_active?: boolean;
     notes?: string;
     new_password?: string;
