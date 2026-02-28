@@ -13,6 +13,7 @@ from ..services.odoo_database_manager import (
     provision_tenant,
     delete_tenant,
     backup_tenant,
+    is_tenant_protected,
     create_tenant_from_template,
     create_tenant_api,
     OdooDatabaseManager,
@@ -560,6 +561,8 @@ async def delete_tenant_endpoint(
             status_code=400,
             detail=f"Confirmación inválida. Debe escribir exactamente '{subdomain}'"
         )
+    if is_tenant_protected(subdomain):
+        raise HTTPException(status_code=403, detail=f"'{subdomain}' está protegido y no puede eliminarse")
     
     try:
         # 1) Eliminar primero registro local (BDA), conservando datos para respaldo/email

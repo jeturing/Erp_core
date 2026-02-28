@@ -7,6 +7,7 @@ import logging
 import subprocess
 import shlex
 import os
+import shutil
 from pathlib import Path
 from typing import Dict, Any, List, Optional
 from datetime import datetime
@@ -126,6 +127,18 @@ ODOO_SERVERS: Dict[str, OdooServer] = {
     #     region="secondary"
     # ),
 }
+
+def _load_protected_tenants() -> set[str]:
+    """Lista de tenants protegidos para evitar borrados accidentales."""
+    raw = os.getenv("PROTECTED_TENANTS", "cliente1,tcs")
+    return {item.strip().lower() for item in raw.split(",") if item.strip()}
+
+
+PROTECTED_TENANTS = _load_protected_tenants()
+
+
+def is_tenant_protected(subdomain: str) -> bool:
+    return subdomain.strip().lower() in PROTECTED_TENANTS
 
 
 class OdooDatabaseManager:
@@ -496,8 +509,14 @@ class OdooDatabaseManager:
 
             env = os.environ.copy()
             env["PGPASSWORD"] = DEFAULT_DB_PASSWORD
+            # erp-core.service define PATH solo al venv; incluir rutas del sistema para pg_dump
+            env["PATH"] = f"{env.get('PATH', '')}:/usr/bin:/bin:/usr/lib/postgresql/15/bin"
+            pg_dump_bin = shutil.which("pg_dump", path=env["PATH"])
+            if not pg_dump_bin:
+                return {"success": False, "error": "pg_dump no está disponible en el servidor API"}
+
             cmd = [
-                "pg_dump",
+                pg_dump_bin,
                 "-h", DEFAULT_DB_HOST,
                 "-p", str(DEFAULT_DB_PORT),
                 "-U", DEFAULT_DB_USER,
@@ -758,8 +777,7 @@ async def delete_tenant(subdomain: str, server_id: Optional[str] = None) -> Dict
     """Elimina un tenant"""
     
     # Proteger tenants importantes
-    protected = ['cliente1', 'tcs', 'demo_cliente']
-    if subdomain.lower() in protected:
+    if is_tenant_protected(subdomain):
         return {"success": False, "error": f"'{subdomain}' está protegido y no puede eliminarse"}
     
     # Buscar en qué servidor está
