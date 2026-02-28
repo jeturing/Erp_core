@@ -27,6 +27,7 @@
     "workbox-window": "^7.4.0"
   },
   "dependencies": {
+    "@sentry/svelte": "^10.40.0",
     "lucide-svelte": "^0.563.0",
     "svelte-i18n": "^4.0.1"
   },

@@ -1,5 +1,20 @@
 {
   "mcpServers": {
+    "stitch": {
+      "type": "http",
+      "url": "https://stitch.googleapis.com/mcp",
+      "headers": {
+        "X-Goog-Api-Key": "AQ.Ab8RN6J4LrZhX-jN8doN2nfeL3h5DU2bYIOLbift9mHhzgtsEQ"
+      }
+    },
+    "filesystem-workspace": {
+      "command": "npx",
+      "args": [
+        "-y",
+        "@modelcontextprotocol/server-filesystem",
+        "/opt"
+      ]
+    },
     "onboarding-api": {
       "command": "node",
       "args": ["/opt/onboarding-system/mcp/api-server.js"],
