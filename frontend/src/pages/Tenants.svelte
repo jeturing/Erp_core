@@ -310,11 +310,11 @@
           </div>
           <div>
             <label class="label" for="f-password">Contraseña</label>
-            <input id="f-password" class="input w-full px-3 py-2" type="password" bind:value={formPassword} placeholder="••••••••" required />
+            <input id="f-password" class="input w-full px-3 py-2" type="password" autocomplete="new-password" bind:value={formPassword} placeholder="••••••••" required />
           </div>
           <div>
             <label class="label" for="f-confirm">Confirmar contraseña</label>
-            <input id="f-confirm" class="input w-full px-3 py-2" type="password" bind:value={formConfirmPassword} placeholder="••••••••" required />
+            <input id="f-confirm" class="input w-full px-3 py-2" type="password" autocomplete="new-password" bind:value={formConfirmPassword} placeholder="••••••••" required />
           </div>
         </div>
         <div class="flex gap-3 pt-2">

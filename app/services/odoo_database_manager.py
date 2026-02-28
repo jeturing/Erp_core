@@ -237,39 +237,33 @@ class OdooDatabaseManager:
             
             logger.info(f"Creando BD '{db_name}' en {self.server.name}...")
             
-            # Llamar al endpoint de creación de Odoo
+            # Odoo /web/database/create espera campos del formulario (x-www-form-urlencoded),
+            # no JSON-RPC.
             payload = {
-                "jsonrpc": "2.0",
-                "method": "call",
-                "params": {
-                    "master_pwd": self.master_password,
-                    "name": db_name,
-                    "login": admin_login,
-                    "password": admin_password,
-                    "lang": lang,
-                    "country_code": country_code,
-                    "phone": "",
-                },
-                "id": None
+                "master_pwd": self.master_password,
+                "name": db_name,
+                "login": admin_login,
+                "password": admin_password,
+                "lang": lang,
+                "country_code": country_code,
+                "phone": "",
             }
             
             response = await self.client.post(
                 f"{self.server.base_url}/web/database/create",
-                json=payload,
+                data=payload,
                 timeout=600.0  # 10 min para creación
             )
             
             if response.status_code == 200:
-                data = response.json()
-                
-                if "error" in data:
-                    error_msg = data["error"].get("data", {}).get("message", str(data["error"]))
-                    logger.error(f"Error creando BD: {error_msg}")
-                    return {
-                        "success": False,
-                        "error": error_msg,
-                        "error_type": "odoo_error"
-                    }
+                body_lower = (response.text or "").lower()
+                if "database creation error" in body_lower or "access denied" in body_lower:
+                    if "database manager has been disabled" in body_lower:
+                        msg = "Odoo DB manager deshabilitado o master password inválido"
+                    else:
+                        msg = "Odoo rechazó la creación de BD (Access Denied)"
+                    logger.error(f"Error creando BD: {msg}")
+                    return {"success": False, "error": msg, "error_type": "odoo_access_denied"}
                 
                 logger.info(f"✅ BD '{db_name}' creada exitosamente")
                 
@@ -289,7 +283,7 @@ class OdooDatabaseManager:
             else:
                 return {
                     "success": False,
-                    "error": f"HTTP {response.status_code}: {response.text}",
+                    "error": f"HTTP {response.status_code}: {(response.text or '')[:400]}",
                     "error_type": "http_error"
                 }
                 
@@ -363,25 +357,22 @@ class OdooDatabaseManager:
             
             response = await self.client.post(
                 f"{self.server.base_url}/web/database/duplicate",
-                json={
-                    "jsonrpc": "2.0",
-                    "params": {
-                        "master_pwd": self.master_password,
-                        "name": source_db,
-                        "new_name": new_db_name
-                    }
+                data={
+                    "master_pwd": self.master_password,
+                    "name": source_db,
+                    "new_name": new_db_name
                 },
                 timeout=600.0
             )
             
             if response.status_code == 200:
-                data = response.json()
-                
-                if "error" in data:
-                    return {
-                        "success": False,
-                        "error": data["error"].get("data", {}).get("message", str(data["error"]))
-                    }
+                body_lower = (response.text or "").lower()
+                if "database duplication error" in body_lower or "access denied" in body_lower:
+                    if "database manager has been disabled" in body_lower:
+                        msg = "Odoo DB manager deshabilitado o master password inválido"
+                    else:
+                        msg = "Odoo rechazó la duplicación de BD (Access Denied)"
+                    return {"success": False, "error": msg, "error_type": "odoo_access_denied"}
                 
                 # Actualizar credenciales y configuración
                 await self._reset_database_after_duplicate(new_db_name, admin_login, admin_password)
@@ -402,7 +393,8 @@ class OdooDatabaseManager:
             else:
                 return {
                     "success": False,
-                    "error": f"HTTP {response.status_code}"
+                    "error": f"HTTP {response.status_code}: {(response.text or '')[:400]}",
+                    "error_type": "http_error"
                 }
                 
         except Exception as e:
@@ -727,6 +719,22 @@ async def provision_tenant(
                 admin_login=admin_login,
                 admin_password=admin_password
             )
+            # Fallback robusto: cuando Odoo DB manager está deshabilitado o falla por master password,
+            # usar ruta SQL directa desde template (no depende de /web/database/*).
+            if not result.get("success"):
+                logger.warning(
+                    f"duplicate_database falló para '{subdomain}' en {server.id}: "
+                    f"{result.get('error')}. Intentando fallback SQL directo."
+                )
+                direct_result = await create_tenant_from_template(
+                    subdomain=subdomain,
+                    company_name=company_name,
+                    server_id=server.id,
+                    admin_login=admin_login,
+                    admin_password=admin_password,
+                )
+                if direct_result.get("success"):
+                    result = direct_result
         else:
             result = await manager.create_database(
                 db_name=subdomain,
@@ -845,12 +853,40 @@ async def get_servers_status() -> Dict[str, Any]:
 
 def _run_pct_sql(pct_id: int, database: str, sql: str, timeout: int = 60) -> tuple:
     """
-    Ejecuta SQL en PostgreSQL de Odoo (10.10.10.137) via:
-      LXC 160  →SSH→  Proxmox host  →pct exec 105→  psql -h 10.10.10.137
-    
-    Esto garantiza que el SQL corra en el contexto correcto del LXC de Odoo.
-    Para queries de administración de BD (CREATE DATABASE etc.) se usa psycopg2 directo.
+    Ejecuta SQL con preferencia por conexión directa PostgreSQL.
+    Si falla, usa fallback legacy SSH→pct exec.
     """
+    # Fast path: conexión directa a PostgreSQL (evita dependencia de SSH/proxmox).
+    try:
+        import psycopg2
+        conn = psycopg2.connect(
+            host=DEFAULT_DB_HOST,
+            port=DEFAULT_DB_PORT,
+            dbname=database,
+            user=DEFAULT_DB_USER,
+            password=DEFAULT_DB_PASSWORD,
+            connect_timeout=10,
+        )
+        conn.autocommit = True
+        cur = conn.cursor()
+        cur.execute(sql)
+
+        output = ""
+        if cur.description:
+            rows = cur.fetchall()
+            output = "\n".join(
+                "|".join("" if c is None else str(c) for c in row)
+                for row in rows
+            )
+        else:
+            output = "OK"
+
+        cur.close()
+        conn.close()
+        return True, output
+    except Exception as direct_err:
+        logger.warning(f"_run_pct_sql directo falló, usando fallback SSH→pct: {direct_err}")
+
     try:
         from ..config import PROXMOX_SSH_HOST, PROXMOX_SSH_USER, PROXMOX_SSH_KEY
         # Escapar SQL para pasar por shell remota doble (SSH → pct exec → bash)
@@ -863,6 +899,7 @@ def _run_pct_sql(pct_id: int, database: str, sql: str, timeout: int = 60) -> tup
         cmd = [
             'ssh', '-i', PROXMOX_SSH_KEY,
             '-o', 'StrictHostKeyChecking=no',
+            '-o', 'IdentitiesOnly=yes',
             '-o', 'ConnectTimeout=10',
             f'{PROXMOX_SSH_USER}@{PROXMOX_SSH_HOST}',
             remote_cmd
@@ -887,6 +924,7 @@ def _run_pct_shell(pct_id: int, bash_cmd: str, timeout: int = 60) -> tuple:
         cmd = [
             'ssh', '-i', PROXMOX_SSH_KEY,
             '-o', 'StrictHostKeyChecking=no',
+            '-o', 'IdentitiesOnly=yes',
             '-o', 'ConnectTimeout=10',
             f'{PROXMOX_SSH_USER}@{PROXMOX_SSH_HOST}',
             remote_cmd
