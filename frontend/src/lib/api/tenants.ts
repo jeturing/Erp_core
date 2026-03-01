@@ -29,6 +29,13 @@ export interface SuspendTenantRequest {
   server?: string;
 }
 
+export interface UpdateTenantEmailRequest {
+  subdomain: string;
+  new_email: string;
+  server_id?: string;
+  server?: string;
+}
+
 export const tenantsApi = {
   async list(): Promise<TenantListResponse> {
     return api.get<TenantListResponse>('/api/tenants');
@@ -66,6 +73,18 @@ export const tenantsApi = {
         subdomain: payload.subdomain,
         suspend: payload.suspend,
         reason: payload.reason || (payload.suspend ? 'Suspension manual desde admin SPA' : 'Reactivacion manual desde admin SPA'),
+        server: payload.server_id || payload.server || 'primary',
+      },
+      { 'X-API-KEY': PROVISIONING_API_KEY },
+    );
+  },
+
+  async updateEmail(payload: UpdateTenantEmailRequest): Promise<{ success: boolean; message: string }> {
+    return api.put(
+      '/api/provisioning/tenant/email',
+      {
+        subdomain: payload.subdomain,
+        new_email: payload.new_email,
         server: payload.server_id || payload.server || 'primary',
       },
       { 'X-API-KEY': PROVISIONING_API_KEY },

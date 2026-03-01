@@ -16,6 +16,7 @@ from ..config import (
     ODOO_PRIMARY_IP, ODOO_PRIMARY_API_PORT, ODOO_BASE_DOMAIN, ODOO_PRIMARY_PCT_ID,
     CLOUDFLARE_TUNNEL_ID, CLOUDFLARE_API_TOKEN, CLOUDFLARE_ZONES,
     PROVISIONING_API_KEY, ODOO_DEFAULT_ADMIN_PASSWORD,
+    ODOO_DB_HOST, ODOO_DB_USER, ODOO_DB_PASSWORD,
 )
 
 logger = logging.getLogger(__name__)
@@ -98,6 +99,13 @@ class TenantSuspensionRequest(BaseModel):
     server: str = Field(default="primary")
     install_modules: Optional[List[str]] = None
     with_demo: bool = False
+
+
+class TenantEmailUpdateRequest(BaseModel):
+    """Request para actualizar el email del admin de un tenant"""
+    subdomain: str = Field(..., min_length=3, max_length=30)
+    new_email: str = Field(..., pattern=r'^[a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\.[a-zA-Z]{2,}$')
+    server: str = Field(default="primary")
 
 
 class TenantProvisionResponse(BaseModel):
@@ -413,19 +421,23 @@ async def change_tenant_password(
         logger.info(f"Cambiando contraseña para tenant: {subdomain} (server={server_key})")
         
         # Intentar conectar directamente a PostgreSQL
+        db_host = ODOO_DB_HOST
+        db_user = ODOO_DB_USER
+        db_password = ODOO_DB_PASSWORD
+        
         try:
             result = subprocess.run(
                 [
                     'psql',
-                    '-h', server_config['ip'],
-                    '-U', 'odoo',
+                    '-h', db_host,
+                    '-U', db_user,
                     '-d', subdomain,
                     '-c', f"UPDATE res_users SET password = '{new_password}', write_date = NOW() WHERE login = 'admin';"
                 ],
                 capture_output=True,
                 text=True,
                 timeout=10,
-                env={**os.environ, 'PGPASSWORD': os.getenv('ODOO_DB_PASSWORD', 'odoo')}
+                env={**os.environ, 'PGPASSWORD': db_password}
             )
             
             if result.returncode == 0:
@@ -493,7 +505,31 @@ async def suspend_tenant(
         
         logger.info(f"{action} tenant: {subdomain}")
         
+        # Actualizar BD local primero
+        from ..models.database import SessionLocal, Customer, Subscription, SubscriptionStatus
+        db = SessionLocal()
+        try:
+            customer = db.query(Customer).filter(Customer.subdomain == subdomain).first()
+            if customer:
+                subscriptions = db.query(Subscription).filter(Subscription.customer_id == customer.id).all()
+                for sub in subscriptions:
+                    if request.suspend:
+                        sub.status = SubscriptionStatus.cancelled
+                    else:
+                        sub.status = SubscriptionStatus.active
+                db.commit()
+                logger.info(f"✅ Estado local actualizado para {subdomain}: {'cancelled' if request.suspend else 'active'}")
+        except Exception as db_err:
+            db.rollback()
+            logger.warning(f"No se pudo actualizar BD local: {db_err}")
+        finally:
+            db.close()
+        
         # Intentar conectar directamente a PostgreSQL
+        db_host = ODOO_DB_HOST
+        db_user = ODOO_DB_USER
+        db_password = ODOO_DB_PASSWORD
+        
         if request.suspend:
             sql_cmd = f"""UPDATE res_users SET active = false WHERE login != 'admin';"""
         else:
@@ -503,15 +539,15 @@ async def suspend_tenant(
             result = subprocess.run(
                 [
                     'psql',
-                    '-h', server_config['ip'],
-                    '-U', 'odoo',
+                    '-h', db_host,
+                    '-U', db_user,
                     '-d', subdomain,
                     '-c', sql_cmd
                 ],
                 capture_output=True,
                 text=True,
                 timeout=10,
-                env={**os.environ, 'PGPASSWORD': os.getenv('ODOO_DB_PASSWORD', 'odoo')}
+                env={**os.environ, 'PGPASSWORD': db_password}
             )
             
             if result.returncode == 0:
@@ -560,6 +596,83 @@ async def suspend_tenant(
         
     except Exception as e:
         logger.error(f"Error suspendiendo tenant: {e}")
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+@router.put("/tenant/email")
+async def update_tenant_email(
+    request: TenantEmailUpdateRequest,
+    x_api_key: str = Header(None)
+):
+    """Actualiza el email del usuario admin de un tenant y sincroniza con BD local"""
+    if x_api_key != PROVISIONING_API_KEY:
+        raise HTTPException(status_code=401, detail="API key inválida")
+    
+    server_key, server_config = _resolve_server_config(request.server)
+    
+    try:
+        subdomain = request.subdomain.lower()
+        new_email = request.new_email.strip()
+        
+        logger.info(f"Actualizando email para tenant: {subdomain} → {new_email}")
+        
+        # 1. Actualizar en PostgreSQL de Odoo (tenant database)
+        db_host = ODOO_DB_HOST
+        db_user = ODOO_DB_USER
+        db_password = ODOO_DB_PASSWORD
+        
+        try:
+            result = subprocess.run(
+                [
+                    'psql',
+                    '-h', db_host,
+                    '-U', db_user,
+                    '-d', subdomain,
+                    '-c', f"UPDATE res_users SET login = '{new_email}', email = '{new_email}', write_date = NOW() WHERE login = 'admin' OR id = 2;"
+                ],
+                capture_output=True,
+                text=True,
+                timeout=10,
+                env={**os.environ, 'PGPASSWORD': db_password}
+            )
+            
+            if result.returncode == 0:
+                logger.info(f"✅ Email actualizado en Odoo para {subdomain}: {new_email}")
+                
+                # 2. Sincronizar con BD local (erp_core_db)
+                from ..models.database import SessionLocal, Customer
+                db = SessionLocal()
+                try:
+                    customer = db.query(Customer).filter(Customer.subdomain == subdomain).first()
+                    if customer:
+                        customer.email = new_email
+                        db.commit()
+                        logger.info(f"✅ Email sincronizado en BD local para {subdomain}")
+                except Exception as sync_err:
+                    db.rollback()
+                    logger.warning(f"No se pudo sincronizar BD local: {sync_err}")
+                finally:
+                    db.close()
+                
+                return {
+                    "success": True,
+                    "subdomain": subdomain,
+                    "new_email": new_email,
+                    "message": "Email actualizado exitosamente"
+                }
+            else:
+                logger.error(f"psql error: {result.stderr}")
+                raise HTTPException(status_code=500, detail=f"Error ejecutando SQL: {result.stderr}")
+        except subprocess.TimeoutExpired:
+            raise HTTPException(status_code=504, detail="Timeout conectando a PostgreSQL")
+        except Exception as e:
+            logger.error(f"Error actualizando email: {e}")
+            raise HTTPException(status_code=500, detail=str(e))
+        
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.error(f"Error actualizando email: {e}")
         raise HTTPException(status_code=500, detail=str(e))
 
 

@@ -34,6 +34,9 @@
   let rowPassword = $state('');
   let rowConfirmPassword = $state('');
   let rowPasswordLoading = $state(false);
+  let expandedEmailRow = $state<string | null>(null);
+  let rowEmail = $state('');
+  let rowEmailLoading = $state(false);
   let showDeleteModal = $state(false);
   let deleteTenantTarget = $state<Tenant | null>(null);
   let deleteConfirmInput = $state('');
@@ -93,7 +96,11 @@
   }
 
   function getProvisioningServerId(tenant: Tenant): string {
-    return tenant.server_id || 'primary';
+    // Normalizar server_id a 'primary' o 'pct-137'
+    const serverId = tenant.server_id || 'primary';
+    // Mapear IDs antiguos
+    if (serverId === 'pct-105' || serverId === '105') return 'primary';
+    return serverId;
   }
 
   async function handleChangePassword(tenant: Tenant) {
@@ -121,6 +128,36 @@
       toasts.error($currentUser?.role === 'admin' ? msg : 'Error al cambiar contraseña');
     } finally {
       rowPasswordLoading = false;
+    }
+  }
+
+  async function handleUpdateEmail(tenant: Tenant) {
+    if (!rowEmail || !rowEmail.includes('@')) {
+      toasts.error('Ingresa un email válido');
+      return;
+    }
+    rowEmailLoading = true;
+    try {
+      await tenantsApi.updateEmail({
+        subdomain: tenant.subdomain,
+        new_email: rowEmail,
+        server_id: getProvisioningServerId(tenant),
+      });
+      toasts.success('Email actualizado');
+      // Actualizar el tenant en la lista local
+      tenants = tenants.map((t) => {
+        if (t.subdomain === tenant.subdomain) {
+          return { ...t, email: rowEmail };
+        }
+        return t;
+      });
+      expandedEmailRow = null;
+      rowEmail = '';
+    } catch (e: any) {
+      const msg = e?.message ?? 'Error al actualizar email';
+      toasts.error($currentUser?.role === 'admin' ? msg : 'Error al actualizar email');
+    } finally {
+      rowEmailLoading = false;
     }
   }
 
@@ -215,6 +252,16 @@
       expandedPasswordRow = subdomain;
       rowPassword = '';
       rowConfirmPassword = '';
+    }
+  }
+
+  function toggleEmailRow(subdomain: string, currentEmail: string) {
+    if (expandedEmailRow === subdomain) {
+      expandedEmailRow = null;
+      rowEmail = '';
+    } else {
+      expandedEmailRow = subdomain;
+      rowEmail = currentEmail || '';
     }
   }
 
@@ -455,6 +502,12 @@
                 <div class="flex items-center gap-2 flex-wrap">
                   <button
                     class="btn-secondary btn-sm"
+                    onclick={() => toggleEmailRow(tenant.subdomain, tenant.email ?? '')}
+                  >
+                    CAMBIAR EMAIL
+                  </button>
+                  <button
+                    class="btn-secondary btn-sm"
                     onclick={() => togglePasswordRow(tenant.subdomain)}
                   >
                     CAMBIAR CLAVE
@@ -474,6 +527,38 @@
                 </div>
               </td>
             </tr>
+            <!-- Inline email row -->
+            {#if expandedEmailRow === tenant.subdomain}
+              <tr class="bg-bg-page">
+                <td colspan="7" class="py-4 px-6">
+                  <div class="flex items-end gap-4 flex-wrap">
+                    <div class="flex-1">
+                      <label class="label" for="re-{tenant.subdomain}">Nuevo email del admin</label>
+                      <input
+                        id="re-{tenant.subdomain}"
+                        type="email"
+                        class="input px-3 py-2 w-full max-w-md"
+                        placeholder="admin@empresa.com"
+                        bind:value={rowEmail}
+                      />
+                    </div>
+                    <div class="flex gap-2">
+                      <button
+                        class="btn-secondary btn-sm"
+                        onclick={() => { expandedEmailRow = null; rowEmail = ''; }}
+                      >CANCELAR</button>
+                      <button
+                        class="btn-accent btn-sm disabled:opacity-60"
+                        disabled={rowEmailLoading}
+                        onclick={() => handleUpdateEmail(tenant)}
+                      >
+                        {rowEmailLoading ? 'GUARDANDO...' : 'GUARDAR'}
+                      </button>
+                    </div>
+                  </div>
+                </td>
+              </tr>
+            {/if}
             <!-- Inline password row -->
             {#if expandedPasswordRow === tenant.subdomain}
               <tr class="bg-bg-page">
