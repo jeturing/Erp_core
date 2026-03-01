@@ -21,15 +21,17 @@ export interface SystemStatus {
 }
 
 export const logsApi = {
-  getProvisioningLogs(lines = 100, level?: string): Promise<LogsResponse> {
+  getProvisioningLogs(lines = 100, level?: string, tenant?: string): Promise<LogsResponse> {
     const params = new URLSearchParams({ lines: String(lines) });
     if (level) params.set('level', level);
+    if (tenant) params.set('tenant', tenant);
     return api.get(`/api/logs/provisioning?${params}`);
   },
 
-  getAppLogs(lines = 100, level?: string): Promise<LogsResponse> {
+  getAppLogs(lines = 100, level?: string, tenant?: string): Promise<LogsResponse> {
     const params = new URLSearchParams({ lines: String(lines) });
     if (level) params.set('level', level);
+    if (tenant) params.set('tenant', tenant);
     return api.get(`/api/logs/app?${params}`);
   },
 

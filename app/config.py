@@ -109,14 +109,14 @@ MERCURY_DISPERSION_MAX_AUTO_USD = float(os.getenv("MERCURY_DISPERSION_MAX_AUTO_U
 # ═══════════════════════════════════════════════════════
 # Infrastructure IPs
 # ═══════════════════════════════════════════════════════
-ODOO_PRIMARY_IP = os.getenv("ODOO_PRIMARY_IP", "10.10.10.100")
+ODOO_PRIMARY_IP = os.getenv("ODOO_PRIMARY_IP", ODOO_DB_HOST or "10.10.10.100")
 ODOO_PRIMARY_PCT_ID = int(os.getenv("ODOO_PRIMARY_PCT_ID", "105"))
 ODOO_PRIMARY_PORT = int(os.getenv("ODOO_PRIMARY_PORT", "8069"))
 ODOO_PRIMARY_API_PORT = int(os.getenv("ODOO_PRIMARY_API_PORT", "8070"))
 
 ERP_CORE_IP = os.getenv("ERP_CORE_IP", "10.10.10.20")
 
-CT105_IP = os.getenv("CT105_IP", "10.10.10.100")
+CT105_IP = os.getenv("CT105_IP", ODOO_PRIMARY_IP)
 CT105_NGINX_PORT = int(os.getenv("CT105_NGINX_PORT", "8080"))
 
 

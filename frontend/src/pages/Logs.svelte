@@ -14,6 +14,7 @@
   let logsLoading = $state(false);
   let lineCount = $state(100);
   let levelFilter = $state('');
+  let tenantFilter = $state('');
   let autoRefresh = $state(false);
   let systemStatus = $state<SystemStatus | null>(null);
   let statusLoading = $state(false);
@@ -25,9 +26,9 @@
     try {
       let data: { logs: LogEntry[]; total: number; file?: string };
       if (activeTab === 'provisioning') {
-        data = await logsApi.getProvisioningLogs(lineCount, levelFilter || undefined);
+        data = await logsApi.getProvisioningLogs(lineCount, levelFilter || undefined, tenantFilter || undefined);
       } else if (activeTab === 'app') {
-        data = await logsApi.getAppLogs(lineCount, levelFilter || undefined);
+        data = await logsApi.getAppLogs(lineCount, levelFilter || undefined, tenantFilter || undefined);
       } else {
         data = await logsApi.getSystemLogs(lineCount);
       }
@@ -117,6 +118,15 @@
             <option value="WARNING">WARNING</option>
             <option value="ERROR">ERROR</option>
           </select>
+        </div>
+        <div>
+          <input
+            class="input px-3 py-2 text-sm"
+            type="text"
+            bind:value={tenantFilter}
+            placeholder="Tenant (ej: demo_cliente)"
+            onkeydown={(e) => e.key === 'Enter' && loadLogs()}
+          />
         </div>
       {/if}
       <button

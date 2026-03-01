@@ -33,7 +33,8 @@ async def get_provisioning_logs(
     request: Request,
     access_token: str = Cookie(None),
     lines: int = Query(100, ge=10, le=500),
-    level: Optional[str] = Query(None, description="Filtrar por nivel: info, warning, error")
+    level: Optional[str] = Query(None, description="Filtrar por nivel: info, warning, error"),
+    tenant: Optional[str] = Query(None, description="Filtrar por subdominio/tenant en la línea")
 ) -> Dict[str, Any]:
     """
     Obtiene logs de provisioning del sistema.
@@ -74,6 +75,9 @@ async def get_provisioning_logs(
                         level_upper = level.upper()
                         if level_upper not in line.upper():
                             continue
+
+                    if tenant and tenant.strip().lower() not in line.lower():
+                        continue
                     
                     # Colorear según nivel
                     log_class = "text-slate-400"  # default
@@ -115,7 +119,8 @@ async def get_app_logs(
     request: Request,
     access_token: str = Cookie(None),
     lines: int = Query(100, ge=10, le=500),
-    level: Optional[str] = None
+    level: Optional[str] = None,
+    tenant: Optional[str] = Query(None, description="Filtrar por subdominio/tenant en la línea")
 ) -> Dict[str, Any]:
     """Obtiene logs de la aplicación FastAPI"""
     token = access_token
@@ -144,6 +149,8 @@ async def get_app_logs(
                     if not line:
                         continue
                     if level and level.upper() not in line.upper():
+                        continue
+                    if tenant and tenant.strip().lower() not in line.lower():
                         continue
                     
                     log_class = "text-slate-400"

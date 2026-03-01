@@ -58,9 +58,12 @@ class LoginResponse(BaseModel):
     role: str
     requires_totp: bool = False
     requires_email_verify: bool = False
+    requires_tenant_selection: bool = False
+    available_tenants: Optional[list] = None
     redirect_url: Optional[str] = None
     email: Optional[str] = None
     email_domain: Optional[str] = None
+    user_id: Optional[int] = None
 
 
 class TokenResponse(BaseModel):
@@ -135,11 +138,17 @@ async def secure_login(request: Request, login_data: LoginRequest):
             import bcrypt as _bcrypt
             import hashlib
 
-            # ── Intentar login como admin_user (BD) primero ──
-            admin_user = db.query(AdminUser).filter(
-                AdminUser.email == login_data.email,
-                AdminUser.is_active == True
-            ).first()
+            # ── PRIMERO verificar si hay múltiples tenants con este email ──
+            # Si hay múltiples, saltear admin_user/partner y ir directo a selector
+            customers_count = db.query(Customer).filter_by(email=login_data.email).count()
+            
+            # ── Intentar login como admin_user (BD) solo si NO hay múltiples tenants ──
+            admin_user = None
+            if customers_count <= 1:
+                admin_user = db.query(AdminUser).filter(
+                    AdminUser.email == login_data.email,
+                    AdminUser.is_active == True
+                ).first()
 
             if admin_user:
                 if _bcrypt.checkpw(login_data.password.encode(), admin_user.password_hash.encode()):
@@ -216,9 +225,10 @@ async def secure_login(request: Request, login_data: LoginRequest):
 
                 # ── Si no es partner, intentar como tenant ──
                 if not partner_authenticated:
-                    customer = db.query(Customer).filter_by(email=login_data.email).first()
+                    # Buscar TODOS los customers con este email
+                    customers = db.query(Customer).filter_by(email=login_data.email).all()
 
-                    if not customer:
+                    if not customers:
                         AuditLogger.log_login_failed(
                             username=login_data.email,
                             reason="Email not found",
@@ -229,8 +239,10 @@ async def secure_login(request: Request, login_data: LoginRequest):
                             detail="Credenciales inválidas"
                         )
 
-                    if customer.password_hash:
-                        ok, migrated_hash = _verify_and_migrate_password(login_data.password, customer.password_hash)
+                    # Verificar password con el PRIMER customer (todos deberían tener el mismo)
+                    first_customer = customers[0]
+                    if first_customer.password_hash:
+                        ok, migrated_hash = _verify_and_migrate_password(login_data.password, first_customer.password_hash)
                         if not ok:
                             AuditLogger.log_login_failed(
                                 username=login_data.email,
@@ -242,7 +254,7 @@ async def secure_login(request: Request, login_data: LoginRequest):
                                 detail="Credenciales inválidas"
                             )
                         if migrated_hash:
-                            customer.password_hash = migrated_hash
+                            first_customer.password_hash = migrated_hash
                             db.commit()
                     else:
                         AuditLogger.log_login_failed(
@@ -255,6 +267,28 @@ async def secure_login(request: Request, login_data: LoginRequest):
                             detail="Cuenta sin contraseña configurada. Contacte al administrador."
                         )
 
+                    # Si hay MÚLTIPLES tenants, requerir selección
+                    if len(customers) > 1:
+                        tenants_list = [
+                            {
+                                "tenant_id": c.id,
+                                "company_name": c.company_name,
+                                "subdomain": c.subdomain,
+                                "email": c.email
+                            }
+                            for c in customers
+                        ]
+                        return LoginResponse(
+                            message="Seleccione el tenant",
+                            role="tenant",
+                            requires_tenant_selection=True,
+                            available_tenants=tenants_list,
+                            email=login_data.email,
+                            user_id=first_customer.id
+                        )
+
+                    # Si solo hay UNO, continuar normalmente
+                    customer = first_customer
                     username = customer.email
                     role = "tenant"
                     user_id = customer.id
@@ -855,6 +889,104 @@ async def regenerate_backup_codes(request: Request, data: TOTPVerifyRequest):
             status_code=status.HTTP_401_UNAUTHORIZED,
             detail="Token inválido"
         )
+
+
+@router.post("/select-tenant")
+async def select_tenant(request: Request, tenant_id: int = None):
+    """
+    Completa el login seleccionando un tenant específico cuando hay múltiples con el mismo email.
+    Recibe tenant_id via JSON body.
+    """
+    from pydantic import BaseModel
+    
+    class TenantSelectRequest(BaseModel):
+        email: str
+        tenant_id: int
+    
+    try:
+        body = await request.json()
+        tenant_select = TenantSelectRequest(**body)
+    except Exception:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="Request inválido, se requiere email y tenant_id"
+        )
+    
+    db = SessionLocal()
+    try:
+        # Verificar que el customer existe
+        customer = db.query(Customer).filter(
+            Customer.id == tenant_select.tenant_id,
+            Customer.email == tenant_select.email
+        ).first()
+        
+        if not customer:
+            raise HTTPException(
+                status_code=status.HTTP_404_NOT_FOUND,
+                detail="Tenant no encontrado"
+            )
+        
+        # Generar tokens
+        access_token_str = TokenManager.create_access_token(
+            username=customer.email,
+            role="tenant",
+            user_id=customer.id,
+            tenant_id=customer.id
+        )
+        refresh_token_str = TokenManager.create_refresh_token(customer.email)
+        
+        # Crear respuesta con cookies
+        response = JSONResponse({
+            "message": "Login exitoso",
+            "role": "tenant",
+            "redirect_url": "/tenant/portal",
+            "email": customer.email,
+            "user_id": customer.id,
+            "tenant_id": customer.id,
+            "access_token": access_token_str,
+            "token_type": "bearer"
+        })
+        
+        # Configurar cookies
+        response.set_cookie(
+            key="access_token",
+            value=access_token_str,
+            httponly=True,
+            secure=True,
+            samesite="lax",
+            max_age=3600
+        )
+        response.set_cookie(
+            key="refresh_token",
+            value=refresh_token_str,
+            httponly=True,
+            secure=True,
+            samesite="lax",
+            max_age=30 * 24 * 3600
+        )
+        
+        # Audit log
+        AuditLogger.log_login_success(
+            username=customer.email,
+            role="tenant",
+            user_id=customer.id,
+            tenant_id=customer.id,
+            request=request
+        )
+        
+        return response
+        
+    except HTTPException:
+        raise
+    except Exception as e:
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail="Error interno del servidor"
+        )
+    finally:
+        db.close()
+    finally:
+        db.close()
 
 
 # Verificación de estado de rate limit

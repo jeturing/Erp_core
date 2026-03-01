@@ -15,6 +15,7 @@
   let search = '';
   let typeFilter = '';
   let resourceFilter = '';
+  let tenantFilter = '';
   const PAGE_SIZE = 30;
   let currentPage = 0;
   let expandedId: number | null = null;
@@ -25,6 +26,7 @@
       const res = await auditApi.list({
         event_type: typeFilter || undefined,
         resource: resourceFilter || undefined,
+        tenant: tenantFilter || undefined,
         limit: PAGE_SIZE,
         offset: page * PAGE_SIZE,
       });
@@ -107,6 +109,7 @@
     </div>
     <input type="text" bind:value={typeFilter} placeholder="Tipo de evento..." class="input w-auto" on:keydown={(e) => e.key === 'Enter' && loadEvents(0)} />
     <input type="text" bind:value={resourceFilter} placeholder="Recurso..." class="input w-auto" on:keydown={(e) => e.key === 'Enter' && loadEvents(0)} />
+    <input type="text" bind:value={tenantFilter} placeholder="Tenant (ej: demo_cliente)..." class="input w-auto" on:keydown={(e) => e.key === 'Enter' && loadEvents(0)} />
     <button class="btn-secondary btn-sm flex items-center gap-1" on:click={() => { currentPage = 0; loadEvents(0); }}>
       <Filter size={14} /> Filtrar
     </button>

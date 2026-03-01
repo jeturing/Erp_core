@@ -30,13 +30,66 @@ import httpx
 import logging
 import psycopg
 import os
+from ..models.database import AuditEventRecord
 
-from ..config import PROVISIONING_API_KEY, ODOO_DB_USER, ODOO_DB_PASSWORD
+from ..config import PROVISIONING_API_KEY, ODOO_DB_USER, ODOO_DB_PASSWORD, ODOO_DB_HOST
 
 router = APIRouter(prefix="/api/tenants", tags=["Tenants"])
 logger = logging.getLogger(__name__)
 
 _SUBDOMAIN_RE = re.compile(r'^[a-z0-9][a-z0-9_]{1,28}[a-z0-9]$')
+
+
+def _safe_actor_from_request(request: Request) -> tuple[Optional[int], Optional[str], Optional[str], Optional[str], Optional[str]]:
+    """Extrae actor básico para auditoría sin romper el flujo principal."""
+    try:
+        token = _extract_token(request)
+        if not token:
+            return None, None, None, request.client.host if request.client else None, request.headers.get("user-agent")
+        payload = verify_token_with_role(token)
+        return (
+            payload.get("user_id"),
+            payload.get("username") or payload.get("email"),
+            payload.get("role"),
+            request.client.host if request.client else None,
+            request.headers.get("user-agent"),
+        )
+    except Exception:
+        return None, None, None, request.client.host if request.client else None, request.headers.get("user-agent")
+
+
+def _log_tenant_audit(
+    request: Request,
+    *,
+    event_type: str,
+    resource: str,
+    action: str,
+    status: str,
+    details: Optional[dict] = None,
+) -> None:
+    """Registra evento de auditoría persistente para operaciones de tenant."""
+    db = SessionLocal()
+    try:
+        actor_id, actor_username, actor_role, ip_address, user_agent = _safe_actor_from_request(request)
+        evt = AuditEventRecord(
+            event_type=event_type,
+            actor_id=actor_id,
+            actor_username=actor_username,
+            actor_role=actor_role,
+            ip_address=ip_address,
+            user_agent=(user_agent or "")[:500] if user_agent else None,
+            resource=resource,
+            action=action,
+            status=status,
+            details=details or {},
+        )
+        db.add(evt)
+        db.commit()
+    except Exception as audit_err:
+        db.rollback()
+        logger.warning(f"No se pudo registrar auditoría tenant ({event_type}): {audit_err}")
+    finally:
+        db.close()
 
 
 # DTOs
@@ -234,11 +287,12 @@ def _list_databases_via_postgres(server_id: Optional[str]) -> List[str]:
 
     db_user = ODOO_DB_USER
     db_password = ODOO_DB_PASSWORD
+    db_host = ODOO_DB_HOST
     db_port = int(os.getenv("ODOO_DB_PORT", "5432"))
 
     try:
         with psycopg.connect(
-            host=server.ip,
+            host=db_host,
             port=db_port,
             dbname="postgres",
             user=db_user,
@@ -256,10 +310,12 @@ def _list_databases_via_postgres(server_id: Optional[str]) -> List[str]:
                 )
                 rows = cur.fetchall()
                 dbs = [row[0] for row in rows if row and row[0]]
-                logger.info(f"PostgreSQL fallback: {len(dbs)} BDs detectadas en {server.id}")
+                logger.info(
+                    f"PostgreSQL fallback: {len(dbs)} BDs detectadas via {db_host}:{db_port} (server={server.id})"
+                )
                 return dbs
     except Exception as e:
-        logger.warning(f"No se pudo listar BDs via PostgreSQL en {server.id}: {e}")
+        logger.warning(f"No se pudo listar BDs via PostgreSQL en {db_host}:{db_port} (server={server.id}): {e}")
         return []
 
 
@@ -273,7 +329,8 @@ async def _verify_remote_tenant_absence(
       - exists: True/False
       - verified: si al menos un servidor pudo ser consultado
       - errors: lista de errores por servidor
-      - server_id: id donde se encontró (si aplica)
+    - server_id: id donde se encontró (si aplica)
+    - active_connections: conexiones activas detectadas cuando existe
     """
     normalized = (subdomain or "").strip().lower()
     servers_to_check = []
@@ -286,12 +343,14 @@ async def _verify_remote_tenant_absence(
                 "verified": False,
                 "errors": [f"Servidor '{server_id}' no encontrado"],
                 "server_id": None,
+                "active_connections": 0,
             }
         servers_to_check = [server]
     else:
         servers_to_check = list(ODOO_SERVERS.values())
 
     db_port = int(os.getenv("ODOO_DB_PORT", "5432"))
+    db_host = ODOO_DB_HOST
     verified = False
     errors: List[str] = []
 
@@ -300,7 +359,7 @@ async def _verify_remote_tenant_absence(
             continue
         try:
             with psycopg.connect(
-                host=server.ip,
+                host=db_host,
                 port=db_port,
                 dbname="postgres",
                 user=ODOO_DB_USER,
@@ -315,20 +374,32 @@ async def _verify_remote_tenant_absence(
                     exists = cur.fetchone() is not None
                     verified = True
                     if exists:
+                        active_connections = 0
+                        try:
+                            cur.execute(
+                                "SELECT count(*) FROM pg_stat_activity WHERE datname = %s AND pid <> pg_backend_pid()",
+                                (normalized,),
+                            )
+                            c_row = cur.fetchone()
+                            active_connections = int(c_row[0]) if c_row and c_row[0] is not None else 0
+                        except Exception:
+                            active_connections = 0
                         return {
                             "exists": True,
                             "verified": True,
                             "errors": errors,
                             "server_id": server.id,
+                            "active_connections": active_connections,
                         }
         except Exception as check_err:
-            errors.append(f"{server.id}: {check_err}")
+            errors.append(f"{server.id} via {db_host}:{db_port}: {check_err}")
 
     return {
         "exists": False,
         "verified": verified,
         "errors": errors,
         "server_id": None,
+        "active_connections": 0,
     }
 
 
@@ -592,19 +663,76 @@ async def create_tenant(
             status_msg = "vinculado" if already_existed else "creado"
 
             # Provisionar subdominio .sajet.us en nginx automáticamente
-            if not already_existed:
-                try:
-                    nginx_result = provision_sajet_subdomain(payload.subdomain)
-                    if nginx_result.get("success"):
-                        logger.info(f"✅ Subdominio {payload.subdomain}.sajet.us provisionado en nginx")
-                        result["nginx_provisioned"] = True
-                    else:
-                        logger.warning(f"⚠️ Nginx no provisionado: {nginx_result.get('error')} — se puede hacer manual desde Dominios")
-                        result["nginx_provisioned"] = False
-                        result["nginx_warning"] = nginx_result.get("error")
-                except Exception as ng_err:
-                    logger.warning(f"⚠️ Error provisionando nginx: {ng_err}")
-                    result["nginx_provisioned"] = False
+            try:
+                nginx_result = provision_sajet_subdomain(payload.subdomain)
+                if nginx_result.get("success"):
+                    logger.info(f"✅ Subdominio {payload.subdomain}.sajet.us provisionado en nginx")
+                    result["nginx_provisioned"] = True
+                else:
+                    ng_err = nginx_result.get("error") or "Error no especificado al provisionar nginx"
+                    logger.error(
+                        f"❌ Tenant '{payload.subdomain}' creado en BD pero nginx no quedó configurado: {ng_err}"
+                    )
+                    _log_tenant_audit(
+                        request,
+                        event_type="TENANT_CREATE_NGINX_FAILED",
+                        resource=f"tenant:{payload.subdomain}",
+                        action="create",
+                        status="error",
+                        details={
+                            "subdomain": payload.subdomain,
+                            "server_id": result.get("server"),
+                            "nginx_error": ng_err,
+                            "creation_mode": creation_mode,
+                        },
+                    )
+                    raise HTTPException(
+                        status_code=502,
+                        detail=(
+                            f"Tenant '{payload.subdomain}' creado, pero no se pudo publicar el subdominio en nginx: {ng_err}. "
+                            "Revise conectividad/permiso en CT105 y PCT160."
+                        ),
+                    )
+            except HTTPException:
+                raise
+            except Exception as ng_err:
+                logger.error(f"❌ Error provisionando nginx para {payload.subdomain}: {ng_err}")
+                _log_tenant_audit(
+                    request,
+                    event_type="TENANT_CREATE_NGINX_FAILED",
+                    resource=f"tenant:{payload.subdomain}",
+                    action="create",
+                    status="error",
+                    details={
+                        "subdomain": payload.subdomain,
+                        "server_id": result.get("server"),
+                        "nginx_error": str(ng_err),
+                        "creation_mode": creation_mode,
+                    },
+                )
+                raise HTTPException(
+                    status_code=502,
+                    detail=(
+                        f"Tenant '{payload.subdomain}' creado, pero falló la publicación nginx: {ng_err}. "
+                        "Revise logs de nginx y conectividad CT105/PCT160."
+                    ),
+                )
+
+            _log_tenant_audit(
+                request,
+                event_type="TENANT_CREATED",
+                resource=f"tenant:{payload.subdomain}",
+                action="create",
+                status="success",
+                details={
+                    "subdomain": payload.subdomain,
+                    "server_id": result.get("server"),
+                    "already_existed": already_existed,
+                    "creation_mode": creation_mode,
+                    "partner_id": payload.partner_id,
+                    "url": result.get("url"),
+                },
+            )
 
             response_payload = {
                 "success": True,
@@ -626,6 +754,20 @@ async def create_tenant(
             return response_payload
         else:
             error_msg = result.get("error", "Error creando tenant")
+            _log_tenant_audit(
+                request,
+                event_type="TENANT_CREATE_FAILED",
+                resource=f"tenant:{payload.subdomain}",
+                action="create",
+                status="error",
+                details={
+                    "subdomain": payload.subdomain,
+                    "server_id": payload.server_id,
+                    "error": error_msg,
+                    "creation_mode": creation_mode,
+                    "fallback_reason": fallback_reason,
+                },
+            )
             # Si el error indica que ya existe, dar 409 (no 400)
             if "ya existe" in error_msg.lower():
                 raise HTTPException(status_code=409, detail=error_msg)
@@ -635,6 +777,14 @@ async def create_tenant(
         raise
     except Exception as e:
         logger.error(f"Error creando tenant: {e}")
+        _log_tenant_audit(
+            request,
+            event_type="TENANT_CREATE_EXCEPTION",
+            resource=f"tenant:{payload.subdomain}",
+            action="create",
+            status="error",
+            details={"error": str(e), "subdomain": payload.subdomain, "server_id": payload.server_id},
+        )
         raise HTTPException(status_code=500, detail=str(e))
 
 
@@ -667,6 +817,14 @@ async def delete_tenant_endpoint(
             detail=f"Confirmación inválida. Debe escribir exactamente '{subdomain}'"
         )
     if is_tenant_protected(subdomain):
+        _log_tenant_audit(
+            request,
+            event_type="TENANT_DELETE_BLOCKED",
+            resource=f"tenant:{subdomain}",
+            action="delete",
+            status="blocked",
+            details={"reason": "protected_tenant", "server_id": server_id},
+        )
         raise HTTPException(status_code=403, detail=f"'{subdomain}' está protegido y no puede eliminarse")
     
     try:
@@ -717,14 +875,48 @@ async def delete_tenant_endpoint(
         verification = await _verify_remote_tenant_absence(subdomain, server_id)
         if verification.get("exists"):
             srv = verification.get("server_id") or "servidor remoto"
+            detail = (
+                f"No se confirmó eliminación remota. La BD '{subdomain}' aún existe en {srv}. "
+                f"Conexiones activas detectadas: {verification.get('active_connections', 0)}."
+            )
+            if result.get("error"):
+                detail = f"{detail} Último error de eliminación: {result.get('error')}"
+            _log_tenant_audit(
+                request,
+                event_type="TENANT_DELETE_CONFLICT",
+                resource=f"tenant:{subdomain}",
+                action="delete",
+                status="error",
+                details={
+                    "subdomain": subdomain,
+                    "server_id": server_id,
+                    "verification": verification,
+                    "delete_result": result,
+                    "local_deleted": local_deleted,
+                },
+            )
             raise HTTPException(
                 status_code=409,
-                detail=f"No se confirmó eliminación remota. La BD '{subdomain}' aún existe en {srv}",
+                detail=detail,
             )
         if not verification.get("verified"):
             detail = "No se pudo verificar la eliminación remota"
             if verification.get("errors"):
                 detail = f"{detail}: {'; '.join(verification['errors'])}"
+            _log_tenant_audit(
+                request,
+                event_type="TENANT_DELETE_UNVERIFIED",
+                resource=f"tenant:{subdomain}",
+                action="delete",
+                status="warning",
+                details={
+                    "subdomain": subdomain,
+                    "server_id": server_id,
+                    "verification": verification,
+                    "delete_result": result,
+                    "local_deleted": local_deleted,
+                },
+            )
             raise HTTPException(status_code=503, detail=detail)
 
         # 5) Limpiar nginx solo si se eliminó la BD remota
@@ -737,6 +929,21 @@ async def delete_tenant_endpoint(
 
         # 6) Respuesta final idempotente
         if deleted_remote:
+            _log_tenant_audit(
+                request,
+                event_type="TENANT_DELETED",
+                resource=f"tenant:{subdomain}",
+                action="delete",
+                status="success",
+                details={
+                    "subdomain": subdomain,
+                    "server_id": server_id,
+                    "local_deleted": local_deleted,
+                    "backup_success": backup_result.get("success"),
+                    "email_success": email_result.get("success") if isinstance(email_result, dict) else None,
+                    "delete_result": result,
+                },
+            )
             return {
                 "success": True,
                 "message": f"Tenant '{subdomain}' eliminado exitosamente",
@@ -750,6 +957,20 @@ async def delete_tenant_endpoint(
         # Si la BD remota no existe pero el registro local sí se limpió, tratar como éxito parcial
         err = (result.get("error") or "Error eliminando tenant").strip()
         if "no encontrado" in err.lower() and local_deleted:
+            _log_tenant_audit(
+                request,
+                event_type="TENANT_DELETE_PARTIAL",
+                resource=f"tenant:{subdomain}",
+                action="delete",
+                status="warning",
+                details={
+                    "subdomain": subdomain,
+                    "server_id": server_id,
+                    "warning": err,
+                    "local_deleted": local_deleted,
+                    "delete_result": result,
+                },
+            )
             return {
                 "success": True,
                 "message": f"Registro local de '{subdomain}' eliminado. La BD remota ya no existía.",
@@ -763,14 +984,44 @@ async def delete_tenant_endpoint(
 
         # Si no existe en local ni remoto, devolver 404
         if "no encontrado" in err.lower() and not local_deleted:
+            _log_tenant_audit(
+                request,
+                event_type="TENANT_DELETE_NOT_FOUND",
+                resource=f"tenant:{subdomain}",
+                action="delete",
+                status="warning",
+                details={"subdomain": subdomain, "server_id": server_id, "error": err},
+            )
             raise HTTPException(status_code=404, detail=err)
 
+        _log_tenant_audit(
+            request,
+            event_type="TENANT_DELETE_FAILED",
+            resource=f"tenant:{subdomain}",
+            action="delete",
+            status="error",
+            details={
+                "subdomain": subdomain,
+                "server_id": server_id,
+                "error": err,
+                "delete_result": result,
+                "local_deleted": local_deleted,
+            },
+        )
         raise HTTPException(status_code=400, detail=err)
     
     except HTTPException:
         raise
     except Exception as e:
         logger.error(f"Error eliminando tenant: {e}")
+        _log_tenant_audit(
+            request,
+            event_type="TENANT_DELETE_EXCEPTION",
+            resource=f"tenant:{subdomain}",
+            action="delete",
+            status="error",
+            details={"subdomain": subdomain, "server_id": server_id, "error": str(e)},
+        )
         raise HTTPException(status_code=500, detail=str(e))
 
 

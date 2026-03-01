@@ -13,7 +13,7 @@ import subprocess
 import hashlib
 
 from ..config import (
-    ODOO_PRIMARY_IP, ODOO_PRIMARY_API_PORT, ODOO_BASE_DOMAIN,
+    ODOO_PRIMARY_IP, ODOO_PRIMARY_API_PORT, ODOO_BASE_DOMAIN, ODOO_PRIMARY_PCT_ID,
     CLOUDFLARE_TUNNEL_ID, CLOUDFLARE_API_TOKEN, CLOUDFLARE_ZONES,
     PROVISIONING_API_KEY, ODOO_DEFAULT_ADMIN_PASSWORD,
 )
@@ -25,7 +25,7 @@ router = APIRouter(prefix="/api/provisioning", tags=["Provisioning"])
 # Configuración de servidores Odoo — from env via config.py
 ODOO_SERVERS = {
     "primary": {
-        "name": "SRV-Odoo-server",
+        "name": f"Servidor Principal (PCT {ODOO_PRIMARY_PCT_ID})",
         "ip": ODOO_PRIMARY_IP,
         "api_port": ODOO_PRIMARY_API_PORT,
         "domain": ODOO_BASE_DOMAIN,
@@ -35,10 +35,14 @@ ODOO_SERVERS = {
 
 SERVER_ALIASES = {
     "primary": "primary",
+    f"pct-{ODOO_PRIMARY_PCT_ID}": "primary",
+    f"pct{ODOO_PRIMARY_PCT_ID}": "primary",
+    f"servidor principal (pct {ODOO_PRIMARY_PCT_ID})": "primary",
+    f"servidor principal pct {ODOO_PRIMARY_PCT_ID}": "primary",
     "pct-105": "primary",
     "pct105": "primary",
-    "servidor principal (pct 105)": "primary",
-    "servidor principal pct 105": "primary",
+    "pct-137": "primary",
+    "pct137": "primary",
     "srv-odoo-server": "primary",
 }
 

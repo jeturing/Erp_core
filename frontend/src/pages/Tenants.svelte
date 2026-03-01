@@ -3,6 +3,7 @@
   import { tenantsApi } from '../lib/api';
   import { partnersApi } from '../lib/api/partners';
   import { toasts } from '../lib/stores/toast';
+  import { currentUser } from '../lib/stores';
   import { formatDate } from '../lib/utils/formatters';
   import { Plus, RefreshCw, Search } from 'lucide-svelte';
   import type { Tenant } from '../lib/types';
@@ -84,7 +85,8 @@
       formPartnerId = null;
       await loadTenants();
     } catch (e: any) {
-      toasts.error(e?.message ?? 'Error al crear tenant');
+      const msg = e?.message ?? 'Error al crear tenant';
+      toasts.error($currentUser?.role === 'admin' ? msg : 'Error al crear tenant');
     } finally {
       formLoading = false;
     }
@@ -115,7 +117,8 @@
       rowPassword = '';
       rowConfirmPassword = '';
     } catch (e: any) {
-      toasts.error(e?.message ?? 'Error al cambiar contraseña');
+      const msg = e?.message ?? 'Error al cambiar contraseña';
+      toasts.error($currentUser?.role === 'admin' ? msg : 'Error al cambiar contraseña');
     } finally {
       rowPasswordLoading = false;
     }
@@ -153,7 +156,8 @@
       closeSuspendModal(true);
       await loadTenants();
     } catch (e: any) {
-      toasts.error(e?.message ?? 'Error al actualizar estado');
+      const msg = e?.message ?? 'Error al actualizar estado';
+      toasts.error($currentUser?.role === 'admin' ? msg : 'Error al actualizar estado');
     } finally {
       suspendLoading = false;
     }
@@ -190,7 +194,8 @@
       closeDeleteModal(true);
       await loadTenants();
     } catch (e: any) {
-      toasts.error(e?.message ?? 'Error al eliminar tenant');
+      const msg = e?.message ?? 'Error al eliminar tenant';
+      toasts.error($currentUser?.role === 'admin' ? msg : 'Error al eliminar tenant');
     } finally {
       deleteLoading = false;
     }

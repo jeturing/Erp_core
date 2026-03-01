@@ -8,6 +8,7 @@ import subprocess
 import shlex
 import os
 import shutil
+import asyncio
 from pathlib import Path
 from typing import Dict, Any, List, Optional
 from datetime import datetime
@@ -104,10 +105,11 @@ class OdooServer:
 
 
 # Pool de servidores disponibles
+_PRIMARY_SERVER_ID = f"pct-{ODOO_PRIMARY_PCT_ID}"
 ODOO_SERVERS: Dict[str, OdooServer] = {
-    "pct-105": OdooServer(
-        id="pct-105",
-        name="Servidor Principal (PCT 105)",
+    _PRIMARY_SERVER_ID: OdooServer(
+        id=_PRIMARY_SERVER_ID,
+        name=f"Servidor Principal (PCT {ODOO_PRIMARY_PCT_ID})",
         pct_id=ODOO_PRIMARY_PCT_ID,
         ip=ODOO_PRIMARY_IP,
         port=ODOO_PRIMARY_PORT,
@@ -434,49 +436,131 @@ class OdooDatabaseManager:
             logger.warning(f"Error reseteando BD {db_name}: {e}")
     
     async def drop_database(self, db_name: str) -> Dict[str, Any]:
-        """Elimina una base de datos directamente via psycopg2 + limpia filestore"""
+        """
+        Elimina una base de datos vía PostgreSQL con reintentos y terminación de conexiones activas.
+        Incluye verificación post-delete para evitar falsos positivos.
+        """
         try:
             protected_dbs = ['postgres', 'template0', 'template1', 'template_tenant', 'cliente1', 'erp_core_db']
             if db_name.lower() in protected_dbs:
                 return {"success": False, "error": f"BD '{db_name}' está protegida"}
 
             import psycopg2
-            # 1. Terminar conexiones activas
-            conn_term = psycopg2.connect(
-                host=DEFAULT_DB_HOST, port=DEFAULT_DB_PORT,
-                dbname="postgres", user=DEFAULT_DB_USER,
-                password=DEFAULT_DB_PASSWORD, connect_timeout=10,
-            )
-            conn_term.set_isolation_level(0)
-            cur = conn_term.cursor()
-            cur.execute(
-                "SELECT pg_terminate_backend(pid) FROM pg_stat_activity "
-                "WHERE datname = %s AND pid <> pg_backend_pid()",
-                (db_name,)
-            )
-            cur.close()
-            conn_term.close()
+            max_attempts = int(os.getenv("ODOO_DROP_DB_RETRIES", "4"))
+            base_delay = float(os.getenv("ODOO_DROP_DB_RETRY_DELAY_SECONDS", "1.5"))
 
-            # 2. DROP DATABASE
-            conn_drop = psycopg2.connect(
-                host=DEFAULT_DB_HOST, port=DEFAULT_DB_PORT,
-                dbname="postgres", user=DEFAULT_DB_USER,
-                password=DEFAULT_DB_PASSWORD, connect_timeout=10,
-            )
-            conn_drop.set_isolation_level(0)
-            cur2 = conn_drop.cursor()
-            cur2.execute(f'DROP DATABASE IF EXISTS "{db_name}"')
-            cur2.close()
-            conn_drop.close()
+            last_error = None
+            last_active_connections = 0
+            total_terminated = 0
 
-            # 3. Limpiar filestore en LXC 105 via SSH→pct
-            _run_pct_shell(
-                self.server.pct_id,
-                f'rm -rf {FILESTORE_PATH}/{db_name}'
-            )
+            for attempt in range(1, max_attempts + 1):
+                try:
+                    # 1) Terminar conexiones activas al tenant
+                    with psycopg2.connect(
+                        host=DEFAULT_DB_HOST,
+                        port=DEFAULT_DB_PORT,
+                        dbname="postgres",
+                        user=DEFAULT_DB_USER,
+                        password=DEFAULT_DB_PASSWORD,
+                        connect_timeout=10,
+                    ) as conn_term:
+                        conn_term.set_isolation_level(0)
+                        with conn_term.cursor() as cur:
+                            cur.execute(
+                                "SELECT count(*) FROM pg_stat_activity WHERE datname = %s AND pid <> pg_backend_pid()",
+                                (db_name,),
+                            )
+                            row = cur.fetchone()
+                            last_active_connections = int(row[0]) if row and row[0] is not None else 0
 
-            logger.info(f"✅ BD '{db_name}' eliminada")
-            return {"success": True, "database": db_name, "deleted_at": datetime.utcnow().isoformat()}
+                            cur.execute(
+                                "SELECT pg_terminate_backend(pid) "
+                                "FROM pg_stat_activity "
+                                "WHERE datname = %s AND pid <> pg_backend_pid()",
+                                (db_name,),
+                            )
+                            terminated_rows = cur.fetchall() or []
+                            terminated_now = sum(1 for r in terminated_rows if r and r[0] is True)
+                            total_terminated += terminated_now
+
+                    # 2) Intentar DROP DATABASE (FORCE cuando disponible)
+                    with psycopg2.connect(
+                        host=DEFAULT_DB_HOST,
+                        port=DEFAULT_DB_PORT,
+                        dbname="postgres",
+                        user=DEFAULT_DB_USER,
+                        password=DEFAULT_DB_PASSWORD,
+                        connect_timeout=10,
+                    ) as conn_drop:
+                        conn_drop.set_isolation_level(0)
+                        with conn_drop.cursor() as cur2:
+                            try:
+                                cur2.execute(f'DROP DATABASE "{db_name}" WITH (FORCE)')
+                            except Exception:
+                                cur2.execute(f'DROP DATABASE IF EXISTS "{db_name}"')
+
+                    # 3) Verificación estricta post-delete
+                    with psycopg2.connect(
+                        host=DEFAULT_DB_HOST,
+                        port=DEFAULT_DB_PORT,
+                        dbname="postgres",
+                        user=DEFAULT_DB_USER,
+                        password=DEFAULT_DB_PASSWORD,
+                        connect_timeout=10,
+                    ) as conn_verify:
+                        with conn_verify.cursor() as cur3:
+                            cur3.execute("SELECT 1 FROM pg_database WHERE datname = %s", (db_name,))
+                            still_exists = cur3.fetchone() is not None
+
+                    if not still_exists:
+                        # 4) Limpiar filestore
+                        _run_pct_shell(
+                            self.server.pct_id,
+                            f'rm -rf {FILESTORE_PATH}/{db_name}'
+                        )
+
+                        logger.info(
+                            f"✅ BD '{db_name}' eliminada en intento {attempt} "
+                            f"(conexiones_activas_previas={last_active_connections}, terminadas_total={total_terminated})"
+                        )
+                        return {
+                            "success": True,
+                            "database": db_name,
+                            "deleted_at": datetime.utcnow().isoformat(),
+                            "attempts": attempt,
+                            "active_connections_before_drop": last_active_connections,
+                            "terminated_connections": total_terminated,
+                            "server": self.server.id,
+                        }
+
+                    last_error = (
+                        f"La BD '{db_name}' sigue existiendo tras intento {attempt} "
+                        f"(conexiones_activas_previas={last_active_connections})"
+                    )
+                    logger.warning(last_error)
+
+                except Exception as attempt_err:
+                    last_error = str(attempt_err)
+                    logger.warning(
+                        f"Intento {attempt}/{max_attempts} falló eliminando '{db_name}' "
+                        f"en {self.server.id}: {attempt_err}"
+                    )
+
+                if attempt < max_attempts:
+                    await asyncio.sleep(base_delay * attempt)
+
+            return {
+                "success": False,
+                "error": (
+                    f"No se pudo eliminar la BD '{db_name}' tras {max_attempts} intentos. "
+                    f"Último error: {last_error or 'desconocido'}"
+                ),
+                "database": db_name,
+                "attempts": max_attempts,
+                "active_connections": last_active_connections,
+                "terminated_connections": total_terminated,
+                "server": self.server.id,
+            }
 
         except Exception as e:
             logger.exception(f"Error eliminando BD: {e}")
