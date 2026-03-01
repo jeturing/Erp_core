@@ -36,6 +36,9 @@ from .routes import admin_landing
 from .routes import payments  # Nuevo: Pagos y dispersión a proveedores
 from .routes import mercury_webhooks  # Webhooks Mercury para conciliación
 from .routes import dispersion  # Dispersión Mercury con feature flag y auth 4-ojos
+from .routes import plan_migration  # Migración automática de planes por consumo
+from .routes import storage_alerts  # Alertas de almacenamiento con notificaciones
+from .routes import monitoring_dashboard  # Dashboard de monitoreo completo
 
 # Import security middleware
 from .security.middleware import SecurityMiddleware, WAFMiddleware
@@ -208,6 +211,16 @@ app.include_router(onboarding_config.router)    # Admin-configurable onboarding 
 app.include_router(communications.router)        # Historial de emails transaccionales
 app.include_router(admin_users.router)           # CRUD usuarios administrativos
 app.include_router(agreements.router)            # NDA/TOS templates + signing flow
+app.include_router(stripe_sync.router)           # Stripe webhook sync
+app.include_router(public_landing.router)        # Landing page pública
+app.include_router(accountant_portal.router)     # Portal para contadores
+app.include_router(admin_landing.router)         # Landing admin-only
+app.include_router(payments.router)              # Pagos y dispersión a proveedores
+app.include_router(mercury_webhooks.router)      # Webhooks Mercury para conciliación
+app.include_router(dispersion.router)            # Dispersión Mercury con feature flag y auth 4-ojos
+app.include_router(plan_migration.router)        # Migración automática de planes por consumo
+app.include_router(storage_alerts.router)        # Alertas de almacenamiento con notificaciones
+app.include_router(monitoring_dashboard.router)  # Dashboard de monitoreo completo
 app.include_router(stripe_sync.router)           # Stripe → BD sync (source of truth)
 app.include_router(public_landing.router)        # Endpoints públicos para landing page (sin auth)
 app.include_router(accountant_portal.router)     # Portal para contadores/CPA multi-empresa

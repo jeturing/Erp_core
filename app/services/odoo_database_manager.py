@@ -52,6 +52,7 @@ from ..config import (
     ODOO_BASE_DOMAIN as BASE_DOMAIN,
     ODOO_TEMPLATE_DB as TEMPLATE_DB,
     ODOO_FILESTORE_PATH as FILESTORE_PATH,
+    ODOO_FILESTORE_PCT_ID,
     ODOO_PRIMARY_IP, ODOO_PRIMARY_PCT_ID, ODOO_PRIMARY_PORT,
 )
 
@@ -1085,6 +1086,7 @@ async def create_tenant_from_template(
         return {"success": False, "error": "Servidor no disponible"}
     
     pct_id = server.pct_id
+    filestore_pct_id = ODOO_FILESTORE_PCT_ID
     
     def _fast_error(code: str, message: str, raw: Optional[str] = None) -> Dict[str, Any]:
         payload: Dict[str, Any] = {
@@ -1140,7 +1142,11 @@ async def create_tenant_from_template(
                 f'cp -an {FILESTORE_PATH}/{TEMPLATE_DB}/. {FILESTORE_PATH}/{subdomain}/ 2>/dev/null; '
                 f'chown -R odoo:odoo {FILESTORE_PATH}/{subdomain}/'
             )
-            _run_pct_shell(pct_id, fs_fix_cmd, timeout=60)
+            fs_fix_ok, fs_fix_out = _run_pct_shell(filestore_pct_id, fs_fix_cmd, timeout=60)
+            if not fs_fix_ok:
+                logger.warning(
+                    f"No se pudo reforzar filestore para BD existente '{subdomain}' en pct {filestore_pct_id}: {fs_fix_out}"
+                )
             
             logger.info(f"BD '{subdomain}' ya existe y es funcional — retornando éxito idempotente")
             return {
@@ -1199,18 +1205,46 @@ async def create_tenant_from_template(
         logger.info(f"BD '{subdomain}' duplicada, copiando filestore...")
         
         # 4.5 Copiar filestore del template al nuevo tenant
-        # El filestore está en el filesystem del LXC 105 — se accede via SSH→pct exec
+        # El filestore vive en el nodo Odoo de aplicaciones (PCT dedicado) y no en el nodo de BD.
         fs_cmd = (
+            f'test -d {FILESTORE_PATH}/{TEMPLATE_DB} && '
             f'mkdir -p {FILESTORE_PATH}/{subdomain} && '
             f'cp -an {FILESTORE_PATH}/{TEMPLATE_DB}/. {FILESTORE_PATH}/{subdomain}/ && '
             f'chown -R odoo:odoo {FILESTORE_PATH}/{subdomain} && '
             f'echo filestore_ok'
         )
-        fs_ok, fs_out = _run_pct_shell(pct_id, fs_cmd, timeout=90)
+        fs_ok, fs_out = _run_pct_shell(filestore_pct_id, fs_cmd, timeout=90)
         if fs_ok and "filestore_ok" in fs_out:
             logger.info(f"✅ Filestore copiado para '{subdomain}'")
         else:
-            logger.warning(f"⚠️ No se pudo copiar filestore: {fs_out} — iconos podrían no funcionar")
+            logger.error(
+                f"❌ No se pudo copiar filestore para '{subdomain}' en pct {filestore_pct_id}: {fs_out}"
+            )
+            return _fast_error(
+                "filestore_sync_failed",
+                (
+                    f"No se pudo copiar filestore desde '{TEMPLATE_DB}'. "
+                    "Se bloqueó la creación para evitar tenant sin assets (iconos/apps)."
+                ),
+                fs_out,
+            )
+        
+        # 4.6 Mantenimiento post-creación: verificar y reparar filestore
+        logger.info(f"🔧 Ejecutando mantenimiento post-creación para '{subdomain}'...")
+        verify_cmd = (
+            f"set -e; "
+            f"test -d {FILESTORE_PATH}/{TEMPLATE_DB}; "
+            f"mkdir -p {FILESTORE_PATH}/{subdomain}; "
+            f"cp -an {FILESTORE_PATH}/{TEMPLATE_DB}/. {FILESTORE_PATH}/{subdomain}/; "
+            f"chown -R odoo:odoo {FILESTORE_PATH}/{subdomain}; "
+            f"echo filestore_files=$(find {FILESTORE_PATH}/{subdomain} -type f | wc -l)"
+        )
+        maint_ok, maint_out = _run_pct_shell(filestore_pct_id, verify_cmd, timeout=90)
+        if maint_ok and "filestore_files=" in maint_out:
+            file_count = maint_out.split("filestore_files=")[-1].strip()
+            logger.info(f"✅ Mantenimiento completado: {file_count} archivos verificados en filestore de '{subdomain}'")
+        else:
+            logger.warning(f"⚠️ Mantenimiento tuvo problemas pero la creación continúa: {maint_out}")
         
         # 5. Configurar nueva BD
         base_url = f"https://{subdomain}.{BASE_DOMAIN}"

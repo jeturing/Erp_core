@@ -48,6 +48,12 @@ class DomainVerificationStatus(enum.Enum):
     failed = "failed"
 
 
+class StorageAlertStatus(enum.Enum):
+    warning = "warning"      # 75% del límite
+    critical = "critical"    # 90% del límite
+    exceeded = "exceeded"     # 100%+ del límite
+
+
 class CustomerStatus(enum.Enum):
     active = "active"
     inactive = "inactive"
@@ -1692,6 +1698,37 @@ SessionLocal = _SessionLocalProxy()
 
 def init_db():
     Base.metadata.create_all(bind=_get_engine())
+
+class StorageAlert(Base):
+    """Alertas de almacenamiento para tenants — Notificaciones antes de agotar límite"""
+    __tablename__ = "storage_alerts"
+    
+    id = Column(Integer, primary_key=True, index=True)
+    customer_id = Column(Integer, ForeignKey("customers.id"), nullable=False, index=True)
+    customer = relationship("Customer", backref="storage_alerts")
+    
+    # Status de la alerta
+    status = Column(Enum(StorageAlertStatus), nullable=False)  # warning (75%), critical (90%), exceeded (100%)
+    usage_percent = Column(Float, nullable=False)  # % actual de uso
+    storage_limit_mb = Column(Integer, nullable=False)  # Límite en MB
+    current_usage_mb = Column(Float, nullable=False)  # Consumo actual en MB
+    
+    # Notificación
+    email_sent = Column(Boolean, default=False, nullable=False)
+    email_sent_at = Column(DateTime, nullable=True)
+    email_recipient = Column(String(255), nullable=True)
+    
+    # Tracking
+    created_at = Column(DateTime, default=datetime.utcnow, nullable=False)
+    resolved_at = Column(DateTime, nullable=True)  # Cuando el uso bajó de la alerta
+    
+    __table_args__ = (
+        Index("idx_storage_alerts_customer_status", customer_id, status),
+    )
+    
+    def __repr__(self):
+        return f"<StorageAlert {self.customer_id} {self.status.value} ({self.usage_percent:.1f}%)>"
+
 
 def get_db():
     db = _get_session_factory()()

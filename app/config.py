@@ -93,6 +93,7 @@ ODOO_DEFAULT_COUNTRY = os.getenv("ODOO_DEFAULT_COUNTRY", "DO")
 ODOO_BASE_DOMAIN = os.getenv("ODOO_BASE_DOMAIN", "sajet.us")
 ODOO_TEMPLATE_DB = os.getenv("ODOO_TEMPLATE_DB", "template_tenant")
 ODOO_FILESTORE_PATH = os.getenv("ODOO_FILESTORE_PATH", "/var/lib/odoo/filestore")
+ODOO_FILESTORE_PCT_ID = int(os.getenv("ODOO_FILESTORE_PCT_ID", os.getenv("LXC_CONTAINER_ID", "105")))
 
 # Proxmox host SSH — para operaciones pct exec desde LXC API
 PROXMOX_SSH_HOST = os.getenv("PROXMOX_SSH_HOST", "10.10.10.1")
@@ -142,6 +143,17 @@ if _cf_zones_raw:
 # Provisioning
 # ═══════════════════════════════════════════════════════
 PROVISIONING_API_KEY = os.getenv("PROVISIONING_API_KEY", "")
+
+
+# ═══════════════════════════════════════════════════════
+# Email / SMTP — Notificaciones
+# ═══════════════════════════════════════════════════════
+SMTP_SERVER = os.getenv("SMTP_SERVER", "smtp.gmail.com")
+SMTP_PORT = int(os.getenv("SMTP_PORT", "587"))
+SMTP_USER = os.getenv("SMTP_USER", "")
+SMTP_PASSWORD = os.getenv("SMTP_PASSWORD", "")
+SMTP_FROM_EMAIL = os.getenv("SMTP_FROM_EMAIL", "alerts@sajet.us")
+SMTP_FROM_NAME = os.getenv("SMTP_FROM_NAME", "Sajet ERP Alerts")
 
 
 # ═══════════════════════════════════════════════════════

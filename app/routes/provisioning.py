@@ -749,3 +749,136 @@ async def deployment_status(x_api_key: str = Header(None)):
         return result
     finally:
         db.close()
+
+
+# ═══════════════════════════════════════════════════════════════════════════════
+# MANTENIMIENTO DE TENANTS
+# ═══════════════════════════════════════════════════════════════════════════════
+
+class TenantMaintenanceRequest(BaseModel):
+    """Request para ejecutar mantenimiento de tenants"""
+    tenant: Optional[str] = Field(None, description="Tenant específico (opcional, si no se especifica se procesan todos)")
+    repair: bool = Field(False, description="Ejecutar reparación (true) o solo verificación (false)")
+    min_files: int = Field(400, description="Mínimo de archivos esperados en filestore")
+
+
+@router.post("/tenants/maintenance", response_model=dict)
+async def tenant_maintenance(
+    request: TenantMaintenanceRequest,
+    x_api_key: str = Header(None)
+):
+    """
+    Ejecuta mantenimiento sobre tenants existentes.
+    
+    - Verifica integridad del filestore
+    - Repara archivos faltantes desde template_tenant (si repair=true)
+    - Corrige permisos
+    - Reporta estadísticas
+    
+    Ejemplos:
+    - {"repair": false} → Solo verifica todos los tenants
+    - {"repair": true} → Repara todos los tenants con problemas
+    - {"tenant": "sattra", "repair": true} → Repara solo 'sattra'
+    """
+    if x_api_key != PROVISIONING_API_KEY:
+        raise HTTPException(status_code=401, detail="API key inválida")
+    
+    from ..config import (
+        ODOO_FILESTORE_PATH, ODOO_FILESTORE_PCT_ID, ODOO_TEMPLATE_DB
+    )
+    from ..services.odoo_database_manager import _run_pct_shell
+    
+    logger.info(f"🔧 Ejecutando mantenimiento: repair={request.repair}, tenant={request.tenant}")
+    
+    # Listar tenants
+    if request.tenant:
+        tenants = [request.tenant]
+    else:
+        cmd = f"ls -1 {ODOO_FILESTORE_PATH}"
+        ok, output = _run_pct_shell(ODOO_FILESTORE_PCT_ID, cmd)
+        
+        if not ok:
+            raise HTTPException(status_code=500, detail=f"Error listando tenants: {output}")
+        
+        tenants = [t.strip() for t in output.split("\n") if t.strip()]
+        tenants = [t for t in tenants if t != ODOO_TEMPLATE_DB]
+    
+    results = []
+    issues = []
+    repaired = []
+    
+    for tenant in tenants:
+        # Verificar estado
+        check_cmd = (
+            f"set -e; "
+            f"test -d {ODOO_FILESTORE_PATH}/{tenant} && "
+            f"file_count=$(find {ODOO_FILESTORE_PATH}/{tenant} -type f 2>/dev/null | wc -l); "
+            f"size=$(du -sh {ODOO_FILESTORE_PATH}/{tenant} 2>/dev/null | cut -f1); "
+            f"echo \"files=$file_count|size=$size\""
+        )
+        
+        ok, output = _run_pct_shell(ODOO_FILESTORE_PCT_ID, check_cmd, timeout=30)
+        
+        if not ok:
+            result = {"tenant": tenant, "status": "error", "error": output}
+            results.append(result)
+            issues.append(result)
+            continue
+        
+        # Parse output
+        data = {}
+        for part in output.split("|"):
+            if "=" in part:
+                key, value = part.strip().split("=", 1)
+                data[key] = value
+        
+        files = int(data.get("files", 0))
+        size = data.get("size", "0")
+        
+        result = {
+            "tenant": tenant,
+            "status": "ok" if files >= request.min_files else "needs_repair",
+            "files": files,
+            "size": size,
+        }
+        
+        # Reparar si es necesario
+        if files < request.min_files:
+            issues.append(result)
+            
+            if request.repair:
+                logger.info(f"🔧 Reparando {tenant}...")
+                repair_cmd = (
+                    f"set -e; "
+                    f"test -d {ODOO_FILESTORE_PATH}/{ODOO_TEMPLATE_DB}; "
+                    f"mkdir -p {ODOO_FILESTORE_PATH}/{tenant}; "
+                    f"cp -an {ODOO_FILESTORE_PATH}/{ODOO_TEMPLATE_DB}/. {ODOO_FILESTORE_PATH}/{tenant}/; "
+                    f"chown -R odoo:odoo {ODOO_FILESTORE_PATH}/{tenant}; "
+                    f"echo repaired_files=$(find {ODOO_FILESTORE_PATH}/{tenant} -type f | wc -l)"
+                )
+                
+                repair_ok, repair_output = _run_pct_shell(ODOO_FILESTORE_PCT_ID, repair_cmd, timeout=90)
+                
+                if repair_ok and "repaired_files=" in repair_output:
+                    repaired_files = int(repair_output.split("repaired_files=")[-1].strip())
+                    result["repaired"] = True
+                    result["repaired_files"] = repaired_files
+                    repaired.append(result)
+                    logger.info(f"✅ Reparado {tenant}: {repaired_files} archivos")
+                else:
+                    result["repaired"] = False
+                    result["repair_error"] = repair_output
+                    logger.error(f"❌ Error reparando {tenant}: {repair_output}")
+        
+        results.append(result)
+    
+    return {
+        "success": True,
+        "mode": "repair" if request.repair else "check",
+        "total_tenants": len(tenants),
+        "tenants_ok": len([r for r in results if r["status"] == "ok"]),
+        "tenants_with_issues": len(issues),
+        "tenants_repaired": len(repaired) if request.repair else 0,
+        "results": results,
+    }
+
