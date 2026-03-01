@@ -42,41 +42,59 @@ async def get_monitoring_dashboard(
         # Obtener alertas activas
         active_alerts = alert_service.get_active_alerts()
         
-        # Evaluación de planes
-        migration_service = PlanMigrationService(db)
-        migration_summary = migration_service.get_migration_summary()
+        # Intentar obtener resumen de migraciones (si falla, usar defaults)
+        migration_summary = {
+            "ok": 0,
+            "warning": 0,
+            "critical": 0,
+            "exceeded": 0,
+            "migration_recommended": 0,
+            "tenants_by_status": {
+                "ok": [],
+                "warning": [],
+                "critical": [],
+                "exceeded": [],
+            }
+        }
+        
+        try:
+            migration_service = PlanMigrationService(db)
+            migration_summary = migration_service.get_migration_summary()
+        except Exception as e:
+            logger.error(f"Error getting migration summary: {str(e)}")
         
         return {
             "success": True,
             "timestamp": "",
             "overview": {
-                "total_tenants": evaluation_result["total_evaluated"],
+                "total_tenants": evaluation_result.get("total_evaluated", 0),
                 "total_alerts": len(active_alerts),
                 "alerts_by_status": {
-                    "warning": len([a for a in active_alerts if a["status"] == "warning"]),
-                    "critical": len([a for a in active_alerts if a["status"] == "critical"]),
-                    "exceeded": len([a for a in active_alerts if a["status"] == "exceeded"]),
+                    "warning": len([a for a in active_alerts if a.get("status") == "warning"]),
+                    "critical": len([a for a in active_alerts if a.get("status") == "critical"]),
+                    "exceeded": len([a for a in active_alerts if a.get("status") == "exceeded"]),
                 },
-                "migration_recommended": migration_summary["summary"]["migration_recommended"],
+                "migration_recommended": migration_summary.get("migration_recommended", 0),
             },
             "health": {
-                "total_ok": migration_summary["summary"]["ok"],
-                "total_warning": len([a for a in active_alerts if a["status"] == "warning"]),
-                "total_critical": len([a for a in active_alerts if a["status"] == "critical"]),
-                "total_exceeded": len([a for a in active_alerts if a["status"] == "exceeded"]),
+                "total_ok": migration_summary.get("ok", 0),
+                "total_warning": migration_summary.get("warning", 0),
+                "total_critical": migration_summary.get("critical", 0),
+                "total_exceeded": migration_summary.get("exceeded", 0),
             },
             "alerts": active_alerts,
             "tenants_requiring_attention": [
-                t for t in migration_summary["summary"]["tenants_by_status"].get("critical", []) +
-                migration_summary["summary"]["tenants_by_status"].get("exceeded", [])
+                t for t in migration_summary.get("tenants_by_status", {}).get("critical", []) +
+                migration_summary.get("tenants_by_status", {}).get("exceeded", [])
             ],
             "recommendations": {
-                "migrations": migration_summary["summary"]["tenants_by_status"].get("exceeded", []),
-                "upgrades": [
-                    t for t in migration_summary["summary"]["tenants_by_status"].get("critical", [])
-                ],
+                "migrations": migration_summary.get("tenants_by_status", {}).get("exceeded", []),
+                "upgrades": migration_summary.get("tenants_by_status", {}).get("critical", []),
             }
         }
+    except Exception as e:
+        logger.error(f"Dashboard error: {str(e)}")
+        raise HTTPException(status_code=500, detail=f"Error en dashboard: {str(e)}")
     finally:
         db.close()
 

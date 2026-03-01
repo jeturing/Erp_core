@@ -39,6 +39,7 @@ from .routes import dispersion  # Dispersión Mercury con feature flag y auth 4-
 from .routes import plan_migration  # Migración automática de planes por consumo
 from .routes import storage_alerts  # Alertas de almacenamiento con notificaciones
 from .routes import monitoring_dashboard  # Dashboard de monitoreo completo
+from .routes import admin_control_panel  # 🔧 Panel de control administrativo (SMTP, templates, alertas)
 
 # Import security middleware
 from .security.middleware import SecurityMiddleware, WAFMiddleware
@@ -221,6 +222,7 @@ app.include_router(dispersion.router)            # Dispersión Mercury con featu
 app.include_router(plan_migration.router)        # Migración automática de planes por consumo
 app.include_router(storage_alerts.router)        # Alertas de almacenamiento con notificaciones
 app.include_router(monitoring_dashboard.router)  # Dashboard de monitoreo completo
+app.include_router(admin_control_panel.router)   # 🔧 Panel de control: SMTP, templates, alertas
 app.include_router(stripe_sync.router)           # Stripe → BD sync (source of truth)
 app.include_router(public_landing.router)        # Endpoints públicos para landing page (sin auth)
 app.include_router(accountant_portal.router)     # Portal para contadores/CPA multi-empresa
