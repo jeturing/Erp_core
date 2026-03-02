@@ -45,7 +45,7 @@
     <!-- CTA buttons -->
     <div class="flex flex-col sm:flex-row items-center justify-center gap-4 mb-10">
       <a
-        href="#/customer-onboarding"
+        href="#/signup"
         class="flex items-center gap-2 text-navy font-inter font-semibold text-[15px] px-8 py-4 rounded-btn transition-all hover:-translate-y-px hover:shadow-elevated w-full sm:w-auto"
         style="background: white"
       >

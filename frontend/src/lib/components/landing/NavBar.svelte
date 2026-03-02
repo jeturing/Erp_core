@@ -10,6 +10,7 @@
     { labelKey: 'nav.pricing', href: '#pricing' },
     { labelKey: 'nav.partners', href: '#partners' },
     { labelKey: 'nav.resources', href: '#resources' },
+    { labelKey: 'nav.onboarding', href: '#/signup' },
   ];
 
   function goToLogin() {
@@ -85,6 +86,12 @@
         <span class="text-xs font-jakarta font-bold text-primary ml-1">{$localeStore === 'es' ? 'ES' : 'EN'}</span>
       </button>
 
+      <a
+        href="#/partner-signup"
+        class="text-sm font-inter text-slate hover:text-slate-dark transition-colors px-3 py-1.5"
+      >
+        {$t('common.become_partner')}
+      </a>
       <button
         class="text-sm font-inter text-slate hover:text-slate-dark transition-colors px-3 py-1.5"
         on:click={goToLogin}

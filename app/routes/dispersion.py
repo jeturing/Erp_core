@@ -120,7 +120,7 @@ async def get_dispersion_status(
     
     Visible para cualquier admin aunque el flag esté apagado.
     """
-    admin = await _require_admin(request, db)
+    admin = _require_admin(request)
 
     # Feature flag
     flag_from_db = False
@@ -220,7 +220,7 @@ async def set_feature_flag(
     Activa o desactiva el sistema de dispersión Mercury.
     Solo administradores. El cambio se persiste en system_config.
     """
-    admin = await _require_admin(request, db)
+    admin = _require_admin(request)
 
     value = "true" if body.enabled else "false"
     try:
@@ -258,7 +258,7 @@ async def list_payouts(
     Lista todos los payout requests. Filtrable por status.
     Status: pending_approval | authorized | processing | completed | failed | rejected
     """
-    await _require_admin(request, db)
+    _require_admin(request)
 
     try:
         where = "WHERE pr.status = :status" if status else ""
@@ -307,7 +307,7 @@ async def create_payout_request(
     ⚠️ NO ejecuta el pago. Requiere que otro admin lo autorice primero.
     El feature flag debe estar activo para crear solicitudes.
     """
-    admin = await _require_admin(request, db)
+    admin = _require_admin(request)
 
     if not _feature_enabled(db):
         raise HTTPException(
@@ -395,7 +395,7 @@ async def authorize_payout(
     - El feature flag debe estar activo
     - El pago se ejecuta inmediatamente tras la autorización
     """
-    admin = await _require_admin(request, db)
+    admin = _require_admin(request)
     authorizer_email = admin.get("email", "admin")
 
     if not _feature_enabled(db):
@@ -529,7 +529,7 @@ async def reject_payout(
     db: Session = Depends(get_db),
 ):
     """Rechaza un payout pending_approval."""
-    admin = await _require_admin(request, db)
+    admin = _require_admin(request)
 
     try:
         row = db.execute(

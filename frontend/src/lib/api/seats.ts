@@ -18,8 +18,10 @@ export const seatsApi = {
   },
 
   async getHWM(subscriptionId?: number): Promise<SeatHWMResponse> {
-    const params = subscriptionId ? `?subscription_id=${subscriptionId}` : '';
-    return api.get<SeatHWMResponse>(`/api/seats/hwm${params}`);
+    if (!subscriptionId) {
+      throw new Error('subscriptionId requerido para consultar HWM');
+    }
+    return api.get<SeatHWMResponse>(`/api/seats/hwm/${subscriptionId}`);
   },
 
   async syncStripe(): Promise<{ message: string; synced: number; errors: number }> {
@@ -27,8 +29,10 @@ export const seatsApi = {
   },
 
   async getSummary(subscriptionId?: number): Promise<SeatSummaryResponse> {
-    const params = subscriptionId ? `?subscription_id=${subscriptionId}` : '';
-    return api.get<SeatSummaryResponse>(`/api/seats/summary${params}`);
+    if (!subscriptionId) {
+      throw new Error('subscriptionId requerido para consultar summary');
+    }
+    return api.get<SeatSummaryResponse>(`/api/seats/summary/${subscriptionId}`);
   },
 };
 

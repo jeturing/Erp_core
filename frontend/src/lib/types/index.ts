@@ -452,6 +452,21 @@ export interface NodesListResponse {
   total: number;
 }
 
+export interface NodeCreatePayload {
+  name: string;
+  hostname: string;
+  total_cpu_cores: number;
+  total_ram_gb: number;
+  total_storage_gb: number;
+  region?: string;
+  ssh_port?: number;
+  api_port?: number;
+  max_containers?: number;
+  is_database_node?: boolean;
+  ssh_user?: string;
+  api_token_id?: string | null;
+}
+
 export interface ClusterStatus {
   total_nodes: number;
   online_nodes: number;

@@ -4,13 +4,31 @@
   import { toasts } from '../lib/stores/toast';
   import { formatPercent } from '../lib/utils/formatters';
   import type { NodeSummary, ContainerItem, ClusterSummary } from '../lib/types';
-  import { RefreshCw, Server, ChevronDown, ChevronUp } from 'lucide-svelte';
+  import { RefreshCw, Server, ChevronDown, ChevronUp, Plus, Copy } from 'lucide-svelte';
 
   let nodes: NodeSummary[] = [];
   let containers: ContainerItem[] = [];
   let summary: ClusterSummary | null = null;
   let loading = true;
   let showContainers = false;
+  let creatingNode = false;
+  let createMode: 'new' | 'clone' = 'new';
+  let cloneFromNodeId: number | null = null;
+
+  let nodeForm = {
+    name: '',
+    hostname: '',
+    total_cpu_cores: 8,
+    total_ram_gb: 16,
+    total_storage_gb: 250,
+    region: 'default',
+    ssh_port: 22,
+    api_port: 8006,
+    max_containers: 50,
+    is_database_node: false,
+    ssh_user: 'root',
+    api_token_id: '',
+  };
 
   async function loadData() {
     loading = true;
@@ -58,6 +76,61 @@
     if (pct >= 65) return 'bg-warning';
     return 'bg-success';
   }
+
+  function applyCloneTemplate(nodeId: number | null) {
+    cloneFromNodeId = nodeId;
+    if (!nodeId) return;
+    const tpl = nodes.find((n) => n.id === nodeId);
+    if (!tpl) return;
+
+    nodeForm = {
+      ...nodeForm,
+      total_cpu_cores: tpl.resources.cpu.total_cores,
+      total_ram_gb: tpl.resources.ram.total_gb,
+      total_storage_gb: tpl.resources.storage.total_gb,
+      region: tpl.region || 'default',
+      max_containers: tpl.containers.max || 50,
+      is_database_node: tpl.is_database_node,
+      ssh_port: 22,
+      api_port: 8006,
+      ssh_user: 'root',
+      api_token_id: '',
+      name: `${tpl.name}-clone`,
+      hostname: `${tpl.hostname.split('.')[0]}-clone.local`,
+    };
+  }
+
+  async function handleCreateNode() {
+    if (!nodeForm.name.trim() || !nodeForm.hostname.trim()) {
+      toasts.error('Nombre y hostname son obligatorios');
+      return;
+    }
+
+    creatingNode = true;
+    try {
+      const payload = {
+        ...nodeForm,
+        name: nodeForm.name.trim(),
+        hostname: nodeForm.hostname.trim(),
+        api_token_id: nodeForm.api_token_id.trim() || null,
+      };
+      const res = await infrastructureApi.createNode(payload);
+      toasts.success(`Nodo creado: ${res.name}`);
+
+      nodeForm = {
+        ...nodeForm,
+        name: '',
+        hostname: '',
+        api_token_id: '',
+      };
+      cloneFromNodeId = null;
+      await loadData();
+    } catch (err) {
+      toasts.error(err instanceof Error ? err.message : 'Error creando nodo');
+    } finally {
+      creatingNode = false;
+    }
+  }
 </script>
 
 <div class="p-6 lg:p-8 space-y-6">
@@ -78,6 +151,106 @@
       <div class="w-10 h-10 border-2 border-charcoal border-t-transparent rounded-full animate-spin"></div>
     </div>
   {:else}
+    <!-- Node Create / Clone -->
+    <div class="card p-6 space-y-4">
+      <div class="flex items-center justify-between gap-3 flex-wrap">
+        <div>
+          <h2 class="section-heading">Escalado de nodos</h2>
+          <p class="text-xs text-gray-500 mt-1">Agrega nodos nuevos o clona la configuración base de un nodo template.</p>
+        </div>
+        <div class="flex items-center gap-2">
+          <button
+            class="btn btn-sm {createMode === 'new' ? 'btn-primary' : 'btn-secondary'}"
+            on:click={() => (createMode = 'new')}
+            type="button"
+          >
+            <Plus size={12} /> Nuevo nodo
+          </button>
+          <button
+            class="btn btn-sm {createMode === 'clone' ? 'btn-primary' : 'btn-secondary'}"
+            on:click={() => (createMode = 'clone')}
+            type="button"
+          >
+            <Copy size={12} /> Clonar template
+          </button>
+        </div>
+      </div>
+
+      {#if createMode === 'clone'}
+        <div>
+          <label class="label">Template base</label>
+          <select
+            class="input"
+            bind:value={cloneFromNodeId}
+            on:change={(e) => applyCloneTemplate(Number((e.currentTarget as HTMLSelectElement).value) || null)}
+          >
+            <option value="">Selecciona un nodo existente...</option>
+            {#each nodes as n}
+              <option value={n.id}>{n.name} ({n.hostname})</option>
+            {/each}
+          </select>
+        </div>
+      {/if}
+
+      <div class="grid grid-cols-1 md:grid-cols-3 gap-3">
+        <div>
+          <label class="label">Nombre</label>
+          <input class="input" type="text" bind:value={nodeForm.name} placeholder="pve-node-03" />
+        </div>
+        <div>
+          <label class="label">Hostname</label>
+          <input class="input" type="text" bind:value={nodeForm.hostname} placeholder="10.10.10.150" />
+        </div>
+        <div>
+          <label class="label">Región</label>
+          <input class="input" type="text" bind:value={nodeForm.region} placeholder="do-santo-domingo" />
+        </div>
+
+        <div>
+          <label class="label">CPU Cores</label>
+          <input class="input" type="number" min="1" bind:value={nodeForm.total_cpu_cores} />
+        </div>
+        <div>
+          <label class="label">RAM (GB)</label>
+          <input class="input" type="number" min="1" step="0.5" bind:value={nodeForm.total_ram_gb} />
+        </div>
+        <div>
+          <label class="label">Storage (GB)</label>
+          <input class="input" type="number" min="10" step="1" bind:value={nodeForm.total_storage_gb} />
+        </div>
+
+        <div>
+          <label class="label">Max containers</label>
+          <input class="input" type="number" min="1" bind:value={nodeForm.max_containers} />
+        </div>
+        <div>
+          <label class="label">SSH user</label>
+          <input class="input" type="text" bind:value={nodeForm.ssh_user} />
+        </div>
+        <div>
+          <label class="label">API token ID (opcional)</label>
+          <input class="input" type="text" bind:value={nodeForm.api_token_id} placeholder="root@pam!erp-core" />
+        </div>
+      </div>
+
+      <div class="flex items-center justify-between flex-wrap gap-3">
+        <label class="flex items-center gap-2 text-sm text-gray-600">
+          <input type="checkbox" bind:checked={nodeForm.is_database_node} />
+          Nodo dedicado de base de datos
+        </label>
+
+        <button class="btn btn-primary btn-sm" on:click={handleCreateNode} disabled={creatingNode}>
+          {#if creatingNode}
+            <RefreshCw size={12} class="animate-spin" /> Creando...
+          {:else if createMode === 'clone'}
+            <Copy size={12} /> Clonar y crear nodo
+          {:else}
+            <Plus size={12} /> Crear nodo
+          {/if}
+        </button>
+      </div>
+    </div>
+
     <!-- Cluster Summary Stats -->
     <div class="grid grid-cols-2 lg:grid-cols-4 gap-4">
       <div class="stat-card">

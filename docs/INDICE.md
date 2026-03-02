@@ -12,6 +12,7 @@ Este documento es la entrada oficial para navegar la documentacion de `Erp_core`
 - `README.md` - vision global, arquitectura, setup, deploy y comandos base
 - `DEPLOYMENT_NOTES.md` - notas operativas de despliegue y verificacion
 - `PR_TRACKER.md` - seguimiento de epicas y estado operativo del producto
+- [SAJET_APP_ARCHITECTURE.md](../SAJET_APP_ARCHITECTURE.md) - diagrama general de flujos, rutas y modulos
 
 ## 2) Documentacion por dominio (`docs/`)
 

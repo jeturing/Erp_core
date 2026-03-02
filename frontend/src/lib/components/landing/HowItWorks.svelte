@@ -51,7 +51,7 @@
     </div>
 
     <div class="text-center mt-16">
-      <a href="#/customer-onboarding" class="inline-flex items-center gap-2 bg-primary hover:bg-navy text-white font-jakarta font-semibold text-sm px-6 py-3 rounded-btn shadow-soft hover:shadow-medium transition-all">
+      <a href="#/signup" class="inline-flex items-center gap-2 bg-primary hover:bg-navy text-white font-jakarta font-semibold text-sm px-6 py-3 rounded-btn shadow-soft hover:shadow-medium transition-all">
         {$t('how_it_works.cta')}
       </a>
     </div>

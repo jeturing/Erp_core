@@ -15,6 +15,24 @@
   let storedTotpCode = $state('');
   let emailVerifyMessage = $state('');
 
+  function getPostLoginRoute(): string {
+    try {
+      const hash = window.location.hash || '';
+      const query = hash.split('?')[1] || '';
+      const params = new URLSearchParams(query);
+      const next = (params.get('next') || '').trim();
+      if (!next) return 'dashboard';
+
+      // Allow only simple internal hash routes
+      const safe = next.replace(/^#\/?/, '').split('?')[0].split('/')[0];
+      if (!safe) return 'dashboard';
+      if (!/^[a-z0-9-]+$/i.test(safe)) return 'dashboard';
+      return safe;
+    } catch {
+      return 'dashboard';
+    }
+  }
+
   async function handleLogin(e: Event) {
     e.preventDefault();
     loading = true;
@@ -46,7 +64,7 @@
     }
 
     if (result.success) {
-      window.location.hash = '#/dashboard';
+      window.location.hash = `#/${getPostLoginRoute()}`;
     }
 
     loading = false;
@@ -75,7 +93,7 @@
     }
 
     if (result.success) {
-      window.location.hash = '#/dashboard';
+      window.location.hash = `#/${getPostLoginRoute()}`;
     }
 
     loading = false;
@@ -100,7 +118,7 @@
     }
 
     if (result.success) {
-      window.location.hash = '#/dashboard';
+      window.location.hash = `#/${getPostLoginRoute()}`;
     }
 
     loading = false;
@@ -214,6 +232,11 @@
           >
             {loading ? 'Iniciando...' : 'Ingresar'}
           </button>
+
+          <div class="flex items-center justify-between text-xs mt-3">
+            <a href="#/signup" class="text-[#C05A3C] hover:underline">Crear cuenta</a>
+            <a href="#/recover-account" class="text-[#C05A3C] hover:underline">Recuperar cuenta</a>
+          </div>
         </form>
       {:else if requiresTotp}
         <!-- TOTP Step -->

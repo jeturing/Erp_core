@@ -145,6 +145,7 @@
       plan_name: customer.subscription?.plan_name || '',
       is_admin_account: customer.is_admin_account,
       company_name: customer.company_name,
+      email: customer.email,
       stripe_customer_id: customer.stripe_customer_id || '',
     };
     showEdit = true;
@@ -159,6 +160,41 @@
       await loadData();
     } catch (e: any) {
       alert(e.message || 'Error actualizando');
+    } finally {
+      saving = false;
+    }
+  }
+
+  async function linkStripeCustomer() {
+    if (!editCustomer) return;
+    saving = true;
+    try {
+      await billingApi.updateCustomer(editCustomer.id, {
+        ...editForm,
+        stripe_action: 'link'
+      });
+      editCustomer.stripe_customer_id = null; // Forzar recarga
+      alert('Stripe Customer vinculado/creado exitosamente');
+      await loadData();
+      showEdit = false;
+    } catch (e: any) {
+      alert(e.message || 'Error vinculando Stripe Customer');
+    } finally {
+      saving = false;
+    }
+  }
+
+  async function unlinkStripeCustomer() {
+    if (!editCustomer) return;
+    saving = true;
+    try {
+      await billingApi.updateCustomer(editCustomer.id, {
+        stripe_action: 'unlink'
+      });
+      editForm.stripe_customer_id = '';
+      alert('Stripe Customer desvinculado');
+    } catch (e: any) {
+      alert(e.message || 'Error desvinculando');
     } finally {
       saving = false;
     }
@@ -480,67 +516,122 @@
 <!-- Edit Modal -->
 {#if showEdit && editCustomer}
   <div class="fixed inset-0 bg-black/60 z-50 flex items-center justify-center p-4" role="dialog">
-    <div class="bg-charcoal rounded-xl border border-border-dark w-full max-w-md">
+    <div class="bg-charcoal rounded-xl border border-border-dark w-full max-w-2xl">
       <div class="flex items-center justify-between p-6 border-b border-border-dark">
         <h2 class="text-lg font-semibold text-text-light">Editar Cliente</h2>
         <button class="text-gray-400 hover:text-text-light" onclick={() => { showEdit = false; }}>✕</button>
       </div>
 
-      <form class="p-6 space-y-4" onsubmit={(e) => { e.preventDefault(); saveCustomer(); }}>
-        <div>
-          <label class="label" for="edit-company">Empresa</label>
-          <input id="edit-company" class="input" bind:value={editForm.company_name} />
-        </div>
+      <div class="p-6 space-y-6 overflow-y-auto max-h-[80vh]">
+        <!-- Datos principales -->
+        <form class="space-y-4" onsubmit={(e) => { e.preventDefault(); saveCustomer(); }}>
+          <div class="grid grid-cols-2 gap-4">
+            <div>
+              <label class="label" for="edit-company">Empresa</label>
+              <input id="edit-company" class="input" bind:value={editForm.company_name} />
+            </div>
 
-        <div>
-          <label class="label" for="edit-email">Email</label>
-          <input id="edit-email" class="input" value={editCustomer.email} disabled />
-        </div>
+            <div>
+              <label class="label" for="edit-email">Email</label>
+              <input id="edit-email" type="email" class="input" bind:value={editForm.email} />
+            </div>
+          </div>
 
-        <div>
-          <label class="label" for="edit-plan">Plan</label>
-          <select id="edit-plan" class="input" bind:value={editForm.plan_name}>
-            {#each plans as plan}
-              <option value={plan.name}>{plan.display_name} ({formatCurrency(plan.base_price)}/mes)</option>
-            {/each}
-          </select>
-        </div>
+          <div>
+            <label class="label" for="edit-plan">Plan</label>
+            <select id="edit-plan" class="input" bind:value={editForm.plan_name}>
+              {#each plans as plan}
+                <option value={plan.name}>{plan.display_name} ({formatCurrency(plan.base_price)}/mes)</option>
+              {/each}
+            </select>
+          </div>
 
-        <div>
-          <label class="label" for="edit-users">Usuarios</label>
+          <div>
+            <label class="label" for="edit-users">Usuarios</label>
+            <div class="flex items-center gap-3">
+              <button type="button" class="btn-secondary btn-sm" onclick={() => { editForm.user_count = Math.max(1, editForm.user_count - 1); }}>−</button>
+              <input id="edit-users" type="number" min="1" class="input text-center w-20" bind:value={editForm.user_count} />
+              <button type="button" class="btn-secondary btn-sm" onclick={() => { editForm.user_count++; }}>+</button>
+            </div>
+          </div>
+
           <div class="flex items-center gap-3">
-            <button type="button" class="btn-secondary btn-sm" onclick={() => { editForm.user_count = Math.max(1, editForm.user_count - 1); }}>−</button>
-            <input id="edit-users" type="number" min="1" class="input text-center w-20" bind:value={editForm.user_count} />
-            <button type="button" class="btn-secondary btn-sm" onclick={() => { editForm.user_count++; }}>+</button>
+            <input type="checkbox" id="edit-admin" bind:checked={editForm.is_admin_account} class="w-4 h-4" />
+            <label for="edit-admin" class="text-sm text-gray-400">
+              Cuenta de administración (exenta de facturación)
+            </label>
           </div>
-        </div>
 
-        <div>
-          <label class="label" for="edit-stripe">Stripe Customer ID</label>
-          <input id="edit-stripe" class="input" bind:value={editForm.stripe_customer_id} placeholder="cus_xxx..." />
-        </div>
+          {#if editForm.is_admin_account}
+            <div class="bg-yellow-500/10 border border-yellow-500/30 rounded-lg p-3 text-yellow-400 text-sm flex items-center gap-2">
+              <Shield size={16} />
+              Esta cuenta no generará cobros
+            </div>
+          {/if}
 
-        <div class="flex items-center gap-3">
-          <input type="checkbox" id="edit-admin" bind:checked={editForm.is_admin_account} class="w-4 h-4" />
-          <label for="edit-admin" class="text-sm text-gray-400">
-            Cuenta de administración (exenta de facturación)
-          </label>
-        </div>
-
-        {#if editForm.is_admin_account}
-          <div class="bg-yellow-500/10 border border-yellow-500/30 rounded-lg p-3 text-yellow-400 text-sm flex items-center gap-2">
-            <Shield size={16} />
-            Esta cuenta no generará cobros. admin@sajet.us
-          </div>
-        {/if}
-
-        <div class="flex gap-3 pt-2">
-          <button type="submit" class="btn-accent flex-1" disabled={saving}>
+          <button type="submit" class="btn-accent w-full" disabled={saving}>
             {saving ? 'Guardando...' : 'Guardar Cambios'}
           </button>
-          <button type="button" class="btn-secondary" onclick={() => { showEdit = false; }}>Cancelar</button>
+        </form>
+
+        <!-- Stripe vinculación -->
+        <div class="border-t border-border-dark pt-6">
+          <h3 class="font-semibold text-text-light mb-4 flex items-center gap-2">
+            <CreditCard size={18} />
+            Vinculación con Stripe
+          </h3>
+
+          <div class="space-y-3">
+            <div class="bg-dark-subtle rounded-lg p-4">
+              <label class="text-sm text-gray-400 block mb-2">Stripe Customer ID</label>
+              <input class="input w-full font-mono text-sm" bind:value={editForm.stripe_customer_id} placeholder="cus_xxx..." />
+              {#if editForm.stripe_customer_id}
+                <div class="text-xs text-green-400 mt-2 flex items-center gap-1">
+                  ✓ Vinculado
+                </div>
+              {/if}
+            </div>
+
+            <div class="flex gap-2">
+              <button 
+                type="button"
+                class="btn-secondary flex-1"
+                onclick={linkStripeCustomer}
+                disabled={saving}
+                title="Buscar cliente en Stripe por email o crear uno nuevo"
+              >
+                <CreditCard size={14} />
+                {editForm.stripe_customer_id ? 'Actualizar' : 'Buscar/Crear'} en Stripe
+              </button>
+              {#if editForm.stripe_customer_id}
+                <button 
+                  type="button"
+                  class="btn-secondary"
+                  onclick={unlinkStripeCustomer}
+                  disabled={saving}
+                  title="Desvincular de Stripe"
+                >
+                  ✕
+                </button>
+              {/if}
+            </div>
+
+            <div class="bg-blue-500/10 border border-blue-500/30 rounded-lg p-3 text-blue-400 text-xs">
+              💡 Haz clic en "Buscar/Crear en Stripe" para:
+              <ul class="list-disc list-inside mt-2 space-y-1">
+                <li>Buscar cliente existente por email</li>
+                <li>Crear nuevo cliente en Stripe si no existe</li>
+                <li>Vincular automáticamente</li>
+              </ul>
+            </div>
+          </div>
         </div>
-      </form>
+
+        <!-- Botones finales -->
+        <div class="border-t border-border-dark pt-4 flex gap-2">
+          <button type="button" class="btn-secondary flex-1" onclick={() => { showEdit = false; }}>Cerrar</button>
+        </div>
+      </div>
     </div>
   </div>
 {/if}

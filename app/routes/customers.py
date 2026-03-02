@@ -34,10 +34,12 @@ def _verify_admin(request: Request, token: str = None):
 
 class CustomerUpdate(BaseModel):
     company_name: Optional[str] = None
+    email: Optional[str] = None
     user_count: Optional[int] = None
     is_admin_account: Optional[bool] = None
     plan_name: Optional[str] = None  # Cambiar plan de la suscripción
     stripe_customer_id: Optional[str] = None
+    stripe_action: Optional[str] = None  # 'link' (buscar/crear en Stripe) o 'unlink'
 
 
 class UserCountUpdate(BaseModel):
@@ -149,7 +151,7 @@ async def update_customer(
     payload: CustomerUpdate,
     access_token: str = Cookie(None)
 ) -> Dict[str, Any]:
-    """Actualiza un cliente: user_count, plan, is_admin, etc."""
+    """Actualiza un cliente: user_count, plan, is_admin, email, Stripe vinculación, etc."""
     _verify_admin(request, access_token)
     db = SessionLocal()
     try:
@@ -159,16 +161,55 @@ async def update_customer(
 
         messages = []
 
+        # Actualizar email
+        if payload.email is not None:
+            old_email = customer.email
+            customer.email = payload.email
+            messages.append(f"Email: {old_email} → {payload.email}")
+
         # Actualizar campos simples
         if payload.company_name is not None:
             customer.company_name = payload.company_name
-        if payload.stripe_customer_id is not None:
-            # Convertir string vacío a None para evitar violación de unique constraint
-            customer.stripe_customer_id = payload.stripe_customer_id.strip() or None
+            messages.append(f"Empresa: {payload.company_name}")
+
         if payload.is_admin_account is not None:
             customer.is_admin_account = payload.is_admin_account
             if payload.is_admin_account:
                 messages.append("Marcado como cuenta admin (exento de facturación)")
+
+        # Manejo de Stripe: buscar/crear/vincular cliente
+        if payload.stripe_action == "link":
+            # Buscar cliente existente en Stripe por email
+            try:
+                email_to_search = payload.email or customer.email
+                stripe_customers = stripe.Customer.list(email=email_to_search, limit=1)
+                
+                if stripe_customers.data:
+                    # Vincular existente
+                    stripe_cust_id = stripe_customers.data[0].id
+                    customer.stripe_customer_id = stripe_cust_id
+                    messages.append(f"Vinculado a Stripe Customer: {stripe_cust_id}")
+                else:
+                    # Crear nuevo en Stripe
+                    stripe_cust = stripe.Customer.create(
+                        name=customer.company_name,
+                        email=email_to_search,
+                        metadata={"sajet_customer_id": customer.id}
+                    )
+                    customer.stripe_customer_id = stripe_cust.id
+                    messages.append(f"Creado nuevo Stripe Customer: {stripe_cust.id}")
+            except Exception as e:
+                logger.error(f"Error manejando Stripe para cliente {customer_id}: {e}")
+                raise HTTPException(status_code=400, detail=f"Error con Stripe: {str(e)}")
+        elif payload.stripe_action == "unlink":
+            # Desvincular
+            customer.stripe_customer_id = None
+            messages.append("Desvinculado de Stripe")
+        elif payload.stripe_customer_id is not None:
+            # Vincular manualmente si se proporciona ID
+            customer.stripe_customer_id = payload.stripe_customer_id.strip() or None
+            if customer.stripe_customer_id:
+                messages.append(f"Vinculado a Stripe Customer: {customer.stripe_customer_id}")
 
         # Actualizar user_count y recalcular
         if payload.user_count is not None:
@@ -214,7 +255,8 @@ async def update_customer(
         return {
             "message": "Cliente actualizado",
             "changes": messages,
-            "customer_id": customer_id
+            "customer_id": customer_id,
+            "stripe_customer_id": customer.stripe_customer_id
         }
     except HTTPException:
         raise

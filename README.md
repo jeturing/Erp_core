@@ -370,7 +370,20 @@ bash tests/test_jwt.sh
 node mcp/api-server.js
 ```
 
-Config: `mcp_config.json`
+Config: [mcp_config.json](mcp_config.json)
+
+---
+
+## 🧰 Skills locales
+
+Skills disponibles en [.agents/skills](.agents/skills). Uso recomendado:
+1. Identificar el contrato backend (Pydantic/Odoo)
+2. Generar tipos TypeScript
+3. Implementar estados completos: idle, loading, success, error
+4. Validar consistencia request/response
+
+Skills clave:
+- [Full-Stack Consistency Guardian](.agents/skills/full-stack-consistency-guardian/SKILL.md)
 
 ---
 
@@ -380,6 +393,7 @@ Config: `mcp_config.json`
 
 | Área | Ruta |
 |------|------|
+| Arquitectura SAJET | [SAJET_APP_ARCHITECTURE.md](SAJET_APP_ARCHITECTURE.md) |
 | Arquitectura base | `docs/00-base/ARQUITECTURA_OPERATIVA_MAESTRA.md` |
 | Frontend | `docs/01-frontend/` |
 | Seguridad / Auth | `docs/02-security-auth/` |

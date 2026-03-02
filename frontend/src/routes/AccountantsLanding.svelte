@@ -77,7 +77,7 @@
         Sajet gives accounting professionals a single dashboard to oversee all client companies — financials, documents, and reporting — without juggling multiple logins.
       </p>
       <div class="flex flex-col sm:flex-row items-center justify-center gap-4">
-        <a href="#/customer-onboarding?is_accountant=true" class="inline-flex items-center gap-2 bg-white text-primary font-jakarta font-semibold text-sm px-8 py-3.5 rounded-btn shadow-medium hover:shadow-elevated hover:bg-cloud transition-all">
+        <a href="#/signup?role=accountant" class="inline-flex items-center gap-2 bg-white text-primary font-jakarta font-semibold text-sm px-8 py-3.5 rounded-btn shadow-medium hover:shadow-elevated hover:bg-cloud transition-all">
           Start Your Free Trial
           <ArrowRight class="w-4 h-4" />
         </a>
@@ -181,7 +181,7 @@
               {/each}
             </ul>
             <a
-              href="#/customer-onboarding?is_accountant=true"
+              href="#/signup?role=accountant"
               class="w-full text-center text-sm font-jakarta font-semibold py-2.5 rounded-btn transition-all block {tier.highlighted
                 ? 'bg-primary hover:bg-navy text-white shadow-soft hover:shadow-medium'
                 : 'border border-primary text-primary hover:bg-primary hover:text-white'}"
@@ -237,7 +237,7 @@
         Join accounting firms that manage all their clients from one platform. 14-day free trial, no credit card required.
       </p>
       <div class="flex flex-col sm:flex-row items-center justify-center gap-4">
-        <a href="#/customer-onboarding?is_accountant=true" class="inline-flex items-center gap-2 bg-white text-primary font-jakarta font-semibold text-sm px-8 py-3.5 rounded-btn shadow-medium hover:shadow-elevated hover:bg-cloud transition-all">
+        <a href="#/signup?role=accountant" class="inline-flex items-center gap-2 bg-white text-primary font-jakarta font-semibold text-sm px-8 py-3.5 rounded-btn shadow-medium hover:shadow-elevated hover:bg-cloud transition-all">
           Start Free Trial
           <ArrowRight class="w-4 h-4" />
         </a>

@@ -580,3 +580,58 @@ class CloudflareManager:
         except Exception as e:
             logger.warning(f"No se pudo cargar dominios.json: {e}")
             return []
+
+    @classmethod
+    def list_authorized_domains(cls) -> List[Dict[str, str]]:
+        """
+        Retorna dominios autorizados para gestión de tunnels.
+
+        Fuente (prioridad):
+        1) CLOUDFLARE_ZONES (env domain=zone_id,...)
+        2) CLOUDFLARE_ZONE_ID como fallback para sajet.us
+        3) Archivo legacy dominios.json
+        """
+        domains: List[Dict[str, str]] = []
+
+        # 1) Dominios declarados explícitamente en env
+        for domain, zone_id in CLOUDFLARE_ZONES.items():
+            if not domain:
+                continue
+            domains.append({
+                "domain": domain.strip().lower(),
+                "zone_id": zone_id,
+                "source": "env:zones",
+            })
+
+        # 2) Fallback principal si no hay lista
+        if not domains and CLOUDFLARE_ZONE_ID:
+            domains.append({
+                "domain": "sajet.us",
+                "zone_id": CLOUDFLARE_ZONE_ID,
+                "source": "env:default",
+            })
+
+        # 3) Legacy file (sin sobreescribir existentes)
+        if not domains:
+            for item in cls.load_domains_file():
+                domain = (item.get("domain") or "").strip().lower()
+                zone_id = (item.get("zone_id") or "").strip()
+                if not domain or not zone_id:
+                    continue
+                domains.append({
+                    "domain": domain,
+                    "zone_id": zone_id,
+                    "source": "file:dominios.json",
+                })
+
+        # Deduplicar por dominio
+        seen = set()
+        deduped: List[Dict[str, str]] = []
+        for d in domains:
+            key = d["domain"]
+            if key in seen:
+                continue
+            seen.add(key)
+            deduped.append(d)
+
+        return deduped

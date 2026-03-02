@@ -3,7 +3,7 @@
   import { tunnelsApi } from '../lib/api';
   import { toasts } from '../lib/stores/toast';
   import { formatDate } from '../lib/utils/formatters';
-  import { RefreshCw, Wifi, WifiOff, Globe, Server, Link, Trash2, RotateCw, ChevronDown, ChevronUp, CreditCard, Plug, Unplug } from 'lucide-svelte';
+  import { RefreshCw, Wifi, WifiOff, Globe, Server, Link, Trash2, RotateCw, ChevronDown, ChevronUp, CreditCard, Plug, Unplug, PlusCircle } from 'lucide-svelte';
   import type { Tunnel, TunnelStats, DeploymentItem } from '../lib/api/tunnels';
 
   let tunnels = $state<Tunnel[]>([]);
@@ -29,6 +29,14 @@
   let subscriptions = $state<{id: number; plan_name: string; status: string; customer_email: string; stripe_id: string}[]>([]);
   let selectedSubId = $state<number | null>(null);
 
+  // Create tunnel state
+  let creatingTunnel = $state(false);
+  let createName = $state('');
+  let createHostname = $state('');
+  let createDomain = $state('');
+  let createDeploymentId = $state('');
+  let authorizedDomains = $state<{ domain: string; zone_id: string; source: string }[]>([]);
+
   let filteredTunnels = $derived(
     (tunnels || []).filter(t => {
       const matchesSearch = !searchQuery ||
@@ -52,6 +60,22 @@
       toasts.error(e?.message ?? 'Error al cargar tunnels');
     } finally {
       loading = false;
+    }
+  }
+
+  async function loadCreateMetadata() {
+    try {
+      const [domainsRes, deploymentsRes] = await Promise.all([
+        tunnelsApi.listAuthorizedDomains(),
+        tunnelsApi.listDeployments(),
+      ]);
+      authorizedDomains = domainsRes.domains ?? [];
+      if (!createDomain && authorizedDomains.length > 0) {
+        createDomain = authorizedDomains[0].domain;
+      }
+      deployments = deploymentsRes.deployments ?? deployments;
+    } catch {
+      // silencioso: la UI principal sigue funcionando
     }
   }
 
@@ -164,6 +188,41 @@
     }
   }
 
+  async function handleCreateTunnel() {
+    if (!createName.trim()) {
+      toasts.error('Nombre de tunnel requerido');
+      return;
+    }
+
+    creatingTunnel = true;
+    try {
+      const payload: Record<string, unknown> = {
+        name: createName.trim(),
+      };
+      if (createDomain.trim() && createHostname.trim()) {
+        payload.domain = createDomain.trim();
+        payload.hostname = createHostname.trim();
+      }
+      const parsedDeploymentId = Number(createDeploymentId);
+      if (Number.isFinite(parsedDeploymentId) && parsedDeploymentId > 0) {
+        payload.deployment_id = parsedDeploymentId;
+      }
+
+      const res = await tunnelsApi.createAdvanced(payload as { name: string; domain?: string; hostname?: string; deployment_id?: number }) as any;
+      toasts.success(res?.message || 'Tunnel creado');
+
+      createName = '';
+      createHostname = '';
+      createDeploymentId = '';
+      await loadTunnels();
+      await loadCreateMetadata();
+    } catch (e: any) {
+      toasts.error(e?.message ?? 'Error creando tunnel');
+    } finally {
+      creatingTunnel = false;
+    }
+  }
+
   function statusBadge(status: string): string {
     switch (status) {
       case 'healthy': return 'badge-success';
@@ -182,7 +241,10 @@
     }
   }
 
-  onMount(loadTunnels);
+  onMount(async () => {
+    await loadTunnels();
+    await loadCreateMetadata();
+  });
 </script>
 
 <div class="space-y-6">
@@ -224,6 +286,39 @@
     <div class="stat-card card">
       <div class="stat-value text-2xl font-bold text-blue-600">{stats.total_dns_cnames}</div>
       <div class="stat-label text-xs text-gray-500 uppercase flex items-center gap-1"><Globe size={12} class="text-blue-500" /> DNS CNAMEs</div>
+    </div>
+  </div>
+
+  <div class="card p-4 space-y-3">
+    <div class="flex items-center justify-between gap-2 flex-wrap">
+      <h3 class="text-sm font-semibold uppercase text-gray-700">Crear nuevo tunnel</h3>
+      <span class="text-xs text-gray-400">Cloudflare + DNS opcional + vínculo a deployment</span>
+    </div>
+    <div class="grid grid-cols-1 md:grid-cols-4 gap-3">
+      <input class="input" type="text" bind:value={createName} placeholder="Nombre tunnel (ej: node-rd-01)" />
+      <input class="input" type="text" bind:value={createHostname} placeholder="Hostname (ej: nodo1)" />
+      <select class="input" bind:value={createDomain}>
+        <option value="">Sin DNS automático</option>
+        {#each authorizedDomains as d}
+          <option value={d.domain}>{d.domain}</option>
+        {/each}
+      </select>
+      <select class="input" bind:value={createDeploymentId}>
+        <option value="">Sin vincular deployment</option>
+        {#each deployments as dep}
+          <option value={dep.id}>{dep.subdomain} ({dep.company_name || 'tenant'})</option>
+        {/each}
+      </select>
+    </div>
+    <div class="flex justify-end">
+      <button class="btn-accent px-4 py-2 text-sm flex items-center gap-2 disabled:opacity-50" disabled={creatingTunnel} onclick={handleCreateTunnel}>
+        {#if creatingTunnel}
+          <RefreshCw size={12} class="animate-spin" />
+        {:else}
+          <PlusCircle size={12} />
+        {/if}
+        CREAR TUNNEL
+      </button>
     </div>
   </div>
 

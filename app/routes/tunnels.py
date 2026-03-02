@@ -195,6 +195,18 @@ async def verify_api_token(access_token: str = Cookie(None)):
         raise HTTPException(status_code=500, detail=str(e))
 
 
+@router.get("/domains/available", summary="Dominios autorizados para tunnels")
+async def list_available_domains(access_token: str = Cookie(None)):
+    """Lista los dominios registrados/autorizados para creación de DNS en Cloudflare."""
+    verify_admin(access_token)
+    domains = CloudflareManager.list_authorized_domains()
+    return {
+        "success": True,
+        "domains": domains,
+        "total": len(domains),
+    }
+
+
 @router.get("/deployments/available", summary="Deployments disponibles para vincular")
 async def list_available_deployments(access_token: str = Cookie(None)):
     """Lista todos los TenantDeployments para vincular a tunnels."""
@@ -394,6 +406,9 @@ async def get_subscription_tunnel(subscription_id: str, access_token: str = Cook
 @router.post("", summary="Crear nuevo Cloudflare Tunnel")
 async def create_tunnel(
     name: str = Query(..., description="Nombre del tunnel"),
+    domain: Optional[str] = Query(None, description="Dominio autorizado (ej: sajet.us)"),
+    hostname: Optional[str] = Query(None, description="Hostname/FQDN para crear CNAME (ej: nodo1 o nodo1.sajet.us)"),
+    deployment_id: Optional[int] = Query(None, description="TenantDeployment opcional para vincular"),
     access_token: str = Cookie(None),
 ) -> Dict[str, Any]:
     """Crea un nuevo Cloudflare Tunnel vía API REST."""
@@ -403,11 +418,51 @@ async def create_tunnel(
         if not result.get("success"):
             raise HTTPException(status_code=500, detail=result.get("error", "Error creando tunnel"))
 
-        logger.info(f"Tunnel creado vía API: {name}")
+        tunnel = result.get("tunnel") or {}
+        tunnel_id = tunnel.get("id")
+
+        dns_result = None
+        linked_deployment = None
+
+        # Si pidieron vínculo con deployment, intentar resolver hostname por subdomain
+        if deployment_id:
+            db = SessionLocal()
+            try:
+                deployment = db.query(TenantDeployment).filter_by(id=deployment_id).first()
+                if not deployment:
+                    raise HTTPException(status_code=404, detail="Deployment no encontrado")
+
+                deployment.tunnel_id = tunnel_id
+                deployment.tunnel_active = False
+                db.commit()
+
+                linked_deployment = {
+                    "id": deployment.id,
+                    "subdomain": deployment.subdomain,
+                }
+
+                if not hostname and deployment.subdomain:
+                    hostname = deployment.subdomain
+            finally:
+                db.close()
+
+        # Si pidieron DNS, crearlo automáticamente en el dominio elegido
+        if domain and hostname and tunnel_id:
+            fqdn = hostname if hostname.endswith(f".{domain}") else f"{hostname}.{domain}"
+            dns_result = await CloudflareManager.create_dns_record(
+                subdomain=fqdn,
+                tunnel_id=tunnel_id,
+                domain=domain,
+                proxied=True,
+            )
+
+        logger.info(f"Tunnel creado vía API: {name} ({tunnel_id})")
         return {
             "success": True,
             "message": f"Tunnel '{name}' creado exitosamente",
-            "tunnel": result.get("tunnel"),
+            "tunnel": tunnel,
+            "linked_deployment": linked_deployment,
+            "dns": dns_result,
         }
     except HTTPException:
         raise

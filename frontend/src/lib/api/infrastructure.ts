@@ -4,6 +4,7 @@ import type {
   ClusterSummary,
   ContainerItem,
   ContainersListResponse,
+  NodeCreatePayload,
   NodeSummary,
   NodesListResponse,
 } from '../types';
@@ -36,6 +37,10 @@ export interface NodeMetrics {
 export const infrastructureApi = {
   async getNodes(): Promise<NodesListResponse> {
     return api.get<NodesListResponse>('/api/nodes');
+  },
+
+  async createNode(payload: NodeCreatePayload): Promise<{ message: string; id: number; name: string }> {
+    return api.post('/api/nodes', payload);
   },
 
   async getClusterStatus(): Promise<ClusterStatus> {

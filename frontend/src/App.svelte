@@ -8,6 +8,10 @@
   import Landing from './routes/Landing.svelte';
   import AccountantsLanding from './routes/AccountantsLanding.svelte';
   import PartnerLanding from './routes/PartnerLanding.svelte';
+  import PartnerSignup from './routes/PartnerSignup.svelte';
+  import OnboardingAccess from './routes/OnboardingAccess.svelte';
+  import Signup from './routes/Signup.svelte';
+  import RecoverAccount from './routes/RecoverAccount.svelte';
   import AccountantPortal from './routes/AccountantPortal.svelte';
   import Dashboard from './routes/Dashboard.svelte';
   import TenantPortal from './routes/TenantPortal.svelte';
@@ -89,8 +93,11 @@
     | 'landing-sections'
     | 'translations'
     | 'signup'
+    | 'recover-account'
     | 'accountants'
     | 'plt'
+    | 'partner-signup'
+    | 'onboarding-access'
     | 'accountant-portal'
     | 'notfound';
 
@@ -109,6 +116,9 @@
     if (path.startsWith('/admin')) return 'dashboard';
     if (path.startsWith('/tenant/portal')) return 'portal';
     if (path.startsWith('/login')) return 'login';
+    if (path.startsWith('/signup')) return 'signup';
+    if (path.startsWith('/recover-account')) return 'recover-account';
+    if (path.startsWith('/partner-signup')) return 'partner-signup';
     return 'landing';
   }
 
@@ -148,6 +158,26 @@
 
     if (route === 'login') {
       currentPage = 'login';
+      return;
+    }
+
+    if (route === 'signup') {
+      currentPage = 'signup';
+      return;
+    }
+
+    if (route === 'recover-account') {
+      currentPage = 'recover-account';
+      return;
+    }
+
+    if (route === 'partner-signup') {
+      currentPage = 'partner-signup';
+      return;
+    }
+
+    if (route === 'customer-onboarding' && !$isAuthenticated && !$auth.isLoading) {
+      currentPage = 'onboarding-access';
       return;
     }
 
@@ -222,6 +252,10 @@
       case 'landing-sections':
       case 'translations':
       case 'accountant-portal':
+      case 'signup':
+      case 'recover-account':
+      case 'partner-signup':
+      case 'onboarding-access':
         currentPage = route as AppPage;
         break;
       default:
@@ -276,6 +310,14 @@
   <PartnerLanding code={partnerSlug} />
 {:else if currentPage === 'login'}
   <Login />
+{:else if currentPage === 'signup'}
+  <Signup />
+{:else if currentPage === 'recover-account'}
+  <RecoverAccount />
+{:else if currentPage === 'partner-signup'}
+  <PartnerSignup />
+{:else if currentPage === 'onboarding-access'}
+  <OnboardingAccess />
 {:else if currentPage === 'portal'}
   <TenantPortal />
 {:else if currentPage === 'partner-portal'}

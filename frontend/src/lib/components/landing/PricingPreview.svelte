@@ -64,7 +64,7 @@
       billing: annual ? 'annual' : 'monthly',
       ...(partnerCode ? { partner: partnerCode } : {}),
     });
-    window.location.hash = `#/customer-onboarding?${params.toString()}`;
+    window.location.hash = `#/signup?${params.toString()}`;
   }
 </script>
 

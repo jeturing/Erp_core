@@ -18,18 +18,21 @@ Endpoints:
 
 from fastapi import APIRouter, HTTPException, Query
 from fastapi.responses import JSONResponse
-from pydantic import BaseModel
+from pydantic import BaseModel, EmailStr
 from typing import Optional, List
 from datetime import datetime
 import json
 import logging
+import secrets
+import string
+import bcrypt
 
 from ..models.database import (
     Plan, Customer, Partner, PartnerBrandingProfile, PartnerPricingOverride,
     ModuleCatalog, ModulePackage, ModulePackageItem,
     ServiceCatalogItem, ServiceCategory, PlanCatalogLink,
     Testimonial, LandingSection, Translation, AccountantTenantAccess,
-    SessionLocal, PartnerStatus, SubscriptionStatus, Subscription,
+    SessionLocal, PartnerStatus, SubscriptionStatus, Subscription, BillingScenario,
 )
 
 logger = logging.getLogger(__name__)
@@ -46,6 +49,27 @@ class PriceCalculateRequest(BaseModel):
     user_count: int = 1
     billing_period: str = "monthly"     # "monthly" | "annual"
     partner_code: Optional[str] = None
+
+
+class PublicPartnerSignupRequest(BaseModel):
+    company_name: str
+    contact_name: str
+    contact_email: EmailStr
+    country: Optional[str] = None
+    phone: Optional[str] = None
+    password: str
+    billing_scenario: Optional[str] = "jeturing_collects"
+
+
+def _generate_partner_code(db) -> str:
+    """Genera código partner único P-XXXX."""
+    chars = string.ascii_uppercase + string.digits
+    for _ in range(100):
+        code = "P-" + "".join(secrets.choice(chars) for _ in range(4))
+        existing = db.query(Partner).filter(Partner.partner_code == code).first()
+        if not existing:
+            return code
+    raise ValueError("No se pudo generar código partner")
 
 
 # ═══════════════════════════════════════════
@@ -541,6 +565,65 @@ async def calculate_price(payload: PriceCalculateRequest):
             },
             "currency": plan.currency,
             "has_partner_pricing": partner_id is not None,
+        }
+    finally:
+        db.close()
+
+
+# ═══════════════════════════════════════════
+#  POST /api/public/partner-signup — alta self-service partner
+# ═══════════════════════════════════════════
+
+@router.post("/partner-signup")
+async def public_partner_signup(payload: PublicPartnerSignupRequest):
+    """
+    Registro público de partner (estado pending) con acceso al portal.
+    El partner completa su onboarding al iniciar sesión.
+    """
+    db = SessionLocal()
+    try:
+        email = payload.contact_email.strip().lower()
+
+        # No revelar si existe por contacto_email/portal_email
+        exists = db.query(Partner).filter(
+            (Partner.contact_email == email) | (Partner.portal_email == email)
+        ).first()
+        if exists:
+            raise HTTPException(status_code=409, detail="Ya existe una cuenta con ese email")
+
+        if len(payload.password or "") < 8:
+            raise HTTPException(status_code=400, detail="La contraseña debe tener al menos 8 caracteres")
+
+        try:
+            scenario = BillingScenario(payload.billing_scenario) if payload.billing_scenario else BillingScenario.jeturing_collects
+        except ValueError:
+            scenario = BillingScenario.jeturing_collects
+
+        password_hash = bcrypt.hashpw(payload.password.encode(), bcrypt.gensalt()).decode()
+
+        partner = Partner(
+            company_name=payload.company_name.strip(),
+            contact_name=payload.contact_name.strip(),
+            contact_email=email,
+            portal_email=email,
+            country=(payload.country or "").strip() or None,
+            phone=(payload.phone or "").strip() or None,
+            billing_scenario=scenario,
+            status=PartnerStatus.pending,
+            portal_access=True,
+            partner_code=_generate_partner_code(db),
+            password_hash=password_hash,
+            onboarding_step=1,
+            invited_at=datetime.utcnow(),
+            invited_by="self_signup",
+        )
+        db.add(partner)
+        db.commit()
+
+        return {
+            "success": True,
+            "message": "Cuenta de partner creada. Inicie sesión para completar onboarding.",
+            "redirect_hash": "#/login?next=partner-portal",
         }
     finally:
         db.close()

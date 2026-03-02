@@ -550,6 +550,68 @@ async def create_role(payload: RolePayload, request: Request, access_token: Opti
         db.close()
 
 
+@router.get("/api/roles/permissions-catalog")
+async def permissions_catalog_early(request: Request, access_token: Optional[str] = Cookie(None)):
+    """Catálogo completo de permisos agrupados por módulo (ruta prioritaria)."""
+    _require_admin(request, access_token)
+    return {"modules": PERMISSION_CATALOG}
+
+
+@router.get("/api/roles/presets")
+async def role_presets_early(request: Request, access_token: Optional[str] = Cookie(None)):
+    """Plantillas predefinidas para crear roles rápidamente (ruta prioritaria)."""
+    _require_admin(request, access_token)
+    return {"presets": ROLE_PRESETS}
+
+
+@router.get("/api/roles/available-tenants")
+async def available_tenants_early(request: Request, access_token: Optional[str] = Cookie(None)):
+    """Lista de tenants disponibles para asignar a roles (ruta prioritaria)."""
+    _require_admin(request, access_token)
+    from ..models.database import TenantDeployment, Subscription
+    db = SessionLocal()
+    try:
+        deployments = db.query(TenantDeployment).all()
+        tenants = []
+        for d in deployments:
+            sub = db.query(Subscription).filter(Subscription.id == d.subscription_id).first()
+            customer = None
+            if sub:
+                customer = db.query(Customer).filter(Customer.id == sub.customer_id).first()
+            tenants.append({
+                "id": d.id,
+                "tenant_name": d.subdomain or f"tenant-{d.id}",
+                "domain": d.tunnel_url or d.direct_url or "—",
+                "customer_name": customer.company_name if customer else "—",
+                "customer_id": sub.customer_id if sub else None,
+            })
+        return {"tenants": tenants, "total": len(tenants)}
+    finally:
+        db.close()
+
+
+@router.get("/api/roles/available-users")
+async def available_users_early(request: Request, access_token: Optional[str] = Cookie(None)):
+    """Lista de usuarios admin disponibles para asignar a roles (ruta prioritaria)."""
+    _require_admin(request, access_token)
+    from ..models.database import AdminUser
+    db = SessionLocal()
+    try:
+        users = db.query(AdminUser).filter(AdminUser.is_active == True).order_by(AdminUser.display_name).all()
+        result = [
+            {
+                "id": u.id,
+                "email": u.email,
+                "display_name": u.display_name,
+                "role": u.role.value if u.role else "admin",
+            }
+            for u in users
+        ]
+        return {"users": result, "total": len(result)}
+    finally:
+        db.close()
+
+
 @router.put("/api/roles/{role_id}")
 async def update_role(role_id: int, payload: RolePayload, request: Request, access_token: Optional[str] = Cookie(None)):
     """Actualiza metadata y permisos de un rol."""

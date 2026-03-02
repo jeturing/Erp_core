@@ -77,6 +77,16 @@ def list_reconciliation_runs(
     }
 
 
+@router.get("")
+def list_reconciliation_runs_compat(
+    limit: int = 20,
+    offset: int = 0,
+    db: Session = Depends(get_db),
+):
+    """Compat: mantiene soporte para GET /api/reconciliation?limit=..."""
+    return list_reconciliation_runs(limit=limit, offset=offset, db=db)
+
+
 @router.get("/runs/{run_id}")
 def get_reconciliation_detail(run_id: int, db: Session = Depends(get_db)):
     run = db.query(ReconciliationRun).filter(ReconciliationRun.id == run_id).first()
@@ -94,3 +104,9 @@ def get_reconciliation_detail(run_id: int, db: Session = Depends(get_db)):
         "run_by": run.run_by,
         "details": run.discrepancy_details,
     }
+
+
+@router.get("/{run_id}")
+def get_reconciliation_detail_compat(run_id: int, db: Session = Depends(get_db)):
+    """Compat: mantiene soporte para GET /api/reconciliation/{id}."""
+    return get_reconciliation_detail(run_id=run_id, db=db)

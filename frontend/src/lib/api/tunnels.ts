@@ -87,6 +87,19 @@ export interface DeploymentItem {
   stripe_status: string | null;
 }
 
+export interface AuthorizedDomain {
+  domain: string;
+  zone_id: string;
+  source: string;
+}
+
+export interface CreateTunnelOptions {
+  name: string;
+  domain?: string;
+  hostname?: string;
+  deployment_id?: number;
+}
+
 // ─── API ───────────────────────────────────────────────
 export const tunnelsApi = {
   list(): Promise<TunnelsListResponse> {
@@ -113,6 +126,15 @@ export const tunnelsApi = {
     return api.post(`/api/tunnels?name=${encodeURIComponent(name)}`, {});
   },
 
+  createAdvanced(options: CreateTunnelOptions): Promise<Record<string, unknown>> {
+    const qs = new URLSearchParams();
+    qs.set('name', options.name);
+    if (options.domain) qs.set('domain', options.domain);
+    if (options.hostname) qs.set('hostname', options.hostname);
+    if (typeof options.deployment_id === 'number') qs.set('deployment_id', String(options.deployment_id));
+    return api.post(`/api/tunnels?${qs.toString()}`, {});
+  },
+
   delete(tunnelId: string): Promise<{ success: boolean; message: string }> {
     return api.delete(`/api/tunnels/${tunnelId}`);
   },
@@ -134,6 +156,10 @@ export const tunnelsApi = {
   /** Deployments disponibles para vincular */
   listDeployments(): Promise<{ success: boolean; deployments: DeploymentItem[]; total: number }> {
     return api.get('/api/tunnels/deployments/available');
+  },
+
+  listAuthorizedDomains(): Promise<{ success: boolean; domains: AuthorizedDomain[]; total: number }> {
+    return api.get('/api/tunnels/domains/available');
   },
 
   /** Vincular tunnel → deployment */

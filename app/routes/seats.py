@@ -192,6 +192,18 @@ def get_hwm(subscription_id: int, days: int = 30, db: Session = Depends(get_db))
     }
 
 
+@router.get("/hwm")
+def get_hwm_compat(
+    subscription_id: Optional[int] = None,
+    days: int = 30,
+    db: Session = Depends(get_db),
+):
+    """Compat: soporta GET /api/seats/hwm?subscription_id=123"""
+    if not subscription_id:
+        raise HTTPException(status_code=400, detail="subscription_id es requerido")
+    return get_hwm(subscription_id=subscription_id, days=days, db=db)
+
+
 @router.post("/sync-stripe")
 def sync_stripe_all(db: Session = Depends(get_db)):
     """
@@ -269,3 +281,14 @@ def seat_summary(subscription_id: int, db: Session = Depends(get_db)):
             for e in events
         ],
     }
+
+
+@router.get("/summary")
+def seat_summary_compat(
+    subscription_id: Optional[int] = None,
+    db: Session = Depends(get_db),
+):
+    """Compat: soporta GET /api/seats/summary?subscription_id=123"""
+    if not subscription_id:
+        raise HTTPException(status_code=400, detail="subscription_id es requerido")
+    return seat_summary(subscription_id=subscription_id, db=db)
