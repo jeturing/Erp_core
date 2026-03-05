@@ -97,6 +97,23 @@
     return `máx ${plan.max_users}`;
   }
 
+  function storageLabel(mb: number): string {
+    if (!mb || mb === 0) return '∞';
+    if (mb >= 1024) return `${mb / 1024} GB`;
+    return `${mb} MB`;
+  }
+
+  function apiLabel(plan: any): string {
+    if (plan.name === 'pro') return 'API lectura';
+    return 'API completa';
+  }
+
+  function supportLabel(plan: any): string {
+    if (plan.name === 'basic') return 'Email';
+    if (plan.name === 'pro') return 'Prioritario';
+    return '24/7';
+  }
+
   function goCheckout(plan: any) {
     const params = new URLSearchParams({
       plan: plan.id || plan.name,
@@ -196,6 +213,22 @@
             {/if}
           </div>
 
+          <!-- Specs chips -->
+          <div class="flex flex-wrap gap-1.5 mb-4">
+            <span class="inline-flex items-center gap-1 text-[11px] font-inter font-medium bg-cloud text-slate-dark rounded-full px-2.5 py-1">
+              💾 {storageLabel(plan.max_storage_mb)}
+            </span>
+            <span class="inline-flex items-center gap-1 text-[11px] font-inter font-medium bg-cloud text-slate-dark rounded-full px-2.5 py-1">
+              🔒 Backups ∞
+            </span>
+            <span class="inline-flex items-center gap-1 text-[11px] font-inter font-medium bg-cloud text-slate-dark rounded-full px-2.5 py-1">
+              ⚡ {apiLabel(plan)}
+            </span>
+            <span class="inline-flex items-center gap-1 text-[11px] font-inter font-medium bg-cloud text-slate-dark rounded-full px-2.5 py-1">
+              💬 {supportLabel(plan)}
+            </span>
+          </div>
+
           <!-- Trial badge -->
           <p class="text-xs font-inter text-primary font-semibold mb-4">
             ✓ {plan.trial_days} días de prueba gratis · Sin tarjeta
@@ -234,26 +267,37 @@
       {$t('pricing.billing_note')}
     </p>
 
-    <!-- FEL notice — P1 -->
+    <!-- FEL / e-CF notice -->
     <div class="mt-10 rounded-card-lg border border-amber-200 bg-amber-50 p-5 flex gap-4 items-start">
       <div class="flex-shrink-0 w-10 h-10 bg-amber-100 rounded-full flex items-center justify-center">
         <Zap class="w-5 h-5 text-amber-600" />
       </div>
-      <div>
+      <div class="flex-1">
         <p class="text-sm font-jakarta font-bold text-amber-900 mb-1">
-          ¿Tu negocio requiere facturación electrónica (e-CF) ante la DGII?
+          ⚡ ¿Necesitas facturación electrónica DGII (e-CF)?
         </p>
-        <p class="text-sm font-inter text-amber-800 leading-relaxed">
-          Sajet integra de forma nativa con <strong>República FEL</strong>, proveedor certificado.
-          El servicio FEL se contrata directamente <strong>desde $50/mes</strong> según tu volumen de documentos.
-          Nos encargamos de toda la implementación técnica.
+        <p class="text-sm font-inter text-amber-800 leading-relaxed mb-2">
+          Todos los planes incluyen integración nativa con <strong>República FEL</strong>, proveedor certificado ante la DGII.
+          El módulo e-CF se activa sobre cualquier plan — el costo del timbre fiscal depende de tu volumen de documentos
+          y se factura directamente por el PAC. <strong>Nos encargamos de toda la implementación técnica sin costo adicional.</strong>
         </p>
-        <a
-          href="#/contact?subject=fel"
-          class="inline-flex items-center gap-1 mt-2 text-xs font-inter font-semibold text-amber-700 hover:text-amber-900 transition-colors"
-        >
-          Consultar integración FEL →
-        </a>
+        <div class="flex flex-wrap gap-3">
+          <a
+            href="#/contact?subject=fel"
+            class="inline-flex items-center gap-1 text-xs font-inter font-semibold text-amber-700 hover:text-amber-900 transition-colors"
+          >
+            Consultar integración FEL →
+          </a>
+          <span class="text-xs font-inter text-amber-600">·</span>
+          <a
+            href="https://republicafel.com"
+            target="_blank"
+            rel="noopener noreferrer"
+            class="inline-flex items-center gap-1 text-xs font-inter font-semibold text-amber-700 hover:text-amber-900 transition-colors"
+          >
+            Ver tarifas República FEL ↗
+          </a>
+        </div>
       </div>
     </div>
   </div>

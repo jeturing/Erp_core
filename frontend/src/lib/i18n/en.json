@@ -204,8 +204,8 @@
     "per_user_month": "per user / month",
     "free_trial_included": "{{days}}-day free trial included",
     "start_trial": "Start free trial",
-    "all_prices_usd": "All plans include: your own cloud URL, automatic updates, daily backups, and SSL.",
-    "billing_note": "Billed and managed by Jeturing Inc.",
+    "all_prices_usd": "All plans include: your own URL · SSL · Automatic updates · Unlimited backups · 1 company included",
+    "billing_note": "Billed and managed by Jeturing Inc. · Prices in USD",
     "users": "Users",
     "starter": "Starter",
     "starter_name": "Starter",
@@ -231,7 +231,11 @@
     "enterprise_companies": "Unlimited companies",
     "enterprise_modules": "White-label + Custom integrations",
     "cta_start": "Get Started",
-    "cta_enterprise": "Talk to us"
+    "cta_enterprise": "Talk to us",
+    "fel_title": "⚡ Need DGII electronic invoicing (e-CF)?",
+    "fel_body": "All plans include native integration with República FEL, a DGII-certified provider. e-CF activation has no extra cost in Sajet — fiscal stamp fees depend on your document volume and are billed by the PAC.",
+    "fel_cta": "Ask about FEL integration →",
+    "fel_rates": "See República FEL pricing ↗"
   },
   "final_cta": {
     "headline": "Ready to run your business",
