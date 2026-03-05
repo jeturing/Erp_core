@@ -329,6 +329,43 @@ async def toggle_maintenance(node_id: int, enable: bool = True, access_token: st
         db.close()
 
 
+@router.get("/{node_id}/domains")
+async def get_node_domains(node_id: int, request: Request, access_token: str = Cookie(None)):
+    """Devuelve los dominios Cloudflare vinculados a un nodo por target_node_ip"""
+    verify_admin(get_token_from_request(request, access_token))
+    db = SessionLocal()
+    try:
+        node = db.query(ProxmoxNode).filter_by(id=node_id).first()
+        if not node:
+            raise HTTPException(status_code=404, detail="Nodo no encontrado")
+        domains = db.query(CustomDomain).filter(
+            CustomDomain.is_active == True,
+            CustomDomain.target_node_ip == node.hostname
+        ).all()
+        return {
+            "node_id": node.id,
+            "node_name": node.name,
+            "node_ip": node.hostname,
+            "domains": [
+                {
+                    "id": d.id,
+                    "domain": d.external_domain or d.sajet_subdomain,
+                    "cloudflare_configured": d.cloudflare_configured,
+                    "cloudflare_dns_record_id": d.cloudflare_dns_record_id,
+                    "ssl_status": d.ssl_status,
+                    "verification_status": d.verification_status,
+                    "is_primary": d.is_primary,
+                    "target_port": d.target_port,
+                    "created_at": d.created_at.isoformat() if d.created_at else None,
+                }
+                for d in domains
+            ],
+            "total": len(domains)
+        }
+    finally:
+        db.close()
+
+
 @router.get("/{node_id}/live-stats")
 async def get_node_live_stats(node_id: int, request: Request, access_token: str = Cookie(None)):
     """Obtiene métricas en vivo de un nodo via SSH con password"""
