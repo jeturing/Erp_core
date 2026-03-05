@@ -12,7 +12,7 @@ from datetime import datetime
 
 from ..models.database import (
     SessionLocal, ProxmoxNode, LXCContainer, TenantDeployment,
-    NodeStatus, ContainerStatus, PlanType
+    NodeStatus, ContainerStatus, PlanType, CustomDomain
 )
 from ..services.proxmox_manager import ProxmoxManager
 from ..security.tokens import TokenManager
@@ -89,7 +89,25 @@ async def list_nodes(access_token: str = Cookie(None)):
     db = SessionLocal()
     try:
         nodes = db.query(ProxmoxNode).order_by(ProxmoxNode.priority.desc()).all()
-        
+
+        # Agrupar dominios activos por target_node_ip para vincularlos a cada nodo
+        all_domains = db.query(CustomDomain).filter(CustomDomain.is_active == True).all()
+        domains_by_ip: dict = {}
+        for d in all_domains:
+            ip = d.target_node_ip
+            if not ip:
+                continue
+            if ip not in domains_by_ip:
+                domains_by_ip[ip] = []
+            domains_by_ip[ip].append({
+                "id": d.id,
+                "domain": d.external_domain or d.sajet_subdomain,
+                "cloudflare_configured": d.cloudflare_configured,
+                "ssl_status": d.ssl_status,
+                "is_primary": d.is_primary,
+                "verification_status": d.verification_status,
+            })
+
         return {
             "items": [
                 {
@@ -121,6 +139,7 @@ async def list_nodes(access_token: str = Cookie(None)):
                             "usage_percent": (node.used_storage_gb / node.total_storage_gb * 100) if node.total_storage_gb > 0 else 0
                         }
                     },
+                    "domains": domains_by_ip.get(node.hostname, []),
                     "last_health_check": node.last_health_check.isoformat() if node.last_health_check else None,
                     "created_at": node.created_at.isoformat() if node.created_at else None
                 }

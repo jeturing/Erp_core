@@ -296,6 +296,25 @@
                 <span>Disk free <span class="font-semibold text-gray-700">{live.disk.free_gb} GB</span></span>
               </div>
 
+              <!-- Dominios Cloudflare vinculados al nodo -->
+              {#if node.domains?.length}
+                <div class="flex flex-wrap gap-1 mt-1 px-1">
+                  {#each node.domains as d}
+                    <span class="text-[10px] bg-orange-50 text-orange-700 border border-orange-200 rounded-full px-2 py-0.5 flex items-center gap-1" title="{d.ssl_status || 'sin SSL'} · {d.verification_status}">
+                      {#if d.cloudflare_configured}
+                        <span class="text-orange-500">☁</span>
+                      {:else}
+                        <span class="text-gray-400">○</span>
+                      {/if}
+                      {d.domain}
+                      {#if d.is_primary}
+                        <span class="text-[9px] bg-orange-200 text-orange-800 rounded px-0.5">★</span>
+                      {/if}
+                    </span>
+                  {/each}
+                </div>
+              {/if}
+
             {:else if !isLoading}
               <!-- Offline state -->
               <div class="flex items-center gap-2 py-4 justify-center">
