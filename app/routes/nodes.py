@@ -1,6 +1,8 @@
 """
 Nodes Routes - Proxmox cluster management endpoints
 """
+import asyncio
+import subprocess
 from fastapi import APIRouter, HTTPException, Cookie, Request
 from fastapi.responses import JSONResponse
 from pydantic import BaseModel
@@ -291,6 +293,170 @@ async def toggle_maintenance(node_id: int, enable: bool = True, access_token: st
             "message": f"Nodo {'en mantenimiento' if enable else 'activo'}",
             "status": node.status.value
         }
+    finally:
+        db.close()
+
+
+@router.get("/{node_id}/live-stats")
+async def get_node_live_stats(node_id: int, access_token: str = Cookie(None)):
+    """Obtiene métricas en vivo de un nodo via SSH con password"""
+    verify_admin(access_token)
+
+    db = SessionLocal()
+    try:
+        node = db.query(ProxmoxNode).filter_by(id=node_id).first()
+        if not node:
+            raise HTTPException(status_code=404, detail="Nodo no encontrado")
+
+        # Script de stats compacto que corre en el nodo remoto
+        stats_script = (
+            "nproc; "
+            "cat /proc/cpuinfo | grep 'cpu MHz' | awk '{s+=$4;c++} END{printf \"%.0f\\n\", s/c}'; "
+            "top -bn1 | grep 'Cpu' | awk '{print 100-$8}'; "
+            "free -m | awk '/Mem/{print $2,$3}'; "
+            "df / -BG | awk 'NR==2{gsub(/G/,\"\",$2); gsub(/G/,\"\",$3); print $2,$3}'; "
+            "uptime -p 2>/dev/null || uptime; "
+            "cat /proc/loadavg"
+        )
+
+        use_password = bool(node.ssh_password)
+        if use_password:
+            cmd = [
+                "sshpass", "-p", node.ssh_password,
+                "ssh",
+                "-o", "StrictHostKeyChecking=no",
+                "-o", "ConnectTimeout=8",
+                "-o", "BatchMode=no",
+                "-p", str(node.ssh_port),
+                f"{node.ssh_user}@{node.hostname}",
+                stats_script
+            ]
+        else:
+            cmd = [
+                "ssh",
+                "-o", "StrictHostKeyChecking=no",
+                "-o", "ConnectTimeout=8",
+                "-p", str(node.ssh_port),
+                f"{node.ssh_user}@{node.hostname}",
+                stats_script
+            ]
+
+        try:
+            result = subprocess.run(cmd, capture_output=True, text=True, timeout=15)
+            if result.returncode != 0:
+                # Actualizar estado a offline si falla
+                node.status = NodeStatus.offline
+                db.commit()
+                return {
+                    "node_id": node_id,
+                    "name": node.name,
+                    "online": False,
+                    "error": result.stderr.strip() or "SSH connection failed"
+                }
+
+            lines = result.stdout.strip().splitlines()
+            cpu_cores   = int(lines[0]) if len(lines) > 0 else node.total_cpu_cores
+            cpu_mhz     = int(lines[1]) if len(lines) > 1 else 0
+            cpu_pct     = float(lines[2]) if len(lines) > 2 else 0.0
+            ram_parts   = lines[3].split() if len(lines) > 3 else ["0", "0"]
+            disk_parts  = lines[4].split() if len(lines) > 4 else ["0", "0"]
+            uptime_str  = lines[5] if len(lines) > 5 else ""
+            loadavg_str = lines[6] if len(lines) > 6 else "0 0 0"
+
+            ram_total_mb = int(ram_parts[0]) if ram_parts else 0
+            ram_used_mb  = int(ram_parts[1]) if len(ram_parts) > 1 else 0
+            disk_total   = int(disk_parts[0]) if disk_parts else 0
+            disk_used    = int(disk_parts[1]) if len(disk_parts) > 1 else 0
+
+            ram_pct  = round(ram_used_mb / ram_total_mb * 100, 1) if ram_total_mb > 0 else 0
+            disk_pct = round(disk_used / disk_total * 100, 1) if disk_total > 0 else 0
+
+            loadavg = loadavg_str.split()[:3] if loadavg_str else ["0", "0", "0"]
+
+            # Actualizar BD con métricas frescas
+            node.used_cpu_percent   = round(cpu_pct, 1)
+            node.used_ram_gb        = round(ram_used_mb / 1024, 2)
+            node.total_ram_gb       = round(ram_total_mb / 1024, 2)
+            node.used_storage_gb    = float(disk_used)
+            node.total_storage_gb   = float(disk_total) if disk_total > 0 else node.total_storage_gb
+            node.status             = NodeStatus.online
+            node.last_health_check  = datetime.utcnow()
+            db.commit()
+
+            return {
+                "node_id": node_id,
+                "name": node.name,
+                "hostname": node.hostname,
+                "online": True,
+                "is_database_node": node.is_database_node,
+                "region": node.region,
+                "cpu": {
+                    "cores": cpu_cores,
+                    "usage_percent": round(cpu_pct, 1),
+                    "mhz": cpu_mhz,
+                    "load_avg": {"1m": loadavg[0], "5m": loadavg[1], "15m": loadavg[2]}
+                },
+                "ram": {
+                    "total_mb": ram_total_mb,
+                    "used_mb": ram_used_mb,
+                    "free_mb": ram_total_mb - ram_used_mb,
+                    "usage_percent": ram_pct
+                },
+                "disk": {
+                    "total_gb": disk_total,
+                    "used_gb": disk_used,
+                    "free_gb": disk_total - disk_used,
+                    "usage_percent": disk_pct
+                },
+                "uptime": uptime_str,
+                "last_updated": datetime.utcnow().isoformat()
+            }
+
+        except subprocess.TimeoutExpired:
+            node.status = NodeStatus.offline
+            db.commit()
+            return {"node_id": node_id, "name": node.name, "online": False, "error": "SSH timeout"}
+        except FileNotFoundError:
+            return {"node_id": node_id, "name": node.name, "online": False, "error": "sshpass not installed"}
+
+    finally:
+        db.close()
+
+
+@router.post("/health-check-all")
+async def run_health_check_all(access_token: str = Cookie(None)):
+    """Ejecuta health check + actualiza métricas en todos los nodos"""
+    verify_admin(access_token)
+
+    db = SessionLocal()
+    try:
+        nodes = db.query(ProxmoxNode).all()
+        results = []
+
+        for node in nodes:
+            use_password = bool(node.ssh_password)
+            base_ssh = ["sshpass", "-p", node.ssh_password] if use_password else []
+            cmd = base_ssh + [
+                "ssh", "-o", "StrictHostKeyChecking=no",
+                "-o", "ConnectTimeout=5",
+                "-o", "BatchMode=no" if use_password else "-o", "BatchMode=yes",
+                "-p", str(node.ssh_port),
+                f"{node.ssh_user}@{node.hostname}",
+                "echo ok"
+            ]
+            try:
+                r = subprocess.run(cmd, capture_output=True, timeout=10)
+                is_online = r.returncode == 0
+                node.status = NodeStatus.online if is_online else NodeStatus.offline
+                if is_online:
+                    node.last_health_check = datetime.utcnow()
+                results.append({"node": node.name, "status": "online" if is_online else "offline"})
+            except Exception as e:
+                node.status = NodeStatus.offline
+                results.append({"node": node.name, "status": "error", "error": str(e)})
+
+        db.commit()
+        return {"checks": results, "total": len(results)}
     finally:
         db.close()
 

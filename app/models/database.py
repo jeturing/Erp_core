@@ -776,7 +776,9 @@ class ProxmoxNode(Base):
     api_token_id = Column(String(255))                 # ej: "root@pam!onboarding"
     api_token_secret = Column(Text)                    # Token encriptado
     ssh_user = Column(String(50), default="root")
-    
+    ssh_password = Column(String(255), nullable=True)  # Contraseña SSH (si no usa key)
+    vmid = Column(Integer, nullable=True)              # VMID en Proxmox (para pct exec local)
+
     # Metadatos
     created_at = Column(DateTime, default=datetime.utcnow)
     updated_at = Column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
