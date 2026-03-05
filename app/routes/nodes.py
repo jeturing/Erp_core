@@ -2,6 +2,7 @@
 Nodes Routes - Proxmox cluster management endpoints
 """
 import asyncio
+import os
 import subprocess
 from fastapi import APIRouter, HTTPException, Cookie, Request
 from fastapi.responses import JSONResponse
@@ -53,15 +54,27 @@ class ProvisionRequest(BaseModel):
 
 # ===== Helper =====
 
-def verify_admin(access_token: str) -> bool:
+def get_token_from_request(request: Request, cookie_token: str = None) -> str:
+    """Extrae token desde cookie o header Authorization: Bearer"""
+    if cookie_token:
+        return cookie_token
+    auth = request.headers.get("Authorization", "")
+    if auth.startswith("Bearer "):
+        return auth[7:]
+    return None
+
+
+def verify_admin(token: str) -> bool:
     """Verifica que el token sea de admin"""
-    if not access_token:
+    if not token:
         raise HTTPException(status_code=401, detail="No autenticado")
     try:
-        payload = TokenManager.verify_access_token(access_token)
+        payload = TokenManager.verify_access_token(token)
         if payload.get("role") != "admin":
             raise HTTPException(status_code=403, detail="Acceso denegado")
         return True
+    except HTTPException:
+        raise
     except:
         raise HTTPException(status_code=401, detail="Token inválido")
 
@@ -298,9 +311,9 @@ async def toggle_maintenance(node_id: int, enable: bool = True, access_token: st
 
 
 @router.get("/{node_id}/live-stats")
-async def get_node_live_stats(node_id: int, access_token: str = Cookie(None)):
+async def get_node_live_stats(node_id: int, request: Request, access_token: str = Cookie(None)):
     """Obtiene métricas en vivo de un nodo via SSH con password"""
-    verify_admin(access_token)
+    verify_admin(get_token_from_request(request, access_token))
 
     db = SessionLocal()
     try:
@@ -319,11 +332,15 @@ async def get_node_live_stats(node_id: int, access_token: str = Cookie(None)):
             "cat /proc/loadavg"
         )
 
+        # Rutas absolutas — el servicio systemd tiene PATH restringido a /var/www/html/venv/bin
+        sshpass_bin = "/usr/bin/sshpass" if os.path.exists("/usr/bin/sshpass") else "/bin/sshpass"
+        ssh_bin     = "/usr/bin/ssh"     if os.path.exists("/usr/bin/ssh")     else "/bin/ssh"
+
         use_password = bool(node.ssh_password)
         if use_password:
             cmd = [
-                "sshpass", "-p", node.ssh_password,
-                "ssh",
+                sshpass_bin, "-p", node.ssh_password,
+                ssh_bin,
                 "-o", "StrictHostKeyChecking=no",
                 "-o", "ConnectTimeout=8",
                 "-o", "BatchMode=no",
@@ -333,7 +350,7 @@ async def get_node_live_stats(node_id: int, access_token: str = Cookie(None)):
             ]
         else:
             cmd = [
-                "ssh",
+                ssh_bin,
                 "-o", "StrictHostKeyChecking=no",
                 "-o", "ConnectTimeout=8",
                 "-p", str(node.ssh_port),
@@ -416,30 +433,33 @@ async def get_node_live_stats(node_id: int, access_token: str = Cookie(None)):
             node.status = NodeStatus.offline
             db.commit()
             return {"node_id": node_id, "name": node.name, "online": False, "error": "SSH timeout"}
-        except FileNotFoundError:
-            return {"node_id": node_id, "name": node.name, "online": False, "error": "sshpass not installed"}
+        except FileNotFoundError as e:
+            return {"node_id": node_id, "name": node.name, "online": False, "error": f"Binario no encontrado: {e}"}
 
     finally:
         db.close()
 
 
 @router.post("/health-check-all")
-async def run_health_check_all(access_token: str = Cookie(None)):
+async def run_health_check_all(request: Request, access_token: str = Cookie(None)):
     """Ejecuta health check + actualiza métricas en todos los nodos"""
-    verify_admin(access_token)
+    verify_admin(get_token_from_request(request, access_token))
 
     db = SessionLocal()
     try:
         nodes = db.query(ProxmoxNode).all()
         results = []
 
+        sshpass_bin = "/usr/bin/sshpass" if os.path.exists("/usr/bin/sshpass") else "/bin/sshpass"
+        ssh_bin     = "/usr/bin/ssh"     if os.path.exists("/usr/bin/ssh")     else "/bin/ssh"
+
         for node in nodes:
             use_password = bool(node.ssh_password)
-            base_ssh = ["sshpass", "-p", node.ssh_password] if use_password else []
+            base_ssh = [sshpass_bin, "-p", node.ssh_password] if use_password else []
             cmd = base_ssh + [
-                "ssh", "-o", "StrictHostKeyChecking=no",
+                ssh_bin, "-o", "StrictHostKeyChecking=no",
                 "-o", "ConnectTimeout=5",
-                "-o", "BatchMode=no" if use_password else "-o", "BatchMode=yes",
+                "-o", f"BatchMode={'no' if use_password else 'yes'}",
                 "-p", str(node.ssh_port),
                 f"{node.ssh_user}@{node.hostname}",
                 "echo ok"

@@ -56,8 +56,10 @@
   async function fetchLiveStats(nodeId: number) {
     liveLoading[nodeId] = true;
     try {
+      const token = typeof window !== 'undefined' ? localStorage.getItem('access_token') : null;
       const res = await fetch(`/api/nodes/${nodeId}/live-stats`, {
         credentials: 'include',
+        headers: token ? { Authorization: `Bearer ${token}` } : {},
       });
       if (res.ok) {
         const data = await res.json();
