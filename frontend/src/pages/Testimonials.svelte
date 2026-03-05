@@ -2,7 +2,7 @@
   import { onMount } from 'svelte';
   import { MessageCircle, Plus, Edit3, Trash2, Globe, Star, Check, X } from 'lucide-svelte';
   import { api } from '../lib/api/client';
-  import type { LandingSection, Testimonial } from '../lib/types';
+  import type { Testimonial } from '../lib/types';
 
   let testimonials: Testimonial[] = $state([]);
   let loading = $state(true);
