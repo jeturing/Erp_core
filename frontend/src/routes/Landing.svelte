@@ -10,6 +10,7 @@
   import ForPartners from '../lib/components/landing/ForPartners.svelte';
   import AccountantsSummary from '../lib/components/landing/AccountantsSummary.svelte';
   import Testimonials from '../lib/components/landing/Testimonials.svelte';
+  import FAQ from '../lib/components/landing/FAQ.svelte';
   import PricingPreview from '../lib/components/landing/PricingPreview.svelte';
   import FinalCTA from '../lib/components/landing/FinalCTA.svelte';
   import Footer from '../lib/components/landing/Footer.svelte';
@@ -115,6 +116,7 @@
   <ForPartners />
   <AccountantsSummary />
   <Testimonials {testimonials} />
+  <FAQ />
   <FinalCTA />
   <Footer />
 </div>

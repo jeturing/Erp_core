@@ -1,6 +1,6 @@
 <script lang="ts">
   import { t } from 'svelte-i18n';
-  import { Check, Sparkles } from 'lucide-svelte';
+  import { Check, Sparkles, Zap } from 'lucide-svelte';
 
   export let plans: any[] = [];
   export let partnerCode: string = '';
@@ -22,6 +22,9 @@
       base_price: p.base_price ?? p.monthly_price ?? 0,
       price_per_user: p.price_per_user ?? 0,
       included_users: p.included_users ?? 1,
+      max_users: p.max_users ?? 0,
+      trial_days: p.trial_days ?? 14,
+      annual_discount_percent: p.annual_discount_percent ?? 20,
     };
   }
 
@@ -74,6 +77,24 @@
   $: if (displayPlans.length > 0 && priceKey !== lastPriceKey) {
     lastPriceKey = priceKey;
     updatePrices();
+  }
+
+  function displayTotal(plan: any): string {
+    const data = pricingByPlan[plan.name];
+    if (!data) return '—';
+    const total = annual ? data.annual.monthly_equivalent : data.monthly.total;
+    return `$${Math.round(total)}`;
+  }
+
+  function extraUsersLine(plan: any): string {
+    const data = pricingByPlan[plan.name];
+    if (!data || !data.extra_users || data.extra_users === 0) return '';
+    return `${plan.included_users} incluido${plan.included_users > 1 ? 's' : ''} + ${data.extra_users} × $${plan.price_per_user} extra`;
+  }
+
+  function maxUsersLabel(plan: any): string {
+    if (!plan.max_users || plan.max_users === 0) return '∞';
+    return `máx ${plan.max_users}`;
   }
 
   function goCheckout(plan: any) {
@@ -150,35 +171,35 @@
 
           <h3 class="text-lg font-jakarta font-bold text-slate-dark mb-1">{plan.display_name || plan.name}</h3>
 
-          <div class="flex items-baseline gap-1 mb-1">
+          <!-- Total price -->
+          <div class="flex items-baseline gap-1 mb-2">
             {#if pricingLoading}
-              <span class="text-3xl font-jakarta font-bold text-slate">…</span>
-            {:else if pricingByPlan[plan.name]}
-              <span class="text-4xl font-jakarta font-extrabold text-slate-dark">
-                ${annual
-                  ? pricingByPlan[plan.name].annual.monthly_equivalent
-                  : pricingByPlan[plan.name].monthly.total}
-              </span>
-              <span class="text-sm font-inter text-slate">{$t('pricing.per_month')}</span>
+              <span class="text-3xl font-jakarta font-bold text-slate animate-pulse">…</span>
             {:else}
-              <span class="text-3xl font-jakarta font-bold text-slate">—</span>
+              <span class="text-4xl font-jakarta font-extrabold text-slate-dark">
+                {displayTotal(plan)}
+              </span>
+              <span class="text-sm font-inter text-slate">/mes</span>
             {/if}
           </div>
 
-          <div class="text-xs font-inter text-slate mb-4 space-y-1">
-            <p>{$t('pricing.base_label')}: ${plan.base_price}{$t('pricing.per_month')}</p>
-            <p>{$t('pricing.per_user_additional', { price: plan.price_per_user })}</p>
-            <p>{$t('pricing.included_users', { count: plan.included_users })}</p>
+          <!-- Price breakdown -->
+          <div class="text-xs font-inter text-slate mb-3 bg-cloud rounded-lg px-3 py-2 space-y-0.5">
+            <p class="font-semibold text-slate-dark">Base: ${plan.base_price}/mes</p>
+            <p>+${plan.price_per_user}/usuario adicional</p>
+            <p class="text-slate-400">{plan.included_users} usuario{plan.included_users > 1 ? 's' : ''} incluido{plan.included_users > 1 ? 's' : ''} · Hasta {maxUsersLabel(plan)}</p>
+            {#if !pricingLoading && extraUsersLine(plan)}
+              <p class="text-primary font-medium pt-1 border-t border-border">{extraUsersLine(plan)}</p>
+            {/if}
             {#if annual}
-              <p class="text-emerald-600">{$t('pricing.annual_note', { discount: plan.annual_discount_percent || 20 })}</p>
+              <p class="text-emerald-600 font-medium pt-1 border-t border-border">{plan.annual_discount_percent}% descuento anual</p>
             {/if}
           </div>
 
-          {#if plan.trial_days}
-            <p class="text-xs font-inter text-primary font-medium mb-4">
-              {$t('common.free_trial_days', { days: plan.trial_days })}
-            </p>
-          {/if}
+          <!-- Trial badge -->
+          <p class="text-xs font-inter text-primary font-semibold mb-4">
+            ✓ {plan.trial_days} días de prueba gratis · Sin tarjeta
+          </p>
 
           <ul class="space-y-2.5 mb-6 flex-1">
             {#each plan.features || [] as feat}
@@ -212,5 +233,28 @@
     <p class="text-center text-xs font-inter text-slate-400 mt-2">
       {$t('pricing.billing_note')}
     </p>
+
+    <!-- FEL notice — P1 -->
+    <div class="mt-10 rounded-card-lg border border-amber-200 bg-amber-50 p-5 flex gap-4 items-start">
+      <div class="flex-shrink-0 w-10 h-10 bg-amber-100 rounded-full flex items-center justify-center">
+        <Zap class="w-5 h-5 text-amber-600" />
+      </div>
+      <div>
+        <p class="text-sm font-jakarta font-bold text-amber-900 mb-1">
+          ¿Tu negocio requiere facturación electrónica (e-CF) ante la DGII?
+        </p>
+        <p class="text-sm font-inter text-amber-800 leading-relaxed">
+          Sajet integra de forma nativa con <strong>República FEL</strong>, proveedor certificado.
+          El servicio FEL se contrata directamente <strong>desde $50/mes</strong> según tu volumen de documentos.
+          Nos encargamos de toda la implementación técnica.
+        </p>
+        <a
+          href="#/contact?subject=fel"
+          class="inline-flex items-center gap-1 mt-2 text-xs font-inter font-semibold text-amber-700 hover:text-amber-900 transition-colors"
+        >
+          Consultar integración FEL →
+        </a>
+      </div>
+    </div>
   </div>
 </section>

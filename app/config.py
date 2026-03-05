@@ -166,6 +166,21 @@ ENABLE_WAF = os.getenv("ENABLE_WAF", "true").lower() == "true"
 API_KEY_SECRET = os.getenv("API_KEY_SECRET", "")
 
 
+# ═══════════════════════════════════════════════════════
+# Ollama / VLLM — Local LLM Models
+# ═══════════════════════════════════════════════════════
+OLLAMA_BASE_URL = os.getenv("OLLAMA_BASE_URL", "http://localhost:11434")
+OLLAMA_API_KEY = os.getenv("OLLAMA_API_KEY", "")  # Usually empty for local
+
+VLLM_BASE_URL = os.getenv("VLLM_BASE_URL", "http://localhost:11434/v1")
+VLLM_API_KEY = os.getenv("VLLM_API_KEY", "sk-dummy-local-key")
+VLLM_DEFAULT_MODEL = os.getenv("VLLM_DEFAULT_MODEL", "mistral")
+
+# OpenAI-compatible endpoint (works with Ollama/VLLM)
+OPENAI_COMPATIBLE_API_BASE = os.getenv("OPENAI_COMPATIBLE_API_BASE", "http://localhost:11434/v1")
+OPENAI_COMPATIBLE_API_KEY = os.getenv("OPENAI_COMPATIBLE_API_KEY", "sk-dummy-local-key")
+
+
 def get_env_info() -> dict:
     """Return current environment info (for /api/env endpoint and logging)."""
     # Mask sensitive parts of DATABASE_URL

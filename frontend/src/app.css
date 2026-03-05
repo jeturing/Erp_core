@@ -4,19 +4,48 @@
 @tailwind components;
 @tailwind utilities;
 
+/* ── CSS Custom Properties (light / dark) ─────────────── */
+:root {
+  --color-bg-page:       #F5F3EF;
+  --color-bg-card:       #E8E4DC;
+  --color-bg-sidebar:    #1a1a1a;
+  --color-border-light:  #D1CCC4;
+  --color-border-dark:   #3a3a3a;
+  --color-text-primary:  #1a1a1a;
+  --color-text-secondary:#555555;
+  --color-text-tertiary: #888888;
+  --color-text-light:    #F5F3EF;
+  --color-card-shadow:   rgba(0,0,0,0.06);
+}
+
+.dark {
+  --color-bg-page:       #141414;
+  --color-bg-card:       #1e1e1e;
+  --color-bg-sidebar:    #0d0d0d;
+  --color-border-light:  #2e2e2e;
+  --color-border-dark:   #3a3a3a;
+  --color-text-primary:  #f0ede8;
+  --color-text-secondary:#b0a89e;
+  --color-text-tertiary: #6b6358;
+  --color-text-light:    #f0ede8;
+  --color-card-shadow:   rgba(0,0,0,0.3);
+}
+
 /* ── Base ─────────────────────────────────────────────── */
 @layer base {
   html { @apply antialiased; }
 
   body {
-    @apply bg-bg-page text-text-primary font-sans m-0;
+    background-color: var(--color-bg-page);
+    color: var(--color-text-primary);
+    @apply font-sans m-0 transition-colors duration-200;
   }
 
   #app { @apply min-h-screen; }
 
   ::-webkit-scrollbar { width: 5px; }
-  ::-webkit-scrollbar-track { @apply bg-bg-page; }
-  ::-webkit-scrollbar-thumb { @apply bg-border-light rounded-full; }
+  ::-webkit-scrollbar-track { background: var(--color-bg-page); }
+  ::-webkit-scrollbar-thumb { background: var(--color-border-light); border-radius: 9999px; }
   ::-webkit-scrollbar-thumb:hover { @apply bg-gray-400; }
 }
 
@@ -25,7 +54,9 @@
 
   /* ---- Cards ---- */
   .card {
-    @apply bg-bg-card border border-border-light p-6;
+    background-color: var(--color-bg-card);
+    border-color: var(--color-border-light);
+    @apply border p-6 transition-colors duration-200;
   }
 
   /* ---- Buttons ---- */
@@ -36,24 +67,37 @@
   }
 
   .btn-primary {
-    @apply btn bg-charcoal text-text-light hover:bg-dark-surface;
+    @apply btn bg-charcoal hover:bg-dark-surface;
+    color: var(--color-text-light);
+  }
+  .dark .btn-primary {
+    @apply bg-dark-subtle hover:bg-border-dark;
+    color: var(--color-text-light);
   }
 
   .btn-accent {
-    @apply btn bg-terracotta text-text-light hover:opacity-90;
+    @apply btn bg-terracotta hover:opacity-90;
+    color: var(--color-text-light);
   }
 
   .btn-secondary {
-    @apply btn bg-bg-card text-text-primary border border-border-light hover:bg-border-light;
+    @apply btn border;
+    background-color: var(--color-bg-card);
+    border-color: var(--color-border-light);
+    color: var(--color-text-primary);
   }
+  .btn-secondary:hover { background-color: var(--color-border-light); }
 
   .btn-danger {
-    @apply btn bg-error text-text-light hover:opacity-90;
+    @apply btn bg-error hover:opacity-90;
+    color: var(--color-text-light);
   }
 
   .btn-ghost {
-    @apply btn bg-transparent text-gray-500 hover:text-text-primary hover:bg-bg-card;
+    @apply btn bg-transparent hover:text-text-primary;
+    color: var(--color-text-tertiary);
   }
+  .btn-ghost:hover { background-color: var(--color-bg-card); }
 
   .btn-sm {
     @apply text-[10px] px-3 py-[6px];
@@ -61,14 +105,19 @@
 
   /* ---- Inputs ---- */
   .input {
-    @apply w-full px-3.5 py-2.5 bg-bg-card border border-border-light
-           text-text-primary placeholder-gray-400 font-body text-sm
-           focus:border-charcoal focus:outline-none focus:ring-1 focus:ring-charcoal/20
-           transition-all duration-150;
+    @apply w-full px-3.5 py-2.5 border font-body text-sm
+           focus:outline-none focus:ring-1 transition-all duration-150;
+    background-color: var(--color-bg-card);
+    border-color: var(--color-border-light);
+    color: var(--color-text-primary);
   }
+  .input::placeholder { color: var(--color-text-tertiary); }
+  .input:focus { border-color: #1a1a1a; box-shadow: 0 0 0 1px rgba(26,26,26,0.2); }
+  .dark .input:focus { border-color: #d1d5db; box-shadow: 0 0 0 1px rgba(209,213,219,0.2); }
 
   .label {
-    @apply block text-[11px] font-semibold tracking-[0.08em] uppercase text-gray-600 mb-1.5 font-sans;
+    @apply block text-[11px] font-semibold tracking-[0.08em] uppercase mb-1.5 font-sans;
+    color: var(--color-text-secondary);
   }
 
   /* ---- Badges ---- */
@@ -85,21 +134,31 @@
   .badge-basic    { @apply badge bg-black/5     text-gray-500; }
   .badge-pro      { @apply badge bg-terracotta/10 text-terracotta; }
   .badge-enterprise { @apply badge bg-charcoal/10 text-charcoal; }
+  .dark .badge-neutral  { @apply bg-white/10  text-gray-400; }
+  .dark .badge-basic    { @apply bg-white/10  text-gray-400; }
+  .dark .badge-enterprise { @apply bg-white/10 text-gray-300; }
 
   /* ---- Tables ---- */
   .table { @apply w-full text-left; }
 
   .table th {
-    @apply px-6 py-3 text-[11px] font-semibold tracking-[0.08em] uppercase
-           text-text-primary border-b-2 border-border-light bg-bg-card/50;
+    @apply px-6 py-3 text-[11px] font-semibold tracking-[0.08em] uppercase border-b-2;
+    border-color: var(--color-border-light);
+    background-color: color-mix(in srgb, var(--color-bg-card) 50%, transparent);
+    color: var(--color-text-primary);
   }
 
   .table td {
-    @apply px-6 py-3.5 text-sm text-text-secondary border-b border-border-light font-body;
+    @apply px-6 py-3.5 text-sm border-b font-body;
+    border-color: var(--color-border-light);
+    color: var(--color-text-secondary);
   }
 
   .table tbody tr {
-    @apply hover:bg-bg-card/70 transition-colors;
+    @apply transition-colors;
+  }
+  .table tbody tr:hover {
+    background-color: color-mix(in srgb, var(--color-bg-card) 70%, transparent);
   }
 
   /* ---- Sidebar nav ---- */
@@ -116,19 +175,28 @@
 
   /* ---- Stat card ---- */
   .stat-card { @apply card flex flex-col gap-2; }
-  .stat-value { @apply text-3xl font-bold text-text-primary font-sans; }
-  .stat-label { @apply text-[10px] font-semibold tracking-[0.08em] uppercase text-gray-600 font-sans; }
+  .stat-value {
+    @apply text-3xl font-bold font-sans;
+    color: var(--color-text-primary);
+  }
+  .stat-label {
+    @apply text-[10px] font-semibold tracking-[0.08em] uppercase font-sans;
+    color: var(--color-text-secondary);
+  }
 
   /* ---- Page header ---- */
   .page-title {
-    @apply text-2xl font-bold text-text-primary font-sans tracking-tight;
+    @apply text-2xl font-bold font-sans tracking-tight;
+    color: var(--color-text-primary);
   }
   .page-subtitle {
-    @apply text-sm text-gray-500 mt-0.5 font-body;
+    @apply text-sm mt-0.5 font-body;
+    color: var(--color-text-secondary);
   }
 
   /* ---- Section heading ---- */
   .section-heading {
-    @apply text-[11px] font-semibold tracking-[0.08em] uppercase text-gray-600 font-sans;
+    @apply text-[11px] font-semibold tracking-[0.08em] uppercase font-sans;
+    color: var(--color-text-secondary);
   }
 }

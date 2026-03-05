@@ -7,8 +7,13 @@
     Scale, GitCompareArrows, ClipboardList, ShieldCheck, Palette,
     ShoppingBag, ChevronDown, Sliders, Mail, BarChart2,
     Languages, MessageCircle, FileType, ArrowRightLeft,
+    Moon, Sun,
   } from 'lucide-svelte';
   import { auth } from '../stores';
+  import { darkMode } from '../stores/darkMode';
+  import { onMount } from 'svelte';
+
+  onMount(() => darkMode.init());
 
   export let currentRoute: string = 'dashboard';
 
@@ -264,6 +269,20 @@
         <a href="/docs" target="_blank" rel="noreferrer" class="hidden sm:block text-[11px] uppercase tracking-widest text-gray-500 hover:text-text-light font-sans transition-colors">
           API Docs
         </a>
+        <!-- Dark mode toggle -->
+        <button
+          type="button"
+          on:click={() => darkMode.toggle()}
+          class="p-2 rounded-md text-gray-400 hover:text-text-light hover:bg-white/10 transition-colors"
+          title={$darkMode ? 'Cambiar a modo claro' : 'Cambiar a modo oscuro'}
+          aria-label="Toggle dark mode"
+        >
+          {#if $darkMode}
+            <Sun size={16} />
+          {:else}
+            <Moon size={16} />
+          {/if}
+        </button>
         <a href="#/portal" class="btn-accent btn-sm">Portal</a>
       </div>
     </header>
