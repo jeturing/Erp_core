@@ -442,7 +442,7 @@ class OdooDatabaseManager:
         Incluye verificación post-delete para evitar falsos positivos.
         """
         try:
-            protected_dbs = ['postgres', 'template0', 'template1', 'template_tenant', 'cliente1', 'erp_core_db']
+            protected_dbs = ['postgres', 'template0', 'template1', 'template_tenant']
             if db_name.lower() in protected_dbs:
                 return {"success": False, "error": f"BD '{db_name}' está protegida"}
 

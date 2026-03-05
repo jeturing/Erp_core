@@ -32,7 +32,24 @@ import psycopg
 import os
 from ..models.database import AuditEventRecord
 
-from ..config import PROVISIONING_API_KEY, ODOO_DB_USER, ODOO_DB_PASSWORD, ODOO_DB_HOST
+from ..config import PROVISIONING_API_KEY, ODOO_DB_USER, ODOO_DB_PASSWORD, ODOO_DB_HOST, DATABASE_URL
+from ..services.cloudflare_manager import CloudflareManager
+
+# BDs del sistema que NUNCA deben aparecer en el listado de tenants ni poder borrarse.
+# Se extrae dinámicamente el nombre de la BD propia de la app desde DATABASE_URL.
+def _get_own_db_name() -> str:
+    """Extrae el nombre de la BD interna del sistema desde DATABASE_URL."""
+    try:
+        return DATABASE_URL.rsplit("/", 1)[-1].split("?")[0].strip() or "erp_core_db"
+    except Exception:
+        return "erp_core_db"
+
+_SYSTEM_DBS: set = {
+    'postgres', 'template0', 'template1',
+    'template_tenant',
+    _get_own_db_name(),   # BD interna del ERP (erp_core_db o la que configure DATABASE_URL)
+    'root',               # BD de postgres generada al instalar
+}
 
 router = APIRouter(prefix="/api/tenants", tags=["Tenants"])
 logger = logging.getLogger(__name__)
@@ -141,8 +158,8 @@ async def get_all_tenants_from_servers():
         db_port = int(os.getenv("ODOO_DB_PORT", "5432"))
         
         for db_name in databases:
-            # Saltar BDs del sistema
-            if db_name in ['postgres', 'template0', 'template1', 'template_tenant']:
+            # Saltar BDs del sistema (incluyendo la BD interna del ERP)
+            if db_name in _SYSTEM_DBS:
                 continue
             
             # Consultar login real desde Odoo PostgreSQL
@@ -309,7 +326,7 @@ def _list_databases_via_postgres(server_id: Optional[str]) -> List[str]:
                     """
                 )
                 rows = cur.fetchall()
-                dbs = [row[0] for row in rows if row and row[0]]
+                dbs = [row[0] for row in rows if row and row[0] and row[0] not in _SYSTEM_DBS]
                 logger.info(
                     f"PostgreSQL fallback: {len(dbs)} BDs detectadas via {db_host}:{db_port} (server={server.id})"
                 )
@@ -816,16 +833,24 @@ async def delete_tenant_endpoint(
             status_code=400,
             detail=f"Confirmación inválida. Debe escribir exactamente '{subdomain}'"
         )
-    if is_tenant_protected(subdomain):
+    # Bloquear BDs del sistema (la propia BD del ERP + protegidas por env)
+    normalized_sub = subdomain.strip().lower()
+    if normalized_sub in _SYSTEM_DBS or is_tenant_protected(subdomain):
+        reason = "system_database" if normalized_sub in _SYSTEM_DBS else "protected_tenant"
+        msg = (
+            f"'{subdomain}' es la base de datos interna del sistema y no puede eliminarse desde el panel."
+            if normalized_sub in _SYSTEM_DBS
+            else f"'{subdomain}' está protegido y no puede eliminarse"
+        )
         _log_tenant_audit(
             request,
             event_type="TENANT_DELETE_BLOCKED",
             resource=f"tenant:{subdomain}",
             action="delete",
             status="blocked",
-            details={"reason": "protected_tenant", "server_id": server_id},
+            details={"reason": reason, "server_id": server_id},
         )
-        raise HTTPException(status_code=403, detail=f"'{subdomain}' está protegido y no puede eliminarse")
+        raise HTTPException(status_code=403, detail=msg)
     
     try:
         # 1) Eliminar primero registro local (BDA), conservando datos para respaldo/email
@@ -927,6 +952,30 @@ async def delete_tenant_endpoint(
             except Exception as ng_err:
                 logger.warning(f"No se pudo limpiar nginx para {subdomain}: {ng_err}")
 
+        # 5.1) Eliminar registro DNS de Cloudflare
+        cloudflare_result: dict = {}
+        if deleted_remote:
+            try:
+                cloudflare_result = await CloudflareManager.delete_subdomain_dns(
+                    subdomain=subdomain,
+                    domain="sajet.us",
+                )
+                if cloudflare_result.get("deleted", 0) > 0:
+                    logger.info(
+                        f"DNS Cloudflare eliminado para {subdomain}.sajet.us "
+                        f"({cloudflare_result['deleted']} registro/s)"
+                    )
+                elif cloudflare_result.get("total_found", 0) == 0:
+                    logger.info(f"No había registro DNS en Cloudflare para {subdomain}.sajet.us")
+                else:
+                    logger.warning(
+                        f"Problemas eliminando DNS Cloudflare para {subdomain}: "
+                        f"{cloudflare_result.get('errors')}"
+                    )
+            except Exception as cf_err:
+                logger.warning(f"No se pudo eliminar DNS Cloudflare para {subdomain}: {cf_err}")
+                cloudflare_result = {"success": False, "error": str(cf_err)}
+
         # 6) Respuesta final idempotente
         if deleted_remote:
             _log_tenant_audit(
@@ -952,6 +1001,7 @@ async def delete_tenant_endpoint(
                 "backup": backup_result,
                 "email": email_result,
                 "verified_remote_absence": True,
+                "cloudflare_dns": cloudflare_result,
             }
 
         # Si la BD remota no existe pero el registro local sí se limpió, tratar como éxito parcial

@@ -495,6 +495,73 @@ class CloudflareManager:
         except Exception as e:
             return {"success": False, "error": str(e)}
 
+    # ─── DNS: Eliminar todos los registros de un subdominio ────────────
+    @classmethod
+    async def delete_subdomain_dns(
+        cls,
+        subdomain: str,
+        domain: str = "sajet.us",
+    ) -> Dict[str, Any]:
+        """
+        Busca y elimina TODOS los registros DNS del subdominio dado en la zona.
+        Soporta CNAME, A y AAAA. Retorna lista de resultados por registro eliminado.
+        """
+        zone_id = cls._zone_id(domain)
+        if not zone_id:
+            return {"success": False, "deleted": 0, "error": f"Zone ID no encontrado para {domain}"}
+
+        full_name = f"{subdomain}.{domain}"
+        try:
+            # 1) Buscar todos los registros con ese nombre
+            async with httpx.AsyncClient(timeout=20) as client:
+                resp = await client.get(
+                    f"{CF_API_BASE}/zones/{zone_id}/dns_records",
+                    headers=cls._headers(),
+                    params={"name": full_name, "per_page": 100},
+                )
+                data = resp.json()
+
+            if not data.get("success"):
+                errors = data.get("errors", [])
+                msg = errors[0].get("message") if errors else "Error buscando DNS"
+                return {"success": False, "deleted": 0, "error": msg}
+
+            records = data.get("result", [])
+            if not records:
+                logger.info(f"No se encontraron registros DNS para {full_name}")
+                return {"success": True, "deleted": 0, "message": f"No hay registros DNS para {full_name}"}
+
+            # 2) Eliminar cada registro encontrado
+            deleted = 0
+            delete_errors = []
+            async with httpx.AsyncClient(timeout=20) as client:
+                for record in records:
+                    record_id = record["id"]
+                    del_resp = await client.delete(
+                        f"{CF_API_BASE}/zones/{zone_id}/dns_records/{record_id}",
+                        headers=cls._headers(),
+                    )
+                    del_data = del_resp.json()
+                    if del_data.get("success"):
+                        deleted += 1
+                        logger.info(f"Eliminado registro DNS {record['type']} {full_name} (id={record_id})")
+                    else:
+                        err_list = del_data.get("errors", [])
+                        err_msg = err_list[0].get("message") if err_list else "Error desconocido"
+                        delete_errors.append(f"{record_id}: {err_msg}")
+                        logger.warning(f"No se pudo eliminar registro DNS {record_id}: {err_msg}")
+
+            return {
+                "success": deleted > 0 or not delete_errors,
+                "deleted": deleted,
+                "total_found": len(records),
+                "errors": delete_errors,
+                "subdomain": full_name,
+            }
+        except Exception as e:
+            logger.exception(f"Error eliminando DNS para {full_name}: {e}")
+            return {"success": False, "deleted": 0, "error": str(e)}
+
     # ─── Obtener resumen completo para dashboard ────────
     @classmethod
     async def get_dashboard_summary(cls) -> Dict[str, Any]:
