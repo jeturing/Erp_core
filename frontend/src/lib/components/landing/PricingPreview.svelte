@@ -8,53 +8,72 @@
   let annual = false;
   let userCount = 1;
 
-  const fallbackPlans = [
-    {
-      name: $t('pricing.starter_name'),
-      description: $t('pricing.starter_desc'),
-      monthly_price: 29,
-      features: [$t('pricing.starter_users'), $t('pricing.starter_companies'), $t('pricing.starter_modules')],
-      is_highlighted: false,
-      trial_days: 14,
-    },
-    {
-      name: $t('pricing.growth_name'),
-      description: $t('pricing.growth_desc'),
-      monthly_price: 79,
-      features: [$t('pricing.growth_users'), $t('pricing.growth_companies'), $t('pricing.growth_modules')],
-      is_highlighted: true,
-      trial_days: 14,
-    },
-    {
-      name: $t('pricing.enterprise_name'),
-      description: $t('pricing.enterprise_desc'),
-      monthly_price: 199,
-      features: [$t('pricing.enterprise_users'), $t('pricing.enterprise_companies'), $t('pricing.enterprise_modules')],
-      is_highlighted: false,
-      trial_days: 14,
-    },
-  ];
+  let pricingByPlan: Record<string, any> = {};
+  let pricingLoading = false;
+  let pricingError = '';
+  let lastPriceKey = '';
 
   // Map backend fields to frontend-expected shape
   function normalizePlan(p: any): any {
     return {
       ...p,
-      name: p.display_name || p.name,
-      monthly_price: p.price_per_user ?? p.monthly_price ?? p.base_price ?? 0,
+      name: p.name,
+      display_name: p.display_name || p.name,
+      base_price: p.base_price ?? p.monthly_price ?? 0,
+      price_per_user: p.price_per_user ?? 0,
       included_users: p.included_users ?? 1,
     };
   }
 
-  $: displayPlans = plans.length > 0 ? plans.map(normalizePlan) : fallbackPlans;
+  $: displayPlans = plans.length > 0 ? plans.map(normalizePlan) : [];
 
-  function getPrice(plan: any): number {
-    const base = plan.monthly_price || 0;
-    const perUser = base * userCount;
-    if (annual) {
-      const discount = plan.annual_discount_percent || 20;
-      return Math.round(perUser * (1 - discount / 100));
+  async function updatePrices() {
+    if (displayPlans.length === 0) {
+      pricingByPlan = {};
+      return;
     }
-    return perUser;
+
+    pricingLoading = true;
+    pricingError = '';
+    try {
+      const results = await Promise.all(
+        displayPlans.map(async (plan) => {
+          const res = await fetch('/api/public/calculate', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+              plan_name: plan.name,
+              user_count: userCount,
+              billing_period: annual ? 'annual' : 'monthly',
+              partner_code: partnerCode || null,
+            }),
+          });
+
+          if (!res.ok) {
+            throw new Error(`Pricing error for ${plan.name}`);
+          }
+          return res.json();
+        })
+      );
+
+      const next: Record<string, any> = {};
+      results.forEach((result) => {
+        next[result.plan_name] = result;
+      });
+      pricingByPlan = next;
+    } catch (err) {
+      console.error('[Pricing] Failed to calculate pricing', err);
+      pricingError = $t('pricing.error');
+      pricingByPlan = {};
+    } finally {
+      pricingLoading = false;
+    }
+  }
+
+  $: priceKey = `${userCount}|${annual}|${partnerCode}|${displayPlans.map((p) => p.name).join(',')}`;
+  $: if (displayPlans.length > 0 && priceKey !== lastPriceKey) {
+    lastPriceKey = priceKey;
+    updatePrices();
   }
 
   function goCheckout(plan: any) {
@@ -129,21 +148,36 @@
             </div>
           {/if}
 
-          <h3 class="text-lg font-jakarta font-bold text-slate-dark mb-1">{plan.name}</h3>
+          <h3 class="text-lg font-jakarta font-bold text-slate-dark mb-1">{plan.display_name || plan.name}</h3>
 
           <div class="flex items-baseline gap-1 mb-1">
-            <span class="text-4xl font-jakarta font-extrabold text-slate-dark">${getPrice(plan)}</span>
-            <span class="text-sm font-inter text-slate">/mo</span>
+            {#if pricingLoading}
+              <span class="text-3xl font-jakarta font-bold text-slate">…</span>
+            {:else if pricingByPlan[plan.name]}
+              <span class="text-4xl font-jakarta font-extrabold text-slate-dark">
+                ${annual
+                  ? pricingByPlan[plan.name].annual.monthly_equivalent
+                  : pricingByPlan[plan.name].monthly.total}
+              </span>
+              <span class="text-sm font-inter text-slate">{$t('pricing.per_month')}</span>
+            {:else}
+              <span class="text-3xl font-jakarta font-bold text-slate">—</span>
+            {/if}
           </div>
 
-          {#if userCount > 1}
-            <p class="text-xs font-inter text-slate mb-4">{userCount} users × ${plan.monthly_price}{annual ? ' (−20%)' : ''}</p>
-          {:else}
-            <p class="text-xs font-inter text-slate mb-4">{$t('pricing.per_user_month')}</p>
-          {/if}
+          <div class="text-xs font-inter text-slate mb-4 space-y-1">
+            <p>{$t('pricing.base_label')}: ${plan.base_price}{$t('pricing.per_month')}</p>
+            <p>{$t('pricing.per_user_additional', { price: plan.price_per_user })}</p>
+            <p>{$t('pricing.included_users', { count: plan.included_users })}</p>
+            {#if annual}
+              <p class="text-emerald-600">{$t('pricing.annual_note', { discount: plan.annual_discount_percent || 20 })}</p>
+            {/if}
+          </div>
 
           {#if plan.trial_days}
-            <p class="text-xs font-inter text-primary font-medium mb-4">{plan.trial_days} {$t('common.free_trial_days')}</p>
+            <p class="text-xs font-inter text-primary font-medium mb-4">
+              {$t('common.free_trial_days', { days: plan.trial_days })}
+            </p>
           {/if}
 
           <ul class="space-y-2.5 mb-6 flex-1">
@@ -167,6 +201,11 @@
       {/each}
     </div>
 
+    {#if pricingError}
+      <p class="text-center text-xs font-inter text-rose-600 mt-8">
+        {pricingError}
+      </p>
+    {/if}
     <p class="text-center text-xs font-inter text-slate mt-8">
       {$t('pricing.all_prices_usd')}
     </p>
