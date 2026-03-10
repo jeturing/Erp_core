@@ -7,6 +7,7 @@ from pydantic import BaseModel, Field, field_validator
 from typing import Optional, List
 import re
 from ..models.database import Customer, Subscription, SubscriptionStatus, SessionLocal, Partner, Plan, BillingMode, PayerType, CollectorType, InvoiceIssuer
+from ..models.database import CustomDomain, DomainVerificationStatus
 from ..services.odoo_database_manager import (
     get_available_servers,
     get_servers_status,
@@ -137,6 +138,40 @@ class TenantDeleteRequest(BaseModel):
     confirm: bool = Field(False, description="Confirmación de eliminación")
 
 
+def _get_tenant_primary_url(customer: Customer, subdomain: str) -> str:
+    """
+    Retorna la URL primaria del tenant.
+    Prioridad: dominio personalizado verificado > dominio personalizado activo > sajet.us
+    """
+    try:
+        # Buscar custom domain primario verificado
+        primary_domain = None
+        for domain in customer.custom_domains:
+            if domain.is_primary and domain.verification_status == DomainVerificationStatus.verified:
+                primary_domain = domain.external_domain
+                break
+        
+        # Si no hay primario verificado, buscar cualquiera activo
+        if not primary_domain:
+            for domain in customer.custom_domains:
+                if domain.is_active and domain.verification_status == DomainVerificationStatus.verified:
+                    primary_domain = domain.external_domain
+                    break
+        
+        # Fallback a sajet.us
+        if not primary_domain:
+            primary_domain = f"{subdomain}.sajet.us"
+        
+        # Asegurar https://
+        if not primary_domain.startswith("http"):
+            primary_domain = f"https://{primary_domain}"
+        
+        return primary_domain
+    except Exception as e:
+        logger.warning(f"Error obteniendo URL primaria para {subdomain}: {e}")
+        return f"https://{subdomain}.sajet.us"
+
+
 async def get_all_tenants_from_servers():
     """Obtiene tenants de todos los servidores disponibles usando OdooDatabaseManager"""
     all_tenants = []
@@ -214,7 +249,7 @@ async def get_all_tenants_from_servers():
                         "server": server_info.get("name"),
                         "server_id": server_info.get("id"),
                         "created_at": sub.created_at.isoformat() + "Z" if sub.created_at else None,
-                        "url": f"https://{customer.subdomain}.sajet.us",
+                            "url": _get_tenant_primary_url(customer, customer.subdomain),
                         "partner_id": sub.owner_partner_id,
                         "partner_name": partner_name,
                         "monthly_amount": sub.monthly_amount or 0,
@@ -257,7 +292,7 @@ async def get_all_tenants_from_servers():
                             "server": server_info.get("name"),
                             "server_id": server_info.get("id"),
                             "created_at": new_customer.created_at.isoformat() + "Z" if new_customer.created_at else None,
-                            "url": f"https://{db_name}.sajet.us",
+                                "url": _get_tenant_primary_url(new_customer, db_name),
                             "partner_id": None,
                             "partner_name": None,
                             "monthly_amount": 0,
@@ -279,6 +314,7 @@ async def get_all_tenants_from_servers():
                             "server_id": server_info.get("id"),
                             "created_at": None,
                             "url": f"https://{db_name}.sajet.us",
+                                # Fallback: no customer object, usa sajet.us
                             "partner_id": None,
                             "partner_name": None,
                             "monthly_amount": 0,
