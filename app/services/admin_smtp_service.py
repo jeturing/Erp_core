@@ -13,15 +13,17 @@ from email.mime.multipart import MIMEMultipart
 from sqlalchemy.orm import Session
 from sqlalchemy import text
 from typing import Dict, Tuple, Optional
-from datetime import datetime
+
+from ..config import get_smtp_config, smtp_is_configured
 
 logger = logging.getLogger("admin_smtp_service")
+ENV_ONLY_MESSAGE = "SMTP se administra solo desde .env.production y requiere reinicio de erp-core"
 
 
 class AdminSmtpService:
     """
-    Servicio para administración de SMTP y testing de credenciales.
-    Todas las credenciales se almacenan en system_config de la BD.
+    Servicio para inspección y testing de SMTP.
+    La configuración es de solo lectura y se consume desde .env.production.
     """
     
     SMTP_CONFIG_KEYS = {
@@ -43,61 +45,18 @@ class AdminSmtpService:
     
     def get_smtp_config(self) -> Dict[str, any]:
         """
-        Obtiene la configuración SMTP completa desde system_config.
+        Obtiene la configuración SMTP completa desde el .env activo.
         
         Returns:
             Dict con keys: server, port, user, password, from_email, from_name
-            Si falta alguno, usa valores por defecto (None)
         """
-        try:
-            query = "SELECT key, value FROM system_config WHERE category = 'email' AND key LIKE 'SMTP_%'"
-            result = self.db.execute(text(query)).fetchall()
-            
-            config = {}
-            for row in result:
-                key, value = row
-                if key == "SMTP_SERVER":
-                    config["server"] = value
-                elif key == "SMTP_PORT":
-                    config["port"] = int(value) if value else 465
-                elif key == "SMTP_USER":
-                    config["user"] = value
-                elif key == "SMTP_PASSWORD":
-                    config["password"] = value
-                elif key == "SMTP_FROM_EMAIL":
-                    config["from_email"] = value
-                elif key == "SMTP_FROM_NAME":
-                    config["from_name"] = value
-            
-            # Asegurar que todos los keys existen
-            config.setdefault("server", None)
-            config.setdefault("port", 465)
-            config.setdefault("user", None)
-            config.setdefault("password", None)
-            config.setdefault("from_email", None)
-            config.setdefault("from_name", "Sajet ERP")
-            
-            return config
-        except Exception as e:
-            logger.error(f"❌ Error leyendo config SMTP: {e}")
-            return {
-                "server": None,
-                "port": 465,
-                "user": None,
-                "password": None,
-                "from_email": None,
-                "from_name": "Sajet ERP"
-            }
+        return get_smtp_config()
     
     def get_smtp_config_display(self) -> Dict[str, any]:
         """
         Retorna config SMTP pero con PASSWORD enmascarada para UI.
         """
-        config = self.get_smtp_config()
-        if config.get("password"):
-            config["password_masked"] = f"{'*' * 4}{config['password'][-4:]}"
-            del config["password"]  # No exponer full password
-        return config
+        return get_smtp_config(mask_secret=True)
     
     # ═══════════════════════════════════════════════════════════════════
     # ✏️ UPDATE — Actualizar credenciales SMTP
@@ -115,70 +74,7 @@ class AdminSmtpService:
         Returns:
             (success: bool, message: str)
         """
-        # Validar que el key sea permitido
-        if key not in self.SMTP_CONFIG_KEYS:
-            return False, f"❌ Key '{key}' no es válido. Permitidos: {list(self.SMTP_CONFIG_KEYS.keys())}"
-        
-        # Validar value no vacío
-        if not value or not str(value).strip():
-            return False, f"❌ El valor de {key} no puede estar vacío"
-        
-        try:
-            # Convertir port a string si es necesario
-            if key == "SMTP_PORT":
-                try:
-                    int(value)  # Validar que es número
-                except ValueError:
-                    return False, "❌ SMTP_PORT debe ser un número (ej: 465)"
-            
-            # Verificar si existe
-            query = "SELECT id FROM system_config WHERE key = :key"
-            existing = self.db.execute(text(query), {"key": key}).first()
-            
-            if existing:
-                # Actualizar existente
-                is_secret = key in ["SMTP_PASSWORD", "SMTP_USER"]
-                update_query = """
-                    UPDATE system_config 
-                    SET value = :value, 
-                        updated_at = :now,
-                        updated_by = :user,
-                        is_secret = :secret
-                    WHERE key = :key
-                """
-                self.db.execute(text(update_query), {
-                    "value": str(value),
-                    "now": datetime.utcnow(),
-                    "user": updated_by,
-                    "secret": is_secret,
-                    "key": key
-                })
-            else:
-                # Insertar nuevo
-                is_secret = key in ["SMTP_PASSWORD", "SMTP_USER"]
-                insert_query = """
-                    INSERT INTO system_config 
-                    (key, value, category, is_secret, description, created_at, updated_by)
-                    VALUES (:key, :value, 'email', :secret, :desc, :now, :user)
-                """
-                self.db.execute(text(insert_query), {
-                    "key": key,
-                    "value": str(value),
-                    "secret": is_secret,
-                    "desc": self.SMTP_CONFIG_KEYS.get(key, ""),
-                    "now": datetime.utcnow(),
-                    "user": updated_by
-                })
-            
-            self.db.commit()
-            
-            logger.info(f"✅ {key} actualizado por {updated_by}")
-            return True, f"✅ {key} actualizado exitosamente"
-        
-        except Exception as e:
-            self.db.rollback()
-            logger.error(f"❌ Error actualizando {key}: {e}")
-            return False, f"❌ Error: {str(e)}"
+        return False, f"❌ {ENV_ONLY_MESSAGE}"
     
     def update_smtp_config_batch(self, config: Dict[str, str], updated_by: str) -> Tuple[bool, Dict]:
         """
@@ -353,7 +249,7 @@ class AdminSmtpService:
             last_test = result[2]
             
             return {
-                "configured": bool(config.get("server")),
+                "configured": smtp_is_configured(),
                 "config": config,
                 "tests": {
                     "total": total_tests,
@@ -367,7 +263,7 @@ class AdminSmtpService:
         except Exception as e:
             logger.error(f"❌ Error obteniendo SMTP status: {e}")
             return {
-                "configured": False,
+                "configured": smtp_is_configured(),
                 "config": config,
                 "tests": {"error": str(e)}
             }

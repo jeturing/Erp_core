@@ -19,6 +19,7 @@ from ..services.admin_storage_alerts_service import AdminStorageAlertsService
 from ..security.tokens import TokenManager
 
 logger = logging.getLogger("admin_routes")
+SMTP_ENV_ONLY_MESSAGE = "SMTP se administra solo desde .env.production y requiere reinicio de erp-core"
 
 router = APIRouter(prefix="/api/admin", tags=["admin"])
 
@@ -71,19 +72,15 @@ async def get_smtp_config(request: Request, db: Session = Depends(get_db)):
 @router.post("/smtp/config")
 async def update_smtp_config(request: Request, updates: Dict = Body(...), db: Session = Depends(get_db)):
     """POST /api/admin/smtp/config - Actualiza credenciales SMTP"""
-    admin = _get_admin_user(request)
-    service = AdminSmtpService(db)
-    all_success, results = service.update_smtp_config_batch(updates, admin.get("username", "api"))
-    return {"success": all_success, "data": results}
+    _get_admin_user(request)
+    raise HTTPException(status_code=403, detail=SMTP_ENV_ONLY_MESSAGE)
 
 
 @router.put("/smtp/credential/{key}")
 async def update_smtp_credential(key: str, value: str = Body(..., embed=True), request: Request = None, db: Session = Depends(get_db)):
     """PUT /api/admin/smtp/credential/{key} - Actualiza una credencial"""
-    admin = _get_admin_user(request)
-    service = AdminSmtpService(db)
-    success, message = service.update_smtp_credential(key, value, admin.get("username", "api"))
-    return {"success": success, "message": message}
+    _get_admin_user(request)
+    raise HTTPException(status_code=403, detail=SMTP_ENV_ONLY_MESSAGE)
 
 
 @router.post("/smtp/test")

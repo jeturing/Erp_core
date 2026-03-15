@@ -5,14 +5,13 @@ Envía notificaciones a clientes cuando se acercan a los límites
 from datetime import datetime
 from typing import Dict, List, Optional, Any
 from sqlalchemy.orm import Session
-from sqlalchemy import text
 import logging
 import smtplib
 from email.mime.text import MIMEText
 from email.mime.multipart import MIMEMultipart
 
 from ..models.database import StorageAlert, Customer, Plan, StorageAlertStatus
-from ..config import SMTP_SERVER, SMTP_PORT, SMTP_USER, SMTP_PASSWORD, SMTP_FROM_EMAIL
+from ..config import get_smtp_config, smtp_is_configured
 from .plan_migration_service import PlanMigrationService
 
 logger = logging.getLogger(__name__)
@@ -25,57 +24,18 @@ class StorageAlertService:
         self.db = db
         self.migration_service = PlanMigrationService(db)
         
-        # Cargar configuración SMTP desde BD o usar fallbacks
+        # Cargar configuración SMTP exclusivamente desde el .env activo
         self.smtp_config = self._load_smtp_config()
     
     def _load_smtp_config(self) -> Dict[str, Any]:
         """
-        Carga configuración SMTP desde la tabla system_config.
-        Si no existe en BD, usa variables de entorno como fallback.
+        Carga configuración SMTP exclusivamente desde el .env activo.
         """
-        config = {
-            "server": SMTP_SERVER,
-            "port": SMTP_PORT,
-            "user": SMTP_USER,
-            "password": SMTP_PASSWORD,
-            "from_email": SMTP_FROM_EMAIL,
-            "from_name": "Sajet ERP Alerts"
-        }
-        
-        try:
-            # Buscar configuración en la BD
-            result = self.db.execute(text("""
-                SELECT key, value FROM system_config 
-                WHERE category = 'email' AND key IN ('SMTP_SERVER', 'SMTP_PORT', 'SMTP_USER', 'SMTP_PASSWORD', 'SMTP_FROM_EMAIL', 'SMTP_FROM_NAME')
-            """))
-            
-            db_config = {}
-            for row in result.fetchall():
-                key, value = row
-                db_config[key] = value
-            
-            # Mapear configuración BD a variables del servicio
-            if 'SMTP_SERVER' in db_config:
-                config['server'] = db_config['SMTP_SERVER']
-            if 'SMTP_PORT' in db_config:
-                try:
-                    config['port'] = int(db_config['SMTP_PORT'])
-                except ValueError:
-                    logger.warning(f"SMTP_PORT inválido en BD: {db_config['SMTP_PORT']}, usando {SMTP_PORT}")
-            if 'SMTP_USER' in db_config:
-                config['user'] = db_config['SMTP_USER']
-            if 'SMTP_PASSWORD' in db_config:
-                config['password'] = db_config['SMTP_PASSWORD']
-            if 'SMTP_FROM_EMAIL' in db_config:
-                config['from_email'] = db_config['SMTP_FROM_EMAIL']
-            if 'SMTP_FROM_NAME' in db_config:
-                config['from_name'] = db_config['SMTP_FROM_NAME']
-            
-            logger.info(f"✓ Configuración SMTP cargada desde BD: {config['server']}:{config['port']}")
-            
-        except Exception as e:
-            logger.warning(f"No se pudo cargar SMTP desde BD: {e}. Usando fallbacks de config.py")
-        
+        config = get_smtp_config()
+        if smtp_is_configured():
+            logger.info("✓ Configuración SMTP cargada desde el .env activo")
+        else:
+            logger.warning("⚠️ SMTP no configurado en el .env activo")
         return config
     
     def evaluate_and_alert(self, customer_id: int, subdomain: str) -> Dict[str, Any]:

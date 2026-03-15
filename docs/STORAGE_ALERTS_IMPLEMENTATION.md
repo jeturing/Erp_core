@@ -4,7 +4,7 @@
 
 Se ha implementado y validado exitosamente un **sistema completo de alertas de almacenamiento** que notifica a los clientes cuando se acercan a los límites de almacenamiento de su plan. El sistema incluye:
 
-- ✅ **Integración SMTP desde Base de Datos** - Credenciales centralizadas en `system_config`
+- ✅ **Integración SMTP desde `.env.production`** - Configuración centralizada en el archivo de entorno activo
 - ✅ **Alertas Automáticas** - Evaluación de consumo con 3 niveles (Warning 75%, Critical 90%, Exceeded 100%+)
 - ✅ **Notificaciones por Email** - Plantillas HTML profesionales enviadas mediante SMTP_SSL
 - ✅ **API REST Completa** - 7 endpoints para gestión y monitoreo
@@ -14,21 +14,21 @@ Se ha implementado y validado exitosamente un **sistema completo de alertas de a
 
 ## 🔐 CREDENCIALES SMTP VALIDADAS
 
-Las credenciales se obtuvieron de `/opt/IA/SEGRD_CREDENCIALES_MASTER.md` y se han almacenado en la tabla `system_config` de la BD:
+Las credenciales deben definirse en `.env.production` y ya no se gestionan desde `system_config`:
 
-| Parámetro | Valor | Almacenado en BD |
-|-----------|-------|------------------|
-| **Servidor** | `mail5010.site4now.net` | ✓ SMTP_SERVER |
-| **Puerto** | `465` (SSL) | ✓ SMTP_PORT |
-| **Usuario** | `no-reply@sajet.us` | ✓ SMTP_USER (secreto) |
-| **Contraseña** | `321Abcd.` | ✓ SMTP_PASSWORD (secreto) |
-| **From Email** | `no-reply@sajet.us` | ✓ SMTP_FROM_EMAIL |
-| **From Name** | `Sajet ERP Alerts` | ✓ SMTP_FROM_NAME |
+| Parámetro | Valor |
+|-----------|-------|
+| **Servidor** | `smtp.example.com` |
+| **Puerto** | `465` (SSL) |
+| **Usuario** | `alerts@example.com` |
+| **Contraseña** | `<password>` |
+| **From Email** | `alerts@example.com` |
+| **From Name** | `Sajet ERP Alerts` |
 
-**Ventajas de usar BD:**
-- Cambiar credenciales sin redeploy
-- Auditoría de cambios (timestamp + updated_by)
-- Credenciales marcadas como `is_secret` para no logguearlas
+**Política actual:**
+- SMTP se consume solo desde `.env.production`
+- El panel admin expone estado y pruebas, pero no permite actualizar credenciales
+- La BD ya no actúa como fuente de verdad para SMTP
 
 ---
 
@@ -37,11 +37,11 @@ Las credenciales se obtuvieron de `/opt/IA/SEGRD_CREDENCIALES_MASTER.md` y se ha
 ### 1. **Modelo de Base de Datos**
 
 ```
-system_config (configuración centralizada)
+.env.production (configuración centralizada)
 ├── SMTP_SERVER
 ├── SMTP_PORT
-├── SMTP_USER (is_secret=true)
-├── SMTP_PASSWORD (is_secret=true)
+├── SMTP_USER
+├── SMTP_PASSWORD
 ├── SMTP_FROM_EMAIL
 └── SMTP_FROM_NAME
 
@@ -67,7 +67,7 @@ storage_alerts (historial de alertas)
 
 | Método | Propósito |
 |--------|-----------|
-| `_load_smtp_config()` | Carga credenciales desde BD, fallback a env vars |
+| `_load_smtp_config()` | Carga credenciales desde `.env.production` |
 | `evaluate_and_alert()` | Evalúa un tenant y genera alerta si necesario |
 | `evaluate_all_with_alerts()` | Batch evaluation de todos los tenants |
 | `get_active_alerts()` | Lista alertas activas (admin) |
@@ -99,10 +99,10 @@ storage_alerts (historial de alertas)
 
 ### ✅ Test 1: Configuración SMTP
 ```
-✓ Servidor SMTP: mail5010.site4now.net
+✓ Servidor SMTP: smtp.example.com
 ✓ Puerto: 465
-✓ Usuario: no-reply@sajet.us
-✓ From Email: no-reply@sajet.us
+✓ Usuario: alerts@example.com
+✓ From Email: alerts@example.com
 ```
 
 ### ✅ Test 2: Evaluación de Alertas
@@ -125,7 +125,7 @@ Subject: 🟡 TEST ALERTA - Almacenamiento: sattra - 75% del límite
 Status: ✓ ENVIADO EXITOSAMENTE
 
 Detalles del Email:
-  - Servidor: mail5010.site4now.net:465
+  - Servidor: smtp.example.com:465
   - Autenticación: SMTP_SSL
   - Formato: HTML con CSS embedded
   - Contenido: Alerta con uso, límite, barra de progreso, recomendaciones
@@ -147,7 +147,7 @@ Detalles del Email:
 
 ## 📧 EJEMPLO DE EMAIL GENERADO
 
-**De:** `Sajet ERP Alerts <no-reply@sajet.us>`  
+**De:** `Sajet ERP Alerts <alerts@example.com>`  
 **Para:** `soc@jeturing.com`  
 **Asunto:** `🟡 ALERTA DE ALMACENAMIENTO - TEST`
 
@@ -198,7 +198,7 @@ Contáctenos en support@sajet.us
    │  │  - EXCEEDED: 100%+
    │  ├─ Si status != "ok" → Crear StorageAlert
    │  ├─ Generar email HTML profesional
-   │  ├─ Enviar via SMTP (mail5010.site4now.net:465)
+   │  ├─ Enviar via SMTP (smtp.example.com:465)
    │  └─ Registrar en email_logs
    └─ Retornar resumen
    
@@ -214,27 +214,19 @@ Contáctenos en support@sajet.us
 
 El sistema ya está completamente configurado. Para futuras instancias:
 
-**1. Variables de Entorno (Fallback):**
+**1. Variables de Entorno (fuente de verdad):**
 ```bash
 # .env.production
-SMTP_SERVER=mail5010.site4now.net
+SMTP_SERVER=smtp.example.com
 SMTP_PORT=465
-SMTP_USER=no-reply@sajet.us
-SMTP_PASSWORD=321Abcd.
-SMTP_FROM_EMAIL=no-reply@sajet.us
+SMTP_USER=alerts@example.com
+SMTP_PASSWORD=<password>
+SMTP_FROM_EMAIL=alerts@example.com
 SMTP_FROM_NAME=Sajet ERP Alerts
 ```
 
-**2. Base de Datos (Ya configurado):**
-```sql
--- Insertar en system_config (ya realizado)
-INSERT INTO system_config VALUES
-  ('SMTP_SERVER', 'mail5010.site4now.net', 'email', ...),
-  ('SMTP_PORT', '465', 'email', ...),
-  ('SMTP_USER', 'no-reply@sajet.us', 'email', is_secret=true),
-  ('SMTP_PASSWORD', '321Abcd.', 'email', is_secret=true),
-  ...
-```
+**2. Panel Admin:**
+El panel SMTP quedó en modo solo lectura para estado y pruebas. Las actualizaciones retornan `403` y requieren cambio manual en `.env.production` seguido de reinicio de `erp-core`.
 
 ---
 

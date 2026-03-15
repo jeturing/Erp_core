@@ -279,18 +279,18 @@ curl -H "x-api-key: prov-key-2026-secure" \
 {
   "success": true,
   "data": {
-    "server": "mail5010.site4now.net",
+    "server": "smtp.example.com",
     "port": 465,
-    "user": "no-reply@sajet.us",
-    "password_masked": "****ajet.us",
-    "from_email": "no-reply@sajet.us",
+    "user": "alerts@example.com",
+    "password_masked": "****mple.com",
+    "from_email": "alerts@example.com",
     "from_name": "Sajet ERP Alerts"
   }
 }
 ```
 
 #### POST `/smtp/config`
-Actualiza múltiples credenciales SMTP
+Intento de actualización bloqueado. SMTP ahora se administra solo desde `.env.production`.
 
 ```bash
 curl -X POST -H "x-api-key: prov-key-2026-secure" \
@@ -305,7 +305,7 @@ curl -X POST -H "x-api-key: prov-key-2026-secure" \
 ```
 
 #### PUT `/smtp/credential/{key}`
-Actualiza una credencial individual
+Intento de actualización bloqueado. SMTP ahora se administra solo desde `.env.production`.
 
 ```bash
 curl -X PUT -H "x-api-key: prov-key-2026-secure" \
@@ -313,6 +313,8 @@ curl -X PUT -H "x-api-key: prov-key-2026-secure" \
      -d '{"value": "new-server.com"}' \
      http://localhost:4443/api/admin/smtp/credential/SMTP_SERVER
 ```
+
+**Respuesta actual:** `403 SMTP se administra solo desde .env.production y requiere reinicio de erp-core`
 
 #### POST `/smtp/test`
 Prueba conexión SMTP y opcionalmente envía email de prueba
@@ -327,7 +329,7 @@ curl -X POST -H "x-api-key: prov-key-2026-secure" \
 {
   "success": true,
   "data": {
-    "server": "mail5010.site4now.net",
+    "server": "smtp.example.com",
     "port": 465,
     "connection_test": "✓ Conexión SMTP exitosa",
     "email_test": "✓ Email de prueba enviado a admin@example.com",

@@ -21,17 +21,19 @@ curl -X GET "http://localhost:4443/api/admin/smtp/config" \
 {
   "success": true,
   "data": {
-    "from_email": "no-reply@sajet.us",
+    "from_email": "alerts@example.com",
     "from_name": "Sajet ERP Alerts",
     "port": 465,
-    "server": "mail5010.site4now.net",
-    "user": "no-reply@sajet.us",
-    "password_masked": "****bcd."
+    "server": "smtp.example.com",
+    "user": "alerts@example.com",
+    "password_masked": "****word"
   }
 }
 ```
 
 ### 2️⃣ POST /smtp/config — Actualizar credenciales SMTP
+
+Este endpoint ahora responde `403` porque SMTP se administra solo desde `.env.production`.
 
 ```bash
 curl -X POST "http://localhost:4443/api/admin/smtp/config" \
@@ -46,6 +48,8 @@ curl -X POST "http://localhost:4443/api/admin/smtp/config" \
 ```
 
 ### 3️⃣ PUT /smtp/credential/{key} — Actualizar una credencial
+
+Este endpoint ahora responde `403` porque SMTP se administra solo desde `.env.production`.
 
 ```bash
 curl -X PUT "http://localhost:4443/api/admin/smtp/credential/SMTP_FROM_NAME" \
@@ -74,7 +78,7 @@ curl -X POST "http://localhost:4443/api/admin/smtp/test?test_email=soc@jeturing.
     "success": true,
     "connected": true,
     "message": "✅ Conexión SMTP exitosa",
-    "details": "Server: mail5010.site4now.net:465"
+    "details": "Server: smtp.example.com:465"
   }
 }
 ```
@@ -93,9 +97,9 @@ curl -X GET "http://localhost:4443/api/admin/smtp/status" \
   "data": {
     "configured": true,
     "config": {
-      "server": "mail5010.site4now.net",
+      "server": "smtp.example.com",
       "port": 465,
-      "user": "no-reply@sajet.us"
+      "user": "alerts@example.com"
     },
     "tests": {
       "total": 5,
@@ -377,4 +381,3 @@ curl ... --cookie "access_token=YOUR_TOKEN_HERE"
 3. ⏳ Integrar con portal de clientes para visualización
 4. ⏳ Webhook para eventos de actualización de configuración (opcional)
 5. ⏳ Dashboard Svelte para gestión visual (opcional)
-

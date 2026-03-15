@@ -11,30 +11,33 @@ from email.mime.base import MIMEBase
 from email import encoders
 from typing import Optional, List, Dict, Any
 
+from ..config import (
+    APP_URL,
+    SMTP_ENCRYPTION,
+    SMTP_FROM_EMAIL,
+    SMTP_FROM_NAME,
+    SMTP_PASSWORD,
+    SMTP_PORT,
+    SMTP_SERVER,
+    SMTP_USER,
+    smtp_is_configured,
+)
+
 logger = logging.getLogger(__name__)
 
-# SMTP Configuration — ipzmarketing mailrelay
-SMTP_HOST = os.getenv("SMTP_HOST", "smtp1.s.ipzmarketing.com")
-SMTP_PORT = int(os.getenv("SMTP_PORT", "465"))
-SMTP_USER = os.getenv("SMTP_USER", "xjbmlqganpkd")
-SMTP_PASSWORD = os.getenv("SMTP_PASSWORD", "U5VBlQnjiZpMwgLr")
-SMTP_FROM_EMAIL = os.getenv("SMTP_FROM_EMAIL", "no-reply@sajet.us")
-SMTP_FROM_NAME = os.getenv("SMTP_FROM_NAME", "SAJET Platform")
-SMTP_ENCRYPTION = os.getenv("SMTP_ENCRYPTION", "SSL/TLS")  # SSL/TLS o STARTTLS
-
-APP_URL = os.getenv("APP_URL", "https://sajet.us")
-
-
 def _get_smtp_connection():
-    """Crea conexión SMTP con SSL/TLS"""
-    if SMTP_ENCRYPTION == "STARTTLS":
-        server = smtplib.SMTP(SMTP_HOST, SMTP_PORT, timeout=30)
+    """Crea conexión SMTP usando únicamente la configuración centralizada."""
+    if not smtp_is_configured():
+        raise RuntimeError("SMTP no configurado en el .env activo")
+
+    if SMTP_ENCRYPTION == "STARTTLS" or SMTP_PORT == 587:
+        server = smtplib.SMTP(SMTP_SERVER, SMTP_PORT, timeout=30)
         server.ehlo()
         server.starttls()
         server.ehlo()
     else:
         # SSL/TLS por defecto (puerto 465)
-        server = smtplib.SMTP_SSL(SMTP_HOST, SMTP_PORT, timeout=30)
+        server = smtplib.SMTP_SSL(SMTP_SERVER, SMTP_PORT, timeout=30)
     
     server.login(SMTP_USER, SMTP_PASSWORD)
     return server
@@ -97,6 +100,9 @@ def send_email(
         {"success": True/False, "message_id": str, "error": str}
     """
     try:
+        if not smtp_is_configured():
+            raise RuntimeError("SMTP no configurado en el .env activo")
+
         msg = MIMEMultipart("mixed")
         msg["From"] = f"{SMTP_FROM_NAME} <{SMTP_FROM_EMAIL}>"
         msg["To"] = to_email

@@ -148,12 +148,44 @@ PROVISIONING_API_KEY = os.getenv("PROVISIONING_API_KEY", "")
 # ═══════════════════════════════════════════════════════
 # Email / SMTP — Notificaciones
 # ═══════════════════════════════════════════════════════
-SMTP_SERVER = os.getenv("SMTP_SERVER", "smtp.gmail.com")
+SMTP_SERVER = os.getenv("SMTP_SERVER", "")
 SMTP_PORT = int(os.getenv("SMTP_PORT", "587"))
 SMTP_USER = os.getenv("SMTP_USER", "")
 SMTP_PASSWORD = os.getenv("SMTP_PASSWORD", "")
-SMTP_FROM_EMAIL = os.getenv("SMTP_FROM_EMAIL", "alerts@sajet.us")
+SMTP_FROM_EMAIL = os.getenv("SMTP_FROM_EMAIL", "")
 SMTP_FROM_NAME = os.getenv("SMTP_FROM_NAME", "Sajet ERP Alerts")
+SMTP_ENCRYPTION = os.getenv("SMTP_ENCRYPTION", "SSL/TLS").upper()
+
+
+def get_smtp_config(mask_secret: bool = False) -> dict:
+    """Retorna la configuración SMTP centralizada desde el .env activo."""
+    config = {
+        "server": SMTP_SERVER.strip(),
+        "port": SMTP_PORT,
+        "user": SMTP_USER.strip(),
+        "password": SMTP_PASSWORD,
+        "from_email": SMTP_FROM_EMAIL.strip(),
+        "from_name": SMTP_FROM_NAME.strip() if SMTP_FROM_NAME else "Sajet ERP Alerts",
+        "encryption": SMTP_ENCRYPTION,
+    }
+
+    if mask_secret and config["password"]:
+        config["password_masked"] = f"{'*' * 4}{config['password'][-4:]}"
+        config["password"] = None
+
+    return config
+
+
+def smtp_is_configured() -> bool:
+    """Indica si el .env activo contiene una configuración SMTP utilizable."""
+    config = get_smtp_config()
+    return bool(
+        config["server"]
+        and config["port"]
+        and config["user"]
+        and config["password"]
+        and config["from_email"]
+    )
 
 
 # ═══════════════════════════════════════════════════════
