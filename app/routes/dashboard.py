@@ -5,7 +5,7 @@ from fastapi import APIRouter, HTTPException, Request, Cookie
 from fastapi.responses import HTMLResponse, RedirectResponse
 import os
 from ..models.database import Customer, Subscription, SubscriptionStatus, SessionLocal
-from .roles import verify_token_with_role
+from .roles import _require_admin as _require_admin_base, verify_token_with_role
 from ..services.spa_shell import render_spa_shell
 
 router = APIRouter(tags=["Dashboard"])
@@ -42,18 +42,7 @@ async def admin_dashboard(request: Request, access_token: str = Cookie(None)):
 @router.get("/api/dashboard/metrics")
 async def dashboard_metrics(request: Request, access_token: str = Cookie(None)):
     """Métricas en tiempo real del dashboard admin (desde BD y cluster) - requiere JWT."""
-    # Validar token desde cookie o header
-    token = access_token
-    if token is None:
-        auth_header = request.headers.get("Authorization", "")
-        if auth_header.startswith("Bearer "):
-            token = auth_header[7:]
-    
-    if token:
-        try:
-            verify_token_with_role(token, required_role="admin")
-        except HTTPException:
-            raise HTTPException(status_code=401, detail="Token inválido o expirado")
+    _require_admin_base(request, access_token)
     
     db = SessionLocal()
     try:
@@ -152,17 +141,7 @@ async def admin_settings_page(request: Request, access_token: str = Cookie(None)
 @router.get("/api/admin/stripe-events")
 async def get_stripe_events(request: Request, access_token: str = Cookie(None)):
     """Obtiene los eventos de Stripe recientes."""
-    token = access_token
-    if token is None:
-        auth_header = request.headers.get("Authorization", "")
-        if auth_header.startswith("Bearer "):
-            token = auth_header[7:]
-    
-    if token:
-        try:
-            verify_token_with_role(token, required_role="admin")
-        except HTTPException:
-            raise HTTPException(status_code=401, detail="Token inválido")
+    _require_admin_base(request, access_token)
     
     from ..models.database import StripeEvent
     
@@ -226,18 +205,7 @@ async def dashboard_all(request: Request, access_token: str = Cookie(None)):
     Endpoint consolidado: retorna métricas + tenants + infrastructure en 1 call.
     Evita múltiples requests en el dashboard frontend.
     """
-    # Validar token
-    token = access_token
-    if token is None:
-        auth_header = request.headers.get("Authorization", "")
-        if auth_header.startswith("Bearer "):
-            token = auth_header[7:]
-    
-    if token:
-        try:
-            verify_token_with_role(token, required_role="admin")
-        except HTTPException:
-            raise HTTPException(status_code=401, detail="Token inválido o expirado")
+    _require_admin_base(request, access_token)
     
     db = SessionLocal()
     try:

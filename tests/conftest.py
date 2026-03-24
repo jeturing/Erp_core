@@ -11,12 +11,13 @@ sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
 # Set test environment variables BEFORE importing the app
 # This ensures middleware (HTTPS redirect, WAF) reads the correct values
+os.environ["ERP_ENV"] = "test"
 os.environ["ENVIRONMENT"] = "test"
 os.environ["FORCE_HTTPS"] = "false"
 os.environ["ENABLE_WAF"] = "false"
 os.environ["JWT_SECRET_KEY"] = "test-secret-key-for-testing-only"
 os.environ["ADMIN_USERNAME"] = "admin"
-os.environ["ADMIN_PASSWORD"] = "testpass123"
+os.environ["ADMIN_PASSWORD"] = "SecurePass2026!"
 
 from fastapi.testclient import TestClient
 from sqlalchemy import create_engine
@@ -26,6 +27,7 @@ from sqlalchemy.pool import StaticPool
 from app.main import app
 from app.models import database as db_module
 from app.models.database import Base, Customer, Subscription, SubscriptionStatus, ProxmoxNode, LXCContainer
+from app.routes.roles import create_access_token
 
 
 # Test database - SQLite in memory for speed
@@ -71,18 +73,23 @@ def client():
         yield test_client
 
 
+@pytest.fixture(autouse=True)
+def reset_login_rate_limiter():
+    """Evita contaminación entre pruebas por rate limiting compartido en memoria."""
+    Base.metadata.create_all(bind=engine)
+    try:
+        from app.routes.secure_auth import login_rate_limiter
+        login_rate_limiter.attempts.clear()
+        login_rate_limiter.blocked.clear()
+    except Exception:
+        pass
+    yield
+
+
 @pytest.fixture
 def admin_token(client):
     """Get admin JWT token for authenticated requests"""
-    response = client.post("/api/auth/login", json={
-        "email": "admin",
-        "password": "testpass123",
-        "role": "admin"
-    })
-    if response.status_code == 200:
-        # Token is in cookie
-        return response.cookies.get("access_token")
-    return None
+    return create_access_token("admin", "admin")
 
 
 @pytest.fixture

@@ -172,6 +172,18 @@ PERMISSION_CATALOG: Dict[str, Dict[str, Any]] = {
             "catalog:write": "Editar catálogo y precios",
         },
     },
+    "api_keys": {
+        "label": "API Keys",
+        "icon": "Key",
+        "permissions": {
+            "api_keys:read":    "Ver todas las API keys del sistema",
+            "api_keys:write":   "Crear y editar API keys",
+            "api_keys:rotate":  "Rotar API keys (genera nueva, invalida anterior)",
+            "api_keys:delete":  "Revocar / eliminar API keys",
+            "api_keys:self":    "Ver y gestionar solo sus propias API keys",
+            "api_keys:billing": "Ver métricas de uso y facturación de API keys",
+        },
+    },
 }
 
 # Lista plana de todos los permisos válidos
@@ -295,11 +307,12 @@ ROLE_PRESETS: Dict[str, Dict[str, Any]] = {
     },
     "support": {
         "name": "Soporte",
-        "description": "Soporte técnico – lectura + gestión de tenants",
+        "description": "Soporte técnico – lectura + gestión de tenants y rotación de API keys previa solicitud del tenant",
         "permissions": [
             "dashboard:read", "tenants:read", "tenants:write",
             "domains:read", "domains:write", "nodes:read",
             "tunnels:read", "logs:read", "customers:read",
+            "api_keys:read", "api_keys:rotate",  # rotate solo con verify_token del tenant
         ],
         "color": "#1abc9c",
     },

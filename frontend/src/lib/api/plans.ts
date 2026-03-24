@@ -11,9 +11,22 @@ export interface Plan {
   is_active: boolean;
 }
 
+type PlansListResponse = {
+  items?: Plan[];
+  total?: number;
+};
+
+function normalizePlansResponse(payload: Plan[] | PlansListResponse): Plan[] {
+  if (Array.isArray(payload)) return payload;
+  if (payload && Array.isArray(payload.items)) return payload.items;
+  return [];
+}
+
 export const plansApi = {
-  list: (): Promise<Plan[]> =>
-    api.get('/api/plans'),
+  list: async (): Promise<Plan[]> => {
+    const response = await api.get<Plan[] | PlansListResponse>('/api/plans');
+    return normalizePlansResponse(response);
+  },
 
   update: (planId: number, data: Partial<Plan>) =>
     api.put(`/api/plans/${planId}`, data),

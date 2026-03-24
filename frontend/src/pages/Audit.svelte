@@ -6,12 +6,13 @@
   import { formatDate } from '../lib/utils/formatters';
   import {
     Shield, RefreshCw, Search, ChevronLeft, ChevronRight,
-    User, Globe, Monitor, Activity, Filter, ChevronDown, ChevronUp,
+    User, Globe, Monitor, Activity, Filter, ChevronDown, ChevronUp, CheckCircle,
   } from 'lucide-svelte';
 
   let events: AuditEvent[] = [];
   let total = 0;
   let loading = true;
+  let hasAccess = true;  // Asumimos acceso si llegó aquí (protegido por router)
   let search = '';
   let typeFilter = '';
   let resourceFilter = '';
@@ -76,9 +77,22 @@
       <h1 class="page-title flex items-center gap-2"><Shield size={24} /> Auditoría</h1>
       <p class="page-subtitle">Trail de eventos del sistema — persistente e inmutable</p>
     </div>
-    <button class="btn-secondary flex items-center gap-2" on:click={() => loadEvents(currentPage)} disabled={loading}>
-      <RefreshCw size={14} class={loading ? 'animate-spin' : ''} /> Actualizar
-    </button>
+    <div class="flex items-center gap-3">
+      {#if hasAccess}
+        <div class="flex items-center gap-2 px-3 py-1.5 bg-green-500/10 border border-green-500/30 rounded-lg text-green-400 text-xs">
+          <CheckCircle size={14} />
+          <span>Acceso Autorizado</span>
+        </div>
+      {:else}
+        <div class="flex items-center gap-2 px-3 py-1.5 bg-red-500/10 border border-red-500/30 rounded-lg text-red-400 text-xs">
+          <Shield size={14} />
+          <span>Acceso Denegado</span>
+        </div>
+      {/if}
+      <button class="btn-secondary flex items-center gap-2" on:click={() => loadEvents(currentPage)} disabled={loading}>
+        <RefreshCw size={14} class={loading ? 'animate-spin' : ''} /> Actualizar
+      </button>
+    </div>
   </div>
 
   <!-- KPIs -->

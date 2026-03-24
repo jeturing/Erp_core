@@ -9,7 +9,7 @@ Invoices Routes — Épica 5: Facturas bidireccionales + Payment Links
 - POST /api/invoices/{id}/push-to-stripe  → Crea factura en Stripe desde BD
 - POST /api/invoices/{id}/checkout        → Checkout Session para pago
 """
-from fastapi import APIRouter, HTTPException, Depends
+from fastapi import APIRouter, HTTPException, Depends, Request, Cookie
 from pydantic import BaseModel
 from typing import Optional
 from sqlalchemy.orm import Session
@@ -28,6 +28,7 @@ from ..services.stripe_billing import (
     sync_subscription_quantity,
     change_subscription_plan,
 )
+from .roles import _require_admin as _require_admin_base
 
 router = APIRouter(prefix="/api/invoices", tags=["Invoices"])
 logger = logging.getLogger(__name__)
@@ -60,6 +61,8 @@ class InvoiceMarkPaid(BaseModel):
 @router.post("/generate-on-ready")
 def generate_invoice_on_tenant_ready(
     payload: InvoiceGenerateRequest,
+    request: Request,
+    access_token: str = Cookie(None),
     db: Session = Depends(get_db),
 ):
     """
@@ -68,6 +71,7 @@ def generate_invoice_on_tenant_ready(
     - Partner A: Factura al cliente + 50/50 partner
     - Partner B (intercompany): Factura de Jeturing al Partner
     """
+    _require_admin_base(request, access_token)
     sub = db.query(Subscription).filter(Subscription.id == payload.subscription_id).first()
     if not sub:
         raise HTTPException(404, "Subscription not found")
@@ -182,6 +186,8 @@ def generate_invoice_on_tenant_ready(
 
 @router.get("")
 def list_invoices(
+    request: Request,
+    access_token: str = Cookie(None),
     status: Optional[str] = None,
     customer_id: Optional[int] = None,
     partner_id: Optional[int] = None,
@@ -190,6 +196,7 @@ def list_invoices(
     db: Session = Depends(get_db),
 ):
     """Lista facturas con filtros opcionales."""
+    _require_admin_base(request, access_token)
     q = db.query(Invoice)
     if status:
         q = q.filter(Invoice.status == status)
@@ -238,8 +245,14 @@ def list_invoices(
 
 
 @router.get("/{invoice_id}")
-def get_invoice(invoice_id: int, db: Session = Depends(get_db)):
+def get_invoice(
+    invoice_id: int,
+    request: Request,
+    access_token: str = Cookie(None),
+    db: Session = Depends(get_db),
+):
     """Detalle completo de una factura."""
+    _require_admin_base(request, access_token)
     inv = db.query(Invoice).filter(Invoice.id == invoice_id).first()
     if not inv:
         raise HTTPException(404, "Invoice not found")
@@ -268,8 +281,15 @@ def get_invoice(invoice_id: int, db: Session = Depends(get_db)):
 
 
 @router.post("/{invoice_id}/mark-paid")
-def mark_invoice_paid(invoice_id: int, payload: InvoiceMarkPaid, db: Session = Depends(get_db)):
+def mark_invoice_paid(
+    invoice_id: int,
+    payload: InvoiceMarkPaid,
+    request: Request,
+    access_token: str = Cookie(None),
+    db: Session = Depends(get_db),
+):
     """Marca una factura como pagada."""
+    _require_admin_base(request, access_token)
     inv = db.query(Invoice).filter(Invoice.id == invoice_id).first()
     if not inv:
         raise HTTPException(404, "Invoice not found")
@@ -288,12 +308,18 @@ def mark_invoice_paid(invoice_id: int, payload: InvoiceMarkPaid, db: Session = D
 # ═══════════════════════════════════════════════════════════════
 
 @router.post("/{invoice_id}/payment-link")
-def get_payment_link(invoice_id: int, db: Session = Depends(get_db)):
+def get_payment_link(
+    invoice_id: int,
+    request: Request,
+    access_token: str = Cookie(None),
+    db: Session = Depends(get_db),
+):
     """
     Genera/obtiene el payment link de Stripe para una factura.
     Si la factura no existe en Stripe, la crea primero.
     Retorna la URL de pago hosted de Stripe.
     """
+    _require_admin_base(request, access_token)
     inv = db.query(Invoice).filter(Invoice.id == invoice_id).first()
     if not inv:
         raise HTTPException(404, "Invoice not found")
@@ -316,10 +342,16 @@ def get_payment_link(invoice_id: int, db: Session = Depends(get_db)):
 
 
 @router.post("/{invoice_id}/push-to-stripe")
-def push_to_stripe(invoice_id: int, db: Session = Depends(get_db)):
+def push_to_stripe(
+    invoice_id: int,
+    request: Request,
+    access_token: str = Cookie(None),
+    db: Session = Depends(get_db),
+):
     """
     Crea la factura en Stripe desde la BD local (push bidireccional).
     """
+    _require_admin_base(request, access_token)
     inv = db.query(Invoice).filter(Invoice.id == invoice_id).first()
     if not inv:
         raise HTTPException(404, "Invoice not found")
@@ -343,6 +375,8 @@ class CheckoutRequest(BaseModel):
 @router.post("/{invoice_id}/checkout")
 def create_checkout(
     invoice_id: int,
+    request: Request,
+    access_token: str = Cookie(None),
     payload: CheckoutRequest = CheckoutRequest(),
     db: Session = Depends(get_db),
 ):
@@ -350,6 +384,7 @@ def create_checkout(
     Crea un Stripe Checkout Session para pagar una factura.
     Alternativa al hosted_invoice_url — útil para partners.
     """
+    _require_admin_base(request, access_token)
     inv = db.query(Invoice).filter(Invoice.id == invoice_id).first()
     if not inv:
         raise HTTPException(404, "Invoice not found")
@@ -383,12 +418,15 @@ class ConsumptionInvoiceRequest(BaseModel):
 @router.post("/generate-consumption")
 def generate_consumption(
     payload: ConsumptionInvoiceRequest,
+    request: Request,
+    access_token: str = Cookie(None),
     db: Session = Depends(get_db),
 ):
     """
     Genera factura basada en consumo real: plan base + usuarios adicionales.
     La crea en BD local Y en Stripe simultáneamente.
     """
+    _require_admin_base(request, access_token)
     try:
         result = generate_consumption_invoice(db, payload.subscription_id)
         return result
@@ -411,12 +449,15 @@ class SyncQtyRequest(BaseModel):
 @router.post("/sync-quantity")
 def sync_qty_to_stripe(
     payload: SyncQtyRequest,
+    request: Request,
+    access_token: str = Cookie(None),
     db: Session = Depends(get_db),
 ):
     """
     Sincroniza la cantidad de usuarios de una suscripción a Stripe (DB → Stripe).
     Se llama cuando se agregan/eliminan usuarios en el ERP.
     """
+    _require_admin_base(request, access_token)
     sub = db.query(Subscription).filter(Subscription.id == payload.subscription_id).first()
     if not sub:
         raise HTTPException(404, "Subscription not found")
@@ -433,11 +474,14 @@ class ChangePlanRequest(BaseModel):
 @router.post("/change-plan")
 def change_plan(
     payload: ChangePlanRequest,
+    request: Request,
+    access_token: str = Cookie(None),
     db: Session = Depends(get_db),
 ):
     """
     Cambia el plan de una suscripción en Stripe con proration.
     """
+    _require_admin_base(request, access_token)
     sub = db.query(Subscription).filter(Subscription.id == payload.subscription_id).first()
     if not sub:
         raise HTTPException(404, "Subscription not found")

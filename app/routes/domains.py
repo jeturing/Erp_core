@@ -9,6 +9,7 @@ from pydantic import BaseModel, Field
 from typing import Optional, List
 from sqlalchemy.orm import Session
 import logging
+from urllib.parse import urlparse
 
 from ..models.database import get_db
 from ..services.domain_manager import DomainManager
@@ -88,6 +89,29 @@ def _check_domain_limit(db: Session, customer_id: int):
                    f"El plan '{plan.display_name or plan.name}' permite máximo {max_domains} dominio(s). "
                    f"Actualice a Enterprise para dominios ilimitados.",
         )
+
+
+def _extract_hostname(raw_domain: Optional[str]) -> Optional[str]:
+    """Extrae hostname normalizado desde URL o dominio plano."""
+    if not raw_domain:
+        return None
+
+    value = raw_domain.strip()
+    if not value:
+        return None
+
+    candidate = value if "://" in value else f"//{value}"
+    parsed = urlparse(candidate)
+    host = (parsed.netloc or parsed.path or "").strip().lower().strip(".")
+    if not host:
+        return None
+
+    # Eliminar path accidental y puerto
+    host = host.split("/")[0].split(":")[0]
+    if not host or "." not in host:
+        return None
+
+    return host
 
 
 # ==================== Auth Dependencies ====================
@@ -238,6 +262,142 @@ async def list_customers_with_domain_info(
     return {"items": result, "total": len(result)}
 
 
+@router.get("/linked-domains/{customer_id}", response_model=dict)
+async def get_linked_domains_for_customer(
+    customer_id: int,
+    db: Session = Depends(get_db),
+    current_user: dict = Depends(get_current_admin)
+):
+    """
+    Devuelve los dominios vinculados/visibles de un cliente combinando:
+    - Dominio base del tenant: {subdomain}.sajet.us
+    - Dominios custom registrados en ERP Core
+    - Dominios detectados en websites de Odoo (tenant DB)
+    """
+    from ..models.database import Customer, CustomDomain, TenantDeployment
+    from ..services.odoo_website_configurator import OdooWebsiteConfigurator
+
+    customer = db.query(Customer).filter(Customer.id == customer_id).first()
+    if not customer:
+        raise HTTPException(status_code=404, detail="Cliente no encontrado")
+
+    tenant_db = customer.subdomain
+    deployment = (
+        db.query(TenantDeployment)
+        .filter(TenantDeployment.customer_id == customer_id)
+        .order_by(TenantDeployment.id.desc())
+        .first()
+    )
+    if deployment and deployment.database_name:
+        tenant_db = deployment.database_name
+
+    domain_map = {}
+
+    def _add_domain(
+        name: Optional[str],
+        source: str,
+        *,
+        is_active: Optional[bool] = None,
+        verification_status: Optional[str] = None,
+        custom_domain_id: Optional[int] = None,
+        website_id: Optional[int] = None,
+        website_name: Optional[str] = None,
+    ):
+        host = _extract_hostname(name)
+        if not host:
+            return
+
+        item = domain_map.get(host)
+        if not item:
+            item = {
+                "domain": host,
+                "sources": [],
+                "is_active": False,
+                "verification_status": None,
+                "custom_domain_id": None,
+                "odoo_website_ids": [],
+                "odoo_website_names": [],
+            }
+            domain_map[host] = item
+
+        if source not in item["sources"]:
+            item["sources"].append(source)
+
+        if is_active is True:
+            item["is_active"] = True
+
+        if verification_status and not item["verification_status"]:
+            item["verification_status"] = verification_status
+
+        if custom_domain_id and not item["custom_domain_id"]:
+            item["custom_domain_id"] = custom_domain_id
+
+        if website_id and website_id not in item["odoo_website_ids"]:
+            item["odoo_website_ids"].append(website_id)
+
+        if website_name and website_name not in item["odoo_website_names"]:
+            item["odoo_website_names"].append(website_name)
+
+    # 1) Dominio base del tenant
+    base_domain = f"{customer.subdomain}.sajet.us"
+    _add_domain(base_domain, "base", is_active=True, verification_status="verified")
+
+    # 2) Dominios custom registrados en ERP Core
+    custom_domains = db.query(CustomDomain).filter(CustomDomain.customer_id == customer_id).all()
+    for d in custom_domains:
+        _add_domain(
+            d.external_domain,
+            "custom",
+            is_active=bool(d.is_active),
+            verification_status=d.verification_status.value if d.verification_status else None,
+            custom_domain_id=d.id,
+        )
+
+    # 3) Dominios detectados desde websites Odoo
+    odoo_error = None
+    try:
+        configurator = OdooWebsiteConfigurator()
+        websites_result = configurator.list_websites(tenant_db)
+        if websites_result.get("success"):
+            for w in websites_result.get("websites", []):
+                _add_domain(
+                    w.get("domain"),
+                    "odoo",
+                    website_id=w.get("id"),
+                    website_name=w.get("name"),
+                )
+        else:
+            odoo_error = websites_result.get("error") or "No se pudo consultar websites de Odoo"
+    except Exception as e:
+        odoo_error = str(e)
+
+    domains = []
+    for _, item in domain_map.items():
+        item["sources"] = sorted(item["sources"])
+        item["source_count"] = len(item["sources"])
+        domains.append(item)
+
+    domains.sort(key=lambda x: x["domain"])
+
+    summary = {
+        "total": len(domains),
+        "base": sum(1 for d in domains if "base" in d["sources"]),
+        "custom": sum(1 for d in domains if "custom" in d["sources"]),
+        "odoo": sum(1 for d in domains if "odoo" in d["sources"]),
+    }
+
+    return {
+        "success": True,
+        "customer_id": customer.id,
+        "company_name": customer.company_name,
+        "subdomain": customer.subdomain,
+        "tenant_db": tenant_db,
+        "domains": domains,
+        "summary": summary,
+        "odoo_error": odoo_error,
+    }
+
+
 @router.post("", response_model=dict)
 async def create_domain(
     data: DomainCreate,
@@ -266,6 +426,19 @@ async def create_domain(
     
     if not result["success"]:
         raise HTTPException(status_code=400, detail=result["error"])
+
+    # Auto-configurar CNAME interno en Cloudflare (zona sajet.us)
+    # No bloquea el alta del dominio si falla Cloudflare: se informa en response.
+    domain_id = (result.get("domain") or {}).get("id")
+    cloudflare_result = None
+    if domain_id:
+        try:
+            cloudflare_result = await manager.configure_cloudflare(domain_id)
+        except Exception as cf_err:
+            cloudflare_result = {"success": False, "error": str(cf_err)}
+
+    if cloudflare_result:
+        result["cloudflare"] = cloudflare_result
     
     return result
 

@@ -30,6 +30,7 @@ logger = logging.getLogger("domain_manager")
 # Cloudflare Configuration
 CF_API_TOKEN = os.getenv("CLOUDFLARE_API_TOKEN", "")
 CF_ZONE_ID = os.getenv("CLOUDFLARE_ZONE_ID", "4a83b88793ac3688486ace69b6ae80f9")  # sajet.us
+CF_TUNNEL_ID = os.getenv("CLOUDFLARE_TUNNEL_ID", "")
 CF_TUNNEL_NAME = os.getenv("CLOUDFLARE_TUNNEL_NAME", "tcs-sajet-tunnel")
 CF_API_BASE = "https://api.cloudflare.com/client/v4"
 
@@ -109,6 +110,23 @@ class DomainManager:
         
         # Generar token de verificación
         verification_token = f"jeturing-verify-{secrets.token_hex(16)}"
+
+        # Vinculación automática al deployment del cliente (si no se especifica)
+        if not tenant_deployment_id:
+            auto_dep = (
+                self.db.query(TenantDeployment)
+                .filter(TenantDeployment.customer_id == customer_id)
+                .order_by(TenantDeployment.id.desc())
+                .first()
+            )
+            if auto_dep:
+                tenant_deployment_id = auto_dep.id
+                logger.info(
+                    "Domain auto-link: %s -> deployment_id=%s (customer_id=%s)",
+                    external_domain,
+                    tenant_deployment_id,
+                    customer_id,
+                )
         
         # Obtener IP del nodo si hay deployment
         target_node_ip = None
@@ -276,6 +294,19 @@ class DomainManager:
     
     async def _create_cloudflare_dns(self, subdomain: str) -> Dict[str, Any]:
         """Crea un registro CNAME en Cloudflare"""
+        tunnel_ref = (CF_TUNNEL_ID or CF_TUNNEL_NAME or "").strip()
+        if not tunnel_ref:
+            return {
+                "success": False,
+                "error": "CLOUDFLARE_TUNNEL_ID/CLOUDFLARE_TUNNEL_NAME no configurado"
+            }
+
+        tunnel_target = (
+            tunnel_ref
+            if tunnel_ref.endswith(".cfargotunnel.com")
+            else f"{tunnel_ref}.cfargotunnel.com"
+        )
+
         async with httpx.AsyncClient() as client:
             response = await client.post(
                 f"{CF_API_BASE}/zones/{CF_ZONE_ID}/dns_records",
@@ -283,7 +314,7 @@ class DomainManager:
                 json={
                     "type": "CNAME",
                     "name": subdomain,
-                    "content": f"{CF_TUNNEL_NAME}.cfargotunnel.com",
+                    "content": tunnel_target,
                     "proxied": True,
                     "ttl": 1  # Auto
                 }
@@ -438,7 +469,7 @@ class DomainManager:
             # Estos dominios están en nuestra zona de Cloudflare con proxy activo.
             # No tienen CNAME visible (Cloudflare lo enmascara) y las IPs son de CF.
             # Verificamos directamente via API de Cloudflare.
-            if is_sajet_subdomain or domain.cloudflare_configured:
+            if is_sajet_subdomain:
                 cf_check = self._verify_via_cloudflare_api(domain.external_domain)
                 if cf_check["found"]:
                     return _mark_verified(
@@ -652,20 +683,38 @@ class DomainManager:
     def _resolve_tenant_info(self, domain: CustomDomain) -> Dict[str, str]:
         """
         Resuelve el nombre de BD y subdominio del tenant para un dominio.
-        Prioridad: TenantDeployment.database_name → domain.sajet_subdomain
+        Prioridad:
+        1) TenantDeployment explícito del dominio
+        2) Último TenantDeployment del customer
+        3) Customer.subdomain
+        4) domain.sajet_subdomain (fallback legacy)
         """
-        tenant_db = domain.sajet_subdomain
-        tenant_subdomain = domain.sajet_subdomain
+        customer_subdomain = None
+        if domain.customer and domain.customer.subdomain:
+            customer_subdomain = domain.customer.subdomain
 
+        tenant_db = customer_subdomain or domain.sajet_subdomain
+        tenant_subdomain = customer_subdomain or domain.sajet_subdomain
+
+        deployment = None
         if domain.tenant_deployment_id:
             deployment = self.db.query(TenantDeployment).filter(
                 TenantDeployment.id == domain.tenant_deployment_id
             ).first()
-            if deployment:
-                if deployment.database_name:
-                    tenant_db = deployment.database_name
-                if deployment.subdomain:
-                    tenant_subdomain = deployment.subdomain
+
+        if not deployment and domain.customer_id:
+            deployment = (
+                self.db.query(TenantDeployment)
+                .filter(TenantDeployment.customer_id == domain.customer_id)
+                .order_by(TenantDeployment.id.desc())
+                .first()
+            )
+
+        if deployment:
+            if deployment.database_name:
+                tenant_db = deployment.database_name
+            if deployment.subdomain:
+                tenant_subdomain = deployment.subdomain
 
         return {"tenant_db": tenant_db, "tenant_subdomain": tenant_subdomain}
 

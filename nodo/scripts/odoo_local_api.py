@@ -71,6 +71,15 @@ class TenantSuspendRequest(BaseModel):
     reason: Optional[str] = Field(None)
 
 
+class TenantAccountCredentialsRequest(BaseModel):
+    subdomain: str
+    user_id: Optional[int] = None
+    login: Optional[str] = None
+    new_email: Optional[str] = None
+    new_password: Optional[str] = Field(None, min_length=6)
+    active: Optional[bool] = None
+
+
 def get_pg_user():
     """Detecta automáticamente el usuario PostgreSQL"""
     global PG_USER
@@ -307,6 +316,139 @@ async def delete_tenant(request: TenantDeleteRequest, x_api_key: str = Header(No
 async def list_domains():
     """Lista dominios configurados"""
     return {"domains": list(CF_ZONES.keys())}
+
+
+@app.get("/api/tenant/accounts")
+async def list_tenant_accounts(subdomain: str, include_inactive: bool = True, x_api_key: str = Header(None)):
+    """Lista cuentas de un tenant y resume asientos facturables."""
+    if x_api_key != API_KEY:
+        raise HTTPException(status_code=401, detail="Invalid API key")
+
+    db_name = subdomain.lower().replace("-", "_")
+    where = ""
+    if not include_inactive:
+        where = "WHERE u.active = true"
+
+    sql = f"""
+    SELECT
+      u.id,
+      u.login,
+      u.email,
+      p.name,
+      u.active,
+      COALESCE(u.share, false) AS share,
+      u.write_date,
+      u.create_date
+    FROM res_users u
+    LEFT JOIN res_partner p ON p.id = u.partner_id
+    {where}
+    ORDER BY u.active DESC, u.id ASC;
+    """
+
+    try:
+        result = subprocess.run(
+            ['sudo', '-u', 'postgres', 'psql', '-d', db_name, '-t', '-A', '-F', '|', '-c', sql],
+            capture_output=True,
+            text=True,
+            timeout=20
+        )
+        if result.returncode != 0:
+            raise HTTPException(status_code=500, detail=result.stderr.strip() or "Error listando cuentas")
+
+        accounts = []
+        active_accounts = 0
+        billable_active_accounts = 0
+
+        for line in result.stdout.splitlines():
+            line = line.strip()
+            if not line:
+                continue
+            parts = line.split('|')
+            if len(parts) < 8:
+                continue
+
+            account = {
+                "id": int(parts[0]) if parts[0].isdigit() else None,
+                "login": parts[1] or None,
+                "email": parts[2] or None,
+                "name": parts[3] or None,
+                "active": parts[4].lower() == 't',
+                "share": parts[5].lower() == 't',
+                "write_date": parts[6] or None,
+                "create_date": parts[7] or None,
+            }
+
+            login = (account.get("login") or "").strip().lower()
+            account["is_admin"] = login in {"admin", "admin@sajet.us"}
+            account["is_billable"] = bool(account["active"]) and not bool(account["share"]) and not bool(account["is_admin"])
+
+            if account["active"]:
+                active_accounts += 1
+            if account["is_billable"]:
+                billable_active_accounts += 1
+
+            accounts.append(account)
+
+        return {
+            "success": True,
+            "subdomain": db_name,
+            "accounts": accounts,
+            "total_accounts": len(accounts),
+            "active_accounts": active_accounts,
+            "billable_active_accounts": billable_active_accounts,
+        }
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.error(f"Error listando cuentas de {db_name}: {e}")
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+@app.post("/api/tenant/account/credentials")
+async def update_tenant_account_credentials(request: TenantAccountCredentialsRequest, x_api_key: str = Header(None)):
+    """Actualiza credenciales o estado de una cuenta de tenant."""
+    if x_api_key != API_KEY:
+        raise HTTPException(status_code=401, detail="Invalid API key")
+
+    if not request.user_id and not request.login:
+        raise HTTPException(status_code=400, detail="user_id o login es requerido")
+
+    updates = []
+    if request.new_email is not None:
+        safe_email = request.new_email.replace("'", "''")
+        updates.append(f"login = '{safe_email}'")
+        updates.append(f"email = '{safe_email}'")
+    if request.new_password is not None:
+        safe_password = request.new_password.replace("'", "''")
+        updates.append(f"password = '{safe_password}'")
+    if request.active is not None:
+        updates.append(f"active = {'true' if request.active else 'false'}")
+
+    if not updates:
+        raise HTTPException(status_code=400, detail="No hay cambios para aplicar")
+
+    db_name = request.subdomain.lower().replace("-", "_")
+    if request.user_id:
+        where = f"id = {int(request.user_id)}"
+    else:
+        safe_login = (request.login or "").replace("'", "''")
+        where = f"login = '{safe_login}'"
+
+    sql = f"""
+    UPDATE res_users
+    SET {', '.join(updates)}, write_date = NOW()
+    WHERE {where};
+    """
+
+    ok = run_sql(db_name, sql)
+    if not ok:
+        raise HTTPException(status_code=500, detail="Error actualizando credenciales de cuenta")
+
+    return {
+        "success": True,
+        "subdomain": db_name,
+        "message": "Cuenta actualizada exitosamente"
+    }
 
 
 @app.put("/api/tenant/password")

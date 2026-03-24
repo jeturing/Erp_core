@@ -51,7 +51,32 @@ class DomainVerificationStatus(enum.Enum):
 class StorageAlertStatus(enum.Enum):
     warning = "warning"      # 75% del límite
     critical = "critical"    # 90% del límite
-    exceeded = "exceeded"     # 100%+ del límite
+    exceeded = "exceeded"     # 100%
+
+
+# ═══════════════════════════════════════════════════════
+# ENUMS — Épica API Keys: Gestión de claves estilo Stripe
+# ═══════════════════════════════════════════════════════
+
+class ApiKeyStatus(enum.Enum):
+    active = "active"
+    revoked = "revoked"
+    expired = "expired"
+    rotating = "rotating"   # Grace period: clave vieja válida 24h tras rotar
+
+
+class ApiKeyScope(enum.Enum):
+    read_only = "read_only"
+    read_write = "read_write"
+    admin = "admin"
+    custom = "custom"
+
+
+class ApiKeyTier(enum.Enum):
+    free = "free"             # 10 RPM  / 100 RPD  / 10K tokens/mes
+    standard = "standard"     # 60 RPM  / 10K RPD  / 100K tokens/mes
+    pro = "pro"               # 300 RPM / 100K RPD / 500K tokens/mes
+    enterprise = "enterprise" # 2K RPM  / unlimited / unlimited+ del límite
 
 
 class CustomerStatus(enum.Enum):
@@ -378,6 +403,7 @@ class Customer(Base):
 
     created_at = Column(DateTime, default=datetime.utcnow)
     updated_at = Column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
+    last_password_changed_at = Column(DateTime, nullable=True)  # Último cambio de contraseña en Odoo
 
     # Relaciones
     custom_domains = relationship("CustomDomain", back_populates="customer", cascade="all, delete-orphan")
@@ -1738,3 +1764,141 @@ def get_db():
         yield db
     finally:
         db.close()
+
+
+# ═══════════════════════════════════════════════════════
+# MODELO — API Keys (Épica API Keys)
+# ═══════════════════════════════════════════════════════
+
+# Límites por tier (referencia estática, también en el router)
+API_KEY_TIER_LIMITS = {
+    "free":       {"rpm": 10,   "rpd": 100,     "rpm_tokens": 10_000,  "rpm_month": None},
+    "standard":   {"rpm": 60,   "rpd": 10_000,  "rpm_tokens": 100_000, "rpm_month": None},
+    "pro":        {"rpm": 300,  "rpd": 100_000, "rpm_tokens": 500_000, "rpm_month": None},
+    "enterprise": {"rpm": 2000, "rpd": None,    "rpm_tokens": None,    "rpm_month": None},
+}
+
+
+class ApiKey(Base):
+    """
+    API Key estilo Stripe: prefix visible, secreto hasheado.
+    Formato:  sk_live_<key_id>_<secret>
+              ^^^^^^^^^^^^^^^^ solo esto se muestra post-creación
+    """
+    __tablename__ = "api_keys"
+
+    id            = Column(Integer, primary_key=True, index=True)
+    key_id        = Column(String(32),  unique=True, nullable=False, index=True)  # "sk_live_ABC123XYZ..."
+    key_hash      = Column(String(128), nullable=False)                            # SHA-256 del key completo
+    name          = Column(String(255), nullable=False)
+    description   = Column(Text, nullable=True)
+
+    # Ownership
+    tenant_id     = Column(Integer, ForeignKey("tenant_deployments.id"), nullable=True, index=True)
+    customer_id   = Column(Integer, ForeignKey("customers.id"), nullable=True, index=True)
+    created_by    = Column(Integer, nullable=True)   # admin_user id (no FK para evitar cascade)
+
+    # Estado
+    status        = Column(Enum(ApiKeyStatus),   nullable=False, default=ApiKeyStatus.active)
+    scope         = Column(Enum(ApiKeyScope),     nullable=False, default=ApiKeyScope.read_only)
+    tier          = Column(Enum(ApiKeyTier),      nullable=False, default=ApiKeyTier.standard)
+
+    # Permisos granulares opcionales (lista: ["tenants:read", "billing:read"])
+    permissions   = Column(JSON, nullable=False, default=list)
+
+    # Rate limits (override del tier — null = usa los del tier)
+    requests_per_minute  = Column(Integer, nullable=True)
+    requests_per_day     = Column(Integer, nullable=True)
+    monthly_quota_tokens = Column(Integer, nullable=True)
+
+    # Contadores de uso (se resetean por cron diario/mensual)
+    usage_today          = Column(Integer, nullable=False, default=0)
+    usage_this_month     = Column(Integer, nullable=False, default=0)
+    total_requests       = Column(Integer, nullable=False, default=0)
+    last_used_at         = Column(DateTime, nullable=True)
+    last_used_ip         = Column(String(45), nullable=True)
+
+    # Ciclo de vida
+    expires_at           = Column(DateTime, nullable=True)
+    created_at           = Column(DateTime, nullable=False, default=datetime.utcnow)
+    updated_at           = Column(DateTime, nullable=True, onupdate=datetime.utcnow)
+    rotated_at           = Column(DateTime, nullable=True)
+    rotation_old_key_id  = Column(String(32), nullable=True)  # key_id anterior en rotación
+
+    # Metadata libre
+    tags          = Column(JSON, nullable=False, default=list)   # ["prod", "internal"]
+    metadata_     = Column("metadata", JSON, nullable=False, default=dict)
+
+    __table_args__ = (
+        Index("idx_api_keys_status_tier", "status", "tier"),
+        Index("idx_api_keys_customer", "customer_id", "status"),
+        Index("idx_api_keys_tenant", "tenant_id", "status"),
+    )
+
+    def __repr__(self):
+        return f"<ApiKey {self.key_id!r} [{self.tier.value}/{self.status.value}]>"
+
+
+class ApiKeyUsageLog(Base):
+    """
+    Log de requests por API key — granularidad por hora para billing.
+    """
+    __tablename__ = "api_key_usage_logs"
+
+    id         = Column(Integer, primary_key=True, index=True)
+    key_id     = Column(String(32), nullable=False, index=True)   # FK lógica a api_keys.key_id
+    hour_bucket = Column(DateTime, nullable=False)                 # truncado a la hora (2025-01-10 14:00:00)
+    request_count = Column(Integer, nullable=False, default=0)
+    token_count   = Column(Integer, nullable=False, default=0)
+    error_count   = Column(Integer, nullable=False, default=0)
+    endpoint      = Column(String(255), nullable=True)
+    ip_address    = Column(String(45), nullable=True)
+
+    __table_args__ = (
+        UniqueConstraint("key_id", "hour_bucket", "endpoint", name="uq_usage_key_hour_endpoint"),
+        Index("idx_usage_key_bucket", "key_id", "hour_bucket"),
+    )
+
+
+# ── Solicitud de rotación iniciada por el tenant (flujo de soporte) ──────────
+
+class ApiKeyRotationStatus(enum.Enum):
+    pending  = "pending"   # Tenant solicitó; soporte aún no ejecutó
+    approved = "approved"  # Soporte ejecutó la rotación
+    rejected = "rejected"  # Soporte rechazó
+    expired  = "expired"   # Pasó el TTL sin resolver
+
+
+class ApiKeyRotationRequest(Base):
+    """
+    Solicitud de rotación iniciada desde el módulo de correo del tenant.
+    El rol 'support' SOLO puede ejecutar rotate si existe un request pending
+    asociado al mismo tenant y key_id. El token de verificación viaja
+    en el email al tenant y debe incluirse en la llamada de soporte.
+    """
+    __tablename__ = "api_key_rotation_requests"
+
+    id          = Column(Integer, primary_key=True, index=True)
+    key_id      = Column(String(32),  nullable=False, index=True)   # api_keys.key_id
+    tenant_id   = Column(Integer, ForeignKey("tenant_deployments.id"), nullable=False, index=True)
+    customer_id = Column(Integer, ForeignKey("customers.id"), nullable=True)
+
+    # Token de verificación firmado — viaja en el email del tenant
+    verify_token = Column(String(64), nullable=False, unique=True)
+
+    status      = Column(Enum(ApiKeyRotationStatus), nullable=False, default=ApiKeyRotationStatus.pending)
+    requested_by_email = Column(String(255), nullable=False)   # email del usuario tenant
+    support_user_id    = Column(Integer, nullable=True)        # quién del equipo ejecutó
+
+    reason      = Column(Text, nullable=True)       # nota del tenant
+    reject_note = Column(Text, nullable=True)       # nota del soporte si rechaza
+
+    created_at  = Column(DateTime, nullable=False, default=datetime.utcnow)
+    expires_at  = Column(DateTime, nullable=False)  # TTL: 24h desde creación
+    resolved_at = Column(DateTime, nullable=True)
+
+    __table_args__ = (
+        Index("idx_rotation_req_key_status", "key_id", "status"),
+        Index("idx_rotation_req_tenant",     "tenant_id", "status"),
+    )
+

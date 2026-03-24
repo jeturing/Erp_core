@@ -10,11 +10,13 @@ class TestHealthEndpoint:
     
     def test_health_check_accessible(self, client):
         """Test health endpoint is accessible without auth"""
+        client.cookies.clear()
         response = client.get("/health")
         assert response.status_code == status.HTTP_200_OK
     
     def test_health_check_structure(self, client):
         """Test health response structure"""
+        client.cookies.clear()
         response = client.get("/health")
         assert response.status_code == status.HTTP_200_OK
         data = response.json()
@@ -25,29 +27,25 @@ class TestHealthEndpoint:
     
     def test_health_check_version(self, client):
         """Test health returns version info"""
+        client.cookies.clear()
         response = client.get("/health")
         data = response.json()
         
         assert "version" in data
         assert data["version"] == "2.0.0"
     
-    def test_health_check_environment(self, client):
-        """Test health returns environment info"""
+    def test_health_check_no_sensitive_metadata(self, client):
+        """Test public health omits environment and infrastructure metadata"""
+        client.cookies.clear()
         response = client.get("/health")
         data = response.json()
-        
-        assert "environment" in data
-        assert data["environment"] in ["development", "production", "test"]
-    
-    def test_health_check_security_info(self, client):
-        """Test health returns security configuration"""
-        response = client.get("/health")
-        data = response.json()
-        
-        if "security" in data:
-            security = data["security"]
-            assert "https_enforced" in security
-            assert "waf_enabled" in security
+
+        assert "environment" not in data
+        assert "erp_env" not in data
+        assert "database_host" not in data
+        assert "database_name" not in data
+        assert "stripe_mode" not in data
+        assert "security" not in data
 
 
 class TestStaticFiles:
@@ -106,6 +104,7 @@ class TestErrorHandling:
     
     def test_method_not_allowed(self, client):
         """Test 405 for unsupported methods"""
+        client.cookies.clear()
         response = client.delete("/health")
         assert response.status_code == status.HTTP_405_METHOD_NOT_ALLOWED
     

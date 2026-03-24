@@ -214,6 +214,18 @@
       return;
     }
 
+    // Admin/operator/viewer que navega a rutas exclusivas de tenant/partner → redirigir a dashboard
+    if (route === 'portal' && $currentUser?.role && !['tenant'].includes($currentUser.role)) {
+      currentPage = 'dashboard';
+      setRouteHash('dashboard');
+      return;
+    }
+    if (route === 'partner-portal' && $currentUser?.role && !['partner'].includes($currentUser.role)) {
+      currentPage = 'dashboard';
+      setRouteHash('dashboard');
+      return;
+    }
+
     switch (route) {
       case 'dashboard':
       case 'portal':

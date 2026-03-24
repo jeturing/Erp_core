@@ -1,8 +1,11 @@
 """
 Test Dashboard - Metrics, Pages, and Admin Views
 """
+import os
+
 import pytest
 from fastapi import status
+from app.routes.roles import create_access_token
 
 
 class TestDashboardPages:
@@ -80,13 +83,19 @@ class TestDashboardPages:
 class TestDashboardMetrics:
     """Tests for dashboard metrics API"""
     
-    def test_metrics_endpoint_accessible(self, client):
-        """Test metrics endpoint returns data"""
+    def test_metrics_endpoint_requires_auth(self, client):
+        """Test metrics endpoint requires admin auth"""
+        client.cookies.clear()
         response = client.get("/api/dashboard/metrics")
-        assert response.status_code == status.HTTP_200_OK
+        assert response.status_code == status.HTTP_401_UNAUTHORIZED
     
     def test_metrics_structure(self, client):
         """Test metrics response has correct structure"""
+        client.post("/api/auth/login", json={
+            "email": "admin",
+            "password": "testpass123",
+            "role": "admin"
+        })
         response = client.get("/api/dashboard/metrics")
         assert response.status_code == status.HTTP_200_OK
         data = response.json()
@@ -99,6 +108,11 @@ class TestDashboardMetrics:
     
     def test_metrics_cluster_load_structure(self, client):
         """Test cluster load has cpu and ram"""
+        client.post("/api/auth/login", json={
+            "email": "admin",
+            "password": "testpass123",
+            "role": "admin"
+        })
         response = client.get("/api/dashboard/metrics")
         assert response.status_code == status.HTTP_200_OK
         data = response.json()
@@ -109,6 +123,11 @@ class TestDashboardMetrics:
     
     def test_metrics_values_are_numbers(self, client):
         """Test metrics values are numeric"""
+        client.post("/api/auth/login", json={
+            "email": "admin",
+            "password": "testpass123",
+            "role": "admin"
+        })
         response = client.get("/api/dashboard/metrics")
         data = response.json()
         
@@ -143,6 +162,48 @@ class TestStripeEvents:
         except Exception:
             # Database not available - test passes
             pass
+
+
+class TestSecurityRemediation:
+    """Tests for remediated sensitive endpoints."""
+
+    def test_public_env_requires_auth(self, client):
+        client.cookies.clear()
+        response = client.get("/api/env")
+        assert response.status_code == status.HTTP_401_UNAUTHORIZED
+
+    def test_public_env_is_sanitized_for_admin(self, client):
+        client.cookies.set(
+            "access_token",
+            create_access_token(
+                username=os.environ.get("ADMIN_USERNAME", "admin"),
+                role="admin",
+            ),
+        )
+        response = client.get("/api/env")
+        assert response.status_code == status.HTTP_200_OK
+        data = response.json()
+
+        assert "app_url" in data
+        assert "stripe_mode" in data
+        assert "database_host" not in data
+        assert "database_name" not in data
+        assert "env_file" not in data
+
+    def test_billing_requires_auth(self, client):
+        client.cookies.clear()
+        response = client.get("/api/billing/metrics")
+        assert response.status_code == status.HTTP_401_UNAUTHORIZED
+
+    def test_logs_require_auth(self, client):
+        client.cookies.clear()
+        response = client.get("/api/logs/status")
+        assert response.status_code == status.HTTP_401_UNAUTHORIZED
+
+    def test_invoices_require_auth(self, client):
+        client.cookies.clear()
+        response = client.get("/api/invoices")
+        assert response.status_code == status.HTTP_401_UNAUTHORIZED
     
     def test_stripe_events_structure(self, client):
         """Test Stripe events response structure"""

@@ -28,18 +28,23 @@ requires_odoo = pytest.mark.skipif(
 class TestTenantsList:
     """Tests for listing tenants (READ)"""
     
-    def test_list_tenants_returns_items(self, client):
-        """Test that list tenants returns data"""
+    def test_list_tenants_requires_auth(self, client):
+        """Test that list tenants requires authentication"""
         response = client.get("/api/tenants")
+        assert response.status_code == status.HTTP_401_UNAUTHORIZED
+
+    def test_list_tenants_returns_items(self, client, auth_headers, db_session):
+        """Test that authenticated list tenants returns data"""
+        response = client.get("/api/tenants", headers=auth_headers)
         assert response.status_code == status.HTTP_200_OK
         data = response.json()
         assert "items" in data
         assert "total" in data
         assert isinstance(data["items"], list)
     
-    def test_list_tenants_structure(self, client):
-        """Test that tenant items have correct structure"""
-        response = client.get("/api/tenants")
+    def test_list_tenants_structure(self, client, auth_headers, db_session):
+        """Test that authenticated tenant items have correct structure"""
+        response = client.get("/api/tenants", headers=auth_headers)
         assert response.status_code == status.HTTP_200_OK
         data = response.json()
         
@@ -52,7 +57,7 @@ class TestTenantsList:
             assert "plan" in tenant
             assert "status" in tenant
     
-    def test_list_tenants_with_auth(self, client, admin_token):
+    def test_list_tenants_with_auth(self, client, admin_token, db_session):
         """Test list tenants with authentication"""
         headers = {"Authorization": f"Bearer {admin_token}"} if admin_token else {}
         response = client.get("/api/tenants", headers=headers)
@@ -148,9 +153,9 @@ class TestTenantValidation:
 class TestTenantFiltering:
     """Tests for tenant filtering and search"""
     
-    def test_tenants_ordered_by_created_at(self, client):
+    def test_tenants_ordered_by_created_at(self, client, auth_headers, db_session):
         """Test tenants response has created_at field"""
-        response = client.get("/api/tenants")
+        response = client.get("/api/tenants", headers=auth_headers)
         assert response.status_code == status.HTTP_200_OK
         data = response.json()
         
@@ -158,9 +163,9 @@ class TestTenantFiltering:
             for item in data["items"]:
                 assert "created_at" in item or item.get("created_at") is None
     
-    def test_tenants_status_filter_values(self, client):
+    def test_tenants_status_filter_values(self, client, auth_headers, db_session):
         """Test tenant status values are valid"""
-        response = client.get("/api/tenants")
+        response = client.get("/api/tenants", headers=auth_headers)
         assert response.status_code == status.HTTP_200_OK
         data = response.json()
         

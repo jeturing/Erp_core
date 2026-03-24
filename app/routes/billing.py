@@ -8,7 +8,7 @@ from ..models.database import (
     Customer, Subscription, SubscriptionStatus, 
     StripeEvent, Plan, SessionLocal
 )
-from .roles import verify_token_with_role
+from .roles import _require_admin as _require_admin_base, verify_token_with_role
 import logging
 
 router = APIRouter(prefix="/api/billing", tags=["Billing"])
@@ -69,14 +69,7 @@ async def get_billing_metrics(
     - Pagos pendientes
     - Churn rate (últimos 30 días)
     """
-    token = access_token
-    if token is None:
-        auth_header = request.headers.get("Authorization", "")
-        if auth_header.startswith("Bearer "):
-            token = auth_header[7:]
-    
-    if token:
-        _verify_admin(token)
+    _require_admin_base(request, access_token)
     
     db = SessionLocal()
     try:
@@ -173,14 +166,7 @@ async def get_billing_comparison(
     - Revenue actual vs anterior
     - Nuevos clientes vs perdidos
     """
-    token = access_token
-    if token is None:
-        auth_header = request.headers.get("Authorization", "")
-        if auth_header.startswith("Bearer "):
-            token = auth_header[7:]
-    
-    if token:
-        _verify_admin(token)
+    _require_admin_base(request, access_token)
     
     db = SessionLocal()
     try:
@@ -274,14 +260,7 @@ async def get_invoices(
         offset: Offset para paginación
         status: Filtrar por estado (paid, pending, failed)
     """
-    token = access_token
-    if token is None:
-        auth_header = request.headers.get("Authorization", "")
-        if auth_header.startswith("Bearer "):
-            token = auth_header[7:]
-    
-    if token:
-        _verify_admin(token)
+    _require_admin_base(request, access_token)
     
     db = SessionLocal()
     try:
@@ -346,14 +325,7 @@ async def get_stripe_events(
     limit: int = 20
 ) -> Dict[str, Any]:
     """Obtiene los eventos de Stripe recientes."""
-    token = access_token
-    if token is None:
-        auth_header = request.headers.get("Authorization", "")
-        if auth_header.startswith("Bearer "):
-            token = auth_header[7:]
-    
-    if token:
-        _verify_admin(token)
+    _require_admin_base(request, access_token)
     
     db = SessionLocal()
     try:

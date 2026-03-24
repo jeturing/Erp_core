@@ -30,9 +30,37 @@
     can_add: boolean;
     unlimited: boolean;
   }
+  interface LinkedDomainItem {
+    domain: string;
+    sources: string[];
+    source_count: number;
+    is_active: boolean;
+    verification_status: string | null;
+    custom_domain_id: number | null;
+    odoo_website_ids: number[];
+    odoo_website_names: string[];
+  }
+  interface LinkedDomainsResponse {
+    success: boolean;
+    customer_id: number;
+    company_name: string;
+    subdomain: string;
+    tenant_db: string;
+    domains: LinkedDomainItem[];
+    summary: {
+      total: number;
+      base: number;
+      custom: number;
+      odoo: number;
+    };
+    odoo_error?: string | null;
+  }
   let customers = $state<CustomerOption[]>([]);
   let selectedCustomerId = $state<number | null>(null);
   let loadingCustomers = $state(false);
+  let linkedDomainsByCustomer = $state<Record<number, LinkedDomainsResponse>>({});
+  let loadingLinkedByCustomer = $state<Record<number, boolean>>({});
+  let expandedLinkedCustomerId = $state<number | null>(null);
 
   // Plans (for quota editing)
   let plans = $state<Plan[]>([]);
@@ -117,6 +145,64 @@
       loadingCustomers = false;
     }
   }
+
+  function sourceLabel(source: string): string {
+    if (source === 'base') return 'Base';
+    if (source === 'custom') return 'Custom';
+    if (source === 'odoo') return 'Odoo';
+    return source;
+  }
+
+  function sourceClass(source: string): string {
+    if (source === 'base') return 'bg-blue-100 text-blue-800';
+    if (source === 'custom') return 'bg-emerald-100 text-emerald-800';
+    if (source === 'odoo') return 'bg-purple-100 text-purple-800';
+    return 'bg-gray-100 text-gray-700';
+  }
+
+  function linkedDomainsForRow(domain: Domain): LinkedDomainItem[] {
+    const linked = linkedDomainsByCustomer[domain.customer_id]?.domains ?? [];
+    const currentExternal = (domain.external_domain ?? '').toLowerCase();
+    const currentSajet = (domain.sajet_full_domain ?? '').toLowerCase();
+    return linked.filter((d) => d.domain !== currentExternal && d.domain !== currentSajet);
+  }
+
+  async function loadLinkedDomains(customerId: number) {
+    if (loadingLinkedByCustomer[customerId]) return;
+    loadingLinkedByCustomer = { ...loadingLinkedByCustomer, [customerId]: true };
+    try {
+      const res = await api.get<LinkedDomainsResponse>(`/api/domains/linked-domains/${customerId}`);
+      linkedDomainsByCustomer = {
+        ...linkedDomainsByCustomer,
+        [customerId]: res,
+      };
+    } catch (e: any) {
+      toasts.error(e?.message ?? 'Error cargando dominios vinculados');
+    } finally {
+      loadingLinkedByCustomer = { ...loadingLinkedByCustomer, [customerId]: false };
+    }
+  }
+
+  async function toggleLinkedDomains(customerId: number) {
+    if (expandedLinkedCustomerId === customerId) {
+      expandedLinkedCustomerId = null;
+      return;
+    }
+
+    expandedLinkedCustomerId = customerId;
+    if (!linkedDomainsByCustomer[customerId]) {
+      await loadLinkedDomains(customerId);
+    }
+  }
+
+  $effect(() => {
+    const customerIds = [...new Set(domains.map((d) => d.customer_id).filter(Boolean))] as number[];
+    for (const customerId of customerIds) {
+      if (!linkedDomainsByCustomer[customerId] && !loadingLinkedByCustomer[customerId]) {
+        loadLinkedDomains(customerId);
+      }
+    }
+  });
 
   async function handleCreate(e: Event) {
     e.preventDefault();
@@ -521,6 +607,23 @@
                       <ExternalLink size={10} /> Abrir
                     </a>
                   {/if}
+                  {#if loadingLinkedByCustomer[domain.customer_id]}
+                    <div class="text-[10px] text-gray-400 mt-1 flex items-center gap-1">
+                      <RefreshCw size={10} class="animate-spin" /> Cargando vinculados...
+                    </div>
+                  {:else if linkedDomainsForRow(domain).length > 0}
+                    <div class="mt-1.5 space-y-1">
+                      <div class="text-[10px] text-gray-500">Vinculados ({linkedDomainsForRow(domain).length})</div>
+                      <div class="flex flex-wrap gap-1">
+                        {#each linkedDomainsForRow(domain).slice(0, 3) as ld (ld.domain)}
+                          <span class="text-[10px] px-1.5 py-0.5 rounded bg-gray-100 text-gray-700 font-mono" title={ld.sources.join(', ')}>{ld.domain}</span>
+                        {/each}
+                        {#if linkedDomainsForRow(domain).length > 3}
+                          <span class="text-[10px] px-1.5 py-0.5 rounded bg-gray-100 text-gray-600">+{linkedDomainsForRow(domain).length - 3}</span>
+                        {/if}
+                      </div>
+                    </div>
+                  {/if}
                 </td>
 
                 <!-- Subdominio sajet -->
@@ -738,9 +841,60 @@
                 >
                   <Pencil size={12} />
                 </button>
+                <button
+                  class="p-1 rounded text-gray-400 hover:text-primary hover:bg-gray-100 transition-colors"
+                  onclick={() => toggleLinkedDomains(c.id)}
+                  title="Ver dominios vinculados"
+                >
+                  <ChevronDown size={12} class={expandedLinkedCustomerId === c.id ? 'rotate-180 transition-transform' : 'transition-transform'} />
+                </button>
               </div>
             {/if}
           </div>
+
+          {#if expandedLinkedCustomerId === c.id}
+            <div class="mt-2 w-full border border-border-light rounded-md p-2 bg-gray-50">
+              {#if loadingLinkedByCustomer[c.id]}
+                <div class="text-xs text-gray-500 flex items-center gap-1">
+                  <RefreshCw size={12} class="animate-spin" /> Cargando dominios vinculados...
+                </div>
+              {:else if linkedDomainsByCustomer[c.id]}
+                {@const linked = linkedDomainsByCustomer[c.id]}
+                <div class="text-[11px] text-gray-600 mb-2 flex flex-wrap gap-2">
+                  <span>Total: <span class="font-semibold">{linked.summary.total}</span></span>
+                  <span>Base: <span class="font-semibold">{linked.summary.base}</span></span>
+                  <span>Custom: <span class="font-semibold">{linked.summary.custom}</span></span>
+                  <span>Odoo: <span class="font-semibold">{linked.summary.odoo}</span></span>
+                </div>
+
+                {#if linked.odoo_error}
+                  <div class="text-[10px] text-amber-700 bg-amber-50 border border-amber-200 rounded px-2 py-1 mb-2">
+                    Odoo no disponible: {linked.odoo_error}
+                  </div>
+                {/if}
+
+                {#if linked.domains.length === 0}
+                  <div class="text-xs text-gray-500">Sin dominios vinculados detectados.</div>
+                {:else}
+                  <div class="space-y-1 max-h-40 overflow-auto pr-1">
+                    {#each linked.domains as d (d.domain)}
+                      <div class="text-xs bg-white border border-border-light rounded px-2 py-1.5">
+                        <div class="font-mono text-[11px] truncate">{d.domain}</div>
+                        <div class="mt-1 flex flex-wrap items-center gap-1">
+                          {#each d.sources as src}
+                            <span class={`text-[10px] px-1.5 py-0.5 rounded ${sourceClass(src)}`}>{sourceLabel(src)}</span>
+                          {/each}
+                          {#if d.verification_status}
+                            <span class="text-[10px] px-1.5 py-0.5 rounded bg-gray-100 text-gray-700">{d.verification_status}</span>
+                          {/if}
+                        </div>
+                      </div>
+                    {/each}
+                  </div>
+                {/if}
+              {/if}
+            </div>
+          {/if}
         {/each}
       </div>
     </div>

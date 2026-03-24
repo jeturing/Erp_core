@@ -7,8 +7,11 @@ import logging
 import subprocess
 import shlex
 import os
+import json
 import shutil
 import asyncio
+import secrets
+import string
 from pathlib import Path
 from typing import Dict, Any, List, Optional
 from datetime import datetime
@@ -107,29 +110,106 @@ class OdooServer:
 
 # Pool de servidores disponibles
 _PRIMARY_SERVER_ID = f"pct-{ODOO_PRIMARY_PCT_ID}"
-ODOO_SERVERS: Dict[str, OdooServer] = {
-    _PRIMARY_SERVER_ID: OdooServer(
-        id=_PRIMARY_SERVER_ID,
-        name=f"Servidor Principal (PCT {ODOO_PRIMARY_PCT_ID})",
-        pct_id=ODOO_PRIMARY_PCT_ID,
-        ip=ODOO_PRIMARY_IP,
-        port=ODOO_PRIMARY_PORT,
-        max_databases=50,
-        priority=10,
-        region="primary"
-    ),
-    # Agregar más servidores según se necesite
-    # "pct-106": OdooServer(
-    #     id="pct-106",
-    #     name="Servidor Secundario (PCT 106)",
-    #     pct_id=106,
-    #     ip="10.10.10.101",
-    #     port=8069,
-    #     max_databases=50,
-    #     priority=5,
-    #     region="secondary"
-    # ),
-}
+
+
+def _safe_int(value: Any, default: int) -> int:
+    try:
+        return int(value)
+    except Exception:
+        return default
+
+
+def _parse_server_status(value: Any) -> ServerStatus:
+    try:
+        if not value:
+            return ServerStatus.online
+        normalized = str(value).strip().lower()
+        return ServerStatus(normalized)
+    except Exception:
+        return ServerStatus.online
+
+
+def _load_extra_servers_from_config() -> List[OdooServer]:
+    """
+    Carga nodos extra desde config centralizada:
+    - ODOO_EXTRA_NODES_JSON (preferencia: BD system_config > ENV)
+    Formato esperado: JSON array de objetos con ip/pct_id opcionales de tuning.
+    """
+    raw = _get_config("ODOO_EXTRA_NODES_JSON", os.getenv("ODOO_EXTRA_NODES_JSON", "[]"))
+    if not raw:
+        return []
+
+    try:
+        parsed = json.loads(raw)
+    except Exception as e:
+        logger.warning(f"ODOO_EXTRA_NODES_JSON inválido, se ignora: {e}")
+        return []
+
+    if isinstance(parsed, dict):
+        parsed = parsed.get("servers", [])
+    if not isinstance(parsed, list):
+        logger.warning("ODOO_EXTRA_NODES_JSON debe ser lista o {'servers': [...]}.")
+        return []
+
+    servers: List[OdooServer] = []
+    for item in parsed:
+        if not isinstance(item, dict):
+            continue
+
+        ip = str(item.get("ip", "")).strip()
+        pct_id = _safe_int(item.get("pct_id"), 0)
+        if not ip or pct_id <= 0:
+            continue
+
+        server_id = str(item.get("id") or f"pct-{pct_id}").strip().lower()
+        server_name = str(item.get("name") or f"Servidor Odoo (PCT {pct_id})").strip()
+
+        servers.append(
+            OdooServer(
+                id=server_id,
+                name=server_name,
+                pct_id=pct_id,
+                ip=ip,
+                port=_safe_int(item.get("port"), 8069),
+                max_databases=max(1, _safe_int(item.get("max_databases"), 50)),
+                priority=max(1, _safe_int(item.get("priority"), 5)),
+                region=str(item.get("region") or "secondary").strip(),
+                status=_parse_server_status(item.get("status")),
+            )
+        )
+    return servers
+
+
+def _build_odoo_servers() -> Dict[str, OdooServer]:
+    servers: Dict[str, OdooServer] = {
+        _PRIMARY_SERVER_ID: OdooServer(
+            id=_PRIMARY_SERVER_ID,
+            name=f"Servidor Principal (PCT {ODOO_PRIMARY_PCT_ID})",
+            pct_id=ODOO_PRIMARY_PCT_ID,
+            ip=ODOO_PRIMARY_IP,
+            port=ODOO_PRIMARY_PORT,
+            max_databases=50,
+            priority=10,
+            region="primary",
+        )
+    }
+
+    for extra in _load_extra_servers_from_config():
+        if extra.id in servers:
+            logger.info(f"ODOO extra node '{extra.id}' sobrescribe definición existente")
+        servers[extra.id] = extra
+
+    return servers
+
+
+ODOO_SERVERS: Dict[str, OdooServer] = _build_odoo_servers()
+
+
+def refresh_odoo_servers() -> Dict[str, OdooServer]:
+    """Recarga el catálogo de nodos Odoo (útil para cambios de config en runtime)."""
+    global ODOO_SERVERS
+    ODOO_SERVERS = _build_odoo_servers()
+    return ODOO_SERVERS
 
 def _load_protected_tenants() -> set[str]:
     """Lista de tenants protegidos para evitar borrados accidentales."""
@@ -664,6 +744,7 @@ class OdooDatabaseManager:
 
 async def get_available_servers() -> List[Dict[str, Any]]:
     """Obtiene lista de servidores disponibles con su estado"""
+    refresh_odoo_servers()
     servers = []
     
     for server_id, server in ODOO_SERVERS.items():
@@ -701,6 +782,7 @@ async def get_available_servers() -> List[Dict[str, Any]]:
 
 async def select_best_server() -> Optional[OdooServer]:
     """Selecciona el mejor servidor disponible automáticamente"""
+    refresh_odoo_servers()
     best_server = None
     best_score = -1
     
@@ -758,6 +840,8 @@ async def provision_tenant(
     Returns:
         Dict con resultado del provisioning
     """
+    refresh_odoo_servers()
+
     # Normalizar subdomain
     subdomain = subdomain.lower().strip().replace(" ", "_").replace("-", "_")
     subdomain = ''.join(c for c in subdomain if c.isalnum() or c == '_')
@@ -868,6 +952,7 @@ async def _create_cloudflare_dns(subdomain: str, server: OdooServer) -> Dict[str
 
 async def delete_tenant(subdomain: str, server_id: Optional[str] = None) -> Dict[str, Any]:
     """Elimina un tenant"""
+    refresh_odoo_servers()
     
     # Proteger tenants importantes
     if is_tenant_protected(subdomain):
@@ -895,6 +980,7 @@ async def delete_tenant(subdomain: str, server_id: Optional[str] = None) -> Dict
 
 async def backup_tenant(subdomain: str, server_id: Optional[str] = None) -> Dict[str, Any]:
     """Genera backup de un tenant buscando automáticamente su servidor."""
+    refresh_odoo_servers()
     if server_id:
         servers_to_check = [ODOO_SERVERS.get(server_id)] if server_id in ODOO_SERVERS else []
     else:
@@ -919,6 +1005,7 @@ async def backup_tenant(subdomain: str, server_id: Optional[str] = None) -> Dict
 
 async def get_servers_status() -> Dict[str, Any]:
     """Endpoint: obtiene estado de todos los servidores"""
+    refresh_odoo_servers()
     servers = await get_available_servers()
     
     total_dbs = sum(s.get("current_databases", 0) for s in servers if s.get("status") != "offline")
@@ -1060,6 +1147,8 @@ async def create_tenant_from_template(
     Esta función es la recomendada para crear nuevos tenants en producción.
     Duplica template_tenant y configura los datos del nuevo tenant.
     """
+    refresh_odoo_servers()
+
     # Normalizar
     subdomain = subdomain.lower().strip().replace(" ", "_").replace("-", "_")
     subdomain = ''.join(c for c in subdomain if c.isalnum() or c == '_')
@@ -1077,8 +1166,20 @@ async def create_tenant_from_template(
         company_name = subdomain.replace("_", " ").title()
     
     # Resolver login/password finales
-    final_login = admin_login or DEFAULT_ADMIN_LOGIN
-    final_password = admin_password or DEFAULT_ADMIN_PASSWORD
+    final_login = admin_login or f"{subdomain}@{BASE_DOMAIN}"
+    if admin_password:
+        final_password = admin_password
+    else:
+        alphabet = string.ascii_letters + string.digits + "@#$%!-_"
+        final_password = "".join(secrets.choice(alphabet) for _ in range(20))
+
+    def _sql_literal(value: str) -> str:
+        return (value or "").replace("'", "''")
+
+    safe_company_name = _sql_literal(company_name)
+    safe_base_url = _sql_literal(f"https://{subdomain}.{BASE_DOMAIN}")
+    safe_final_login = _sql_literal(final_login)
+    safe_final_password = _sql_literal(final_password)
     
     # Obtener servidor
     server = ODOO_SERVERS.get(server_id) if server_id else list(ODOO_SERVERS.values())[0]
@@ -1249,9 +1350,9 @@ async def create_tenant_from_template(
         # 5. Configurar nueva BD
         base_url = f"https://{subdomain}.{BASE_DOMAIN}"
         config_sql = f"""
-        UPDATE res_company SET name = '{company_name}' WHERE id = 1;
-        UPDATE res_partner SET name = '{company_name}' WHERE id = 1;
-        UPDATE ir_config_parameter SET value = '{base_url}' WHERE key = 'web.base.url';
+        UPDATE res_company SET name = '{safe_company_name}' WHERE id = 1;
+        UPDATE res_partner SET name = '{safe_company_name}' WHERE id = 1;
+        UPDATE ir_config_parameter SET value = '{safe_base_url}' WHERE key = 'web.base.url';
         UPDATE ir_config_parameter SET value = gen_random_uuid()::text WHERE key = 'database.uuid';
         """
         
@@ -1260,11 +1361,11 @@ async def create_tenant_from_template(
         # 6. Actualizar credenciales admin si son diferentes al default
         if final_login != DEFAULT_ADMIN_LOGIN or final_password != DEFAULT_ADMIN_PASSWORD:
             cred_sql = f"""
-            UPDATE res_users SET login = '{final_login}' WHERE id = 2;
-            UPDATE res_partner SET email = '{final_login}' WHERE id IN (SELECT partner_id FROM res_users WHERE id = 2);
+            UPDATE res_users SET login = '{safe_final_login}' WHERE id = 2;
+            UPDATE res_partner SET email = '{safe_final_login}' WHERE id IN (SELECT partner_id FROM res_users WHERE id = 2);
             """
             if final_password != DEFAULT_ADMIN_PASSWORD:
-                cred_sql += f"UPDATE res_users SET password = '{final_password}' WHERE id = 2;\n"
+                cred_sql += f"UPDATE res_users SET password = '{safe_final_password}' WHERE id = 2;\n"
             
             ok, out = _run_pct_sql(pct_id, subdomain, cred_sql)
             if ok:
@@ -1319,7 +1420,9 @@ async def create_tenant_api(
         return await create_tenant_from_template(
             subdomain=subdomain,
             company_name=company_name,
-            server_id=server_id
+            server_id=server_id,
+            admin_login=admin_login,
+            admin_password=admin_password,
         )
     else:
         # Método tradicional via HTTP API de Odoo

@@ -4,6 +4,7 @@ Customers Management Routes - Mantenimiento de clientes, montos y user_count
 from fastapi import APIRouter, HTTPException, Request, Cookie
 from pydantic import BaseModel
 from typing import Optional, Dict, Any, List
+from datetime import datetime
 from ..models.database import (
     Customer, Subscription, SubscriptionStatus, Plan,
     TenantDeployment, CustomDomain, SessionLocal
@@ -593,6 +594,7 @@ async def reset_customer_password(
     """
     Genera una nueva contraseña para el tenant en Odoo y la envía por email.
     Resetea la contraseña del usuario admin (id=2) en la BD Odoo del tenant.
+    Registra el evento en auditoría.
     """
     _verify_admin(request, access_token)
     db = SessionLocal()
@@ -617,6 +619,10 @@ async def reset_customer_password(
         if not success:
             raise HTTPException(status_code=500, detail=f"Error reseteando password en Odoo: {output}")
 
+        # Actualizar timestamp de cambio de contraseña
+        customer.last_password_changed_at = datetime.utcnow()
+        db.commit()
+
         # Enviar nueva contraseña por email
         from ..services.email_service import send_password_reset
 
@@ -626,6 +632,54 @@ async def reset_customer_password(
             subdomain=customer.subdomain,
             new_password=new_password,
         )
+
+        # Registrar evento de auditoría
+        try:
+            from .audit import log_audit_event as audit_log
+            from .audit import AuditLogRequest
+            
+            # Extraer info del token
+            actor_username = "unknown"
+            try:
+                from ..utils.token import verify_token_with_role
+                token_data = verify_token_with_role(access_token)
+                actor_username = token_data.get("email") or token_data.get("username") or "admin"
+            except:
+                actor_username = "admin"
+            
+            audit_request = AuditLogRequest(
+                event_type="PASSWORD_RESET",
+                resource=f"customer:{customer.id}:{customer.subdomain}",
+                action="reset_password",
+                status="success",
+                details={
+                    "customer_id": customer_id,
+                    "subdomain": customer.subdomain,
+                    "email_sent": email_result["success"],
+                    "actor": actor_username,
+                }
+            )
+            # Log directo a auditoría
+            from ..models.database import AuditEventRecord
+            event = AuditEventRecord(
+                event_type="PASSWORD_RESET",
+                actor_id=None,
+                actor_username=actor_username,
+                actor_role="admin",
+                ip_address=request.client.host if request.client else None,
+                resource=f"customer:{customer.id}:{customer.subdomain}",
+                action="reset_password",
+                status="success",
+                details={
+                    "customer_id": customer_id,
+                    "subdomain": customer.subdomain,
+                    "email_sent": email_result["success"],
+                }
+            )
+            db.add(event)
+            db.commit()
+        except Exception as audit_err:
+            logger.warning(f"No se pudo registrar evento de auditoría: {audit_err}")
 
         return {
             "success": True,

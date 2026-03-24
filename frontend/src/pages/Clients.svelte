@@ -3,6 +3,7 @@
   import { Users, DollarSign, Shield, Edit3, Minus, Plus, RefreshCw, Search, CreditCard, Mail, KeyRound } from 'lucide-svelte';
   import { billingApi } from '../lib/api/billing';
   import { workOrdersApi } from '../lib/api/workOrders';
+  import CredentialsModal from '../lib/components/CredentialsModal.svelte';
   import type { CustomerItem, Plan } from '../lib/types';
   import type { BlueprintPackage } from '../lib/types';
 
@@ -39,6 +40,17 @@
     description: '',
   });
 
+  // Modal Credenciales
+  let showCredentialsModal = $state(false);
+  let credentials = $state<{
+    admin_login: string;
+    admin_password: string;
+    subdomain: string;
+    company_name: string;
+    tenant_url?: string;
+  } | null>(null);
+  let lastCreatedCustomerId: string | null = $state(null);
+
   async function openNewClient() {
     ncStep = 1; ncToast = '';
     selectedBlueprint = null;
@@ -67,7 +79,22 @@
         user_count: ncForm.user_count,
         partner_id: ncForm.partner_id ? Number(ncForm.partner_id) : undefined,
       });
+      
       const customerId = clientRes.id ?? clientRes.customer?.id;
+      
+      // Capturar credenciales del response
+      if (clientRes.tenant && clientRes.tenant.admin_login && clientRes.tenant.admin_password) {
+        credentials = {
+          admin_login: clientRes.tenant.admin_login,
+          admin_password: clientRes.tenant.admin_password,
+          subdomain: ncForm.subdomain,
+          company_name: ncForm.company_name,
+          tenant_url: clientRes.tenant.url || `https://${ncForm.subdomain}.sajet.us`
+        };
+        lastCreatedCustomerId = customerId;
+        showCredentialsModal = true;
+      }
+      
       // 2. Crear Work Order si hay blueprint
       if (customerId && selectedBlueprint) {
         await workOrdersApi.create({
@@ -78,12 +105,23 @@
           description: ncForm.description || `Aprovisionamiento ${ncForm.company_name} — ${selectedBlueprint.name}`,
         });
       }
+      
       showNewClient = false;
       await loadData();
     } catch (e: any) {
       ncToast = e.message || 'Error creando cliente';
     }
     creatingClient = false;
+  }
+
+  async function handleSendCredentialsEmail() {
+    if (!lastCreatedCustomerId) return;
+    try {
+      await billingApi.sendCredentials(lastCreatedCustomerId);
+    } catch (e: any) {
+      console.error('Error enviando credenciales:', e);
+      throw e;
+    }
   }
 
   // Edit modal
@@ -788,3 +826,14 @@
     </div>
   </div>
 {/if}
+
+<!-- Modal Credenciales -->
+<CredentialsModal
+  isOpen={showCredentialsModal}
+  {credentials}
+  onDismiss={() => {
+    showCredentialsModal = false;
+    credentials = null;
+  }}
+  onSendEmail={handleSendCredentialsEmail}
+/>

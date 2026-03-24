@@ -985,8 +985,6 @@ async def select_tenant(request: Request, tenant_id: int = None):
         )
     finally:
         db.close()
-    finally:
-        db.close()
 
 
 # Verificación de estado de rate limit

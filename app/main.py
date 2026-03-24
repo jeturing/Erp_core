@@ -3,7 +3,7 @@ Main application entry point
 Onboarding System API - Modular architecture with production security
 """
 from contextlib import asynccontextmanager
-from fastapi import FastAPI
+from fastapi import FastAPI, Cookie
 from fastapi.staticfiles import StaticFiles
 from starlette.middleware.base import BaseHTTPMiddleware
 from starlette.requests import Request
@@ -40,6 +40,8 @@ from .routes import plan_migration  # Migración automática de planes por consu
 from .routes import storage_alerts  # Alertas de almacenamiento con notificaciones
 from .routes import monitoring_dashboard  # Dashboard de monitoreo completo
 from .routes import admin_control_panel  # 🔧 Panel de control administrativo (SMTP, templates, alertas)
+from .routes import api_keys             # 🔑 API Key Management (rate limit, RBAC, rotación estilo Stripe)
+from .routes.roles import _require_admin as _require_admin_base
 
 # Import security middleware
 from .security.middleware import SecurityMiddleware, WAFMiddleware
@@ -223,6 +225,7 @@ app.include_router(plan_migration.router)        # Migración automática de pla
 app.include_router(storage_alerts.router)        # Alertas de almacenamiento con notificaciones
 app.include_router(monitoring_dashboard.router)  # Dashboard de monitoreo completo
 app.include_router(admin_control_panel.router)   # 🔧 Panel de control: SMTP, templates, alertas
+app.include_router(api_keys.router)              # 🔑 API Key Management (rate limit, rotación Stripe)
 app.include_router(stripe_sync.router)           # Stripe → BD sync (source of truth)
 app.include_router(public_landing.router)        # Endpoints públicos para landing page (sin auth)
 app.include_router(accountant_portal.router)     # Portal para contadores/CPA multi-empresa
@@ -234,8 +237,9 @@ app.include_router(dispersion.router)            # Dispersión Mercury (feature 
 
 # ── CORS Cache Refresh endpoint ──
 @app.post("/api/admin/cors/refresh", tags=["Admin"])
-async def cors_refresh():
+async def cors_refresh(request: Request, access_token: str = Cookie(None)):
     """Force refresh CORS allowed origins from DB."""
+    _require_admin_base(request, access_token)
     refresh_cors_cache()
     return {"message": "CORS cache refreshed"}
 
@@ -247,25 +251,27 @@ logger.info(f"   DB → {_env_info['database_host']}/{_env_info['database_name']
 
 
 @app.get("/api/env")
-async def env_info():
-    """Returns current environment configuration (non-sensitive)."""
-    return get_env_info()
+async def env_info(request: Request, access_token: str = Cookie(None)):
+    """Returns authenticated environment metadata without infrastructure internals."""
+    _require_admin_base(request, access_token)
+    return {
+        "erp_env": _env_info["erp_env"],
+        "environment": ENVIRONMENT,
+        "stripe_mode": _env_info["stripe_mode"],
+        "app_url": APP_URL,
+        "security": {
+            "https_enforced": FORCE_HTTPS,
+            "waf_enabled": ENABLE_WAF,
+        },
+    }
 
 
 @app.get("/health")
 async def health_check():
-    """Health check endpoint"""
+    """Public health check endpoint with no infrastructure disclosure."""
     return {
         "status": "healthy",
         "version": "2.0.0",
-        "environment": ENVIRONMENT,
-        "erp_env": _env_info["erp_env"],
-        "database_host": _env_info["database_host"],
-        "stripe_mode": _env_info["stripe_mode"],
-        "security": {
-            "https_enforced": FORCE_HTTPS,
-            "waf_enabled": ENABLE_WAF
-        }
     }
 
 

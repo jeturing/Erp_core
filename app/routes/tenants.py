@@ -31,6 +31,8 @@ import httpx
 import logging
 import psycopg
 import os
+import secrets
+import string
 from ..models.database import AuditEventRecord
 
 from ..config import PROVISIONING_API_KEY, ODOO_DB_USER, ODOO_DB_PASSWORD, ODOO_DB_HOST, DATABASE_URL
@@ -56,6 +58,19 @@ router = APIRouter(prefix="/api/tenants", tags=["Tenants"])
 logger = logging.getLogger(__name__)
 
 _SUBDOMAIN_RE = re.compile(r'^[a-z0-9][a-z0-9_]{1,28}[a-z0-9]$')
+
+
+def _generate_bootstrap_password(length: int = 20) -> str:
+    """Genera una contraseña robusta (sin comillas simples para evitar problemas SQL legacy)."""
+    alphabet = string.ascii_letters + string.digits + "@#$%!-_"
+    return "".join(secrets.choice(alphabet) for _ in range(max(12, length)))
+
+
+def _build_tenant_admin_credentials(subdomain: str, base_domain: str = "sajet.us") -> tuple[str, str]:
+    """Credenciales bootstrap del admin del tenant: <subdomain>@<base_domain> + password aleatoria."""
+    login = f"{subdomain}@{base_domain}"
+    password = _generate_bootstrap_password()
+    return login, password
 
 
 def _safe_actor_from_request(request: Request) -> tuple[Optional[int], Optional[str], Optional[str], Optional[str], Optional[str]]:
@@ -590,14 +605,55 @@ async def create_tenant(
     - Por defecto usa método SQL rápido (duplica template_tenant)
     """
     _require_admin_base(request, access_token)
-    # Verificar idempotencia: si el subdominio ya existe en BD local, rechazar
+
+    # Política SAJET: credenciales bootstrap siempre derivadas del nombre de BD.
+    # - Login: <nombrebda>@sajet.us
+    # - Password: generada aleatoriamente
+    # Se persisten en auditoría (acceso admin-only en /api/audit).
+    effective_admin_login, effective_admin_password = _build_tenant_admin_credentials(
+        payload.subdomain,
+        "sajet.us",
+    )
+
+    # Verificar idempotencia local. Si existe localmente pero no existe en remoto,
+    # permitir reprovisionar para recuperar estados parciales.
     db = SessionLocal()
+    existing_local_customer: Optional[Customer] = None
     try:
-        existing = db.query(Customer).filter(Customer.subdomain == payload.subdomain).first()
-        if existing:
-            raise HTTPException(status_code=409, detail=f"El subdominio '{payload.subdomain}' ya existe")
+        existing_local_customer = db.query(Customer).filter(Customer.subdomain == payload.subdomain).first()
     finally:
         db.close()
+
+    if existing_local_customer:
+        remote_exists = False
+        remote_server_id = None
+        if payload.server_id:
+            servers_to_check = [ODOO_SERVERS.get(payload.server_id)] if payload.server_id in ODOO_SERVERS else []
+        else:
+            servers_to_check = list(ODOO_SERVERS.values())
+
+        for server in servers_to_check:
+            if not server:
+                continue
+            try:
+                async with OdooDatabaseManager(server) as manager:
+                    if await manager.database_exists(payload.subdomain):
+                        remote_exists = True
+                        remote_server_id = server.id
+                        break
+            except Exception as e:
+                logger.warning(
+                    f"No se pudo verificar existencia remota de '{payload.subdomain}' en {getattr(server, 'id', 'unknown')}: {e}"
+                )
+
+        if remote_exists:
+            raise HTTPException(status_code=409, detail=f"El subdominio '{payload.subdomain}' ya existe")
+
+        logger.warning(
+            f"Recover mode: existe registro local para '{payload.subdomain}' pero no BD remota. "
+            f"Se intentará reprovisionar (server_hint={payload.server_id}, remote_found={remote_server_id})."
+        )
+
     try:
         creation_mode: Optional[str] = None
         fallback_reason: Optional[str] = None
@@ -608,8 +664,8 @@ async def create_tenant(
                 subdomain=payload.subdomain,
                 company_name=payload.company_name,
                 server_id=payload.server_id,
-                admin_login=payload.admin_email,
-                admin_password=payload.admin_password,
+                admin_login=effective_admin_login,
+                admin_password=effective_admin_password,
             )
             fast_error_code = str(fast_result.get("error_code") or "")
 
@@ -619,6 +675,7 @@ async def create_tenant(
                 "template_check_failed",
                 "proxmox_ssh_unavailable",
                 "fast_path_unavailable",
+                "filestore_sync_failed",
             }
             if not fast_result.get("success") and fast_error_code in recoverable_fast_failures:
                 fallback_reason = fast_result.get("error") or "Fast path no disponible"
@@ -628,8 +685,8 @@ async def create_tenant(
                 )
                 result = await provision_tenant(
                     subdomain=payload.subdomain,
-                    admin_login=payload.admin_email or DEFAULT_ADMIN_LOGIN,
-                    admin_password=payload.admin_password or DEFAULT_ADMIN_PASSWORD,
+                    admin_login=effective_admin_login,
+                    admin_password=effective_admin_password,
                     server_id=payload.server_id,
                     demo=False,
                     lang="es_MX"
@@ -643,8 +700,8 @@ async def create_tenant(
             # Método tradicional via HTTP API de Odoo
             result = await provision_tenant(
                 subdomain=payload.subdomain,
-                admin_login=payload.admin_email or DEFAULT_ADMIN_LOGIN,
-                admin_password=payload.admin_password or DEFAULT_ADMIN_PASSWORD,
+                admin_login=effective_admin_login,
+                admin_password=effective_admin_password,
                 server_id=payload.server_id,
                 demo=False,
                 lang="es_MX"
@@ -661,7 +718,7 @@ async def create_tenant(
                     customer = Customer(
                         company_name=payload.company_name or result.get("company_name") or payload.subdomain.title(),
                         full_name=payload.company_name or result.get("company_name") or payload.subdomain.title(),
-                        email=payload.admin_email or DEFAULT_ADMIN_LOGIN,
+                        email=effective_admin_login,
                         subdomain=payload.subdomain
                     )
                     db.add(customer)
@@ -784,6 +841,8 @@ async def create_tenant(
                     "creation_mode": creation_mode,
                     "partner_id": payload.partner_id,
                     "url": result.get("url"),
+                    "admin_login": effective_admin_login,
+                    "generated_admin_password": effective_admin_password,
                 },
             )
 
@@ -795,7 +854,8 @@ async def create_tenant(
                     "subdomain": payload.subdomain,
                     "url": result.get("url"),
                     "server": result.get("server"),
-                    "admin_login": payload.admin_email or DEFAULT_ADMIN_LOGIN,
+                    "admin_login": effective_admin_login,
+                    "admin_password": effective_admin_password,
                     "status": "active"
                 },
                 "details": result
@@ -804,6 +864,8 @@ async def create_tenant(
                 response_payload["creation_mode"] = creation_mode
             if fallback_reason:
                 response_payload["fallback_reason"] = fallback_reason
+            if existing_local_customer is not None:
+                response_payload["recovered_from_partial_state"] = True
             return response_payload
         else:
             error_msg = result.get("error", "Error creando tenant")

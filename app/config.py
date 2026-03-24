@@ -142,7 +142,7 @@ if _cf_zones_raw:
 # ═══════════════════════════════════════════════════════
 # Provisioning
 # ═══════════════════════════════════════════════════════
-PROVISIONING_API_KEY = os.getenv("PROVISIONING_API_KEY", "")
+PROVISIONING_API_KEY = os.getenv("PROVISIONING_API_KEY", "") or os.getenv("API_KEY_SECRET", "")
 
 
 # ═══════════════════════════════════════════════════════

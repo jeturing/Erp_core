@@ -11,11 +11,14 @@ import os
 import logging
 import subprocess
 import hashlib
+import re
+from urllib.parse import quote_plus
+from sqlalchemy import create_engine, text
 
 from ..config import (
     ODOO_PRIMARY_IP, ODOO_PRIMARY_API_PORT, ODOO_BASE_DOMAIN, ODOO_PRIMARY_PCT_ID,
     CLOUDFLARE_TUNNEL_ID, CLOUDFLARE_API_TOKEN, CLOUDFLARE_ZONES,
-    PROVISIONING_API_KEY, ODOO_DEFAULT_ADMIN_PASSWORD,
+    PROVISIONING_API_KEY, ODOO_DEFAULT_ADMIN_PASSWORD, ODOO_DEFAULT_ADMIN_LOGIN,
     ODOO_DB_HOST, ODOO_DB_USER, ODOO_DB_PASSWORD,
 )
 
@@ -24,28 +27,69 @@ logger = logging.getLogger(__name__)
 router = APIRouter(prefix="/api/provisioning", tags=["Provisioning"])
 
 # Configuración de servidores Odoo — from env via config.py
-ODOO_SERVERS = {
-    "primary": {
-        "name": f"Servidor Principal (PCT {ODOO_PRIMARY_PCT_ID})",
-        "ip": ODOO_PRIMARY_IP,
-        "api_port": ODOO_PRIMARY_API_PORT,
-        "domain": ODOO_BASE_DOMAIN,
-        "tunnel_id": CLOUDFLARE_TUNNEL_ID,
+def _load_odoo_servers() -> tuple[dict, dict]:
+    servers = {
+        "primary": {
+            "name": f"Servidor Principal (PCT {ODOO_PRIMARY_PCT_ID})",
+            "ip": ODOO_PRIMARY_IP,
+            "api_port": ODOO_PRIMARY_API_PORT,
+            "domain": ODOO_BASE_DOMAIN,
+            "tunnel_id": CLOUDFLARE_TUNNEL_ID,
+            "pct_id": ODOO_PRIMARY_PCT_ID,
+        }
     }
-}
 
-SERVER_ALIASES = {
-    "primary": "primary",
-    f"pct-{ODOO_PRIMARY_PCT_ID}": "primary",
-    f"pct{ODOO_PRIMARY_PCT_ID}": "primary",
-    f"servidor principal (pct {ODOO_PRIMARY_PCT_ID})": "primary",
-    f"servidor principal pct {ODOO_PRIMARY_PCT_ID}": "primary",
-    "pct-105": "primary",
-    "pct105": "primary",
-    "pct-137": "primary",
-    "pct137": "primary",
-    "srv-odoo-server": "primary",
-}
+    aliases = {
+        "primary": "primary",
+        f"pct-{ODOO_PRIMARY_PCT_ID}": "primary",
+        f"pct{ODOO_PRIMARY_PCT_ID}": "primary",
+        f"servidor principal (pct {ODOO_PRIMARY_PCT_ID})": "primary",
+        f"servidor principal pct {ODOO_PRIMARY_PCT_ID}": "primary",
+        "srv-odoo-server": "primary",
+    }
+
+    raw = os.getenv("ODOO_EXTRA_NODES_JSON", "[]")
+    try:
+        parsed = json.loads(raw) if raw else []
+        if isinstance(parsed, dict):
+            parsed = parsed.get("servers", [])
+        if not isinstance(parsed, list):
+            parsed = []
+    except Exception:
+        parsed = []
+
+    for item in parsed:
+        if not isinstance(item, dict):
+            continue
+
+        ip = str(item.get("ip", "")).strip()
+        pct_id = item.get("pct_id")
+        if not ip or not pct_id:
+            continue
+
+        try:
+            pct_id = int(pct_id)
+        except Exception:
+            continue
+
+        node_id = str(item.get("id") or f"pct-{pct_id}").strip().lower()
+        servers[node_id] = {
+            "name": item.get("name") or f"Servidor Odoo (PCT {pct_id})",
+            "ip": ip,
+            "api_port": int(item.get("api_port") or ODOO_PRIMARY_API_PORT),
+            "domain": item.get("domain") or ODOO_BASE_DOMAIN,
+            "tunnel_id": item.get("tunnel_id") or CLOUDFLARE_TUNNEL_ID,
+            "pct_id": pct_id,
+        }
+
+        aliases[node_id] = node_id
+        aliases[f"pct-{pct_id}"] = node_id
+        aliases[f"pct{pct_id}"] = node_id
+
+    return servers, aliases
+
+
+ODOO_SERVERS, SERVER_ALIASES = _load_odoo_servers()
 
 # Cloudflare zones — from env via config.py
 CF_API_TOKEN = CLOUDFLARE_API_TOKEN
@@ -62,6 +106,9 @@ def _normalize_server_key(raw_server: Optional[str]) -> str:
 
 
 def _resolve_server_config(raw_server: Optional[str]) -> tuple[str, dict]:
+    global ODOO_SERVERS, SERVER_ALIASES
+    ODOO_SERVERS, SERVER_ALIASES = _load_odoo_servers()
+
     server_key = _normalize_server_key(raw_server)
     server_config = ODOO_SERVERS.get(server_key)
     if not server_config:
@@ -71,6 +118,133 @@ def _resolve_server_config(raw_server: Optional[str]) -> tuple[str, dict]:
             detail=f"Servidor '{raw_server}' no existe. Soportados: {supported}",
         )
     return server_key, server_config
+
+
+def _normalize_tenant_db_name(subdomain: str) -> str:
+    db_name = (subdomain or "").strip().lower().replace("-", "_")
+    if not re.fullmatch(r"[a-z0-9_]{3,63}", db_name):
+        raise HTTPException(status_code=400, detail="Subdomain inválido para base de datos")
+    return db_name
+
+
+def _odoo_engine_for_db(db_name: str):
+    host = quote_plus(ODOO_DB_HOST or "")
+    user = quote_plus(ODOO_DB_USER or "")
+    pwd = quote_plus(ODOO_DB_PASSWORD or "")
+    if not host or not user:
+        raise HTTPException(status_code=500, detail="Configuración ODOO_DB incompleta")
+    url = f"postgresql+psycopg2://{user}:{pwd}@{host}:5432/{db_name}"
+    return create_engine(url, pool_pre_ping=True)
+
+
+def _fetch_tenant_accounts_from_db(db_name: str, include_inactive: bool = True) -> "TenantAccountsQuery":
+    engine = _odoo_engine_for_db(db_name)
+    where = ""
+    if not include_inactive:
+        where = "WHERE u.active = true"
+
+    sql = text(f"""
+        SELECT
+            u.id,
+            u.login,
+            u.email,
+            p.name,
+            u.active,
+            COALESCE(u.share, false) AS share,
+            u.write_date,
+            u.create_date
+        FROM res_users u
+        LEFT JOIN res_partner p ON p.id = u.partner_id
+        {where}
+        ORDER BY u.active DESC, u.id ASC
+    """)
+
+    with engine.connect() as conn:
+        rows = conn.execute(sql).mappings().all()
+
+    accounts: list[dict] = []
+    active_accounts = 0
+    billable_active_accounts = 0
+    for row in rows:
+        is_active = bool(row.get("active"))
+        is_share = bool(row.get("share"))
+        login = (row.get("login") or "").strip().lower()
+        is_admin_login = login in {"admin", (ODOO_DEFAULT_ADMIN_LOGIN or "").strip().lower()}
+
+        if is_active:
+            active_accounts += 1
+
+        is_billable = is_active and not is_share and not is_admin_login
+        if is_billable:
+            billable_active_accounts += 1
+
+        accounts.append({
+            "id": row.get("id"),
+            "login": row.get("login"),
+            "email": row.get("email"),
+            "name": row.get("name"),
+            "active": is_active,
+            "share": is_share,
+            "is_admin": is_admin_login,
+            "is_billable": is_billable,
+            "write_date": row.get("write_date").isoformat() if row.get("write_date") else None,
+            "create_date": row.get("create_date").isoformat() if row.get("create_date") else None,
+        })
+
+    return TenantAccountsQuery(
+        accounts=accounts,
+        total_accounts=len(accounts),
+        active_accounts=active_accounts,
+        billable_active_accounts=billable_active_accounts,
+    )
+
+
+def _sync_seat_count_with_local_db(subdomain: str, billable_active_accounts: int) -> dict:
+    from ..models.database import SessionLocal, Customer, Subscription, SubscriptionStatus, Plan
+
+    db = SessionLocal()
+    try:
+        customer = db.query(Customer).filter(Customer.subdomain == subdomain).first()
+        if not customer:
+            return {
+                "customer_found": False,
+                "subscription_found": False,
+                "plan": None,
+                "plan_user_limit": None,
+            }
+
+        customer.user_count = billable_active_accounts
+
+        subscription = db.query(Subscription).filter(
+            Subscription.customer_id == customer.id,
+            Subscription.status.in_([SubscriptionStatus.active, SubscriptionStatus.pending, SubscriptionStatus.past_due]),
+        ).order_by(Subscription.created_at.desc()).first()
+
+        plan_user_limit = None
+        plan_name = None
+        if subscription:
+            subscription.user_count = billable_active_accounts
+            plan_name = subscription.plan_name
+            if subscription.plan_name:
+                plan = db.query(Plan).filter(Plan.name == subscription.plan_name).first()
+                if plan:
+                    plan_user_limit = plan.max_users
+
+        db.commit()
+
+        return {
+            "customer_found": True,
+            "subscription_found": bool(subscription),
+            "subscription_id": subscription.id if subscription else None,
+            "plan": plan_name,
+            "plan_user_limit": plan_user_limit,
+            "extra_over_plan": max(0, billable_active_accounts - plan_user_limit) if plan_user_limit and plan_user_limit > 0 else 0,
+        }
+    except Exception:
+        db.rollback()
+        raise
+    finally:
+        db.close()
 
 
 # DTOs
@@ -105,6 +279,31 @@ class TenantEmailUpdateRequest(BaseModel):
     """Request para actualizar el email del admin de un tenant"""
     subdomain: str = Field(..., min_length=3, max_length=30)
     new_email: str = Field(..., pattern=r'^[a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\.[a-zA-Z]{2,}$')
+    server: str = Field(default="primary")
+
+
+class TenantAccountsQuery(BaseModel):
+    """Response auxiliar para cuentas de un tenant."""
+    accounts: list[dict]
+    total_accounts: int
+    active_accounts: int
+    billable_active_accounts: int
+
+
+class TenantAccountCredentialsUpdateRequest(BaseModel):
+    """Request para actualizar credenciales/estado de una cuenta de tenant."""
+    subdomain: str = Field(..., min_length=3, max_length=30)
+    user_id: Optional[int] = None
+    login: Optional[str] = None
+    new_email: Optional[str] = Field(default=None)
+    new_password: Optional[str] = Field(default=None, min_length=6)
+    active: Optional[bool] = None
+    server: str = Field(default="primary")
+
+
+class TenantSeatSyncRequest(BaseModel):
+    """Request para sincronizar conteo de asientos activos desde Odoo a ERP Core."""
+    subdomain: str = Field(..., min_length=3, max_length=30)
     server: str = Field(default="primary")
 
 
@@ -486,6 +685,194 @@ async def change_tenant_password(
     except Exception as e:
         logger.error(f"Error cambiando contraseña: {e}")
         raise HTTPException(status_code=500, detail=str(e))
+
+
+@router.get("/tenant/accounts")
+async def list_tenant_accounts(
+    subdomain: str,
+    include_inactive: bool = True,
+    server: str = "primary",
+    x_api_key: str = Header(None),
+):
+    """Lista cuentas vinculadas a un tenant y retorna conteo para asientos activos por plan."""
+    if x_api_key != PROVISIONING_API_KEY:
+        raise HTTPException(status_code=401, detail="API key inválida")
+
+    server_key, server_config = _resolve_server_config(server)
+    db_name = _normalize_tenant_db_name(subdomain)
+
+    try:
+        accounts_query = _fetch_tenant_accounts_from_db(db_name, include_inactive=include_inactive)
+    except Exception as db_err:
+        logger.warning(f"No se pudo listar cuentas por SQL directo ({db_name}): {db_err}")
+        fallback = await call_odoo_local_api(
+            server_config,
+            "GET",
+            f"/api/tenant/accounts?subdomain={db_name}&include_inactive={'true' if include_inactive else 'false'}",
+        )
+        accounts_query = TenantAccountsQuery(
+            accounts=fallback.get("accounts", []),
+            total_accounts=fallback.get("total_accounts", len(fallback.get("accounts", []))),
+            active_accounts=fallback.get("active_accounts", 0),
+            billable_active_accounts=fallback.get("billable_active_accounts", 0),
+        )
+
+    seat_sync = _sync_seat_count_with_local_db(db_name, accounts_query.billable_active_accounts)
+
+    return {
+        "success": True,
+        "subdomain": db_name,
+        "server": server_key,
+        "accounts": accounts_query.accounts,
+        "total_accounts": accounts_query.total_accounts,
+        "active_accounts": accounts_query.active_accounts,
+        "billable_active_accounts": accounts_query.billable_active_accounts,
+        "seat_sync": seat_sync,
+    }
+
+
+@router.put("/tenant/account/credentials")
+async def update_tenant_account_credentials(
+    request: TenantAccountCredentialsUpdateRequest,
+    x_api_key: str = Header(None),
+):
+    """Actualiza credenciales o estado de una cuenta específica dentro del tenant."""
+    if x_api_key != PROVISIONING_API_KEY:
+        raise HTTPException(status_code=401, detail="API key inválida")
+
+    if not request.user_id and not request.login:
+        raise HTTPException(status_code=400, detail="Debes enviar user_id o login")
+
+    if request.new_email is None and request.new_password is None and request.active is None:
+        raise HTTPException(status_code=400, detail="No hay cambios para aplicar")
+
+    server_key, server_config = _resolve_server_config(request.server)
+    db_name = _normalize_tenant_db_name(request.subdomain)
+
+    set_clauses: list[str] = []
+    params: dict = {}
+
+    if request.new_email is not None:
+        set_clauses.append("login = :new_email")
+        set_clauses.append("email = :new_email")
+        params["new_email"] = request.new_email.strip()
+
+    if request.new_password is not None:
+        set_clauses.append("password = :new_password")
+        params["new_password"] = request.new_password
+
+    if request.active is not None:
+        set_clauses.append("active = :active")
+        params["active"] = request.active
+
+    where_clause = ""
+    if request.user_id:
+        where_clause = "id = :target_user_id"
+        params["target_user_id"] = request.user_id
+    else:
+        where_clause = "login = :target_login"
+        params["target_login"] = request.login
+
+    sql = text(f"""
+        UPDATE res_users
+        SET {", ".join(set_clauses)}, write_date = NOW()
+        WHERE {where_clause}
+    """)
+
+    used_fallback = False
+    try:
+        engine = _odoo_engine_for_db(db_name)
+        with engine.begin() as conn:
+            result = conn.execute(sql, params)
+            if result.rowcount == 0:
+                raise HTTPException(status_code=404, detail="Cuenta no encontrada")
+    except HTTPException:
+        raise
+    except Exception as db_err:
+        logger.warning(f"No se pudo actualizar cuenta por SQL directo ({db_name}): {db_err}")
+        used_fallback = True
+        fallback = await call_odoo_local_api(
+            server_config,
+            "POST",
+            "/api/tenant/account/credentials",
+            {
+                "subdomain": db_name,
+                "user_id": request.user_id,
+                "login": request.login,
+                "new_email": request.new_email,
+                "new_password": request.new_password,
+                "active": request.active,
+            },
+        )
+        if not fallback.get("success"):
+            raise HTTPException(status_code=500, detail=fallback.get("detail", "No se pudo actualizar cuenta"))
+
+    try:
+        accounts_query = _fetch_tenant_accounts_from_db(db_name, include_inactive=True)
+    except Exception:
+        fallback_read = await call_odoo_local_api(
+            server_config,
+            "GET",
+            f"/api/tenant/accounts?subdomain={db_name}&include_inactive=true",
+        )
+        accounts_query = TenantAccountsQuery(
+            accounts=fallback_read.get("accounts", []),
+            total_accounts=fallback_read.get("total_accounts", len(fallback_read.get("accounts", []))),
+            active_accounts=fallback_read.get("active_accounts", 0),
+            billable_active_accounts=fallback_read.get("billable_active_accounts", 0),
+        )
+    seat_sync = _sync_seat_count_with_local_db(db_name, accounts_query.billable_active_accounts)
+
+    return {
+        "success": True,
+        "message": "Cuenta actualizada exitosamente",
+        "subdomain": db_name,
+        "server": server_key,
+        "used_fallback": used_fallback,
+        "total_accounts": accounts_query.total_accounts,
+        "active_accounts": accounts_query.active_accounts,
+        "billable_active_accounts": accounts_query.billable_active_accounts,
+        "seat_sync": seat_sync,
+    }
+
+
+@router.post("/tenant/accounts/sync-seat-count")
+async def sync_tenant_accounts_seat_count(
+    request: TenantSeatSyncRequest,
+    x_api_key: str = Header(None),
+):
+    """Sincroniza conteo de usuarios activos facturables del tenant con los asientos del plan."""
+    if x_api_key != PROVISIONING_API_KEY:
+        raise HTTPException(status_code=401, detail="API key inválida")
+
+    server_key, server_config = _resolve_server_config(request.server)
+    db_name = _normalize_tenant_db_name(request.subdomain)
+
+    try:
+        accounts_query = _fetch_tenant_accounts_from_db(db_name, include_inactive=True)
+    except Exception:
+        fallback = await call_odoo_local_api(
+            server_config,
+            "GET",
+            f"/api/tenant/accounts?subdomain={db_name}&include_inactive=true",
+        )
+        accounts_query = TenantAccountsQuery(
+            accounts=fallback.get("accounts", []),
+            total_accounts=fallback.get("total_accounts", len(fallback.get("accounts", []))),
+            active_accounts=fallback.get("active_accounts", 0),
+            billable_active_accounts=fallback.get("billable_active_accounts", 0),
+        )
+    seat_sync = _sync_seat_count_with_local_db(db_name, accounts_query.billable_active_accounts)
+
+    return {
+        "success": True,
+        "subdomain": db_name,
+        "server": server_key,
+        "billable_active_accounts": accounts_query.billable_active_accounts,
+        "total_accounts": accounts_query.total_accounts,
+        "active_accounts": accounts_query.active_accounts,
+        "seat_sync": seat_sync,
+    }
 
 
 @router.put("/tenant/suspend")

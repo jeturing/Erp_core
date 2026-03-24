@@ -8,7 +8,7 @@ import subprocess
 import os
 import logging
 
-from .roles import verify_token_with_role
+from .roles import _require_admin as _require_admin_base, verify_token_with_role
 from ..models.database import SessionLocal
 
 router = APIRouter(prefix="/api/logs", tags=["Logs"])
@@ -43,14 +43,7 @@ async def get_provisioning_logs(
         lines: Número de líneas a retornar (default 100, max 500)
         level: Filtrar por nivel (info, warning, error)
     """
-    token = access_token
-    if token is None:
-        auth_header = request.headers.get("Authorization", "")
-        if auth_header.startswith("Bearer "):
-            token = auth_header[7:]
-    
-    if token:
-        _verify_admin(token)
+    _require_admin_base(request, access_token)
     
     try:
         log_file = os.path.join(LOG_DIR, "provisioning.log")
@@ -123,14 +116,7 @@ async def get_app_logs(
     tenant: Optional[str] = Query(None, description="Filtrar por subdominio/tenant en la línea")
 ) -> Dict[str, Any]:
     """Obtiene logs de la aplicación FastAPI"""
-    token = access_token
-    if token is None:
-        auth_header = request.headers.get("Authorization", "")
-        if auth_header.startswith("Bearer "):
-            token = auth_header[7:]
-    
-    if token:
-        _verify_admin(token)
+    _require_admin_base(request, access_token)
     
     try:
         log_file = os.path.join(LOG_DIR, "app.log")
@@ -175,14 +161,7 @@ async def get_system_logs(
     lines: int = Query(50, ge=10, le=200)
 ) -> Dict[str, Any]:
     """Obtiene logs del sistema (journalctl)"""
-    token = access_token
-    if token is None:
-        auth_header = request.headers.get("Authorization", "")
-        if auth_header.startswith("Bearer "):
-            token = auth_header[7:]
-    
-    if token:
-        _verify_admin(token)
+    _require_admin_base(request, access_token)
     
     try:
         # Intentar obtener logs de journalctl para el servicio
@@ -224,14 +203,7 @@ async def get_system_status(
     - LXC Containers
     - Disco
     """
-    token = access_token
-    if token is None:
-        auth_header = request.headers.get("Authorization", "")
-        if auth_header.startswith("Bearer "):
-            token = auth_header[7:]
-    
-    if token:
-        _verify_admin(token)
+    _require_admin_base(request, access_token)
     
     status = {
         "postgresql": {"status": "unknown", "latency_ms": None},
@@ -306,14 +278,7 @@ async def write_log(
     Escribe un mensaje en el log de provisioning.
     Útil para debugging y tracking de operaciones.
     """
-    token = access_token
-    if token is None:
-        auth_header = request.headers.get("Authorization", "")
-        if auth_header.startswith("Bearer "):
-            token = auth_header[7:]
-    
-    if token:
-        _verify_admin(token)
+    _require_admin_base(request, access_token)
     
     try:
         os.makedirs(LOG_DIR, exist_ok=True)

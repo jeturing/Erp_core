@@ -2,6 +2,7 @@
   import { onMount } from 'svelte';
   import { tenantsApi } from '../lib/api';
   import { partnersApi } from '../lib/api/partners';
+  import type { TenantAccountItem } from '../lib/api/tenants';
   import { toasts } from '../lib/stores/toast';
   import { currentUser } from '../lib/stores';
   import { formatDate } from '../lib/utils/formatters';
@@ -37,6 +38,15 @@
   let expandedEmailRow = $state<string | null>(null);
   let rowEmail = $state('');
   let rowEmailLoading = $state(false);
+  let expandedAccountsRow = $state<string | null>(null);
+  let accountsLoading = $state(false);
+  let accountsByTenant = $state<Record<string, TenantAccountItem[]>>({});
+  let seatMetaByTenant = $state<Record<string, { total: number; active: number; billable: number; plan?: string | null; planLimit?: number | null; extra?: number }>>({});
+  let accountEmailDraft = $state<Record<string, string>>({});
+  let accountPasswordDraft = $state<Record<string, string>>({});
+  let accountActiveDraft = $state<Record<string, boolean>>({});
+  let accountSavingKey = $state<string | null>(null);
+  let seatSyncLoadingTenant = $state<string | null>(null);
   let showDeleteModal = $state(false);
   let deleteTenantTarget = $state<Tenant | null>(null);
   let deleteConfirmInput = $state('');
@@ -252,6 +262,104 @@
       expandedPasswordRow = subdomain;
       rowPassword = '';
       rowConfirmPassword = '';
+    }
+  }
+
+  function accountKey(subdomain: string, accountId: number): string {
+    return `${subdomain}:${accountId}`;
+  }
+
+  async function loadTenantAccounts(tenant: Tenant) {
+    accountsLoading = true;
+    try {
+      const res = await tenantsApi.listAccounts(tenant.subdomain, getProvisioningServerId(tenant));
+      accountsByTenant = {
+        ...accountsByTenant,
+        [tenant.subdomain]: res.accounts ?? [],
+      };
+      seatMetaByTenant = {
+        ...seatMetaByTenant,
+        [tenant.subdomain]: {
+          total: res.total_accounts ?? 0,
+          active: res.active_accounts ?? 0,
+          billable: res.billable_active_accounts ?? 0,
+          plan: res.seat_sync?.plan ?? null,
+          planLimit: res.seat_sync?.plan_user_limit ?? null,
+          extra: res.seat_sync?.extra_over_plan ?? 0,
+        },
+      };
+
+      const nextEmail: Record<string, string> = { ...accountEmailDraft };
+      const nextActive: Record<string, boolean> = { ...accountActiveDraft };
+      for (const acc of (res.accounts ?? [])) {
+        const key = accountKey(tenant.subdomain, acc.id);
+        nextEmail[key] = acc.email || acc.login || '';
+        nextActive[key] = !!acc.active;
+      }
+      accountEmailDraft = nextEmail;
+      accountActiveDraft = nextActive;
+    } catch (e: any) {
+      toasts.error(e?.message ?? 'Error cargando cuentas del tenant');
+    } finally {
+      accountsLoading = false;
+    }
+  }
+
+  async function toggleAccountsRow(tenant: Tenant) {
+    if (expandedAccountsRow === tenant.subdomain) {
+      expandedAccountsRow = null;
+      return;
+    }
+    expandedAccountsRow = tenant.subdomain;
+    await loadTenantAccounts(tenant);
+  }
+
+  async function handleSaveAccount(tenant: Tenant, account: TenantAccountItem) {
+    const key = accountKey(tenant.subdomain, account.id);
+    const draftEmail = (accountEmailDraft[key] || '').trim();
+    const draftPassword = (accountPasswordDraft[key] || '').trim();
+    const draftActive = accountActiveDraft[key];
+
+    const emailChanged = draftEmail && draftEmail !== (account.email || account.login || '');
+    const passwordChanged = draftPassword.length > 0;
+    const activeChanged = typeof draftActive === 'boolean' && draftActive !== !!account.active;
+
+    if (!emailChanged && !passwordChanged && !activeChanged) {
+      toasts.error('No hay cambios para guardar en esta cuenta');
+      return;
+    }
+
+    accountSavingKey = key;
+    try {
+      await tenantsApi.updateAccountCredentials({
+        subdomain: tenant.subdomain,
+        user_id: account.id,
+        new_email: emailChanged ? draftEmail : undefined,
+        new_password: passwordChanged ? draftPassword : undefined,
+        active: activeChanged ? draftActive : undefined,
+        server_id: getProvisioningServerId(tenant),
+      });
+      toasts.success('Cuenta actualizada');
+      accountPasswordDraft = { ...accountPasswordDraft, [key]: '' };
+      await loadTenantAccounts(tenant);
+    } catch (e: any) {
+      const msg = e?.message ?? 'Error actualizando cuenta';
+      toasts.error($currentUser?.role === 'admin' ? msg : 'Error actualizando cuenta');
+    } finally {
+      accountSavingKey = null;
+    }
+  }
+
+  async function handleSyncSeatsForTenant(tenant: Tenant) {
+    seatSyncLoadingTenant = tenant.subdomain;
+    try {
+      await tenantsApi.syncSeatCount(tenant.subdomain, getProvisioningServerId(tenant));
+      await loadTenantAccounts(tenant);
+      toasts.success('Conteo de asientos sincronizado');
+    } catch (e: any) {
+      toasts.error(e?.message ?? 'Error sincronizando asientos');
+    } finally {
+      seatSyncLoadingTenant = null;
     }
   }
 
@@ -513,6 +621,12 @@
                     CAMBIAR CLAVE
                   </button>
                   <button
+                    class="btn-secondary btn-sm"
+                    onclick={() => toggleAccountsRow(tenant)}
+                  >
+                    {expandedAccountsRow === tenant.subdomain ? 'OCULTAR CUENTAS' : 'CUENTAS'}
+                  </button>
+                  <button
                     class={tenant.status === 'active' ? 'btn-danger btn-sm' : 'btn-secondary btn-sm'}
                     onclick={() => openSuspendModal(tenant)}
                   >
@@ -556,6 +670,114 @@
                       </button>
                     </div>
                   </div>
+                </td>
+              </tr>
+            {/if}
+            {#if expandedAccountsRow === tenant.subdomain}
+              <tr class="bg-bg-page">
+                <td colspan="7" class="py-4 px-6">
+                  <div class="flex items-center justify-between gap-3 mb-3 flex-wrap">
+                    <div class="text-xs text-gray-400">
+                      {#if seatMetaByTenant[tenant.subdomain]}
+                        <span class="mr-3">Cuentas: <b class="text-text-primary">{seatMetaByTenant[tenant.subdomain].total}</b></span>
+                        <span class="mr-3">Activas: <b class="text-text-primary">{seatMetaByTenant[tenant.subdomain].active}</b></span>
+                        <span class="mr-3">Facturables: <b class="text-text-primary">{seatMetaByTenant[tenant.subdomain].billable}</b></span>
+                        <span class="mr-3">Plan: <b class="text-text-primary">{seatMetaByTenant[tenant.subdomain].plan || '—'}</b></span>
+                        <span>Límite plan: <b class="text-text-primary">{seatMetaByTenant[tenant.subdomain].planLimit ?? '—'}</b></span>
+                      {/if}
+                    </div>
+                    <button
+                      class="btn-secondary btn-sm"
+                      disabled={seatSyncLoadingTenant === tenant.subdomain}
+                      onclick={() => handleSyncSeatsForTenant(tenant)}
+                    >
+                      {seatSyncLoadingTenant === tenant.subdomain ? 'SINCRONIZANDO...' : 'SINCRONIZAR ASIENTOS'}
+                    </button>
+                  </div>
+
+                  {#if accountsLoading}
+                    <div class="text-sm text-gray-500">Cargando cuentas...</div>
+                  {:else if !(accountsByTenant[tenant.subdomain]?.length)}
+                    <div class="text-sm text-gray-500">No hay cuentas disponibles para este tenant.</div>
+                  {:else}
+                    <div class="overflow-x-auto border border-border-light rounded-lg">
+                      <table class="table w-full">
+                        <thead>
+                          <tr>
+                            <th>ID</th>
+                            <th>Usuario</th>
+                            <th>Nombre</th>
+                            <th>Activo</th>
+                            <th>Tipo</th>
+                            <th>Nuevo email/login</th>
+                            <th>Nueva clave</th>
+                            <th>Acción</th>
+                          </tr>
+                        </thead>
+                        <tbody>
+                          {#each accountsByTenant[tenant.subdomain] as account (account.id)}
+                            {@const aKey = accountKey(tenant.subdomain, account.id)}
+                            <tr>
+                              <td class="text-xs font-mono text-gray-400">{account.id}</td>
+                              <td class="text-xs font-mono">{account.login}</td>
+                              <td class="text-xs">{account.name || '—'}</td>
+                              <td>
+                                <input
+                                  type="checkbox"
+                                  checked={accountActiveDraft[aKey] ?? account.active}
+                                  onchange={(e) => {
+                                    const target = e.currentTarget as HTMLInputElement;
+                                    accountActiveDraft = { ...accountActiveDraft, [aKey]: target.checked };
+                                  }}
+                                />
+                              </td>
+                              <td>
+                                {#if account.is_admin}
+                                  <span class="badge-warning text-[10px]">ADMIN</span>
+                                {:else if account.is_billable}
+                                  <span class="badge-success text-[10px]">FACTURABLE</span>
+                                {:else}
+                                  <span class="badge-neutral text-[10px]">NO FACTURABLE</span>
+                                {/if}
+                              </td>
+                              <td>
+                                <input
+                                  class="input px-2 py-1 text-xs min-w-[180px]"
+                                  type="email"
+                                  value={accountEmailDraft[aKey] ?? account.email ?? account.login}
+                                  oninput={(e) => {
+                                    const target = e.currentTarget as HTMLInputElement;
+                                    accountEmailDraft = { ...accountEmailDraft, [aKey]: target.value };
+                                  }}
+                                />
+                              </td>
+                              <td>
+                                <input
+                                  class="input px-2 py-1 text-xs min-w-[150px]"
+                                  type="password"
+                                  placeholder="opcional"
+                                  value={accountPasswordDraft[aKey] ?? ''}
+                                  oninput={(e) => {
+                                    const target = e.currentTarget as HTMLInputElement;
+                                    accountPasswordDraft = { ...accountPasswordDraft, [aKey]: target.value };
+                                  }}
+                                />
+                              </td>
+                              <td>
+                                <button
+                                  class="btn-accent btn-sm"
+                                  disabled={accountSavingKey === aKey}
+                                  onclick={() => handleSaveAccount(tenant, account)}
+                                >
+                                  {accountSavingKey === aKey ? 'GUARDANDO...' : 'GUARDAR'}
+                                </button>
+                              </td>
+                            </tr>
+                          {/each}
+                        </tbody>
+                      </table>
+                    </div>
+                  {/if}
                 </td>
               </tr>
             {/if}
