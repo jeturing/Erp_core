@@ -4,6 +4,7 @@ Complete CRUD and functional tests for authentication system
 """
 import pytest
 from fastapi import status
+from app.models.database import Partner, PartnerStatus
 
 
 class TestAuthLogin:
@@ -62,6 +63,24 @@ class TestAuthLogin:
         response = client.get("/login/tenant")
         assert response.status_code in [status.HTTP_200_OK, status.HTTP_503_SERVICE_UNAVAILABLE]
         assert "text/html" in response.headers["content-type"]
+
+    def test_partner_without_password_returns_setup_message(self, client, db_session):
+        """Test partner login explains that the portal password has not been configured yet."""
+        partner = Partner(
+            company_name="E secure",
+            contact_email="elsaencarnacion@esecure.do",
+            portal_access=True,
+            status=PartnerStatus.pending,
+        )
+        db_session.add(partner)
+        db_session.commit()
+
+        response = client.post("/api/auth/login", json={
+            "email": "elsaencarnacion@esecure.do",
+            "password": "Password123!"
+        })
+        assert response.status_code == status.HTTP_401_UNAUTHORIZED
+        assert "contraseña" in response.json()["detail"].lower()
 
 
 class TestAuthLogout:

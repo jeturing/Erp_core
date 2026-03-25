@@ -198,29 +198,62 @@ async def secure_login(request: Request, login_data: LoginRequest):
                 ).first()
 
                 partner_authenticated = False
-                if partner and partner.password_hash and partner.portal_access and partner.status in (PartnerStatus.active, PartnerStatus.pending):
-                    ok, migrated_hash = _verify_and_migrate_password(login_data.password, partner.password_hash)
-                    if ok:
-                        if migrated_hash:
-                            partner.password_hash = migrated_hash
-                        username = partner.portal_email or partner.contact_email
-                        role = "partner"
-                        user_id = partner.id
-                        tenant_id = None
-                        redirect_url = "/partner/portal"
-                        partner_authenticated = True
-                        partner.last_login_at = datetime.utcnow()
-                        partner.login_count = (partner.login_count or 0) + 1
-                        db.commit()
-                    else:
+                if partner:
+                    partner_can_authenticate = (
+                        bool(partner.password_hash)
+                        and partner.portal_access
+                        and partner.status in (PartnerStatus.active, PartnerStatus.pending)
+                    )
+
+                    if partner_can_authenticate:
+                        ok, migrated_hash = _verify_and_migrate_password(login_data.password, partner.password_hash)
+                        if ok:
+                            if migrated_hash:
+                                partner.password_hash = migrated_hash
+                            username = partner.portal_email or partner.contact_email
+                            role = "partner"
+                            user_id = partner.id
+                            tenant_id = None
+                            redirect_url = "/partner/portal"
+                            partner_authenticated = True
+                            partner.last_login_at = datetime.utcnow()
+                            partner.login_count = (partner.login_count or 0) + 1
+                            db.commit()
+                        else:
+                            AuditLogger.log_login_failed(
+                                username=login_data.email,
+                                reason="Invalid partner password",
+                                request=request
+                            )
+                            raise HTTPException(
+                                status_code=status.HTTP_401_UNAUTHORIZED,
+                                detail="Credenciales inválidas"
+                            )
+                    elif customers_count == 0:
+                        if not partner.portal_access:
+                            reason = "Partner portal disabled"
+                            detail = "El acceso al portal de partners está deshabilitado para esta cuenta."
+                        elif partner.status not in (PartnerStatus.active, PartnerStatus.pending):
+                            reason = f"Partner inactive ({partner.status.value if partner.status else 'unknown'})"
+                            detail = "Tu cuenta de partner no está activa. Contacte al administrador."
+                        elif not partner.password_hash:
+                            reason = "Partner password not set"
+                            detail = (
+                                "Tu cuenta de partner aún no tiene contraseña configurada. "
+                                "Solicita la invitación inicial al administrador."
+                            )
+                        else:
+                            reason = "Partner login unavailable"
+                            detail = "No se pudo iniciar sesión con esta cuenta de partner."
+
                         AuditLogger.log_login_failed(
                             username=login_data.email,
-                            reason="Invalid partner password",
+                            reason=reason,
                             request=request
                         )
                         raise HTTPException(
                             status_code=status.HTTP_401_UNAUTHORIZED,
-                            detail="Credenciales inválidas"
+                            detail=detail
                         )
 
                 # ── Si no es partner, intentar como tenant ──
