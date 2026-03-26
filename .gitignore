@@ -83,3 +83,4 @@ Pencil_desaing/
 node_modules/
 .env.production
 .env
+.env.production.bak*
