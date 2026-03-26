@@ -7,6 +7,7 @@ import os
 from ..models.database import Customer, Subscription, SubscriptionStatus, SessionLocal
 from .roles import _require_admin as _require_admin_base, verify_token_with_role
 from ..services.spa_shell import render_spa_shell
+from ..services.pricing import get_plan_price_for_sub
 
 router = APIRouter(tags=["Dashboard"])
 
@@ -50,11 +51,10 @@ async def dashboard_metrics(request: Request, access_token: str = Cookie(None)):
         active = db.query(Subscription).filter_by(status=SubscriptionStatus.active).count()
         pending = db.query(Subscription).filter_by(status=SubscriptionStatus.pending).count()
         
-        # Calcular MRR aprox (suma de precios por plan)
-        price_map = {"basic": 29, "pro": 49, "enterprise": 99}  # USD
+        # Calcular MRR dinámico (Fix B4 — reemplaza price_map hardcodeado)
         total_revenue = 0
         for sub in db.query(Subscription).filter_by(status=SubscriptionStatus.active).all():
-            total_revenue += price_map.get(sub.plan_name, 0)
+            total_revenue += get_plan_price_for_sub(db, sub)
         
         # Obtener métricas del cluster (si está disponible)
         cluster_load = {"cpu": 0, "ram": 0}

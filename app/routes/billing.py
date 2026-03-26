@@ -9,6 +9,7 @@ from ..models.database import (
     StripeEvent, Plan, SessionLocal
 )
 from .roles import _require_admin as _require_admin_base, verify_token_with_role
+from ..services.pricing import get_plan_prices as _shared_get_plan_prices, get_plan_price_for_sub as _shared_get_plan_price_for_sub
 import logging
 
 router = APIRouter(prefix="/api/billing", tags=["Billing"])
@@ -16,33 +17,13 @@ logger = logging.getLogger(__name__)
 
 
 def _get_plan_prices(db) -> dict:
-    """Obtiene precios de planes desde la BD. Fallback a defaults si no hay planes."""
-    plans = db.query(Plan).filter(Plan.is_active == True).all()
-    if plans:
-        return {p.name: p.base_price for p in plans}
-    return {"basic": 29, "pro": 49, "enterprise": 99}
+    """Obtiene precios de planes desde la BD. Delega a pricing service."""
+    return _shared_get_plan_prices(db)
 
 
 def _get_plan_price_for_sub(db, sub) -> float:
-    """Obtiene precio para una suscripción.
-    Prioridad: monthly_amount de la BD > cálculo dinámico desde Plan > fallback."""
-    # Check if customer is admin account
-    customer = db.query(Customer).filter(Customer.id == sub.customer_id).first()
-    if customer and customer.is_admin_account:
-        return 0  # Admin account exento
-    
-    # Si monthly_amount está definido en BD, usarlo como fuente de verdad
-    if sub.monthly_amount and sub.monthly_amount > 0:
-        return sub.monthly_amount
-    
-    # Si no, calcular desde Plan
-    plan = db.query(Plan).filter(Plan.name == sub.plan_name, Plan.is_active == True).first()
-    if plan:
-        user_count = sub.user_count or 1
-        return plan.calculate_monthly(user_count)
-    # Fallback
-    fallback = {"basic": 29, "pro": 49, "enterprise": 99}
-    return fallback.get(sub.plan_name or "basic", 29)
+    """Obtiene precio para una suscripción. Delega a pricing service."""
+    return _shared_get_plan_price_for_sub(db, sub)
 
 
 def _verify_admin(token: str):

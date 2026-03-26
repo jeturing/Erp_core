@@ -295,7 +295,10 @@ def _recalculate_subscriptions(db, plan_name: str) -> int:
     count = 0
     for sub in subs:
         user_count = sub.user_count or 1
-        new_amount = plan.calculate_monthly(user_count)
+        # Fix B1: Obtener partner_id del customer para aplicar pricing overrides
+        customer = db.query(Customer).filter(Customer.id == sub.customer_id).first()
+        partner_id = customer.partner_id if customer else None
+        new_amount = plan.calculate_monthly(user_count, partner_id=partner_id)
         if sub.monthly_amount != new_amount:
             sub.monthly_amount = new_amount
             count += 1
