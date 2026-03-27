@@ -911,8 +911,9 @@ class CustomDomain(Base):
     # Dominio externo del cliente
     external_domain = Column(String(255), unique=True, nullable=False, index=True)  # ej: "www.impulse-max.com"
     
-    # Subdominio interno de sajet.us
-    sajet_subdomain = Column(String(100), unique=True, nullable=False, index=True)  # ej: "impulse-max"
+    # Subdominio SAJET del tenant. Puede ser compartido por múltiples dominios
+    # externos del mismo cliente.
+    sajet_subdomain = Column(String(100), nullable=False, index=True)  # ej: "impulse-max"
     
     # Estado de verificación
     verification_status = Column(Enum(DomainVerificationStatus), default=DomainVerificationStatus.pending)
@@ -1901,4 +1902,3 @@ class ApiKeyRotationRequest(Base):
         Index("idx_rotation_req_key_status", "key_id", "status"),
         Index("idx_rotation_req_tenant",     "tenant_id", "status"),
     )
-

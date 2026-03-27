@@ -98,6 +98,7 @@ class OdooServer:
     status: ServerStatus = ServerStatus.online
     region: str = "default"
     priority: int = 1  # Mayor = más prioridad
+    can_host_tenants: bool = False
     
     @property
     def base_url(self) -> str:
@@ -175,6 +176,12 @@ def _load_extra_servers_from_config() -> List[OdooServer]:
                 priority=max(1, _safe_int(item.get("priority"), 5)),
                 region=str(item.get("region") or "secondary").strip(),
                 status=_parse_server_status(item.get("status")),
+                can_host_tenants=bool(
+                    item.get(
+                        "can_host_tenants",
+                        item.get("tenant_provisioning_enabled", False),
+                    )
+                ),
             )
         )
     return servers
@@ -191,6 +198,7 @@ def _build_odoo_servers() -> Dict[str, OdooServer]:
             max_databases=50,
             priority=10,
             region="primary",
+            can_host_tenants=True,
         )
     }
 
@@ -210,6 +218,11 @@ def refresh_odoo_servers() -> Dict[str, OdooServer]:
     global ODOO_SERVERS
     ODOO_SERVERS = _build_odoo_servers()
     return ODOO_SERVERS
+
+
+def _iter_tenant_hosting_servers() -> List[OdooServer]:
+    """Retorna solo los nodos habilitados para provisionar tenants SaaS."""
+    return [server for server in ODOO_SERVERS.values() if server.can_host_tenants]
 
 def _load_protected_tenants() -> set[str]:
     """Lista de tenants protegidos para evitar borrados accidentales."""
@@ -765,6 +778,7 @@ async def get_available_servers() -> List[Dict[str, Any]]:
                     "available_slots": server.available_slots,
                     "region": server.region,
                     "priority": server.priority,
+                    "can_host_tenants": server.can_host_tenants,
                     "databases": databases
                 })
         except Exception as e:
@@ -774,6 +788,7 @@ async def get_available_servers() -> List[Dict[str, Any]]:
                 "name": server.name,
                 "pct_id": server.pct_id,
                 "status": "offline",
+                "can_host_tenants": server.can_host_tenants,
                 "error": str(e)
             })
     
@@ -786,7 +801,7 @@ async def select_best_server() -> Optional[OdooServer]:
     best_server = None
     best_score = -1
     
-    for server_id, server in ODOO_SERVERS.items():
+    for server in _iter_tenant_hosting_servers():
         if server.status != ServerStatus.online:
             continue
         
@@ -806,7 +821,7 @@ async def select_best_server() -> Optional[OdooServer]:
                     best_server = server
                     
         except Exception as e:
-            logger.warning(f"Servidor {server_id} no disponible: {e}")
+            logger.warning(f"Servidor {server.id} no disponible: {e}")
             continue
     
     return best_server
@@ -865,6 +880,11 @@ async def provision_tenant(
         server = ODOO_SERVERS.get(server_id)
         if not server:
             return {"success": False, "error": f"Servidor '{server_id}' no encontrado"}
+        if not server.can_host_tenants:
+            return {
+                "success": False,
+                "error": f"Servidor '{server_id}' no está habilitado para provisionar tenants"
+            }
     else:
         server = await select_best_server()
         if not server:
@@ -877,7 +897,7 @@ async def provision_tenant(
         if await manager.database_exists(subdomain):
             return {
                 "success": False,
-                "error": f"El tenant '{subdomain}' ya existe"
+                "error": f"El tenant '{subdomain}' ya existe (detectado en {server.id})"
             }
         
         # Crear BD (duplicando template si existe, o desde cero)
@@ -1181,10 +1201,16 @@ async def create_tenant_from_template(
     safe_final_login = _sql_literal(final_login)
     safe_final_password = _sql_literal(final_password)
     
-    # Obtener servidor
-    server = ODOO_SERVERS.get(server_id) if server_id else list(ODOO_SERVERS.values())[0]
+    # Obtener servidor. Cuando no se fuerza `server_id`, el fast path debe
+    # respetar la misma selección automática que el flujo estándar.
+    server = ODOO_SERVERS.get(server_id) if server_id else await select_best_server()
     if not server:
         return {"success": False, "error": "Servidor no disponible"}
+    if server_id and not server.can_host_tenants:
+        return {
+            "success": False,
+            "error": f"Servidor '{server_id}' no está habilitado para provisionar tenants"
+        }
     
     pct_id = server.pct_id
     filestore_pct_id = ODOO_FILESTORE_PCT_ID

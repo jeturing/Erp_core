@@ -4,7 +4,7 @@ Gestiona dominios personalizados de clientes, integración con Cloudflare y conf
 
 Flujo:
 1. Cliente registra dominio externo (www.impulse-max.com)
-2. Sistema genera subdominio sajet.us (impulse-max.sajet.us)
+2. Sistema lo vincula al subdominio SAJET del tenant (ej: techeels.sajet.us)
 3. Sistema crea CNAME en Cloudflare (impulse-max → tunnel)
 4. Script en PCT 105 actualiza ingress rules del tunnel
 5. Cliente configura CNAME en su DNS externo
@@ -97,16 +97,11 @@ class DomainManager:
         if existing:
             return {"success": False, "error": "El dominio ya está registrado"}
         
-        # Generar subdominio de sajet.us
-        sajet_subdomain = self._generate_sajet_subdomain(external_domain)
-        
-        # Verificar que el subdominio no existe
-        existing_subdomain = self.db.query(CustomDomain).filter(
-            CustomDomain.sajet_subdomain == sajet_subdomain
-        ).first()
-        if existing_subdomain:
-            # Agregar sufijo único
-            sajet_subdomain = f"{sajet_subdomain}-{secrets.token_hex(3)}"
+        # El dominio externo debe quedar vinculado al subdominio SAJET real
+        # del cliente/tenant, no a un alias derivado del dominio externo.
+        sajet_subdomain = (customer.subdomain or "").strip().lower()
+        if not sajet_subdomain:
+            return {"success": False, "error": "Cliente no tiene subdominio SAJET asignado"}
         
         # Generar token de verificación
         verification_token = f"jeturing-verify-{secrets.token_hex(16)}"

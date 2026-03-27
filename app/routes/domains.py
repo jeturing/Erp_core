@@ -79,7 +79,6 @@ def _check_domain_limit(db: Session, customer_id: int):
 
     current_count = db.query(CustomDomain).filter(
         CustomDomain.customer_id == customer_id,
-        CustomDomain.is_active == True,
     ).count()
 
     if current_count >= max_domains:
@@ -410,7 +409,7 @@ async def create_domain(
     
     El sistema:
     1. Verifica límite de dominios del plan del cliente
-    2. Genera un subdominio de sajet.us automáticamente
+    2. Vincula el dominio externo al subdominio SAJET del tenant
     3. Devuelve instrucciones para configurar el CNAME en el DNS del cliente
     """
     # Verificar límite de dominios del plan

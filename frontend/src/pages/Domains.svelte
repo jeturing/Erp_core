@@ -474,7 +474,7 @@
         <div class="bg-blue-50 border border-blue-200 p-3 rounded-md text-xs text-blue-800 space-y-1">
           <p class="font-semibold">Flujo automático al crear:</p>
           <ol class="list-decimal list-inside space-y-0.5 ml-2">
-            <li>Se registra el dominio y genera subdominio <code>.sajet.us</code></li>
+            <li>Se registra el dominio y se vincula a <code>{selectedCustomer?.subdomain ?? '???'}.sajet.us</code></li>
             <li>Se crea CNAME en Cloudflare (zona sajet.us)</li>
             <li>El cliente configura CNAME en su DNS externo</li>
             <li>Se verifica propagación DNS</li>

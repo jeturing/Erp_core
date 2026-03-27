@@ -41,7 +41,7 @@ CREATE TABLE IF NOT EXISTS custom_domains (
     
     -- Dominios
     external_domain VARCHAR(255) NOT NULL UNIQUE,
-    sajet_subdomain VARCHAR(100) NOT NULL UNIQUE,
+    sajet_subdomain VARCHAR(100) NOT NULL,
     
     -- Verificación
     verification_status domain_verification_status DEFAULT 'pending',

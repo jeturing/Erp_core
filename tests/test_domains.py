@@ -2,10 +2,13 @@
 Tests for custom domain verification flows.
 """
 import asyncio
+import pytest
 
 import dns.resolver
+from fastapi import HTTPException
 
-from app.models.database import CustomDomain, DomainVerificationStatus
+from app.models.database import CustomDomain, DomainVerificationStatus, Plan, Subscription, SubscriptionStatus
+from app.routes.domains import _check_domain_limit
 from app.services.domain_manager import DomainManager
 
 
@@ -107,3 +110,88 @@ class TestDomainVerification:
         db_session.refresh(domain)
         assert domain.verification_status == DomainVerificationStatus.verified
         assert domain.is_active is True
+
+
+class TestDomainCreation:
+    def test_create_domain_uses_customer_sajet_subdomain(
+        self,
+        db_session,
+        sample_customer,
+    ):
+        manager = DomainManager(db_session)
+
+        result = manager.create_domain(
+            external_domain="latazacuriosa.com",
+            customer_id=sample_customer.id,
+            created_by="pytest",
+        )
+
+        assert result["success"] is True
+        assert result["domain"]["sajet_subdomain"] == sample_customer.subdomain
+        assert result["domain"]["sajet_full_domain"] == f"{sample_customer.subdomain}.sajet.us"
+        assert result["instructions"]["record_value"] == f"{sample_customer.subdomain}.sajet.us"
+
+    def test_same_tenant_can_have_multiple_external_domains(
+        self,
+        db_session,
+        sample_customer,
+    ):
+        manager = DomainManager(db_session)
+
+        result_one = manager.create_domain(
+            external_domain="techeels.com",
+            customer_id=sample_customer.id,
+            created_by="pytest",
+        )
+        result_two = manager.create_domain(
+            external_domain="techeels.do",
+            customer_id=sample_customer.id,
+            created_by="pytest",
+        )
+
+        assert result_one["success"] is True
+        assert result_two["success"] is True
+        assert result_one["domain"]["sajet_subdomain"] == sample_customer.subdomain
+        assert result_two["domain"]["sajet_subdomain"] == sample_customer.subdomain
+
+
+class TestDomainPlanLimits:
+    def test_plan_limit_counts_pending_domains_too(
+        self,
+        db_session,
+        sample_customer,
+    ):
+        plan = Plan(
+            name="pro",
+            display_name="Pro",
+            max_domains=1,
+            is_active=True,
+        )
+        db_session.add(plan)
+        db_session.commit()
+
+        subscription = Subscription(
+            customer_id=sample_customer.id,
+            plan_name="pro",
+            status=SubscriptionStatus.active,
+        )
+        db_session.add(subscription)
+        db_session.commit()
+
+        domain = CustomDomain(
+            customer_id=sample_customer.id,
+            external_domain="techeels.com",
+            sajet_subdomain=sample_customer.subdomain,
+            verification_status=DomainVerificationStatus.pending,
+            is_active=False,
+            target_node_ip="localhost",
+            target_port=8069,
+            created_by="pytest",
+        )
+        db_session.add(domain)
+        db_session.commit()
+
+        with pytest.raises(HTTPException) as exc:
+            _check_domain_limit(db_session, sample_customer.id)
+
+        assert exc.value.status_code == 403

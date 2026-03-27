@@ -6,6 +6,7 @@ Tests de integración (con servidor Odoo real) marcados con @pytest.mark.integra
 import pytest
 import socket
 from fastapi import status
+from unittest.mock import AsyncMock
 
 
 def _odoo_server_reachable():
@@ -195,3 +196,81 @@ class TestTenantServers:
         if data:
             server = data[0]
             assert "id" in server or "name" in server
+
+
+class TestTenantServerSelection:
+    """Tests for automatic server selection during tenant creation."""
+
+    @pytest.mark.asyncio
+    async def test_fast_path_uses_best_server_when_server_id_is_omitted(self, monkeypatch):
+        from app.services import odoo_database_manager as odm
+
+        primary = odm.OdooServer(
+            id="pct-105",
+            name="PCT 105",
+            pct_id=105,
+            ip="10.10.10.100",
+            can_host_tenants=True,
+        )
+        secondary = odm.OdooServer(
+            id="pct-161",
+            name="PCT 161",
+            pct_id=161,
+            ip="10.10.10.161",
+            can_host_tenants=True,
+        )
+        selected = {"pct_id": None}
+
+        monkeypatch.setattr(odm, "refresh_odoo_servers", lambda: None)
+        monkeypatch.setattr(odm, "ODOO_SERVERS", {"pct-105": primary, "pct-161": secondary})
+        monkeypatch.setattr(odm, "select_best_server", AsyncMock(return_value=secondary))
+
+        def fake_run_pct_sql(pct_id, db_name, sql):
+            selected["pct_id"] = pct_id
+            return False, "timeout"
+
+        monkeypatch.setattr(odm, "_run_pct_sql", fake_run_pct_sql)
+
+        result = await odm.create_tenant_from_template("latazacuriosa")
+
+        assert result["success"] is False
+        assert selected["pct_id"] == 161
+
+    @pytest.mark.asyncio
+    async def test_fast_path_honors_explicit_server_id(self, monkeypatch):
+        from app.services import odoo_database_manager as odm
+
+        primary = odm.OdooServer(
+            id="pct-105",
+            name="PCT 105",
+            pct_id=105,
+            ip="10.10.10.100",
+            can_host_tenants=True,
+        )
+        secondary = odm.OdooServer(
+            id="pct-161",
+            name="PCT 161",
+            pct_id=161,
+            ip="10.10.10.161",
+            can_host_tenants=True,
+        )
+        selected = {"pct_id": None}
+
+        monkeypatch.setattr(odm, "refresh_odoo_servers", lambda: None)
+        monkeypatch.setattr(odm, "ODOO_SERVERS", {"pct-105": primary, "pct-161": secondary})
+        monkeypatch.setattr(
+            odm,
+            "select_best_server",
+            AsyncMock(side_effect=AssertionError("select_best_server should not be used when server_id is provided")),
+        )
+
+        def fake_run_pct_sql(pct_id, db_name, sql):
+            selected["pct_id"] = pct_id
+            return False, "timeout"
+
+        monkeypatch.setattr(odm, "_run_pct_sql", fake_run_pct_sql)
+
+        result = await odm.create_tenant_from_template("latazacuriosa", server_id="pct-105")
+
+        assert result["success"] is False
+        assert selected["pct_id"] == 105
