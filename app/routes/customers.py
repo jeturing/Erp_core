@@ -80,7 +80,9 @@ async def list_customers(
                 ).first()
                 if plan:
                     user_count = c.user_count or sub.user_count or 1
-                    calculated_amount = plan.calculate_monthly(user_count)
+                    # Use partner_id from subscription or customer for pricing overrides
+                    effective_partner_id = sub.owner_partner_id or c.partner_id
+                    calculated_amount = plan.calculate_monthly(user_count, partner_id=effective_partner_id)
                     plan_data = {
                         "name": plan.name,
                         "display_name": plan.display_name,
@@ -227,7 +229,8 @@ async def update_customer(
                 sub.user_count = payload.user_count
                 plan = db.query(Plan).filter(Plan.name == sub.plan_name).first()
                 if plan:
-                    new_amount = plan.calculate_monthly(payload.user_count)
+                    effective_pid = sub.owner_partner_id or customer.partner_id
+                    new_amount = plan.calculate_monthly(payload.user_count, partner_id=effective_pid)
                     old_amount = sub.monthly_amount or 0
                     sub.monthly_amount = new_amount
                     messages.append(f"Monto: ${old_amount:.2f} → ${new_amount:.2f}")
@@ -249,7 +252,8 @@ async def update_customer(
                 old_plan = sub.plan_name
                 sub.plan_name = new_plan.name
                 user_count = customer.user_count or sub.user_count or 1
-                sub.monthly_amount = new_plan.calculate_monthly(user_count)
+                effective_pid = sub.owner_partner_id or customer.partner_id
+                sub.monthly_amount = new_plan.calculate_monthly(user_count, partner_id=effective_pid)
                 messages.append(f"Plan: {old_plan} → {new_plan.name} (${sub.monthly_amount:.2f}/mes)")
 
         db.commit()
@@ -309,7 +313,8 @@ async def update_user_count(
             plan = db.query(Plan).filter(Plan.name == sub.plan_name).first()
             if plan:
                 old_amount = sub.monthly_amount or 0
-                new_amount = plan.calculate_monthly(payload.user_count)
+                effective_pid = sub.owner_partner_id or (customer.partner_id if customer else None)
+                new_amount = plan.calculate_monthly(payload.user_count, partner_id=effective_pid)
                 sub.monthly_amount = new_amount
 
                 extra_users = max(0, payload.user_count - plan.included_users)
@@ -431,7 +436,8 @@ async def recalculate_all(
                 continue
 
             user_count = (customer.user_count if customer else None) or sub.user_count or 1
-            new_amount = plan.calculate_monthly(user_count)
+            effective_pid = sub.owner_partner_id or (customer.partner_id if customer else None)
+            new_amount = plan.calculate_monthly(user_count, partner_id=effective_pid)
             old_amount = sub.monthly_amount or 0
 
             if abs(new_amount - old_amount) > 0.01:
