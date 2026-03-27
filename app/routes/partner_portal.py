@@ -598,15 +598,163 @@ async def list_partner_clients(
                     "customer_id": customer.id,
                     "company_name": customer.company_name,
                     "email": customer.email,
+                    "subdomain": customer.subdomain,
                     "plan": sub.plan_name,
                     "status": sub.status.value if sub.status else None,
                     "billing_mode": sub.billing_mode.value if sub.billing_mode else None,
                     "monthly_amount": sub.monthly_amount,
                     "user_count": sub.user_count,
+                    "url": f"https://{customer.subdomain}.sajet.us" if customer.subdomain else None,
                     "created_at": sub.created_at.isoformat() if sub.created_at else None,
                 })
 
         return {"items": clients, "total": len(clients)}
+    finally:
+        db.close()
+
+
+# ── Crear Cliente desde Portal Partner ──
+
+class PartnerClientCreate(BaseModel):
+    company_name: str
+    contact_email: str
+    subdomain: str
+    plan_name: str = "basic"
+    user_count: int = 1
+    contact_name: Optional[str] = None
+    notes: Optional[str] = None
+
+
+@router.post("/clients")
+async def create_partner_client(
+    payload: PartnerClientCreate,
+    request: Request,
+    access_token: Optional[str] = Cookie(None),
+):
+    """
+    El partner crea un nuevo cliente con auto-provisioning del tenant Odoo.
+
+    Flujo completo:
+    1. Valida que el partner está activo
+    2. Crea Customer + Subscription en BD local (vinculado al partner)
+    3. Provisiona la BD Odoo automáticamente (clona template_tenant)
+    4. Provisiona subdominio en nginx
+    5. Retorna credenciales del tenant
+
+    Esto cierra el gap: el partner puede crear clientes completos
+    sin necesitar intervención del admin.
+    """
+    auth = _require_partner(request, access_token)
+    db = SessionLocal()
+    try:
+        partner = _get_partner(db, auth)
+        if partner.status != PartnerStatus.active:
+            raise HTTPException(
+                status_code=403,
+                detail="Tu cuenta de partner no está activa. Contacta a soporte."
+            )
+
+        # Validar subdominio
+        import re
+        subdomain = payload.subdomain.strip().lower().replace("-", "_")
+        if not re.match(r'^[a-z0-9][a-z0-9_]{1,28}[a-z0-9]$', subdomain):
+            raise HTTPException(
+                status_code=400,
+                detail="Subdominio inválido. Solo letras minúsculas, números y guiones bajos (3-30 chars)."
+            )
+
+        # Verificar que no exista
+        existing = db.query(Customer).filter(Customer.subdomain == subdomain).first()
+        if existing:
+            raise HTTPException(status_code=409, detail=f"El subdominio '{subdomain}' ya está en uso")
+
+        # Validar plan
+        plan = db.query(Plan).filter(Plan.name == payload.plan_name, Plan.is_active == True).first()
+        if not plan:
+            raise HTTPException(status_code=400, detail=f"Plan '{payload.plan_name}' no existe o no está activo")
+
+        from ..models.database import BillingMode, PayerType, CollectorType, InvoiceIssuer
+
+        # Crear cliente vinculado al partner
+        customer = Customer(
+            email=payload.contact_email,
+            full_name=payload.contact_name or "",
+            company_name=payload.company_name,
+            subdomain=subdomain,
+            user_count=payload.user_count,
+            partner_id=partner.id,
+        )
+        db.add(customer)
+        db.flush()
+
+        # Crear suscripción con pricing override del partner
+        calculated_amount = plan.calculate_monthly(payload.user_count, partner.id)
+        sub = Subscription(
+            customer_id=customer.id,
+            plan_name=payload.plan_name,
+            status=SubscriptionStatus.active,
+            user_count=payload.user_count,
+            monthly_amount=calculated_amount,
+            owner_partner_id=partner.id,
+            billing_mode=BillingMode.PARTNER_DIRECT,
+            payer_type=PayerType.PARTNER,
+            collector=CollectorType.STRIPE_CONNECT,
+            invoice_issuer=InvoiceIssuer.JETURING,
+        )
+        db.add(sub)
+        db.commit()
+        db.refresh(customer)
+        db.refresh(sub)
+
+        response = {
+            "success": True,
+            "customer_id": customer.id,
+            "subscription_id": sub.id,
+            "monthly_amount": calculated_amount,
+            "message": f"Cliente '{payload.company_name}' creado exitosamente",
+        }
+
+        # Auto-provision tenant Odoo
+        try:
+            from .customers import _auto_provision_tenant
+            tenant_result = await _auto_provision_tenant(
+                subdomain=subdomain,
+                company_name=payload.company_name,
+                partner_id=partner.id,
+                plan_name=payload.plan_name,
+            )
+            if tenant_result.get("success"):
+                response["tenant"] = {
+                    "subdomain": subdomain,
+                    "url": tenant_result.get("url", f"https://{subdomain}.sajet.us"),
+                    "admin_login": tenant_result.get("admin_login"),
+                    "admin_password": tenant_result.get("admin_password"),
+                    "status": "active",
+                }
+                response["message"] += " + Tenant provisionado"
+                logger.info(
+                    f"✅ Partner {partner.company_name} creó cliente+tenant '{subdomain}'"
+                )
+            else:
+                response["tenant_error"] = tenant_result.get("error")
+                response["message"] += " (tenant pendiente — contacta soporte)"
+                logger.warning(
+                    f"⚠️ Partner {partner.company_name}: cliente creado pero tenant falló: "
+                    f"{tenant_result.get('error')}"
+                )
+        except Exception as prov_err:
+            response["tenant_error"] = str(prov_err)
+            response["message"] += " (error en provisioning)"
+            logger.error(f"Error en auto-provision para partner: {prov_err}")
+
+        return response
+
+    except HTTPException:
+        raise
+    except Exception as e:
+        db.rollback()
+        logger.error(f"Error partner creando cliente: {e}")
+        raise HTTPException(status_code=500, detail=str(e))
     finally:
         db.close()
 

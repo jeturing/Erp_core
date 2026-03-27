@@ -346,6 +346,7 @@ class CreateCustomerRequest(BaseModel):
     plan_name: str = "basic"
     user_count: int = 1
     partner_id: Optional[int] = None
+    auto_provision: Optional[bool] = True  # Auto-provision tenant Odoo
 
 
 @router.post("")
@@ -354,7 +355,16 @@ async def create_customer(
     request: Request,
     access_token: str = Cookie(None)
 ) -> Dict[str, Any]:
-    """Crear un nuevo cliente con suscripción básica."""
+    """
+    Crear un nuevo cliente con suscripción y, opcionalmente, provisionar
+    el tenant Odoo automáticamente (auto_provision=true por defecto).
+
+    Flujo completo:
+    1. Crea Customer + Subscription en BD local
+    2. Si auto_provision=true y hay subdomain: clona template_tenant como nueva BD Odoo
+    3. Provisiona subdominio en nginx
+    4. Devuelve credenciales del tenant en la respuesta
+    """
     _verify_admin(request, access_token)
     db = SessionLocal()
     try:
@@ -368,6 +378,10 @@ async def create_customer(
         if not plan:
             raise HTTPException(status_code=400, detail=f"Plan '{payload.plan_name}' no existe o no está activo")
 
+        # Determinar partner para billing
+        from ..models.database import BillingMode, PayerType, CollectorType, InvoiceIssuer
+        partner_id = payload.partner_id
+
         # Crear cliente
         customer = Customer(
             email=payload.email,
@@ -375,24 +389,67 @@ async def create_customer(
             company_name=payload.company_name,
             subdomain=payload.subdomain,
             user_count=payload.user_count,
-            partner_id=payload.partner_id,
+            partner_id=partner_id,
         )
         db.add(customer)
         db.flush()
 
         # Crear suscripción activa
-        calculated_amount = plan.calculate_monthly(payload.user_count, payload.partner_id)
+        calculated_amount = plan.calculate_monthly(payload.user_count, partner_id)
         sub = Subscription(
             customer_id=customer.id,
             plan_name=payload.plan_name,
             status=SubscriptionStatus.active,
             user_count=payload.user_count,
             monthly_amount=calculated_amount,
+            owner_partner_id=partner_id,
+            billing_mode=BillingMode.PARTNER_DIRECT if partner_id else BillingMode.JETURING_DIRECT_SUBSCRIPTION,
+            payer_type=PayerType.PARTNER if partner_id else PayerType.CLIENT,
+            collector=CollectorType.STRIPE_CONNECT if partner_id else CollectorType.STRIPE_DIRECT,
+            invoice_issuer=InvoiceIssuer.JETURING,
         )
         db.add(sub)
         db.commit()
         db.refresh(customer)
-        return {"id": customer.id, "message": f"Cliente '{payload.company_name}' creado exitosamente"}
+        db.refresh(sub)
+
+        response = {
+            "id": customer.id,
+            "subscription_id": sub.id,
+            "monthly_amount": calculated_amount,
+            "message": f"Cliente '{payload.company_name}' creado exitosamente",
+        }
+
+        # ── Auto-provision tenant Odoo ──
+        if payload.auto_provision and payload.subdomain:
+            try:
+                tenant_result = await _auto_provision_tenant(
+                    subdomain=payload.subdomain,
+                    company_name=payload.company_name,
+                    partner_id=partner_id,
+                    plan_name=payload.plan_name,
+                )
+                if tenant_result.get("success"):
+                    response["tenant"] = {
+                        "subdomain": payload.subdomain,
+                        "url": tenant_result.get("url", f"https://{payload.subdomain}.sajet.us"),
+                        "admin_login": tenant_result.get("admin_login"),
+                        "admin_password": tenant_result.get("admin_password"),
+                        "server": tenant_result.get("server"),
+                        "status": "active",
+                    }
+                    response["message"] += " + Tenant Odoo provisionado"
+                    logger.info(f"✅ Cliente + Tenant '{payload.subdomain}' creado exitosamente")
+                else:
+                    response["tenant_error"] = tenant_result.get("error", "Error provisionando tenant")
+                    response["message"] += " (tenant NO provisionado — requiere acción manual)"
+                    logger.warning(f"⚠️ Cliente creado pero tenant falló: {tenant_result.get('error')}")
+            except Exception as prov_err:
+                response["tenant_error"] = str(prov_err)
+                response["message"] += " (error en provisioning — cliente creado sin tenant)"
+                logger.error(f"Error en auto-provision de '{payload.subdomain}': {prov_err}")
+
+        return response
     except HTTPException:
         raise
     except Exception as e:
@@ -401,6 +458,60 @@ async def create_customer(
         raise HTTPException(status_code=500, detail=str(e))
     finally:
         db.close()
+
+
+async def _auto_provision_tenant(
+    subdomain: str,
+    company_name: str,
+    partner_id: Optional[int] = None,
+    plan_name: str = "basic",
+) -> Dict[str, Any]:
+    """
+    Provisiona un tenant Odoo automáticamente:
+    1. Clona template_tenant via create_tenant_from_template (fast path)
+    2. Provisiona subdominio en nginx
+    3. Retorna credenciales generadas
+
+    Esta función NO crea Customer/Subscription — eso lo hace el caller.
+    """
+    from ..services.odoo_database_manager import create_tenant_from_template
+    from ..services.nginx_domain_configurator import provision_sajet_subdomain
+
+    # Generar credenciales bootstrap
+    admin_login = f"{subdomain}@sajet.us"
+    admin_password = secrets.token_urlsafe(16)
+
+    # 1. Crear BD Odoo desde template
+    result = await create_tenant_from_template(
+        subdomain=subdomain,
+        company_name=company_name,
+        server_id=None,  # auto-select
+        admin_login=admin_login,
+        admin_password=admin_password,
+    )
+
+    if not result.get("success"):
+        return {
+            "success": False,
+            "error": result.get("error", "Error clonando template"),
+            "error_code": result.get("error_code"),
+        }
+
+    # 2. Provisionar nginx
+    try:
+        nginx_result = provision_sajet_subdomain(subdomain)
+        if not nginx_result.get("success"):
+            logger.warning(f"Nginx provisioning failed for {subdomain}: {nginx_result.get('error')}")
+    except Exception as ng_err:
+        logger.warning(f"Nginx error for {subdomain}: {ng_err}")
+
+    return {
+        "success": True,
+        "url": f"https://{subdomain}.sajet.us",
+        "admin_login": admin_login,
+        "admin_password": admin_password,
+        "server": result.get("server", "primary"),
+    }
 
 
 @router.post("/recalculate-all")

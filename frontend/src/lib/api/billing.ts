@@ -74,7 +74,21 @@ export const billingApi = {
     plan_name?: string;
     user_count?: number;
     partner_id?: number;
-  }): Promise<{ id: number; message: string }> {
+    auto_provision?: boolean;
+  }): Promise<{
+    id: number;
+    message: string;
+    customer?: { id: number };
+    tenant?: {
+      admin_login: string;
+      admin_password: string;
+      subdomain: string;
+      url: string;
+      server: string;
+      status: string;
+    };
+    tenant_error?: string;
+  }> {
     return api.post('/api/customers', data);
   },
 

@@ -75,6 +75,31 @@ export const partnerPortalApi = {
     return api.get(`${BASE}/clients`);
   },
 
+  async createClient(data: {
+    company_name: string;
+    contact_email: string;
+    subdomain: string;
+    plan_name?: string;
+    user_count?: number;
+    contact_name?: string;
+    notes?: string;
+  }): Promise<{
+    message: string;
+    customer_id: number;
+    subscription_id: number;
+    tenant?: {
+      admin_login: string;
+      admin_password: string;
+      subdomain: string;
+      url: string;
+      server: string;
+      status: string;
+    };
+    tenant_error?: string;
+  }> {
+    return api.post(`${BASE}/clients`, data);
+  },
+
   // ── Commissions ──
   async getCommissions(): Promise<{
     items: PartnerCommissionItem[];

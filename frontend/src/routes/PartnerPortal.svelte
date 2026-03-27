@@ -33,6 +33,13 @@
   let newLead = { company_name: '', contact_name: '', contact_email: '', phone: '', country: '', notes: '', estimated_monthly_value: 0 };
   let savingLead = false;
 
+  // New Client form
+  let showNewClient = false;
+  let newClient = { company_name: '', contact_email: '', subdomain: '', plan_name: 'standard', user_count: 1, contact_name: '', notes: '' };
+  let savingClient = false;
+  let clientCredentials: { admin_login: string; admin_password: string; subdomain: string; url: string } | null = null;
+  let showClientCredentials = false;
+
   $: showOnboarding = onboardingStatus && onboardingStatus.current_step < 4;
 
   function formatCurrency(amount: number): string {
@@ -111,6 +118,32 @@
       error = err instanceof Error ? err.message : 'Error al crear lead';
     } finally {
       savingLead = false;
+    }
+  }
+
+  async function createClient() {
+    if (!newClient.company_name.trim() || !newClient.contact_email.trim() || !newClient.subdomain.trim()) return;
+    savingClient = true;
+    error = '';
+    try {
+      const result = await partnerPortalApi.createClient(newClient);
+      // Mostrar credenciales si el tenant fue creado
+      if (result.tenant && result.tenant.admin_login) {
+        clientCredentials = {
+          admin_login: result.tenant.admin_login,
+          admin_password: result.tenant.admin_password,
+          subdomain: newClient.subdomain,
+          url: result.tenant.url || `https://${newClient.subdomain}.sajet.us`,
+        };
+        showClientCredentials = true;
+      }
+      newClient = { company_name: '', contact_email: '', subdomain: '', plan_name: 'standard', user_count: 1, contact_name: '', notes: '' };
+      showNewClient = false;
+      clients = await partnerPortalApi.getClients();
+    } catch (err) {
+      error = err instanceof Error ? err.message : 'Error al crear cliente';
+    } finally {
+      savingClient = false;
     }
   }
 
@@ -406,7 +439,58 @@
 
       <!-- ═══ CLIENTS ═══ -->
       {:else if activeTab === 'clients'}
-        <h2 class="text-lg font-bold text-[#1a1a1a] mb-4">Mis Clientes</h2>
+        <div class="flex items-center justify-between mb-4">
+          <h2 class="text-lg font-bold text-[#1a1a1a]">Mis Clientes</h2>
+          <button
+            class="bg-[#C05A3C] text-white text-sm font-semibold px-4 py-2 rounded-lg hover:bg-[#a94e33] transition-colors flex items-center gap-1.5"
+            on:click={() => showNewClient = !showNewClient}
+          >
+            <Plus class="w-4 h-4" /> Nuevo Cliente
+          </button>
+        </div>
+
+        <!-- New Client Form -->
+        {#if showNewClient}
+          <div class="bg-white rounded-xl border border-gray-200 p-5 mb-4">
+            <h3 class="text-sm font-bold text-[#1a1a1a] mb-3">Crear Cliente y Aprovisionar Tenant</h3>
+            <div class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3">
+              <input type="text" bind:value={newClient.company_name} placeholder="Empresa *"
+                class="px-3 py-2 border border-gray-300 rounded-lg text-sm focus:ring-2 focus:ring-[#C05A3C] focus:border-transparent outline-none" />
+              <input type="email" bind:value={newClient.contact_email} placeholder="Email contacto *"
+                class="px-3 py-2 border border-gray-300 rounded-lg text-sm focus:ring-2 focus:ring-[#C05A3C] focus:border-transparent outline-none" />
+              <div>
+                <div class="flex items-center gap-1">
+                  <input type="text" bind:value={newClient.subdomain} placeholder="subdominio *"
+                    class="flex-1 px-3 py-2 border border-gray-300 rounded-lg text-sm focus:ring-2 focus:ring-[#C05A3C] focus:border-transparent outline-none" />
+                  <span class="text-xs text-gray-400 whitespace-nowrap">.sajet.us</span>
+                </div>
+              </div>
+              <input type="text" bind:value={newClient.contact_name} placeholder="Nombre contacto"
+                class="px-3 py-2 border border-gray-300 rounded-lg text-sm focus:ring-2 focus:ring-[#C05A3C] focus:border-transparent outline-none" />
+              <select bind:value={newClient.plan_name}
+                class="px-3 py-2 border border-gray-300 rounded-lg text-sm focus:ring-2 focus:ring-[#C05A3C] focus:border-transparent outline-none bg-white">
+                <option value="standard">Standard</option>
+                <option value="professional">Professional</option>
+                <option value="enterprise">Enterprise</option>
+              </select>
+              <input type="number" bind:value={newClient.user_count} min="1" max="999" placeholder="# Usuarios"
+                class="px-3 py-2 border border-gray-300 rounded-lg text-sm focus:ring-2 focus:ring-[#C05A3C] focus:border-transparent outline-none" />
+              <textarea bind:value={newClient.notes} placeholder="Notas" rows="2"
+                class="sm:col-span-2 lg:col-span-3 px-3 py-2 border border-gray-300 rounded-lg text-sm focus:ring-2 focus:ring-[#C05A3C] focus:border-transparent outline-none resize-none"></textarea>
+            </div>
+            <div class="flex gap-2 mt-3 justify-end">
+              <button class="text-sm text-gray-500 px-4 py-2 hover:text-gray-700" on:click={() => showNewClient = false}>Cancelar</button>
+              <button
+                class="bg-[#4A7C59] text-white text-sm font-semibold px-5 py-2 rounded-lg hover:bg-[#3d6a4b] transition-colors flex items-center gap-1.5"
+                on:click={createClient} disabled={savingClient || !newClient.company_name || !newClient.contact_email || !newClient.subdomain}
+              >
+                {#if savingClient}<Loader2 class="w-4 h-4 animate-spin" />{/if}
+                Crear y Aprovisionar
+              </button>
+            </div>
+          </div>
+        {/if}
+
         <div class="bg-white rounded-xl border border-gray-200 overflow-hidden">
           {#if clients?.items && clients.items.length > 0}
             <div class="overflow-x-auto">
@@ -414,6 +498,7 @@
                 <thead>
                   <tr class="border-b border-gray-200 bg-gray-50">
                     <th class="text-left px-4 py-3 text-[10px] font-semibold text-gray-500 uppercase tracking-wider">Empresa</th>
+                    <th class="text-left px-4 py-3 text-[10px] font-semibold text-gray-500 uppercase tracking-wider">Subdominio</th>
                     <th class="text-left px-4 py-3 text-[10px] font-semibold text-gray-500 uppercase tracking-wider">Plan</th>
                     <th class="text-left px-4 py-3 text-[10px] font-semibold text-gray-500 uppercase tracking-wider">Estado</th>
                     <th class="text-right px-4 py-3 text-[10px] font-semibold text-gray-500 uppercase tracking-wider">Monto/Mes</th>
@@ -426,6 +511,16 @@
                       <td class="px-4 py-3">
                         <span class="text-sm font-medium text-[#1a1a1a]">{client.company_name}</span>
                         <br><span class="text-xs text-gray-400">{client.email}</span>
+                      </td>
+                      <td class="px-4 py-3">
+                        {#if client.subdomain}
+                          <a href="https://{client.subdomain}.sajet.us" target="_blank"
+                            class="text-sm text-[#C05A3C] hover:underline flex items-center gap-1">
+                            {client.subdomain} <ExternalLink class="w-3 h-3" />
+                          </a>
+                        {:else}
+                          <span class="text-xs text-gray-400">—</span>
+                        {/if}
                       </td>
                       <td class="px-4 py-3 text-sm text-gray-600 capitalize">{client.plan || '—'}</td>
                       <td class="px-4 py-3">
@@ -443,7 +538,7 @@
           {:else}
             <div class="py-12 text-center">
               <Users class="w-8 h-8 text-gray-300 mx-auto mb-2" />
-              <p class="text-sm text-gray-500">Aún no tienes clientes activos</p>
+              <p class="text-sm text-gray-500">Aún no tienes clientes activos. ¡Crea tu primer cliente!</p>
             </div>
           {/if}
         </div>
@@ -595,4 +690,56 @@
       {/if}
     </main>
   </div>
+
+  <!-- Credentials Modal -->
+  {#if showClientCredentials && clientCredentials}
+    <div class="fixed inset-0 z-50 bg-black/60 flex items-center justify-center p-4" on:click|self={() => showClientCredentials = false}>
+      <div class="bg-white rounded-2xl shadow-2xl max-w-md w-full p-6">
+        <div class="flex items-center gap-3 mb-4">
+          <div class="w-10 h-10 rounded-full bg-[#4A7C59] flex items-center justify-center">
+            <Users class="w-5 h-5 text-white" />
+          </div>
+          <div>
+            <h3 class="text-lg font-bold text-[#1a1a1a]">¡Tenant Creado!</h3>
+            <p class="text-xs text-gray-500">Guarda estas credenciales — solo se muestran una vez</p>
+          </div>
+        </div>
+
+        <div class="bg-gray-50 rounded-xl p-4 space-y-3 font-mono text-sm">
+          <div>
+            <span class="text-[10px] font-semibold text-gray-500 uppercase tracking-wider block mb-0.5">URL</span>
+            <a href={clientCredentials.url} target="_blank" class="text-[#C05A3C] hover:underline flex items-center gap-1">
+              {clientCredentials.url} <ExternalLink class="w-3 h-3" />
+            </a>
+          </div>
+          <div>
+            <span class="text-[10px] font-semibold text-gray-500 uppercase tracking-wider block mb-0.5">Login</span>
+            <span class="text-[#1a1a1a] select-all">{clientCredentials.admin_login}</span>
+          </div>
+          <div>
+            <span class="text-[10px] font-semibold text-gray-500 uppercase tracking-wider block mb-0.5">Contraseña</span>
+            <span class="text-[#1a1a1a] select-all">{clientCredentials.admin_password}</span>
+          </div>
+        </div>
+
+        <div class="flex gap-2 mt-4 justify-end">
+          <button
+            class="text-sm text-gray-500 px-4 py-2 hover:text-gray-700"
+            on:click={() => {
+              const text = `URL: ${clientCredentials.url}\nLogin: ${clientCredentials.admin_login}\nPassword: ${clientCredentials.admin_password}`;
+              navigator.clipboard.writeText(text);
+            }}
+          >
+            📋 Copiar
+          </button>
+          <button
+            class="bg-[#1a1a1a] text-white text-sm font-semibold px-5 py-2 rounded-lg hover:bg-[#333] transition-colors"
+            on:click={() => { showClientCredentials = false; clientCredentials = null; }}
+          >
+            Cerrar
+          </button>
+        </div>
+      </div>
+    </div>
+  {/if}
 {/if}
