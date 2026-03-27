@@ -410,7 +410,7 @@ class OdooDatabaseManager:
             
             sql_commands = f"""
             UPDATE ir_config_parameter SET value = '{base_url}' WHERE key = 'web.base.url';
-            UPDATE ir_config_parameter SET value = 'True' WHERE key = 'web.base.url.freeze';
+            UPDATE ir_config_parameter SET value = 'False' WHERE key = 'web.base.url.freeze';
             UPDATE ir_config_parameter SET value = '{db_name}.{BASE_DOMAIN}' WHERE key = 'mail.catchall.domain';
             """
             
@@ -515,6 +515,7 @@ class OdooDatabaseManager:
             UPDATE res_partner SET name = '{db_name}' WHERE id = 1;
             UPDATE ir_config_parameter SET value = gen_random_uuid()::text WHERE key = 'database.uuid';
             UPDATE ir_config_parameter SET value = '{base_url}' WHERE key = 'web.base.url';
+            UPDATE ir_config_parameter SET value = 'False' WHERE key = 'web.base.url.freeze';
             """
             
             cmd = f'''pct exec {self.server.pct_id} -- bash -c 'export PGPASSWORD="{DEFAULT_DB_PASSWORD}"; psql -h {DEFAULT_DB_HOST} -p {DEFAULT_DB_PORT} -U {DEFAULT_DB_USER} -d {db_name} -c "{sql_commands}"' '''
@@ -1379,6 +1380,8 @@ async def create_tenant_from_template(
         UPDATE res_company SET name = '{safe_company_name}' WHERE id = 1;
         UPDATE res_partner SET name = '{safe_company_name}' WHERE id = 1;
         UPDATE ir_config_parameter SET value = '{safe_base_url}' WHERE key = 'web.base.url';
+        UPDATE ir_config_parameter SET value = 'False' WHERE key = 'web.base.url.freeze';
+        DELETE FROM ir_sessions;
         UPDATE ir_config_parameter SET value = gen_random_uuid()::text WHERE key = 'database.uuid';
         """
         

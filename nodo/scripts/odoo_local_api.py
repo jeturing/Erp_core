@@ -262,9 +262,11 @@ async def create_tenant(request: TenantCreateRequest, x_api_key: str = Header(No
     UPDATE res_company SET name = '{subdomain}' WHERE id = 1;
     UPDATE res_partner SET name = '{subdomain}' WHERE id = 1;
     UPDATE ir_config_parameter SET value = gen_random_uuid()::text WHERE key = 'database.uuid';
+    DELETE FROM ir_sessions;
     INSERT INTO ir_config_parameter (key, value, create_date, write_date, create_uid, write_uid)
     VALUES ('web.base.url', 'https://{subdomain}.{domain}', NOW(), NOW(), 1, 1)
     ON CONFLICT (key) DO UPDATE SET value = EXCLUDED.value;
+    UPDATE ir_config_parameter SET value = 'False' WHERE key = 'web.base.url.freeze';
     """
     run_sql(subdomain, config_sql)
     

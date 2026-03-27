@@ -46,10 +46,21 @@ UPDATE res_users SET password = '$ADMIN_PASSWORD' WHERE login = 'admin';
 UPDATE res_company SET name = '$SUBDOMAIN' WHERE id = 1;
 UPDATE res_partner SET name = '$SUBDOMAIN' WHERE id = 1;
 UPDATE ir_config_parameter SET value = gen_random_uuid()::text WHERE key = 'database.uuid';
+DELETE FROM ir_sessions;
 INSERT INTO ir_config_parameter (key, value, create_date, write_date, create_uid, write_uid)
 VALUES ('web.base.url', 'https://$SUBDOMAIN.$DOMAIN', NOW(), NOW(), 1, 1)
 ON CONFLICT (key) DO UPDATE SET value = EXCLUDED.value;
+UPDATE ir_config_parameter SET value = 'False' WHERE key = 'web.base.url.freeze';
 SQL
+
+# Sincronizar filestore desde template si el nuevo tenant tiene menos archivos
+FS_BASE="/var/lib/odoo/filestore"
+if [ -d "$FS_BASE/$TEMPLATE_DB" ]; then
+    mkdir -p "$FS_BASE/$SUBDOMAIN"
+    cp -an "$FS_BASE/$TEMPLATE_DB/." "$FS_BASE/$SUBDOMAIN/"
+    chown -R odoo:odoo "$FS_BASE/$SUBDOMAIN" 2>/dev/null || true
+    echo "[✓] Filestore sincronizado desde $TEMPLATE_DB"
+fi
 
 echo "[✓] Tenant '$SUBDOMAIN' creado exitosamente"
 echo "[✓] URL: https://$SUBDOMAIN.$DOMAIN"
