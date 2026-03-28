@@ -20,43 +20,100 @@ from ..config import (
     CLOUDFLARE_TUNNEL_ID, CLOUDFLARE_API_TOKEN, CLOUDFLARE_ZONES,
     PROVISIONING_API_KEY, ODOO_DEFAULT_ADMIN_PASSWORD, ODOO_DEFAULT_ADMIN_LOGIN,
     ODOO_DB_HOST, ODOO_DB_USER, ODOO_DB_PASSWORD,
+    get_runtime_int, get_runtime_json, get_runtime_kv_map, get_runtime_setting,
 )
 
 logger = logging.getLogger(__name__)
 
 router = APIRouter(prefix="/api/provisioning", tags=["Provisioning"])
 
+
+def _provisioning_api_key() -> str:
+    return get_runtime_setting("PROVISIONING_API_KEY", PROVISIONING_API_KEY)
+
+
+def _require_api_key(x_api_key: Optional[str]) -> None:
+    if x_api_key != _provisioning_api_key():
+        raise HTTPException(status_code=401, detail="API key inválida")
+
+
+def _cloudflare_api_token() -> str:
+    return get_runtime_setting("CLOUDFLARE_API_TOKEN", CLOUDFLARE_API_TOKEN)
+
+
+def _cloudflare_zones() -> dict[str, str]:
+    return get_runtime_kv_map("CLOUDFLARE_ZONES", CLOUDFLARE_ZONES)
+
+
+def _cloudflare_tunnel_id() -> str:
+    return get_runtime_setting("CLOUDFLARE_TUNNEL_ID", CLOUDFLARE_TUNNEL_ID)
+
+
+def _odoo_primary_ip() -> str:
+    return get_runtime_setting("ODOO_PRIMARY_IP", ODOO_PRIMARY_IP)
+
+
+def _odoo_primary_api_port() -> int:
+    return get_runtime_int("ODOO_PRIMARY_API_PORT", ODOO_PRIMARY_API_PORT)
+
+
+def _odoo_primary_pct_id() -> int:
+    return get_runtime_int("ODOO_PRIMARY_PCT_ID", ODOO_PRIMARY_PCT_ID)
+
+
+def _odoo_base_domain() -> str:
+    return get_runtime_setting("ODOO_BASE_DOMAIN", ODOO_BASE_DOMAIN)
+
+
+def _odoo_extra_nodes() -> list:
+    raw_nodes = get_runtime_json("ODOO_EXTRA_NODES_JSON", [])
+    if isinstance(raw_nodes, dict):
+        raw_nodes = raw_nodes.get("servers", [])
+    return raw_nodes if isinstance(raw_nodes, list) else []
+
+
+def _odoo_default_admin_login() -> str:
+    return get_runtime_setting("ODOO_DEFAULT_ADMIN_LOGIN", ODOO_DEFAULT_ADMIN_LOGIN)
+
+
+def _odoo_db_host() -> str:
+    return get_runtime_setting("ODOO_DB_HOST", ODOO_DB_HOST)
+
+
+def _odoo_db_user() -> str:
+    return get_runtime_setting("ODOO_DB_USER", ODOO_DB_USER)
+
+
+def _odoo_db_password() -> str:
+    return get_runtime_setting("ODOO_DB_PASSWORD", ODOO_DB_PASSWORD)
+
 # Configuración de servidores Odoo — from env via config.py
 def _load_odoo_servers() -> tuple[dict, dict]:
+    primary_pct_id = _odoo_primary_pct_id()
+    primary_api_port = _odoo_primary_api_port()
+    base_domain = _odoo_base_domain()
+    tunnel_id = _cloudflare_tunnel_id()
     servers = {
         "primary": {
-            "name": f"Servidor Principal (PCT {ODOO_PRIMARY_PCT_ID})",
-            "ip": ODOO_PRIMARY_IP,
-            "api_port": ODOO_PRIMARY_API_PORT,
-            "domain": ODOO_BASE_DOMAIN,
-            "tunnel_id": CLOUDFLARE_TUNNEL_ID,
-            "pct_id": ODOO_PRIMARY_PCT_ID,
+            "name": f"Servidor Principal (PCT {primary_pct_id})",
+            "ip": _odoo_primary_ip(),
+            "api_port": primary_api_port,
+            "domain": base_domain,
+            "tunnel_id": tunnel_id,
+            "pct_id": primary_pct_id,
         }
     }
 
     aliases = {
         "primary": "primary",
-        f"pct-{ODOO_PRIMARY_PCT_ID}": "primary",
-        f"pct{ODOO_PRIMARY_PCT_ID}": "primary",
-        f"servidor principal (pct {ODOO_PRIMARY_PCT_ID})": "primary",
-        f"servidor principal pct {ODOO_PRIMARY_PCT_ID}": "primary",
+        f"pct-{primary_pct_id}": "primary",
+        f"pct{primary_pct_id}": "primary",
+        f"servidor principal (pct {primary_pct_id})": "primary",
+        f"servidor principal pct {primary_pct_id}": "primary",
         "srv-odoo-server": "primary",
     }
 
-    raw = os.getenv("ODOO_EXTRA_NODES_JSON", "[]")
-    try:
-        parsed = json.loads(raw) if raw else []
-        if isinstance(parsed, dict):
-            parsed = parsed.get("servers", [])
-        if not isinstance(parsed, list):
-            parsed = []
-    except Exception:
-        parsed = []
+    parsed = _odoo_extra_nodes()
 
     for item in parsed:
         if not isinstance(item, dict):
@@ -76,9 +133,9 @@ def _load_odoo_servers() -> tuple[dict, dict]:
         servers[node_id] = {
             "name": item.get("name") or f"Servidor Odoo (PCT {pct_id})",
             "ip": ip,
-            "api_port": int(item.get("api_port") or ODOO_PRIMARY_API_PORT),
-            "domain": item.get("domain") or ODOO_BASE_DOMAIN,
-            "tunnel_id": item.get("tunnel_id") or CLOUDFLARE_TUNNEL_ID,
+            "api_port": int(item.get("api_port") or primary_api_port),
+            "domain": item.get("domain") or base_domain,
+            "tunnel_id": item.get("tunnel_id") or tunnel_id,
             "pct_id": pct_id,
         }
 
@@ -90,10 +147,6 @@ def _load_odoo_servers() -> tuple[dict, dict]:
 
 
 ODOO_SERVERS, SERVER_ALIASES = _load_odoo_servers()
-
-# Cloudflare zones — from env via config.py
-CF_API_TOKEN = CLOUDFLARE_API_TOKEN
-CF_ZONES = CLOUDFLARE_ZONES
 
 
 def _normalize_server_key(raw_server: Optional[str]) -> str:
@@ -128,9 +181,9 @@ def _normalize_tenant_db_name(subdomain: str) -> str:
 
 
 def _odoo_engine_for_db(db_name: str):
-    host = quote_plus(ODOO_DB_HOST or "")
-    user = quote_plus(ODOO_DB_USER or "")
-    pwd = quote_plus(ODOO_DB_PASSWORD or "")
+    host = quote_plus(_odoo_db_host() or "")
+    user = quote_plus(_odoo_db_user() or "")
+    pwd = quote_plus(_odoo_db_password() or "")
     if not host or not user:
         raise HTTPException(status_code=500, detail="Configuración ODOO_DB incompleta")
     url = f"postgresql+psycopg2://{user}:{pwd}@{host}:5432/{db_name}"
@@ -169,7 +222,7 @@ def _fetch_tenant_accounts_from_db(db_name: str, include_inactive: bool = True) 
         is_active = bool(row.get("active"))
         is_share = bool(row.get("share"))
         login = (row.get("login") or "").strip().lower()
-        is_admin_login = login in {"admin", (ODOO_DEFAULT_ADMIN_LOGIN or "").strip().lower()}
+        is_admin_login = login in {"admin", (_odoo_default_admin_login() or "").strip().lower()}
 
         if is_active:
             active_accounts += 1
@@ -335,14 +388,14 @@ class TenantDeleteRequest(BaseModel):
 # Funciones auxiliares
 async def create_cloudflare_dns(subdomain: str, domain: str, tunnel_id: str) -> bool:
     """Crea registro CNAME en Cloudflare"""
-    zone_id = CF_ZONES.get(domain)
+    zone_id = _cloudflare_zones().get(domain)
     if not zone_id:
         logger.error(f"Zone ID no encontrado para {domain}")
         return False
     
     url = f"https://api.cloudflare.com/client/v4/zones/{zone_id}/dns_records"
     headers = {
-        "Authorization": f"Bearer {CF_API_TOKEN}",
+        "Authorization": f"Bearer {_cloudflare_api_token()}",
         "Content-Type": "application/json"
     }
     
@@ -383,13 +436,13 @@ async def create_cloudflare_dns(subdomain: str, domain: str, tunnel_id: str) -> 
 
 async def delete_cloudflare_dns(subdomain: str, domain: str) -> bool:
     """Elimina registro DNS en Cloudflare"""
-    zone_id = CF_ZONES.get(domain)
+    zone_id = _cloudflare_zones().get(domain)
     if not zone_id:
         return False
     
     url = f"https://api.cloudflare.com/client/v4/zones/{zone_id}/dns_records"
     headers = {
-        "Authorization": f"Bearer {CF_API_TOKEN}",
+        "Authorization": f"Bearer {_cloudflare_api_token()}",
         "Content-Type": "application/json"
     }
     
@@ -418,7 +471,7 @@ async def call_odoo_local_api(server_config: dict, method: str, endpoint: str, d
     port = server_config.get("api_port", 8070)
     url = f"http://{ip}:{port}{endpoint}"
     
-    headers = {"X-API-KEY": PROVISIONING_API_KEY}
+    headers = {"X-API-KEY": _provisioning_api_key()}
     
     try:
         async with httpx.AsyncClient(timeout=60.0) as client:
@@ -458,14 +511,14 @@ async def provision_tenant(
     3. Crear el registro DNS en Cloudflare
     """
     # Validar API key
-    if x_api_key != PROVISIONING_API_KEY:
-        raise HTTPException(status_code=401, detail="API key inválida")
+    _require_api_key(x_api_key)
     
     # Validar servidor
     server_key, server_config = _resolve_server_config(request.server)
     
     # Validar dominio
-    if request.domain not in CF_ZONES:
+    zones = _cloudflare_zones()
+    if request.domain not in zones:
         raise HTTPException(status_code=400, detail=f"Dominio '{request.domain}' no soportado")
     
     subdomain = request.subdomain.lower().replace("-", "_")
@@ -500,8 +553,7 @@ async def delete_tenant(
     x_api_key: str = Header(None)
 ):
     """Elimina un tenant (BD + DNS) via API local"""
-    if x_api_key != PROVISIONING_API_KEY:
-        raise HTTPException(status_code=401, detail="API key inválida")
+    _require_api_key(x_api_key)
     
     server_config = ODOO_SERVERS["primary"]
     
@@ -526,8 +578,7 @@ async def delete_tenant(
 @router.get("/tenants")
 async def list_provisioned_tenants(x_api_key: str = Header(None)):
     """Lista todos los tenants provisionados via API local"""
-    if x_api_key != PROVISIONING_API_KEY:
-        raise HTTPException(status_code=401, detail="API key inválida")
+    _require_api_key(x_api_key)
     
     server_config = ODOO_SERVERS["primary"]
     
@@ -555,8 +606,7 @@ async def create_dns_record(
     x_api_key: str = Header(None)
 ):
     """Crea un registro DNS en Cloudflare"""
-    if x_api_key != PROVISIONING_API_KEY:
-        raise HTTPException(status_code=401, detail="API key inválida")
+    _require_api_key(x_api_key)
     
     tunnel_id = request.tunnel_id or ODOO_SERVERS["primary"]["tunnel_id"]
     
@@ -579,8 +629,7 @@ async def create_dns_record(
 @router.get("/servers")
 async def list_odoo_servers(x_api_key: str = Header(None)):
     """Lista servidores Odoo disponibles"""
-    if x_api_key != PROVISIONING_API_KEY:
-        raise HTTPException(status_code=401, detail="API key inválida")
+    _require_api_key(x_api_key)
     
     servers = []
     for key, config in ODOO_SERVERS.items():
@@ -598,7 +647,7 @@ async def list_odoo_servers(x_api_key: str = Header(None)):
 async def list_available_domains():
     """Lista dominios disponibles para provisioning (público)"""
     return {
-        "domains": list(CF_ZONES.keys()),
+        "domains": list(_cloudflare_zones().keys()),
         "default": "sajet.us"
     }
 
@@ -608,8 +657,7 @@ async def change_tenant_password(
     x_api_key: str = Header(None)
 ):
     """Cambia la contraseña del admin de un tenant"""
-    if x_api_key != PROVISIONING_API_KEY:
-        raise HTTPException(status_code=401, detail="API key inválida")
+    _require_api_key(x_api_key)
     
     server_key, server_config = _resolve_server_config(request.server)
     
@@ -620,9 +668,9 @@ async def change_tenant_password(
         logger.info(f"Cambiando contraseña para tenant: {subdomain} (server={server_key})")
         
         # Intentar conectar directamente a PostgreSQL
-        db_host = ODOO_DB_HOST
-        db_user = ODOO_DB_USER
-        db_password = ODOO_DB_PASSWORD
+        db_host = _odoo_db_host()
+        db_user = _odoo_db_user()
+        db_password = _odoo_db_password()
         
         try:
             result = subprocess.run(
@@ -662,7 +710,7 @@ async def change_tenant_password(
             async with httpx.AsyncClient(timeout=10.0) as client:
                 response = await client.put(
                     f"http://{server_config['ip']}:8070/api/tenant/password",
-                    headers={"X-API-KEY": PROVISIONING_API_KEY},
+                    headers={"X-API-KEY": _provisioning_api_key()},
                     json={"subdomain": subdomain, "new_password": new_password}
                 )
                 
@@ -695,8 +743,7 @@ async def list_tenant_accounts(
     x_api_key: str = Header(None),
 ):
     """Lista cuentas vinculadas a un tenant y retorna conteo para asientos activos por plan."""
-    if x_api_key != PROVISIONING_API_KEY:
-        raise HTTPException(status_code=401, detail="API key inválida")
+    _require_api_key(x_api_key)
 
     server_key, server_config = _resolve_server_config(server)
     db_name = _normalize_tenant_db_name(subdomain)
@@ -737,8 +784,7 @@ async def update_tenant_account_credentials(
     x_api_key: str = Header(None),
 ):
     """Actualiza credenciales o estado de una cuenta específica dentro del tenant."""
-    if x_api_key != PROVISIONING_API_KEY:
-        raise HTTPException(status_code=401, detail="API key inválida")
+    _require_api_key(x_api_key)
 
     if not request.user_id and not request.login:
         raise HTTPException(status_code=400, detail="Debes enviar user_id o login")
@@ -842,8 +888,7 @@ async def sync_tenant_accounts_seat_count(
     x_api_key: str = Header(None),
 ):
     """Sincroniza conteo de usuarios activos facturables del tenant con los asientos del plan."""
-    if x_api_key != PROVISIONING_API_KEY:
-        raise HTTPException(status_code=401, detail="API key inválida")
+    _require_api_key(x_api_key)
 
     server_key, server_config = _resolve_server_config(request.server)
     db_name = _normalize_tenant_db_name(request.subdomain)
@@ -881,8 +926,7 @@ async def suspend_tenant(
     x_api_key: str = Header(None)
 ):
     """Suspende o reactiva un tenant (cierra acceso por falta de pago)"""
-    if x_api_key != PROVISIONING_API_KEY:
-        raise HTTPException(status_code=401, detail="API key inválida")
+    _require_api_key(x_api_key)
     
     server_key, server_config = _resolve_server_config(request.server)
     
@@ -913,9 +957,9 @@ async def suspend_tenant(
             db.close()
         
         # Intentar conectar directamente a PostgreSQL
-        db_host = ODOO_DB_HOST
-        db_user = ODOO_DB_USER
-        db_password = ODOO_DB_PASSWORD
+        db_host = _odoo_db_host()
+        db_user = _odoo_db_user()
+        db_password = _odoo_db_password()
         
         if request.suspend:
             sql_cmd = f"""UPDATE res_users SET active = false WHERE login != 'admin';"""
@@ -956,7 +1000,7 @@ async def suspend_tenant(
             async with httpx.AsyncClient(timeout=10.0) as client:
                 response = await client.put(
                     f"http://{server_config['ip']}:8070/api/tenant/suspend",
-                    headers={"X-API-KEY": PROVISIONING_API_KEY},
+                    headers={"X-API-KEY": _provisioning_api_key()},
                     json={
                         "subdomain": subdomain,
                         "suspend": request.suspend,
@@ -992,8 +1036,7 @@ async def update_tenant_email(
     x_api_key: str = Header(None)
 ):
     """Actualiza el email del usuario admin de un tenant y sincroniza con BD local"""
-    if x_api_key != PROVISIONING_API_KEY:
-        raise HTTPException(status_code=401, detail="API key inválida")
+    _require_api_key(x_api_key)
     
     server_key, server_config = _resolve_server_config(request.server)
     
@@ -1004,9 +1047,9 @@ async def update_tenant_email(
         logger.info(f"Actualizando email para tenant: {subdomain} → {new_email}")
         
         # 1. Actualizar en PostgreSQL de Odoo (tenant database)
-        db_host = ODOO_DB_HOST
-        db_user = ODOO_DB_USER
-        db_password = ODOO_DB_PASSWORD
+        db_host = _odoo_db_host()
+        db_user = _odoo_db_user()
+        db_password = _odoo_db_password()
         
         try:
             result = subprocess.run(
@@ -1070,8 +1113,7 @@ async def repair_deployments(x_api_key: str = Header(None)):
     Busca suscripciones con tenant_provisioned=True que no tienen
     un registro TenantDeployment y los crea automáticamente.
     """
-    if x_api_key != PROVISIONING_API_KEY:
-        raise HTTPException(status_code=401, detail="API key inválida")
+    _require_api_key(x_api_key)
     
     from ..services.odoo_provisioner import repair_missing_deployments
     
@@ -1089,8 +1131,7 @@ async def deployment_status(x_api_key: str = Header(None)):
     Muestra el estado completo de todos los deployments,
     incluyendo suscripciones sin deployment y deployments sin tunnel.
     """
-    if x_api_key != PROVISIONING_API_KEY:
-        raise HTTPException(status_code=401, detail="API key inválida")
+    _require_api_key(x_api_key)
     
     from ..models.database import (
         SessionLocal, Subscription, Customer, TenantDeployment, LXCContainer
@@ -1167,8 +1208,7 @@ async def tenant_maintenance(
     - {"repair": true} → Repara todos los tenants con problemas
     - {"tenant": "sattra", "repair": true} → Repara solo 'sattra'
     """
-    if x_api_key != PROVISIONING_API_KEY:
-        raise HTTPException(status_code=401, detail="API key inválida")
+    _require_api_key(x_api_key)
     
     from ..config import (
         ODOO_FILESTORE_PATH, ODOO_FILESTORE_PCT_ID, ODOO_TEMPLATE_DB
@@ -1268,4 +1308,3 @@ async def tenant_maintenance(
         "tenants_repaired": len(repaired) if request.repair else 0,
         "results": results,
     }
-

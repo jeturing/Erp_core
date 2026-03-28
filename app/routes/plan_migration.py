@@ -8,11 +8,16 @@ import logging
 
 from ..models.database import SessionLocal
 from ..services.plan_migration_service import PlanMigrationService
-from ..config import PROVISIONING_API_KEY
+from ..config import PROVISIONING_API_KEY, get_runtime_setting
 
 logger = logging.getLogger(__name__)
 
 router = APIRouter(prefix="/api/plan-migration", tags=["Plan Migration"])
+
+
+def _require_api_key(x_api_key: Optional[str]) -> None:
+    if x_api_key != get_runtime_setting("PROVISIONING_API_KEY", PROVISIONING_API_KEY):
+        raise HTTPException(status_code=401, detail="API key inválida")
 
 
 class TenantEvaluationRequest(BaseModel):
@@ -54,8 +59,7 @@ async def evaluate_tenant(
     }
     ```
     """
-    if x_api_key != PROVISIONING_API_KEY:
-        raise HTTPException(status_code=401, detail="API key inválida")
+    _require_api_key(x_api_key)
     
     db = SessionLocal()
     try:
@@ -85,8 +89,7 @@ async def evaluate_all_tenants(
     - Reportes ejecutivos
     - Identificar tenants que requieren atención
     """
-    if x_api_key != PROVISIONING_API_KEY:
-        raise HTTPException(status_code=401, detail="API key inválida")
+    _require_api_key(x_api_key)
     
     db = SessionLocal()
     try:
@@ -118,8 +121,7 @@ async def get_migration_summary(
     
     Incluye listas detalladas por cada estado.
     """
-    if x_api_key != PROVISIONING_API_KEY:
-        raise HTTPException(status_code=401, detail="API key inválida")
+    _require_api_key(x_api_key)
     
     db = SessionLocal()
     try:
@@ -173,8 +175,7 @@ async def auto_migrate_tenant(
     }
     ```
     """
-    if x_api_key != PROVISIONING_API_KEY:
-        raise HTTPException(status_code=401, detail="API key inválida")
+    _require_api_key(x_api_key)
     
     db = SessionLocal()
     try:
@@ -212,8 +213,7 @@ async def batch_migrate_tenants(
     ADVERTENCIA: Usar con precaución en producción.
     Se recomienda ejecutar primero con dry_run=true.
     """
-    if x_api_key != PROVISIONING_API_KEY:
-        raise HTTPException(status_code=401, detail="API key inválida")
+    _require_api_key(x_api_key)
     
     db = SessionLocal()
     try:
@@ -272,8 +272,7 @@ async def list_available_plans(
     - Comparar planes
     - Planificación de capacidad
     """
-    if x_api_key != PROVISIONING_API_KEY:
-        raise HTTPException(status_code=401, detail="API key inválida")
+    _require_api_key(x_api_key)
     
     db = SessionLocal()
     try:
@@ -318,8 +317,7 @@ async def get_tenant_size(
     - filestore_size_mb: Tamaño del filestore
     - total_size_mb: Suma total
     """
-    if x_api_key != PROVISIONING_API_KEY:
-        raise HTTPException(status_code=401, detail="API key inválida")
+    _require_api_key(x_api_key)
     
     db = SessionLocal()
     try:

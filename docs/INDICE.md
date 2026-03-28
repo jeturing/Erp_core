@@ -1,9 +1,9 @@
 # INDICE DOCUMENTAL VIGENTE
 
 Estado: vigente  
-Validado: 2026-02-22  
+Validado: 2026-03-27  
 Entorno objetivo: `/opt/Erp_core` (PCT160 + PCT105)
-Auditoria documental: 2026-02-22 (sin enlaces internos rotos)
+Auditoria documental: 2026-03-27 (incluye inventario canonico de contratos y mapa de ecosistema)
 
 Este documento es la entrada oficial para navegar la documentacion de `Erp_core`.
 
@@ -106,6 +106,19 @@ Este documento es la entrada oficial para navegar la documentacion de `Erp_core`
 ### 2.10 Historico (`docs/09-historico/`)
 
 - `docs/09-historico/INDICE_PHASE3.md`
+
+### 2.11 Contratos y ecosistema (`docs/contratos/`)
+
+- `docs/contratos/README.md`
+- `docs/contratos/01-sajet-auth-admin-acceso.md`
+- `docs/contratos/02-sajet-comercial-clientes-partners.md`
+- `docs/contratos/03-sajet-tenants-provisioning-infra.md`
+- `docs/contratos/04-sajet-billing-pagos-webhooks.md`
+- `docs/contratos/05-odoo-pct-v17-contratos-http.md`
+- `docs/contratos/06-odoo-pct-v19-contratos-http.md`
+- `docs/contratos/07-odoo-integraciones-salientes.md`
+- `docs/contratos/08-sync-odoo-sajet.md`
+- `docs/contratos/09-mapa-ecosistema-y-puntos-de-quiebre.md`
 
 ## 3) Flujos funcionales (`docs/flujos/`)
 

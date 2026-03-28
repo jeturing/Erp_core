@@ -1,5 +1,6 @@
 import api from './client';
 import type {
+  AddonSubscriptionItem,
   PartnerOnboardingStatus,
   PartnerDashboard,
   PartnerLeadsResponse,
@@ -7,6 +8,7 @@ import type {
   PartnerProfile,
   PartnerClientItem,
   PartnerCommissionItem,
+  ServiceCatalogItemType,
 } from '../types';
 
 const BASE = '/api/partner-portal';
@@ -33,6 +35,8 @@ export const partnerPortalApi = {
     charges_enabled: boolean;
     details_submitted: boolean;
     payouts_enabled: boolean;
+    requirements_currently_due: string[];
+    requirements_disabled_reason: string | null;
     onboarding_step: number;
     onboarding_complete: boolean;
   }> {
@@ -98,6 +102,22 @@ export const partnerPortalApi = {
     tenant_error?: string;
   }> {
     return api.post(`${BASE}/clients`, data);
+  },
+
+  async getClientServiceCatalog(customerId: number): Promise<{ items: ServiceCatalogItemType[]; total: number }> {
+    return api.get(`${BASE}/clients/${customerId}/services/catalog`);
+  },
+
+  async getClientServiceSubscriptions(customerId: number): Promise<{ items: AddonSubscriptionItem[]; total: number }> {
+    return api.get(`${BASE}/clients/${customerId}/services/subscriptions`);
+  },
+
+  async purchaseClientService(customerId: number, catalog_item_id: number, quantity = 1): Promise<{
+    message: string;
+    addon: AddonSubscriptionItem;
+    invoice?: { id: number; invoice_number: string; total: number; currency: string; status: string; stripe_invoice_id?: string | null; payment_url?: string | null } | null;
+  }> {
+    return api.post(`${BASE}/clients/${customerId}/services/purchase`, { catalog_item_id, quantity });
   },
 
   // ── Commissions ──

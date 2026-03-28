@@ -8,11 +8,16 @@ import logging
 
 from ..models.database import SessionLocal
 from ..services.storage_alert_service import StorageAlertService
-from ..config import PROVISIONING_API_KEY
+from ..config import PROVISIONING_API_KEY, get_runtime_setting
 
 logger = logging.getLogger(__name__)
 
 router = APIRouter(prefix="/api/storage-alerts", tags=["Storage Alerts"])
+
+
+def _require_api_key(x_api_key: Optional[str]) -> None:
+    if x_api_key != get_runtime_setting("PROVISIONING_API_KEY", PROVISIONING_API_KEY):
+        raise HTTPException(status_code=401, detail="API key inválida")
 
 
 class AlertResponse(BaseModel):
@@ -46,8 +51,7 @@ async def evaluate_tenant_alert(
     - alert_created: bool indicando si se creó una alerta nueva
     - email_sent: bool indicando si se envió notificación
     """
-    if x_api_key != PROVISIONING_API_KEY:
-        raise HTTPException(status_code=401, detail="API key inválida")
+    _require_api_key(x_api_key)
     
     db = SessionLocal()
     try:
@@ -77,8 +81,7 @@ async def evaluate_all_alerts(
     - Generación de alertas batch
     - Reportes de status global
     """
-    if x_api_key != PROVISIONING_API_KEY:
-        raise HTTPException(status_code=401, detail="API key inválida")
+    _require_api_key(x_api_key)
     
     db = SessionLocal()
     try:
@@ -110,8 +113,7 @@ async def get_active_alerts(
     
     Disponible para: Admin
     """
-    if x_api_key != PROVISIONING_API_KEY:
-        raise HTTPException(status_code=401, detail="API key inválida")
+    _require_api_key(x_api_key)
     
     db = SessionLocal()
     try:
@@ -137,8 +139,7 @@ async def get_customer_alerts(
     
     Disponible para: Admin + Tenant
     """
-    if x_api_key != PROVISIONING_API_KEY:
-        raise HTTPException(status_code=401, detail="API key inválida")
+    _require_api_key(x_api_key)
     
     db = SessionLocal()
     try:
@@ -173,8 +174,7 @@ async def get_alerts_summary(
     
     Disponible para: Admin
     """
-    if x_api_key != PROVISIONING_API_KEY:
-        raise HTTPException(status_code=401, detail="API key inválida")
+    _require_api_key(x_api_key)
     
     db = SessionLocal()
     try:

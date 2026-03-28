@@ -1,0 +1,103 @@
+{
+  "created_at_utc": "2026-03-28T01:23:41.441158Z",
+  "zone_id": "4a83b88793ac3688486ace69b6ae80f9",
+  "targets": [
+    {
+      "type": "TXT",
+      "name": "mail.sajet.us",
+      "content": "v=spf1 a mx include:spf.mail.sajet.us ~all",
+      "ttl": 1,
+      "comment": "SPF subdominio correo - Postal relay local 151"
+    },
+    {
+      "type": "TXT",
+      "name": "postal-cnApah._domainkey.mail.sajet.us",
+      "content": "v=DKIM1; t=s; h=sha256; p=MIGfMA0GCSqGSIb3DQEBAQUAA4GNADCBiQKBgQDIsgPh/pFMCrp3rPx0HNNajg9J7URxZHhkULigOAtXwEKyn6foWV53uYi+hcXuZopVX+U0u1PbXwU9VtEYdqWyTJ/Ns47Zh0glNDPqNMI+pmK7kndSG+NrLY1VhrGXsuye/C9M+GL+FuT2olE3BJ9brm3jEPSvKvHd3e/IxzObdQIDAQAB;",
+      "ttl": 1,
+      "comment": "Postal DKIM selector cnApah for mail.sajet.us"
+    },
+    {
+      "type": "TXT",
+      "name": "postal-cnApah._domainkey.sajet.us",
+      "content": "v=DKIM1; t=s; h=sha256; p=MIGfMA0GCSqGSIb3DQEBAQUAA4GNADCBiQKBgQDIsgPh/pFMCrp3rPx0HNNajg9J7URxZHhkULigOAtXwEKyn6foWV53uYi+hcXuZopVX+U0u1PbXwU9VtEYdqWyTJ/Ns47Zh0glNDPqNMI+pmK7kndSG+NrLY1VhrGXsuye/C9M+GL+FuT2olE3BJ9brm3jEPSvKvHd3e/IxzObdQIDAQAB;",
+      "ttl": 1,
+      "comment": "Postal DKIM selector cnApah compatibility for sajet.us"
+    },
+    {
+      "type": "MX",
+      "name": "mail.sajet.us",
+      "content": "mail.sajet.us",
+      "priority": 10,
+      "ttl": 1,
+      "comment": "Inbound MX for local relay 151"
+    }
+  ],
+  "before": [
+    {
+      "id": "d46e351d11265faa95af072f72460d13",
+      "name": "mail.sajet.us",
+      "type": "A",
+      "content": "208.115.125.27",
+      "proxiable": true,
+      "proxied": false,
+      "ttl": 1,
+      "settings": {},
+      "meta": {},
+      "comment": "Servidor SMTP relay - PCT mail",
+      "tags": [],
+      "created_on": "2026-03-23T08:15:24.154403Z",
+      "modified_on": "2026-03-23T08:15:24.154403Z",
+      "comment_modified_on": "2026-03-23T08:15:24.154403Z"
+    },
+    {
+      "id": "e1303dbd1c09cd9abb9b81144ff3bd97",
+      "name": "psrp.mail.sajet.us",
+      "type": "CNAME",
+      "content": "rp.mail.sajet.us",
+      "proxiable": true,
+      "proxied": false,
+      "ttl": 1,
+      "settings": {
+        "flatten_cname": false
+      },
+      "meta": {},
+      "comment": "Postal return-path for sajet.us",
+      "tags": [],
+      "created_on": "2026-03-25T00:45:32.308478Z",
+      "modified_on": "2026-03-25T00:45:32.308478Z",
+      "comment_modified_on": "2026-03-25T00:45:32.308478Z"
+    },
+    {
+      "id": "9c8a788689898fe2e2c83267fb276709",
+      "name": "mail.sajet.us",
+      "type": "TXT",
+      "content": "v=spf1 ip4:208.115.125.27 include:spf.mail.sajet.us ~all",
+      "proxiable": false,
+      "proxied": false,
+      "ttl": 1,
+      "settings": {},
+      "meta": {},
+      "comment": "SPF subdominio correo",
+      "tags": [],
+      "created_on": "2026-03-23T08:15:24.480419Z",
+      "modified_on": "2026-03-25T00:49:12.081903Z",
+      "comment_modified_on": "2026-03-23T08:15:24.480419Z"
+    },
+    {
+      "id": "37f6b1b1456cbe8855f312e94624eb48",
+      "name": "spf.mail.sajet.us",
+      "type": "TXT",
+      "content": "v=spf1 ip4:208.115.125.27 ~all",
+      "proxiable": false,
+      "proxied": false,
+      "ttl": 1,
+      "settings": {},
+      "meta": {},
+      "comment": "Postal server authorized sending IPs",
+      "tags": [],
+      "created_on": "2026-03-25T00:47:03.99596Z",
+      "modified_on": "2026-03-25T00:47:03.99596Z",
+      "comment_modified_on": "2026-03-25T00:47:03.99596Z"
+    }
+  ]
+}

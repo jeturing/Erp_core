@@ -16,20 +16,31 @@ from ..services.stripe_billing import (
     push_invoice_to_stripe,
     create_checkout_for_invoice,
 )
+from ..config import get_runtime_setting
 from ..services.tunnel_lifecycle import get_customer_tunnel_info
 import stripe
-import os
 import hashlib
 import secrets
 import logging
 from datetime import datetime
 from ..services.domain_manager import DomainManager
+from ..services.addon_billing_service import (
+    list_available_addon_services,
+    list_customer_addon_subscriptions,
+    purchase_customer_addon,
+)
 
 router = APIRouter(prefix="/tenant", tags=["Tenant Portal"])
 logger = logging.getLogger(__name__)
 
-# Stripe config
-stripe.api_key = os.getenv("STRIPE_SECRET_KEY")
+
+def _configure_stripe() -> str:
+    stripe.api_key = get_runtime_setting("STRIPE_SECRET_KEY", "")
+    return stripe.api_key
+
+
+def _app_url() -> str:
+    return get_runtime_setting("APP_URL", "http://localhost:4443")
 
 
 def get_current_tenant(request: Request, access_token: str = Cookie(None)):
@@ -138,6 +149,7 @@ async def get_tenant_info(request: Request, access_token: str = Cookie(None)):
 @router.get("/api/billing")
 async def get_tenant_billing(request: Request, access_token: str = Cookie(None)):
     """Obtiene información de facturación del tenant."""
+    _configure_stripe()
     token_data = get_current_tenant(request, access_token)
     tenant_id = token_data.get("tenant_id")
 
@@ -201,6 +213,7 @@ async def get_tenant_billing(request: Request, access_token: str = Cookie(None))
 @router.post("/api/update-payment")
 async def update_payment_method(request: Request, access_token: str = Cookie(None)):
     """Crea una sesión de Stripe para actualizar el método de pago."""
+    _configure_stripe()
     token_data = get_current_tenant(request, access_token)
     tenant_id = token_data.get("tenant_id")
 
@@ -220,8 +233,8 @@ async def update_payment_method(request: Request, access_token: str = Cookie(Non
         session = stripe.checkout.Session.create(
             customer=customer.stripe_customer_id,
             mode="setup",
-            success_url=f"{os.getenv('APP_URL', 'http://localhost:4443')}/tenant/portal?payment_updated=true",
-            cancel_url=f"{os.getenv('APP_URL', 'http://localhost:4443')}/tenant/portal",
+            success_url=f"{_app_url()}/tenant/portal?payment_updated=true",
+            cancel_url=f"{_app_url()}/tenant/portal",
         )
         
         return {"checkout_url": session.url}
@@ -235,6 +248,7 @@ async def update_payment_method(request: Request, access_token: str = Cookie(Non
 @router.post("/api/cancel-subscription")
 async def cancel_subscription(request: Request, access_token: str = Cookie(None)):
     """Cancela la suscripción del tenant."""
+    _configure_stripe()
     token_data = get_current_tenant(request, access_token)
     tenant_id = token_data.get("tenant_id")
 
@@ -282,6 +296,11 @@ class ChangePasswordRequest(BaseModel):
 
 class DomainRequestBody(BaseModel):
     external_domain: str = Field(..., min_length=3, example="miempresa.com")
+
+
+class PortalAddonPurchaseRequest(BaseModel):
+    catalog_item_id: int
+    quantity: int = Field(default=1, ge=1)
 
 
 # ─────────────────────────────────────────────────────────
@@ -466,6 +485,77 @@ async def get_tenant_users(request: Request, access_token: str = Cookie(None)):
 
 
 # ─────────────────────────────────────────────────────────
+# Servicios adicionales / add-ons
+# ─────────────────────────────────────────────────────────
+
+@router.get("/api/services/catalog")
+async def get_tenant_service_catalog(request: Request, access_token: str = Cookie(None)):
+    """Catálogo de add-ons disponibles para el tenant actual."""
+    token_data = get_current_tenant(request, access_token)
+    tenant_id = token_data.get("tenant_id")
+
+    if not tenant_id:
+        raise HTTPException(status_code=403, detail="Contexto de tenant requerido")
+
+    db = SessionLocal()
+    try:
+        items = list_available_addon_services(db, tenant_id)
+        return {"items": items, "total": len(items)}
+    finally:
+        db.close()
+
+
+@router.get("/api/services/subscriptions")
+async def get_tenant_service_subscriptions(request: Request, access_token: str = Cookie(None)):
+    """Servicios adicionales activos del tenant."""
+    token_data = get_current_tenant(request, access_token)
+    tenant_id = token_data.get("tenant_id")
+
+    if not tenant_id:
+        raise HTTPException(status_code=403, detail="Contexto de tenant requerido")
+
+    db = SessionLocal()
+    try:
+        items = list_customer_addon_subscriptions(db, tenant_id)
+        return {"items": items, "total": len(items)}
+    finally:
+        db.close()
+
+
+@router.post("/api/services/purchase")
+async def purchase_tenant_service(
+    body: PortalAddonPurchaseRequest,
+    request: Request,
+    access_token: str = Cookie(None),
+):
+    """Compra un add-on para el tenant y genera factura automática."""
+    token_data = get_current_tenant(request, access_token)
+    tenant_id = token_data.get("tenant_id")
+
+    if not tenant_id:
+        raise HTTPException(status_code=403, detail="Contexto de tenant requerido")
+
+    db = SessionLocal()
+    try:
+        result = purchase_customer_addon(
+            db=db,
+            customer_id=tenant_id,
+            catalog_item_id=body.catalog_item_id,
+            quantity=body.quantity,
+            acquired_via="tenant_portal",
+        )
+        return {
+            "message": "Servicio adicional adquirido y facturado",
+            **result,
+        }
+    except ValueError as exc:
+        db.rollback()
+        raise HTTPException(status_code=400, detail=str(exc))
+    finally:
+        db.close()
+
+
+# ─────────────────────────────────────────────────────────
 # Facturas ERP (BD local) con payment links
 # ─────────────────────────────────────────────────────────
 
@@ -475,6 +565,7 @@ async def get_tenant_invoices(request: Request, access_token: str = Cookie(None)
     Lista facturas del ERP (BD local) del tenant.
     Incluye payment_url de Stripe para facturas pendientes.
     """
+    _configure_stripe()
     token_data = get_current_tenant(request, access_token)
     tenant_id = token_data.get("tenant_id")
 

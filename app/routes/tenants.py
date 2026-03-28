@@ -7,7 +7,7 @@ from pydantic import BaseModel, Field, field_validator
 from typing import Optional, List
 import re
 from ..models.database import Customer, Subscription, SubscriptionStatus, SessionLocal, Partner, Plan, BillingMode, PayerType, CollectorType, InvoiceIssuer
-from ..models.database import CustomDomain, DomainVerificationStatus
+from ..models.database import CustomDomain, DomainVerificationStatus, TenantDeployment
 from ..services.odoo_database_manager import (
     get_available_servers,
     get_servers_status,
@@ -19,9 +19,12 @@ from ..services.odoo_database_manager import (
     create_tenant_api,
     OdooDatabaseManager,
     ODOO_SERVERS,
+    refresh_odoo_servers,
     DEFAULT_ADMIN_LOGIN,
     DEFAULT_ADMIN_PASSWORD,
     query_admin_login_pg,
+    COUNTRY_LOCALIZATION,
+    _resolve_blueprint_modules,
 )
 from ..services.email_service import send_tenant_backup_deleted
 from .auth import verify_token
@@ -31,6 +34,7 @@ import httpx
 import logging
 import psycopg
 import os
+import xmlrpc.client
 import secrets
 import string
 from ..models.database import AuditEventRecord
@@ -143,6 +147,8 @@ class TenantCreateRequest(BaseModel):
     server_id: Optional[str] = Field(None, description="ID del servidor (None = automático)")
     plan: Optional[str] = Field("basic", description="Plan de suscripción")
     partner_id: Optional[int] = Field(None, description="ID del partner que origina este tenant")
+    country_code: Optional[str] = Field("DO", description="Código ISO del país (DO, US, MX, CO, ES, PA, CL, AR, PE)")
+    blueprint_package_name: Optional[str] = Field(None, description="Nombre del paquete/blueprint (ej: pkg_restaurantes, pkg_retail)")
     use_fast_method: Optional[bool] = Field(True, description="Usar método SQL directo (más rápido)")
 
 
@@ -190,7 +196,30 @@ def _get_tenant_primary_url(customer: Customer, subdomain: str) -> str:
 async def get_all_tenants_from_servers():
     """Obtiene tenants de todos los servidores disponibles usando OdooDatabaseManager"""
     all_tenants = []
-    
+
+    # Precargar TenantDeployment + nodo activo por subdomain
+    _deploy_map: dict = {}  # subdomain -> {node_name, backend_host}
+    try:
+        _db_pre = SessionLocal()
+        from ..models.database import ProxmoxNode
+        _deployments = (
+            _db_pre.query(TenantDeployment)
+            .options()
+            .all()
+        )
+        for _dep in _deployments:
+            _node_name = None
+            if _dep.active_node_id:
+                _node = _db_pre.query(ProxmoxNode).filter(ProxmoxNode.id == _dep.active_node_id).first()
+                _node_name = _node.hostname if _node else None
+            _deploy_map[_dep.subdomain] = {
+                "node_name": _node_name or _dep.backend_host,
+                "backend_host": _dep.backend_host,
+            }
+        _db_pre.close()
+    except Exception as _e:
+        logger.warning(f"No se pudo precargar deploy_map: {_e}")
+
     servers = await get_available_servers()
     
     for server_info in servers:
@@ -253,6 +282,7 @@ async def get_all_tenants_from_servers():
                         if partner:
                             partner_name = partner.company_name
                     
+                    _dep_info = _deploy_map.get(customer.subdomain, {})
                     all_tenants.append({
                         "id": sub.id,
                         "company_name": customer.company_name,
@@ -263,6 +293,8 @@ async def get_all_tenants_from_servers():
                         "tunnel_active": sub.status == SubscriptionStatus.active,
                         "server": server_info.get("name"),
                         "server_id": server_info.get("id"),
+                        "node_name": _dep_info.get("node_name") or server_info.get("name"),
+                        "backend_host": _dep_info.get("backend_host") or server_info.get("ip"),
                         "created_at": sub.created_at.isoformat() + "Z" if sub.created_at else None,
                             "url": _get_tenant_primary_url(customer, customer.subdomain),
                         "partner_id": sub.owner_partner_id,
@@ -296,6 +328,7 @@ async def get_all_tenants_from_servers():
                         
                         logger.info(f"Auto-registrado tenant '{db_name}' en BD local (email={email_to_show})")
                         
+                        _dep_info2 = _deploy_map.get(db_name, {})
                         all_tenants.append({
                             "id": new_sub.id,
                             "company_name": new_customer.company_name,
@@ -306,6 +339,8 @@ async def get_all_tenants_from_servers():
                             "tunnel_active": True,
                             "server": server_info.get("name"),
                             "server_id": server_info.get("id"),
+                            "node_name": _dep_info2.get("node_name") or server_info.get("name"),
+                            "backend_host": _dep_info2.get("backend_host") or server_info.get("ip"),
                             "created_at": new_customer.created_at.isoformat() + "Z" if new_customer.created_at else None,
                                 "url": _get_tenant_primary_url(new_customer, db_name),
                             "partner_id": None,
@@ -317,6 +352,7 @@ async def get_all_tenants_from_servers():
                     except Exception as auto_err:
                         logger.warning(f"No se pudo auto-registrar {db_name}: {auto_err}")
                         db.rollback()
+                        _dep_info3 = _deploy_map.get(db_name, {})
                         all_tenants.append({
                             "id": abs(hash(db_name)) % 10000,
                             "company_name": db_name.replace("_", " ").title(),
@@ -327,6 +363,8 @@ async def get_all_tenants_from_servers():
                             "tunnel_active": True,
                             "server": server_info.get("name"),
                             "server_id": server_info.get("id"),
+                            "node_name": _dep_info3.get("node_name") or server_info.get("name"),
+                            "backend_host": _dep_info3.get("backend_host") or server_info.get("ip"),
                             "created_at": None,
                             "url": f"https://{db_name}.sajet.us",
                                 # Fallback: no customer object, usa sajet.us
@@ -666,6 +704,8 @@ async def create_tenant(
                 server_id=payload.server_id,
                 admin_login=effective_admin_login,
                 admin_password=effective_admin_password,
+                country_code=payload.country_code,
+                blueprint_package_name=payload.blueprint_package_name,
             )
             fast_error_code = str(fast_result.get("error_code") or "")
 
@@ -683,13 +723,16 @@ async def create_tenant(
                     f"Fast path falló para '{payload.subdomain}' ({fast_error_code}). "
                     f"Aplicando fallback estándar. Detalle: {fallback_reason}"
                 )
+                _loc = COUNTRY_LOCALIZATION.get((payload.country_code or 'DO').upper(), {})
                 result = await provision_tenant(
                     subdomain=payload.subdomain,
                     admin_login=effective_admin_login,
                     admin_password=effective_admin_password,
                     server_id=payload.server_id,
                     demo=False,
-                    lang="es_MX"
+                    lang=_loc.get('lang', 'es_DO'),
+                    country_code=payload.country_code,
+                    blueprint_package_name=payload.blueprint_package_name,
                 )
                 creation_mode = "fallback_standard"
             else:
@@ -698,13 +741,16 @@ async def create_tenant(
                     creation_mode = "fast"
         else:
             # Método tradicional via HTTP API de Odoo
+            _loc2 = COUNTRY_LOCALIZATION.get((payload.country_code or 'DO').upper(), {})
             result = await provision_tenant(
                 subdomain=payload.subdomain,
                 admin_login=effective_admin_login,
                 admin_password=effective_admin_password,
                 server_id=payload.server_id,
                 demo=False,
-                lang="es_MX"
+                lang=_loc2.get('lang', 'es_DO'),
+                country_code=payload.country_code,
+                blueprint_package_name=payload.blueprint_package_name,
             )
             creation_mode = "fallback_standard"
         
@@ -742,6 +788,31 @@ async def create_tenant(
                     result["customer_id"] = customer.id
                     result["subscription_id"] = subscription.id
                     logger.info(f"Tenant '{payload.subdomain}' registrado en BD local (customer={customer.id})")
+
+                    # ── Crear TenantDeployment con campos multi-nodo ──
+                    from ..services.deployment_writer import ensure_tenant_deployment
+                    dep_result = ensure_tenant_deployment(
+                        subdomain=payload.subdomain,
+                        subscription_id=subscription.id,
+                        customer_id=customer.id,
+                        server_id=result.get("server"),
+                        server_ip=None,
+                        plan_name=payload.plan or "basic",
+                        tunnel_id=None,
+                        db=db,
+                    )
+                    if dep_result.get("success"):
+                        db.commit()
+                        result["deployment_id"] = dep_result["deployment_id"]
+                        logger.info(
+                            f"✅ TenantDeployment #{dep_result['deployment_id']} "
+                            f"({dep_result['status']}) para '{payload.subdomain}'"
+                        )
+                    else:
+                        logger.warning(
+                            f"⚠️ TenantDeployment no creado para '{payload.subdomain}': "
+                            f"{dep_result.get('error')}"
+                        )
                 else:
                     result["customer_id"] = existing.id
                     # Verificar que tenga suscripción activa
@@ -764,6 +835,22 @@ async def create_tenant(
                         db.refresh(new_sub)
                         result["subscription_id"] = new_sub.id
                         logger.info(f"Suscripción creada para tenant existente '{payload.subdomain}'")
+
+                    # ── Asegurar TenantDeployment para tenant existente ──
+                    _sub_id = result.get("subscription_id")
+                    if _sub_id:
+                        from ..services.deployment_writer import ensure_tenant_deployment
+                        dep_result = ensure_tenant_deployment(
+                            subdomain=payload.subdomain,
+                            subscription_id=_sub_id,
+                            customer_id=existing.id,
+                            server_id=result.get("server"),
+                            plan_name=payload.plan or "basic",
+                            db=db,
+                        )
+                        if dep_result.get("success"):
+                            db.commit()
+                            result["deployment_id"] = dep_result["deployment_id"]
             except Exception as db_err:
                 logger.warning(f"No se pudo registrar tenant en BD local: {db_err}")
                 db.rollback()
@@ -1197,3 +1284,126 @@ async def get_tenant_details(
     except Exception as e:
         logger.error(f"Error obteniendo tenant: {e}")
         raise HTTPException(status_code=500, detail=str(e))
+
+
+# ═══════════════════════════════════════════════════════
+# INSTALACIÓN DE MÓDULOS ON-DEMAND
+# ═══════════════════════════════════════════════════════
+
+class ModuleInstallRequest(BaseModel):
+    """Request para instalar módulos en un tenant existente"""
+    modules: List[str] = Field(..., min_length=1, description="Lista de technical_names de módulos a instalar")
+    blueprint_package_name: Optional[str] = Field(None, description="Instalar todos los módulos de un paquete/blueprint")
+
+
+@router.post("/{subdomain}/modules/install")
+async def install_modules_on_tenant(
+    subdomain: str,
+    payload: ModuleInstallRequest,
+    request: Request,
+    access_token: str = Cookie(None),
+):
+    """
+    Instala módulos Odoo en un tenant existente.
+
+    Accesible desde:
+    - Panel admin (rol admin)
+    - Panel socio (rol partner — solo módulos partner_allowed)
+    - Panel cliente (rol client — solo módulos de su plan)
+
+    Los módulos se instalan via XML-RPC al servidor Odoo donde vive el tenant.
+    """
+    _require_admin_base(request, access_token)
+
+    refresh_odoo_servers()
+
+    # Resolver módulos del blueprint si se proporcionó
+    modules_to_install: List[str] = list(payload.modules) if payload.modules else []
+    if payload.blueprint_package_name:
+        bp_mods = _resolve_blueprint_modules(payload.blueprint_package_name)
+        for m in bp_mods:
+            if m not in modules_to_install:
+                modules_to_install.append(m)
+
+    if not modules_to_install:
+        raise HTTPException(400, "No hay módulos para instalar")
+
+    # Buscar en qué servidor está el tenant
+    target_server = None
+    for server in ODOO_SERVERS.values():
+        if not server:
+            continue
+        try:
+            async with OdooDatabaseManager(server) as manager:
+                if await manager.database_exists(subdomain):
+                    target_server = server
+                    break
+        except Exception:
+            continue
+
+    if not target_server:
+        raise HTTPException(404, f"Tenant '{subdomain}' no encontrado en ningún servidor")
+
+    # Instalar via XML-RPC
+    url = f"http://{target_server.ip}:{target_server.port}"
+
+    try:
+        common = xmlrpc.client.ServerProxy(f"{url}/xmlrpc/2/common", allow_none=True)
+        # Intentar con login del tenant
+        tenant_login = f"{subdomain}@sajet.us"
+        uid = common.authenticate(subdomain, tenant_login, DEFAULT_ADMIN_PASSWORD, {})
+        if not uid:
+            uid = common.authenticate(subdomain, DEFAULT_ADMIN_LOGIN, DEFAULT_ADMIN_PASSWORD, {})
+        if not uid:
+            raise HTTPException(500, f"No se pudo autenticar en '{subdomain}' para instalar módulos")
+
+        models = xmlrpc.client.ServerProxy(f"{url}/xmlrpc/2/object", allow_none=True)
+
+        installed = []
+        failed = []
+        already = []
+
+        for module_name in modules_to_install:
+            try:
+                module_ids = models.execute_kw(
+                    subdomain, uid, DEFAULT_ADMIN_PASSWORD,
+                    'ir.module.module', 'search',
+                    [[('name', '=', module_name)]]
+                )
+                if module_ids:
+                    module_data = models.execute_kw(
+                        subdomain, uid, DEFAULT_ADMIN_PASSWORD,
+                        'ir.module.module', 'read',
+                        [module_ids], {'fields': ['state']}
+                    )
+                    state = module_data[0]['state'] if module_data else 'uninstalled'
+
+                    if state in ('installed', 'to upgrade'):
+                        already.append(module_name)
+                    else:
+                        models.execute_kw(
+                            subdomain, uid, DEFAULT_ADMIN_PASSWORD,
+                            'ir.module.module', 'button_immediate_install',
+                            [module_ids]
+                        )
+                        installed.append(module_name)
+                else:
+                    failed.append(f"{module_name}(not_found)")
+            except Exception as e:
+                failed.append(f"{module_name}({str(e)[:50]})")
+
+        return {
+            "success": True,
+            "subdomain": subdomain,
+            "server": target_server.id,
+            "installed": installed,
+            "already_installed": already,
+            "failed": failed,
+            "total_requested": len(modules_to_install),
+        }
+
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.error(f"Error instalando módulos en '{subdomain}': {e}")
+        raise HTTPException(500, f"Error instalando módulos: {str(e)}")

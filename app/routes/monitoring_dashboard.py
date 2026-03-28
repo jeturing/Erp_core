@@ -10,11 +10,16 @@ import logging
 from ..models.database import SessionLocal
 from ..services.plan_migration_service import PlanMigrationService
 from ..services.storage_alert_service import StorageAlertService
-from ..config import PROVISIONING_API_KEY
+from ..config import PROVISIONING_API_KEY, get_runtime_setting
 
 logger = logging.getLogger(__name__)
 
 router = APIRouter(prefix="/api/monitoring", tags=["Monitoring Dashboard"])
+
+
+def _require_api_key(x_api_key: Optional[str]) -> None:
+    if x_api_key != get_runtime_setting("PROVISIONING_API_KEY", PROVISIONING_API_KEY):
+        raise HTTPException(status_code=401, detail="API key inválida")
 
 
 @router.get("/dashboard", response_model=dict)
@@ -30,8 +35,7 @@ async def get_monitoring_dashboard(
     
     Disponible para: Admin
     """
-    if x_api_key != PROVISIONING_API_KEY:
-        raise HTTPException(status_code=401, detail="API key inválida")
+    _require_api_key(x_api_key)
     
     db = SessionLocal()
     try:
@@ -114,8 +118,7 @@ async def evaluate_tenant_with_alert(
     - Recomendación de migración
     - Email enviado (bool)
     """
-    if x_api_key != PROVISIONING_API_KEY:
-        raise HTTPException(status_code=401, detail="API key inválida")
+    _require_api_key(x_api_key)
     
     db = SessionLocal()
     try:

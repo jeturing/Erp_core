@@ -6,7 +6,6 @@ from fastapi.responses import JSONResponse
 from pydantic import BaseModel, EmailStr
 from typing import Optional
 from datetime import datetime
-import os
 
 from ..models.database import Customer, Partner, PartnerStatus, AdminUser, AdminUserRole, SessionLocal
 from ..security.tokens import TokenManager, RefreshTokenManager
@@ -15,9 +14,17 @@ from ..security.audit import AuditLogger, AuditEvent
 from ..security.totp import TOTPManager
 from ..security.email_verify import create_verification_token, verify_token, send_verification_email
 
-from ..config import ADMIN_USERNAME, ADMIN_PASSWORD
+from ..config import get_runtime_setting
 
 router = APIRouter(prefix="/api/auth", tags=["Secure Authentication"])
+
+
+def _admin_username() -> str:
+    return get_runtime_setting("ADMIN_USERNAME", "admin@sajet.us")
+
+
+def _admin_password() -> str:
+    return get_runtime_setting("ADMIN_PASSWORD", "")
 
 # Rate limiter instance (compartida)
 login_rate_limiter = RateLimiter(
@@ -115,11 +122,13 @@ async def secure_login(request: Request, login_data: LoginRequest):
         redirect_url = None
         
         # Auto-detectar tipo de usuario basándose en el formato
-        is_admin_login = '@' not in login_data.email or login_data.email == ADMIN_USERNAME
-        
+        admin_username = _admin_username()
+        admin_password = _admin_password()
+        is_admin_login = '@' not in login_data.email or login_data.email == admin_username
+
         if is_admin_login:
             # Login de admin por env vars (fallback)
-            if login_data.email != ADMIN_USERNAME or login_data.password != ADMIN_PASSWORD:
+            if login_data.email != admin_username or login_data.password != admin_password:
                 AuditLogger.log_login_failed(
                     username=login_data.email,
                     reason="Invalid admin credentials",
@@ -130,7 +139,7 @@ async def secure_login(request: Request, login_data: LoginRequest):
                     detail="Credenciales inválidas"
                 )
             
-            username = ADMIN_USERNAME
+            username = admin_username
             role = "admin"
             redirect_url = "/admin"
             

@@ -11,7 +11,24 @@ export interface CreateTenantRequest {
   server_id?: string;
   plan?: 'basic' | 'pro' | 'enterprise';
   partner_id?: number | null;
+  country_code?: string;
+  blueprint_package_name?: string;
   use_fast_method?: boolean;
+}
+
+export interface ModuleInstallRequest {
+  modules: string[];
+  blueprint_package_name?: string;
+}
+
+export interface ModuleInstallResponse {
+  success: boolean;
+  subdomain: string;
+  server: string;
+  installed: string[];
+  already_installed: string[];
+  failed: string[];
+  total_requested: number;
 }
 
 export interface ChangeTenantPasswordRequest {
@@ -166,6 +183,13 @@ export const tenantsApi = {
         server: server || 'primary',
       },
       { 'X-API-KEY': PROVISIONING_API_KEY },
+    );
+  },
+
+  async installModules(subdomain: string, payload: ModuleInstallRequest): Promise<ModuleInstallResponse> {
+    return api.post<ModuleInstallResponse>(
+      `/api/tenants/${encodeURIComponent(subdomain)}/modules/install`,
+      payload,
     );
   },
 };

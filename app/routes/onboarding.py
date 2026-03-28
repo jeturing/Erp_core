@@ -7,26 +7,36 @@ from fastapi.responses import HTMLResponse, RedirectResponse, JSONResponse
 from pydantic import BaseModel
 from typing import Optional
 import stripe
-import os
 from datetime import datetime
 from ..models.database import (
     Customer, Subscription, StripeEvent, SubscriptionStatus, SessionLocal,
-    BillingMode, InvoiceIssuer, CollectorType, PayerType,
-    Partner, Plan, Lead, LeadStatus,
+    BillingMode, BillingScenario, InvoiceIssuer, CollectorType, PayerType,
+    Partner, PartnerStatus, Plan, Lead, LeadStatus,
 )
 from ..services.tunnel_lifecycle import handle_stripe_subscription_event
 from ..services.odoo_provisioner import provision_tenant
 from ..services.spa_shell import render_spa_shell
 from ..services.email_service import send_payment_failed_email, send_subscription_cancelled_email
+from ..services.stripe_connect import compute_application_fee_percent, should_use_on_behalf_of
+from ..config import get_runtime_setting
 import logging
 
 router = APIRouter(tags=["Onboarding"])
 
-# Stripe configuration
-from ..config import STRIPE_SECRET_KEY, STRIPE_WEBHOOK_SECRET, APP_URL
-stripe.api_key = STRIPE_SECRET_KEY
-
 logger = logging.getLogger(__name__)
+
+
+def _configure_stripe() -> str:
+    stripe.api_key = get_runtime_setting("STRIPE_SECRET_KEY", "")
+    return stripe.api_key
+
+
+def _stripe_webhook_secret() -> str:
+    return get_runtime_setting("STRIPE_WEBHOOK_SECRET", "")
+
+
+def _app_url() -> str:
+    return get_runtime_setting("APP_URL", "http://localhost:4443")
 
 
 # DTOs
@@ -70,6 +80,7 @@ async def create_checkout_session(payload: CheckoutRequest, background_tasks: Ba
     - Con partner_code escenario A → PARTNER_DIRECT (Partner cobra con Stripe Connect)
     - Con partner_code escenario B → PARTNER_PAYS_FOR_CLIENT (Partner paga, Jeturing emite intercompany)
     """
+    _configure_stripe()
     db = SessionLocal()
     try:
         # ── Resolver partner si viene partner_code ──
@@ -77,28 +88,38 @@ async def create_checkout_session(payload: CheckoutRequest, background_tasks: Ba
         billing_mode = BillingMode.JETURING_DIRECT_SUBSCRIPTION
         invoice_issuer = InvoiceIssuer.JETURING
         collector = CollectorType.STRIPE_DIRECT
-        payer_type = PayerType.END_CUSTOMER
+        payer_type = PayerType.CLIENT
 
         if payload.partner_code:
             partner = db.query(Partner).filter(
                 Partner.partner_code == payload.partner_code,
-                Partner.is_active == True,
+                Partner.status == PartnerStatus.active,
             ).first()
             if not partner:
                 raise HTTPException(404, f"Partner code '{payload.partner_code}' not found or inactive")
 
             # Determinar billing mode según configuración del partner
-            if partner.billing_scenario == "B":
+            scenario = partner.billing_scenario or BillingScenario.jeturing_collects
+
+            if scenario == BillingScenario.partner_collects:
                 billing_mode = BillingMode.PARTNER_PAYS_FOR_CLIENT
                 invoice_issuer = InvoiceIssuer.JETURING
-                collector = CollectorType.PARTNER_COLLECTS
+                collector = CollectorType.PARTNER_EXTERNAL
                 payer_type = PayerType.PARTNER
             else:
-                # Escenario A (default partner)
+                # Escenario A: SAJET cobra en Stripe y dispersa al partner por Connect.
+                if not partner.stripe_account_id or not partner.stripe_onboarding_complete:
+                    raise HTTPException(
+                        status_code=409,
+                        detail=(
+                            f"El partner '{partner.company_name}' aún no tiene Stripe Connect listo "
+                            "para cobrar y dispersar fondos."
+                        ),
+                    )
                 billing_mode = BillingMode.PARTNER_DIRECT
                 invoice_issuer = InvoiceIssuer.PARTNER
                 collector = CollectorType.STRIPE_CONNECT
-                payer_type = PayerType.END_CUSTOMER
+                payer_type = PayerType.CLIENT
 
         # ── Resolver plan desde DB ──
         plan = db.query(Plan).filter(
@@ -142,20 +163,22 @@ async def create_checkout_session(payload: CheckoutRequest, background_tasks: Ba
         db.add(customer)
         db.flush()
 
-        # ── Crear Lead en pipeline ──
-        lead = Lead(
-            customer_id=customer.id,
-            partner_id=partner.id if partner else None,
-            company_name=payload.company_name,
-            contact_email=payload.email,
-            contact_name=payload.full_name,
-            plan_interest=payload.plan,
-            status=LeadStatus.new,
-            source="onboarding_checkout",
-            notes=f"billing_mode={billing_mode.value}",
-        )
-        db.add(lead)
-        db.flush()
+        # ── Crear Lead en pipeline solo cuando el alta viene por un partner ──
+        lead = None
+        if partner:
+            lead = Lead(
+                partner_id=partner.id,
+                company_name=payload.company_name,
+                contact_email=payload.email,
+                contact_name=payload.full_name,
+                status=LeadStatus.new,
+                notes=(
+                    f"billing_mode={billing_mode.value}; "
+                    f"plan={payload.plan}; users={user_count}; source=onboarding_checkout"
+                ),
+            )
+            db.add(lead)
+            db.flush()
 
         # ── Épica 8: Early domain verification (no bloqueante) ──
         if payload.custom_domain:
@@ -179,26 +202,37 @@ async def create_checkout_session(payload: CheckoutRequest, background_tasks: Ba
             "payment_method_types": ["card"],
             "line_items": [{"price": price_id, "quantity": user_count}],
             "mode": "subscription",
-            "success_url": f"{APP_URL}/success?session_id={{CHECKOUT_SESSION_ID}}",
-            "cancel_url": f"{APP_URL}/signup",
+            "success_url": f"{_app_url()}/success?session_id={{CHECKOUT_SESSION_ID}}",
+            "cancel_url": f"{_app_url()}/signup",
             "client_reference_id": str(customer.id),
             "customer_email": payload.email,
             "metadata": {
                 "billing_mode": billing_mode.value,
                 "partner_id": str(partner.id) if partner else "",
-                "lead_id": str(lead.id),
+                "lead_id": str(lead.id) if lead else "",
                 "plan": payload.plan,
                 "user_count": str(user_count),
                 "is_accountant": str(payload.is_accountant),
             },
         }
 
-        # Escenario A con Stripe Connect: application_fee_percent 50%
+        # Escenario A con Stripe Connect:
+        # destination charge en la plataforma + dispersión automática al partner.
         if billing_mode == BillingMode.PARTNER_DIRECT and partner and partner.stripe_account_id:
-            checkout_params["subscription_data"] = {
-                "application_fee_percent": 50,
+            subscription_data = {
+                "application_fee_percent": compute_application_fee_percent(partner.commission_rate),
+                "transfer_data": {
+                    "destination": partner.stripe_account_id,
+                },
+                "metadata": {
+                    "partner_id": str(partner.id),
+                    "billing_scenario": (partner.billing_scenario.value if partner.billing_scenario else ""),
+                    "commission_rate": str(partner.commission_rate or 0),
+                },
             }
-            checkout_params["stripe_account"] = partner.stripe_account_id
+            if should_use_on_behalf_of(partner.country, partner.stripe_charges_enabled):
+                subscription_data["on_behalf_of"] = partner.stripe_account_id
+            checkout_params["subscription_data"] = subscription_data
 
         session = stripe.checkout.Session.create(**checkout_params)
 
@@ -219,12 +253,13 @@ async def create_checkout_session(payload: CheckoutRequest, background_tasks: Ba
 @router.post("/webhook/stripe")
 async def stripe_webhook(request: Request, background_tasks: BackgroundTasks):
     """Webhook de Stripe para eventos de pago."""
+    _configure_stripe()
     payload = await request.body()
     sig_header = request.headers.get("stripe-signature")
 
     try:
         event = stripe.Webhook.construct_event(
-            payload, sig_header, STRIPE_WEBHOOK_SECRET
+            payload, sig_header, _stripe_webhook_secret()
         )
     except ValueError:
         raise HTTPException(status_code=400, detail="Invalid payload")
@@ -277,14 +312,14 @@ async def stripe_webhook(request: Request, background_tasks: BackgroundTasks):
                 if billing_mode == BillingMode.JETURING_DIRECT_SUBSCRIPTION:
                     subscription.invoice_issuer = InvoiceIssuer.JETURING
                     subscription.collector = CollectorType.STRIPE_DIRECT
-                    subscription.payer_type = PayerType.END_CUSTOMER
+                    subscription.payer_type = PayerType.CLIENT
                 elif billing_mode == BillingMode.PARTNER_DIRECT:
                     subscription.invoice_issuer = InvoiceIssuer.PARTNER
                     subscription.collector = CollectorType.STRIPE_CONNECT
-                    subscription.payer_type = PayerType.END_CUSTOMER
+                    subscription.payer_type = PayerType.CLIENT
                 elif billing_mode == BillingMode.PARTNER_PAYS_FOR_CLIENT:
                     subscription.invoice_issuer = InvoiceIssuer.JETURING
-                    subscription.collector = CollectorType.PARTNER_COLLECTS
+                    subscription.collector = CollectorType.PARTNER_EXTERNAL
                     subscription.payer_type = PayerType.PARTNER
 
                 db.add(subscription)
@@ -306,6 +341,40 @@ async def stripe_webhook(request: Request, background_tasks: BackgroundTasks):
                     customer.email,
                     customer.company_name,
                     subscription.id  # Pasar ID para actualizar estado
+                )
+
+        elif event["type"] == "account.updated":
+            account = event["data"]["object"]
+            partner = db.query(Partner).filter(
+                Partner.stripe_account_id == account.get("id")
+            ).first()
+            if partner:
+                requirements = account.get("requirements", {}) or {}
+                currently_due = requirements.get("currently_due") or []
+                disabled_reason = requirements.get("disabled_reason")
+                details_submitted = bool(account.get("details_submitted"))
+                charges_enabled = bool(account.get("charges_enabled"))
+                payouts_enabled = bool(account.get("payouts_enabled"))
+                onboarding_ready = (
+                    details_submitted
+                    and not currently_due
+                    and not disabled_reason
+                    and (payouts_enabled or charges_enabled)
+                )
+
+                partner.stripe_charges_enabled = charges_enabled
+                partner.stripe_onboarding_complete = onboarding_ready
+                if onboarding_ready and partner.onboarding_step < 4:
+                    partner.onboarding_step = 4
+                    partner.onboarding_completed_at = datetime.utcnow()
+                db.commit()
+                logger.info(
+                    "Stripe Connect sync partner=%s account=%s ready=%s payouts=%s charges=%s",
+                    partner.id,
+                    account.get("id"),
+                    onboarding_ready,
+                    payouts_enabled,
+                    charges_enabled,
                 )
 
         # ═══ Tunnel Lifecycle — Sincronizar tunnel con estado de suscripción ═══

@@ -163,10 +163,10 @@ async def get_partner_connect_status(
         if result["success"]:
             changed = False
             if partner.stripe_charges_enabled != result.get("charges_enabled", False):
-                partner.stripe_charges_enabled = result["charges_enabled"]
+                partner.stripe_charges_enabled = bool(result["charges_enabled"])
                 changed = True
-            if partner.stripe_onboarding_complete != result.get("details_submitted", False):
-                partner.stripe_onboarding_complete = result["details_submitted"]
+            if partner.stripe_onboarding_complete != result.get("onboarding_ready", False):
+                partner.stripe_onboarding_complete = bool(result["onboarding_ready"])
                 changed = True
             if changed:
                 db.commit()

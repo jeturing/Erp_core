@@ -85,6 +85,162 @@ class ServerStatus(str, Enum):
     full = "full"
 
 
+# =====================================================
+# LOCALIZACIÓN POR PAÍS — Configuración automática
+# =====================================================
+# Mapea country_code ISO → módulos l10n, chart of accounts,
+# moneda, zona horaria, idioma e impuestos a instalar.
+# El key "modules" lista los módulos técnicos de Odoo.
+# "chart_template" es el xmlid del chart a instalar.
+
+COUNTRY_LOCALIZATION: Dict[str, Dict[str, Any]] = {
+    "DO": {
+        "name": "República Dominicana",
+        "modules": ["l10n_do", "l10n_latam_invoice_document", "l10n_latam_base"],
+        "chart_template": "l10n_do.do_chart_template",
+        "currency": "DOP",
+        "timezone": "America/Santo_Domingo",
+        "lang": "es_DO",
+        "phone_code": "+1",
+    },
+    "US": {
+        "name": "Estados Unidos",
+        "modules": ["l10n_us"],
+        "chart_template": "l10n_us.generate_l10n_us_chart",
+        "currency": "USD",
+        "timezone": "America/New_York",
+        "lang": "en_US",
+        "phone_code": "+1",
+    },
+    "MX": {
+        "name": "México",
+        "modules": ["l10n_mx", "l10n_mx_edi", "l10n_latam_invoice_document", "l10n_latam_base"],
+        "chart_template": "l10n_mx.mx_coa",
+        "currency": "MXN",
+        "timezone": "America/Mexico_City",
+        "lang": "es_MX",
+        "phone_code": "+52",
+    },
+    "CO": {
+        "name": "Colombia",
+        "modules": ["l10n_co", "l10n_latam_invoice_document", "l10n_latam_base"],
+        "chart_template": "l10n_co.l10n_co_chart_template",
+        "currency": "COP",
+        "timezone": "America/Bogota",
+        "lang": "es_CO",
+        "phone_code": "+57",
+    },
+    "ES": {
+        "name": "España",
+        "modules": ["l10n_es"],
+        "chart_template": "l10n_es.account_chart_template_pymes",
+        "currency": "EUR",
+        "timezone": "Europe/Madrid",
+        "lang": "es_ES",
+        "phone_code": "+34",
+    },
+    "PA": {
+        "name": "Panamá",
+        "modules": ["l10n_pa", "l10n_latam_invoice_document", "l10n_latam_base"],
+        "chart_template": "l10n_pa.pa_chart_template",
+        "currency": "PAB",
+        "timezone": "America/Panama",
+        "lang": "es_PA",
+        "phone_code": "+507",
+    },
+    "CL": {
+        "name": "Chile",
+        "modules": ["l10n_cl", "l10n_latam_invoice_document", "l10n_latam_base"],
+        "chart_template": "l10n_cl.cl_chart",
+        "currency": "CLP",
+        "timezone": "America/Santiago",
+        "lang": "es_CL",
+        "phone_code": "+56",
+    },
+    "AR": {
+        "name": "Argentina",
+        "modules": ["l10n_ar", "l10n_latam_invoice_document", "l10n_latam_base"],
+        "chart_template": "l10n_ar.l10nar_ri_chart",
+        "currency": "ARS",
+        "timezone": "America/Argentina/Buenos_Aires",
+        "lang": "es_AR",
+        "phone_code": "+54",
+    },
+    "PE": {
+        "name": "Perú",
+        "modules": ["l10n_pe", "l10n_latam_invoice_document", "l10n_latam_base"],
+        "chart_template": "l10n_pe.pe_chart_template",
+        "currency": "PEN",
+        "timezone": "America/Lima",
+        "lang": "es_PE",
+        "phone_code": "+51",
+    },
+}
+
+# Módulos base que siempre se instalan en cada tenant nuevo
+TENANT_BASE_MODULES = [
+    "contacts",
+    "sale_management",
+    "purchase",
+    "stock",
+    "account",
+    "website",
+    "crm",
+]
+
+# Módulos Jeturing de infraestructura — siempre se instalan (plataforma SaaS)
+JETURING_INFRA_MODULES = [
+    "jeturing_erp_sync",       # Sincronización webhooks con ERP Core
+    "jeturing_branding",       # Rebranding Odoo → Jeturing/Sajet + catálogo errores
+    "jeturing_universal_api",  # API REST universal para IA/MCP
+    "redis_session_store",     # Sesiones HTTP en Redis (multi-nodo)
+    "spiffy_theme_backend",    # Theme backend PWA + app drawer
+]
+
+# Módulo de sincronización Jeturing (backward compat)
+JETURING_SYNC_MODULE = "jeturing_erp_sync"
+
+
+def _resolve_blueprint_modules(blueprint_package_name: Optional[str] = None) -> List[str]:
+    """
+    Consulta la BD (module_packages) para obtener la lista de módulos técnicos
+    del blueprint/paquete indicado.
+
+    Si no se especifica paquete, retorna lista vacía.
+    Los módulos core (web, portal) ya están en TENANT_BASE_MODULES,
+    así que se filtran duplicados al momento de instalar.
+
+    Args:
+        blueprint_package_name: Nombre técnico del paquete (ej: 'pkg_restaurantes')
+
+    Returns:
+        Lista de technical_names de módulos del paquete
+    """
+    if not blueprint_package_name:
+        return []
+
+    try:
+        from ..models.database import ModulePackage, SessionLocal
+        db = SessionLocal()
+        try:
+            pkg = db.query(ModulePackage).filter(
+                ModulePackage.name == blueprint_package_name,
+                ModulePackage.is_active == True,
+            ).first()
+            if pkg and pkg.module_list:
+                modules = list(pkg.module_list) if isinstance(pkg.module_list, list) else []
+                logger.info(f"Blueprint '{blueprint_package_name}' → {len(modules)} módulos: {modules}")
+                return modules
+            else:
+                logger.warning(f"Blueprint '{blueprint_package_name}' no encontrado o sin módulos")
+                return []
+        finally:
+            db.close()
+    except Exception as e:
+        logger.warning(f"Error resolviendo blueprint '{blueprint_package_name}': {e}")
+        return []
+
+
 @dataclass
 class OdooServer:
     """Configuración de un servidor Odoo"""
@@ -214,9 +370,21 @@ ODOO_SERVERS: Dict[str, OdooServer] = _build_odoo_servers()
 
 
 def refresh_odoo_servers() -> Dict[str, OdooServer]:
-    """Recarga el catálogo de nodos Odoo (útil para cambios de config en runtime)."""
+    """Recarga el catálogo de nodos Odoo delegando a NodeRegistry."""
     global ODOO_SERVERS
-    ODOO_SERVERS = _build_odoo_servers()
+    try:
+        from .node_registry import get_node_registry
+        registry = get_node_registry()
+        registry.invalidate()
+        # NodeRegistry es async, pero refresh es sync context.
+        # Actualizamos desde BD directamente.
+        servers = registry._load_from_db()
+        if servers:
+            ODOO_SERVERS = servers
+        else:
+            ODOO_SERVERS = _build_odoo_servers()
+    except Exception:
+        ODOO_SERVERS = _build_odoo_servers()
     return ODOO_SERVERS
 
 
@@ -757,11 +925,18 @@ class OdooDatabaseManager:
 # =====================================================
 
 async def get_available_servers() -> List[Dict[str, Any]]:
-    """Obtiene lista de servidores disponibles con su estado"""
-    refresh_odoo_servers()
+    """Obtiene lista de servidores disponibles con su estado via NodeRegistry"""
+    try:
+        from .node_registry import get_node_registry
+        registry = get_node_registry()
+        all_servers = await registry.get_servers(force_refresh=True)
+    except Exception:
+        refresh_odoo_servers()
+        all_servers = ODOO_SERVERS
+
     servers = []
-    
-    for server_id, server in ODOO_SERVERS.items():
+
+    for server_id, server in all_servers.items():
         try:
             async with OdooDatabaseManager(server) as manager:
                 databases = await manager.list_databases()
@@ -797,35 +972,40 @@ async def get_available_servers() -> List[Dict[str, Any]]:
 
 
 async def select_best_server() -> Optional[OdooServer]:
-    """Selecciona el mejor servidor disponible automáticamente"""
-    refresh_odoo_servers()
-    best_server = None
-    best_score = -1
-    
-    for server in _iter_tenant_hosting_servers():
-        if server.status != ServerStatus.online:
-            continue
-        
-        try:
-            async with OdooDatabaseManager(server) as manager:
-                databases = await manager.list_databases()
-                server.current_databases = len(databases)
-                
-                if server.available_slots <= 0:
-                    continue
-                
-                # Score = prioridad * slots disponibles
-                score = server.priority * server.available_slots
-                
-                if score > best_score:
-                    best_score = score
-                    best_server = server
-                    
-        except Exception as e:
-            logger.warning(f"Servidor {server.id} no disponible: {e}")
-            continue
-    
-    return best_server
+    """Selecciona el mejor servidor disponible delegando a NodeRegistry."""
+    try:
+        from .node_registry import get_node_registry
+        registry = get_node_registry()
+        return await registry.select_best_for_tenant()
+    except Exception as e:
+        logger.warning(f"NodeRegistry no disponible, usando fallback legacy: {e}")
+        # Fallback legacy para compatibilidad
+        refresh_odoo_servers()
+        best_server = None
+        best_score = -1
+
+        for server in _iter_tenant_hosting_servers():
+            if server.status != ServerStatus.online:
+                continue
+
+            try:
+                async with OdooDatabaseManager(server) as manager:
+                    databases = await manager.list_databases()
+                    server.current_databases = len(databases)
+
+                    if server.available_slots <= 0:
+                        continue
+
+                    score = server.priority * server.available_slots
+
+                    if score > best_score:
+                        best_score = score
+                        best_server = server
+            except Exception as ex:
+                logger.warning(f"Servidor {server.id} no disponible: {ex}")
+                continue
+
+        return best_server
 
 
 async def provision_tenant(
@@ -837,7 +1017,9 @@ async def provision_tenant(
     use_template: bool = True,  # Usar template por defecto
     template_db: str = TEMPLATE_DB,
     demo: bool = False,
-    lang: str = DEFAULT_LANG
+    lang: str = DEFAULT_LANG,
+    country_code: str = None,  # Código ISO país para localización (DO, US, MX, etc.)
+    blueprint_package_name: str = None,  # Nombre del paquete/blueprint
 ) -> Dict[str, Any]:
     """
     Provisiona un nuevo tenant completo
@@ -922,6 +1104,8 @@ async def provision_tenant(
                     server_id=server.id,
                     admin_login=admin_login,
                     admin_password=admin_password,
+                    country_code=country_code,
+                    blueprint_package_name=blueprint_package_name,
                 )
                 if direct_result.get("success"):
                     result = direct_result
@@ -937,6 +1121,23 @@ async def provision_tenant(
         if result.get("success"):
             result["company_name"] = company_name
             
+            # Localización por país + blueprint
+            effective_country = (country_code or DEFAULT_COUNTRY).upper().strip()
+            bp_modules = _resolve_blueprint_modules(blueprint_package_name)
+            try:
+                loc_result = _configure_tenant_localization(
+                    pct_id=server.pct_id,
+                    db_name=subdomain,
+                    country_code=effective_country,
+                    server_ip=server.ip,
+                    server_port=server.port,
+                    blueprint_modules=bp_modules,
+                )
+                result["localization"] = loc_result
+            except Exception as loc_err:
+                logger.warning(f"⚠️ Error localización en provision_tenant: {loc_err}")
+                result["localization"] = {"success": False, "error": str(loc_err)}
+
             # Intentar crear DNS en Cloudflare
             try:
                 dns_result = await _create_cloudflare_dns(subdomain, server)
@@ -1155,20 +1356,232 @@ def query_admin_login_pg(server_ip: str, db_name: str, db_port: int = 5432) -> O
     return None
 
 
+# =====================================================
+# LOCALIZACIÓN POST-PROVISIÓN
+# =====================================================
+
+def _configure_tenant_localization(
+    pct_id: int,
+    db_name: str,
+    country_code: str,
+    server_ip: str,
+    server_port: int = 8069,
+    blueprint_modules: Optional[List[str]] = None,
+) -> Dict[str, Any]:
+    """
+    Configura localización del tenant recién creado según país e instala
+    módulos del blueprint seleccionado.
+
+    1. SQL: país de la compañía, moneda, timezone, idioma
+    2. XML-RPC: instala módulos (base + infra Jeturing + l10n + blueprint)
+
+    Args:
+        pct_id: ID del PCT donde está el Odoo server
+        db_name: Nombre de la base de datos del tenant
+        country_code: Código ISO 2 letras (DO, US, MX, etc.)
+        server_ip: IP del servidor Odoo para XML-RPC
+        server_port: Puerto HTTP de Odoo (default 8069)
+        blueprint_modules: Módulos adicionales del paquete/blueprint seleccionado
+
+    Returns:
+        Dict con resultado de la configuración
+    """
+    country_code = (country_code or DEFAULT_COUNTRY).upper().strip()
+    localization = COUNTRY_LOCALIZATION.get(country_code)
+
+    if not localization:
+        logger.warning(
+            f"País '{country_code}' sin localización definida — se usará configuración por defecto ({DEFAULT_COUNTRY})"
+        )
+        localization = COUNTRY_LOCALIZATION.get(DEFAULT_COUNTRY, {})
+        if not localization:
+            return {"success": False, "error": f"No hay localización para '{country_code}' ni para default '{DEFAULT_COUNTRY}'"}
+
+    lang = localization["lang"]
+    timezone = localization["timezone"]
+    currency_code = localization["currency"]
+    modules_to_install = localization.get("modules", [])
+    country_name = localization.get("name", country_code)
+
+    result_details: Dict[str, Any] = {
+        "country_code": country_code,
+        "lang": lang,
+        "timezone": timezone,
+        "currency": currency_code,
+        "modules": modules_to_install,
+    }
+
+    # ── Paso 1: Configurar país, moneda, idioma y timezone vía SQL ──
+    safe_tz = timezone.replace("'", "''")
+    safe_lang = lang.replace("'", "''")
+
+    localization_sql = f"""
+    -- Asignar país a la compañía principal
+    UPDATE res_company SET
+        country_id = (SELECT id FROM res_country WHERE code = '{country_code}' LIMIT 1)
+    WHERE id = 1 AND (SELECT id FROM res_country WHERE code = '{country_code}' LIMIT 1) IS NOT NULL;
+
+    -- Asignar al partner de la compañía
+    UPDATE res_partner SET
+        country_id = (SELECT id FROM res_country WHERE code = '{country_code}' LIMIT 1),
+        lang = '{safe_lang}',
+        tz = '{safe_tz}'
+    WHERE id = 1 AND (SELECT id FROM res_country WHERE code = '{country_code}' LIMIT 1) IS NOT NULL;
+
+    -- Configurar moneda de la compañía
+    UPDATE res_company SET
+        currency_id = (SELECT id FROM res_currency WHERE name = '{currency_code}' LIMIT 1)
+    WHERE id = 1 AND (SELECT id FROM res_currency WHERE name = '{currency_code}' LIMIT 1) IS NOT NULL;
+
+    -- Activar la moneda si no lo está
+    UPDATE res_currency SET active = TRUE
+    WHERE name = '{currency_code}';
+
+    -- Timezone e idioma por defecto para nuevos usuarios
+    UPDATE ir_config_parameter SET value = '{safe_tz}'
+    WHERE key = 'resource.calendar.default.tz';
+
+    -- Insertar si no existe
+    INSERT INTO ir_config_parameter (key, value, create_uid, write_uid, create_date, write_date)
+    SELECT 'resource.calendar.default.tz', '{safe_tz}', 1, 1, NOW(), NOW()
+    WHERE NOT EXISTS (SELECT 1 FROM ir_config_parameter WHERE key = 'resource.calendar.default.tz');
+
+    -- Idioma predeterminado del sistema
+    UPDATE res_lang SET active = TRUE WHERE code = '{safe_lang}';
+
+    -- Configurar idioma del admin
+    UPDATE res_users SET lang = '{safe_lang}', tz = '{safe_tz}' WHERE id = 2;
+    """
+
+    ok, out = _run_pct_sql(pct_id, db_name, localization_sql)
+    if ok:
+        logger.info(f"✅ Localización SQL aplicada: {country_code} ({country_name}) en '{db_name}'")
+        result_details["sql_config"] = "ok"
+    else:
+        logger.warning(f"⚠️ Error aplicando localización SQL para '{db_name}': {out}")
+        result_details["sql_config"] = f"error: {out}"
+
+    # ── Paso 2: Instalar módulos l10n via XML-RPC ──
+    # Usamos XML-RPC porque la instalación de módulos requiere el ORM de Odoo.
+    # Esto dispara un update del registro de módulos + instalación.
+    if modules_to_install:
+        try:
+            import xmlrpc.client
+            url = f"http://{server_ip}:{server_port}"
+
+            # Autenticar como admin
+            common = xmlrpc.client.ServerProxy(f"{url}/xmlrpc/2/common", allow_none=True)
+            uid = common.authenticate(db_name, DEFAULT_ADMIN_LOGIN, DEFAULT_ADMIN_PASSWORD, {})
+
+            if not uid:
+                # Intentar con login del tenant
+                tenant_login = f"{db_name}@{BASE_DOMAIN}"
+                uid = common.authenticate(db_name, tenant_login, DEFAULT_ADMIN_PASSWORD, {})
+
+            if uid:
+                models = xmlrpc.client.ServerProxy(f"{url}/xmlrpc/2/object", allow_none=True)
+
+                installed_modules = []
+                failed_modules = []
+
+                # Construir lista completa de módulos a instalar (deduplicada, orden preservado):
+                # 1. Base ERP (contacts, sale, purchase, stock, account, website, crm)
+                # 2. Localización por país (l10n_do, l10n_mx, etc.)
+                # 3. Infraestructura Jeturing (branding, universal_api, redis, spiffy)
+                # 4. Módulos del blueprint/paquete seleccionado
+                _seen: set = set()
+                all_modules: List[str] = []
+                for m in (
+                    TENANT_BASE_MODULES
+                    + modules_to_install
+                    + JETURING_INFRA_MODULES
+                    + (blueprint_modules or [])
+                ):
+                    if m not in _seen:
+                        _seen.add(m)
+                        all_modules.append(m)
+
+                logger.info(
+                    f"📦 Módulos a instalar en '{db_name}': {len(all_modules)} total "
+                    f"(base={len(TENANT_BASE_MODULES)}, l10n={len(modules_to_install)}, "
+                    f"infra={len(JETURING_INFRA_MODULES)}, blueprint={len(blueprint_modules or [])})"
+                )
+
+                for module_name in all_modules:
+                    try:
+                        # Buscar el módulo en ir.module.module
+                        module_ids = models.execute_kw(
+                            db_name, uid, DEFAULT_ADMIN_PASSWORD,
+                            'ir.module.module', 'search',
+                            [[('name', '=', module_name)]]
+                        )
+                        if module_ids:
+                            # Leer estado actual
+                            module_data = models.execute_kw(
+                                db_name, uid, DEFAULT_ADMIN_PASSWORD,
+                                'ir.module.module', 'read',
+                                [module_ids], {'fields': ['state']}
+                            )
+                            state = module_data[0]['state'] if module_data else 'uninstalled'
+
+                            if state not in ('installed', 'to upgrade'):
+                                # Marcar para instalación
+                                models.execute_kw(
+                                    db_name, uid, DEFAULT_ADMIN_PASSWORD,
+                                    'ir.module.module', 'button_immediate_install',
+                                    [module_ids]
+                                )
+                                installed_modules.append(module_name)
+                                logger.info(f"  📦 Módulo '{module_name}' instalado en '{db_name}'")
+                            else:
+                                logger.info(f"  ✅ Módulo '{module_name}' ya instalado en '{db_name}'")
+                                installed_modules.append(f"{module_name}(already)")
+                        else:
+                            logger.warning(f"  ⚠️ Módulo '{module_name}' no encontrado en '{db_name}'")
+                            failed_modules.append(f"{module_name}(not_found)")
+                    except Exception as mod_err:
+                        logger.warning(f"  ⚠️ Error instalando '{module_name}' en '{db_name}': {mod_err}")
+                        failed_modules.append(f"{module_name}(error)")
+
+                result_details["modules_installed"] = installed_modules
+                result_details["modules_failed"] = failed_modules
+                logger.info(
+                    f"✅ Módulos procesados para '{db_name}': "
+                    f"OK={len(installed_modules)}, FAIL={len(failed_modules)}"
+                )
+            else:
+                logger.warning(f"⚠️ No se pudo autenticar via XML-RPC en '{db_name}' — módulos no instalados")
+                result_details["modules_error"] = "auth_failed"
+
+        except Exception as xmlrpc_err:
+            logger.warning(f"⚠️ Error XML-RPC instalando módulos en '{db_name}': {xmlrpc_err}")
+            result_details["modules_error"] = str(xmlrpc_err)
+
+    result_details["success"] = True
+    return result_details
+
+
 async def create_tenant_from_template(
     subdomain: str,
     company_name: str = None,
     server_id: str = None,
     admin_login: str = None,
-    admin_password: str = None
+    admin_password: str = None,
+    partner_id: int = None,   # ID del partner en la BD de erp-core (para branding + usuario socio)
+    country_code: str = None,  # Código ISO país para localización (DO, US, MX, etc.)
+    blueprint_package_name: str = None,  # Nombre del paquete/blueprint (ej: pkg_restaurantes)
 ) -> Dict[str, Any]:
     """
     Crea tenant duplicando template_tenant via SQL directo (más rápido)
     
     Esta función es la recomendada para crear nuevos tenants en producción.
     Duplica template_tenant y configura los datos del nuevo tenant.
+
+    Si se proporciona `partner_id`, se crea un usuario socio adicional con
+    permisos Sales (imagen 2) y el email de bienvenida usa el branding del partner.
     """
     refresh_odoo_servers()
+    _partner_id = partner_id  # alias interno para usar en los pasos 7b y 8
 
     # Normalizar
     subdomain = subdomain.lower().strip().replace(" ", "_").replace("-", "_")
@@ -1376,6 +1789,27 @@ async def create_tenant_from_template(
         
         # 5. Configurar nueva BD
         base_url = f"https://{subdomain}.{BASE_DOMAIN}"
+        # Leer configuración de Postal desde env (relay interno seguro).
+        # El relay SMTP vive en CT 200 / 10.10.10.151 y expone STARTTLS por 587.
+        # Para tenants Sajet se prioriza la credencial dedicada de sajet.us.
+        _postal_host = os.getenv("POSTAL_SMTP_HOST", "10.10.10.151")
+        _postal_port = int(os.getenv("POSTAL_SMTP_PORT", "587"))
+        _postal_key = (
+            os.getenv("POSTAL_SMTP_KEY_SAJET")
+            or os.getenv("POSTAL_SMTP_KEY")
+            or "QSyHnBo8wWLbOafPRV7MWtmq"
+        )
+        _postal_encryption = os.getenv("POSTAL_SMTP_ENCRYPTION", "starttls").lower()
+        _postal_from_filter = os.getenv("POSTAL_SMTP_FROM_FILTER", "").strip()
+        if _postal_from_filter in {"*@mail.sajet.us", "*@sajet.us"}:
+            _postal_from_filter = ""
+
+        safe_postal_host = _postal_host.replace("'", "''")
+        safe_postal_key = _postal_key.replace("'", "''")
+        safe_postal_encryption = _postal_encryption.replace("'", "''")
+        safe_postal_from_filter = _postal_from_filter.replace("'", "''")
+        postal_from_filter_sql = f"'{safe_postal_from_filter}'" if safe_postal_from_filter else "NULL"
+
         config_sql = f"""
         UPDATE res_company SET name = '{safe_company_name}' WHERE id = 1;
         UPDATE res_partner SET name = '{safe_company_name}' WHERE id = 1;
@@ -1383,25 +1817,293 @@ async def create_tenant_from_template(
         UPDATE ir_config_parameter SET value = 'False' WHERE key = 'web.base.url.freeze';
         DELETE FROM ir_sessions;
         UPDATE ir_config_parameter SET value = gen_random_uuid()::text WHERE key = 'database.uuid';
+        -- Servidor SMTP Postal (relay interno seguro)
+        -- El tenant hereda esta configuración; puede añadir su propio servidor con menor sequence.
+        DELETE FROM ir_mail_server;
+        INSERT INTO ir_mail_server
+            (name, smtp_host, smtp_port, smtp_user, smtp_pass, smtp_encryption,
+             smtp_authentication, from_filter, active, sequence,
+             create_uid, write_uid, create_date, write_date)
+        VALUES
+            ('Postal Relay — Campañas', '{safe_postal_host}', {_postal_port},
+             '{safe_postal_key}', '{safe_postal_key}',
+             '{safe_postal_encryption}', 'login', {postal_from_filter_sql},
+             true, 20, 1, 1, NOW(), NOW());
+        -- Dominio del website
+        UPDATE website SET domain = '{subdomain}.{BASE_DOMAIN}' WHERE id = 1;
         """
         
         _run_pct_sql(pct_id, subdomain, config_sql)
-        
-        # 6. Actualizar credenciales admin si son diferentes al default
-        if final_login != DEFAULT_ADMIN_LOGIN or final_password != DEFAULT_ADMIN_PASSWORD:
-            cred_sql = f"""
-            UPDATE res_users SET login = '{safe_final_login}' WHERE id = 2;
-            UPDATE res_partner SET email = '{safe_final_login}' WHERE id IN (SELECT partner_id FROM res_users WHERE id = 2);
-            """
-            if final_password != DEFAULT_ADMIN_PASSWORD:
-                cred_sql += f"UPDATE res_users SET password = '{safe_final_password}' WHERE id = 2;\n"
-            
-            ok, out = _run_pct_sql(pct_id, subdomain, cred_sql)
-            if ok:
-                logger.info(f"✅ Credenciales admin actualizadas: login={final_login}")
+
+        # 6. Credenciales admin Odoo (backend) — siempre actualizar
+        cred_sql = (
+            f"UPDATE res_users SET login = '{safe_final_login}' WHERE id = 2;\n"
+            f"UPDATE res_partner SET email = '{safe_final_login}' WHERE id IN "
+            f"(SELECT partner_id FROM res_users WHERE id = 2);\n"
+            f"UPDATE res_users SET password = '{safe_final_password}' WHERE id = 2;\n"
+        )
+        ok, out = _run_pct_sql(pct_id, subdomain, cred_sql)
+        if ok:
+            logger.info(f"✅ Credenciales admin actualizadas: login={final_login}")
+        else:
+            logger.warning(f"⚠️ Error actualizando credenciales admin: {out}")
+
+        # 6b. Localización por país + módulos del blueprint
+        effective_country = (country_code or DEFAULT_COUNTRY).upper().strip()
+        bp_modules = _resolve_blueprint_modules(blueprint_package_name)
+        try:
+            loc_result = _configure_tenant_localization(
+                pct_id=pct_id,
+                db_name=subdomain,
+                country_code=effective_country,
+                server_ip=server.ip,
+                server_port=server.port,
+                blueprint_modules=bp_modules,
+            )
+            if loc_result.get("success"):
+                logger.info(
+                    f"✅ Localización '{effective_country}' + blueprint '{blueprint_package_name or 'none'}' "
+                    f"aplicada para '{subdomain}' — modules={loc_result.get('modules_installed', [])}"
+                )
             else:
-                logger.warning(f"⚠️ Error actualizando credenciales: {out}")
-        
+                logger.warning(f"⚠️ Localización parcial para '{subdomain}': {loc_result}")
+        except Exception as loc_err:
+            logger.warning(f"⚠️ Error en localización de '{subdomain}': {loc_err}")
+
+        # 7. Crear usuario cliente portal (acceso portal Sajet — no accede al backend de Odoo)
+        import secrets as _secrets
+        client_login    = f"cliente@{subdomain}.sajet.us"
+        client_password = _secrets.token_urlsafe(12)
+        safe_client_login    = client_login.replace("'", "''")
+        safe_client_password = client_password.replace("'", "''")
+        safe_client_name     = (safe_company_name + " — Cliente")
+
+        portal_sql = f"""
+        DO $$
+        DECLARE
+            v_partner_id  INTEGER;
+            v_user_id     INTEGER;
+            v_group_id    INTEGER;
+        BEGIN
+            INSERT INTO res_partner (name, email, active, type, company_type,
+                                     create_uid, write_uid, create_date, write_date)
+            VALUES ('{safe_client_name}', '{safe_client_login}',
+                    TRUE, 'contact', 'person', 1, 1, NOW(), NOW())
+            RETURNING id INTO v_partner_id;
+
+            INSERT INTO res_users (login, password, partner_id, active, share,
+                                   create_uid, write_uid, create_date, write_date)
+            VALUES ('{safe_client_login}', '{safe_client_password}',
+                    v_partner_id, TRUE, TRUE, 1, 1, NOW(), NOW())
+            RETURNING id INTO v_user_id;
+
+            -- Asignar grupo Portal
+            SELECT id INTO v_group_id FROM res_groups
+            WHERE name = 'Portal'
+              AND category_id = (
+                  SELECT id FROM ir_module_category WHERE name = 'Hidden' LIMIT 1
+              )
+            LIMIT 1;
+
+            IF v_group_id IS NOT NULL THEN
+                INSERT INTO res_groups_users_rel (gid, uid)
+                VALUES (v_group_id, v_user_id) ON CONFLICT DO NOTHING;
+            END IF;
+        END$$;
+        """
+        ok_portal, out_portal = _run_pct_sql(pct_id, subdomain, portal_sql)
+        if ok_portal:
+            logger.info(f"✅ Usuario cliente portal creado: {client_login}")
+        else:
+            logger.warning(f"⚠️ Error creando usuario portal: {out_portal}")
+            client_password = ""  # No exponer password si falló
+
+        # 7b. Crear usuario socio (partner) con permisos Sales full — imagen 2
+        #     Solo se crea si el tenant fue provisionado por un partner identificado.
+        #     Si no hay partner, se omite para no contaminar la BD con cuentas huérfanas.
+        partner_login    = None
+        partner_password = None
+        if _partner_id:
+            partner_login    = f"partner@{subdomain}.sajet.us"
+            partner_password = _secrets.token_urlsafe(12)
+            safe_partner_login    = partner_login.replace("'", "''")
+            safe_partner_password = partner_password.replace("'", "''")
+            safe_partner_name     = (safe_company_name + " — Socio")
+
+            partner_user_sql = f"""
+            DO $$
+            DECLARE
+                v_partner_id   INTEGER;
+                v_user_id      INTEGER;
+                v_group_id     INTEGER;
+                v_cat_id       INTEGER;
+                v_hidden_id    INTEGER;
+            BEGIN
+                -- 1) Partner record
+                INSERT INTO res_partner (name, email, active, type, company_type,
+                                         create_uid, write_uid, create_date, write_date)
+                VALUES ('{safe_partner_name}', '{safe_partner_login}',
+                        TRUE, 'contact', 'person', 1, 1, NOW(), NOW())
+                RETURNING id INTO v_partner_id;
+
+                -- 2) Usuario interno (share=FALSE para acceso backend)
+                INSERT INTO res_users (login, password, partner_id, active, share,
+                                       create_uid, write_uid, create_date, write_date)
+                VALUES ('{safe_partner_login}', '{safe_partner_password}',
+                        v_partner_id, TRUE, FALSE, 1, 1, NOW(), NOW())
+                RETURNING id INTO v_user_id;
+
+                -- Quitar grupo "Public" si existe
+                SELECT id INTO v_group_id FROM res_groups WHERE name = 'Public' LIMIT 1;
+                IF v_group_id IS NOT NULL THEN
+                    DELETE FROM res_groups_users_rel WHERE gid = v_group_id AND uid = v_user_id;
+                END IF;
+
+                -- 3) Grupo base "Internal User"
+                SELECT id INTO v_group_id FROM res_groups
+                WHERE name = 'Internal User'
+                  AND category_id = (SELECT id FROM ir_module_category WHERE name = 'Hidden' LIMIT 1)
+                LIMIT 1;
+                IF v_group_id IS NOT NULL THEN
+                    INSERT INTO res_groups_users_rel (gid, uid)
+                    VALUES (v_group_id, v_user_id) ON CONFLICT DO NOTHING;
+                END IF;
+
+                -- Sales: Administrator
+                SELECT id INTO v_group_id FROM res_groups
+                WHERE name = 'Administrator'
+                  AND category_id = (SELECT id FROM ir_module_category WHERE name = 'Sales' LIMIT 1)
+                LIMIT 1;
+                IF v_group_id IS NOT NULL THEN
+                    INSERT INTO res_groups_users_rel (gid, uid)
+                    VALUES (v_group_id, v_user_id) ON CONFLICT DO NOTHING;
+                END IF;
+
+                -- Accounting: Advisor
+                SELECT id INTO v_group_id FROM res_groups
+                WHERE name = 'Advisor'
+                  AND category_id = (SELECT id FROM ir_module_category WHERE name = 'Accounting' LIMIT 1)
+                LIMIT 1;
+                IF v_group_id IS NOT NULL THEN
+                    INSERT INTO res_groups_users_rel (gid, uid)
+                    VALUES (v_group_id, v_user_id) ON CONFLICT DO NOTHING;
+                END IF;
+
+                -- Accounting: Validate Bank Accounts
+                SELECT id INTO v_group_id FROM res_groups
+                WHERE name = 'Validate bank account'
+                  AND category_id = (SELECT id FROM ir_module_category WHERE name = 'Accounting' LIMIT 1)
+                LIMIT 1;
+                IF v_group_id IS NOT NULL THEN
+                    INSERT INTO res_groups_users_rel (gid, uid)
+                    VALUES (v_group_id, v_user_id) ON CONFLICT DO NOTHING;
+                END IF;
+
+                -- Inventory: Administrator
+                SELECT id INTO v_group_id FROM res_groups
+                WHERE name = 'Administrator'
+                  AND category_id = (SELECT id FROM ir_module_category WHERE name = 'Inventory' LIMIT 1)
+                LIMIT 1;
+                IF v_group_id IS NOT NULL THEN
+                    INSERT INTO res_groups_users_rel (gid, uid)
+                    VALUES (v_group_id, v_user_id) ON CONFLICT DO NOTHING;
+                END IF;
+
+                -- Purchase: Administrator
+                SELECT id INTO v_group_id FROM res_groups
+                WHERE name = 'Administrator'
+                  AND category_id = (SELECT id FROM ir_module_category WHERE name = 'Purchase' LIMIT 1)
+                LIMIT 1;
+                IF v_group_id IS NOT NULL THEN
+                    INSERT INTO res_groups_users_rel (gid, uid)
+                    VALUES (v_group_id, v_user_id) ON CONFLICT DO NOTHING;
+                END IF;
+
+                -- Website: Editor and Designer
+                SELECT id INTO v_group_id FROM res_groups
+                WHERE name = 'Editor and Designer'
+                  AND category_id = (SELECT id FROM ir_module_category WHERE name = 'Website' LIMIT 1)
+                LIMIT 1;
+                IF v_group_id IS NOT NULL THEN
+                    INSERT INTO res_groups_users_rel (gid, uid)
+                    VALUES (v_group_id, v_user_id) ON CONFLICT DO NOTHING;
+                END IF;
+
+                -- Email Marketing: User
+                SELECT id INTO v_group_id FROM res_groups
+                WHERE name = 'User'
+                  AND category_id = (SELECT id FROM ir_module_category WHERE name = 'Email Marketing' LIMIT 1)
+                LIMIT 1;
+                IF v_group_id IS NOT NULL THEN
+                    INSERT INTO res_groups_users_rel (gid, uid)
+                    VALUES (v_group_id, v_user_id) ON CONFLICT DO NOTHING;
+                END IF;
+
+                -- Administration: Access Rights
+                SELECT id INTO v_group_id FROM res_groups
+                WHERE name = 'Access Rights'
+                  AND category_id = (SELECT id FROM ir_module_category WHERE name = 'Administration' LIMIT 1)
+                LIMIT 1;
+                IF v_group_id IS NOT NULL THEN
+                    INSERT INTO res_groups_users_rel (gid, uid)
+                    VALUES (v_group_id, v_user_id) ON CONFLICT DO NOTHING;
+                END IF;
+
+            END$$;
+            """
+            ok_partner_user, out_partner_user = _run_pct_sql(pct_id, subdomain, partner_user_sql)
+            if ok_partner_user:
+                logger.info(f"✅ Usuario socio con permisos Sales creado: {partner_login}")
+            else:
+                logger.warning(f"⚠️ Error creando usuario socio: {out_partner_user}")
+                partner_login    = None
+                partner_password = None
+
+        # 8. Resolver branding del partner para el email de bienvenida
+        partner_brand = None
+        if _partner_id:
+            try:
+                from ..models.database import Partner as PartnerModel, SessionLocal
+                _db = SessionLocal()
+                try:
+                    _p = _db.query(PartnerModel).filter(PartnerModel.id == _partner_id).first()
+                    if _p:
+                        partner_brand = {
+                            "brand_name":          _p.brand_name,
+                            "brand_color_primary": _p.brand_color_primary,
+                            "brand_color_accent":  _p.brand_color_accent,
+                            "logo_url":            _p.logo_url,
+                            "smtp_from_name":      _p.smtp_from_name,
+                            "smtp_from_email":     _p.smtp_from_email,
+                        }
+                finally:
+                    _db.close()
+            except Exception as brand_err:
+                logger.warning(f"⚠️ No se pudo obtener branding del partner {_partner_id}: {brand_err}")
+
+        # 9. Enviar email de bienvenida con todas las credenciales
+        try:
+            from .email_service import send_tenant_welcome
+            email_result = send_tenant_welcome(
+                to_email=final_login,
+                company_name=company_name,
+                subdomain=subdomain,
+                plan_name="basic",
+                admin_login=final_login,
+                admin_password=final_password,
+                client_login=client_login,
+                client_password=client_password,
+                partner_login=partner_login,
+                partner_password=partner_password,
+                partner_brand=partner_brand,
+            )
+            if email_result.get("success"):
+                logger.info(f"✅ Email de bienvenida enviado a {final_login}")
+            else:
+                logger.warning(f"⚠️ Email no enviado: {email_result.get('error')}")
+        except Exception as email_err:
+            logger.warning(f"⚠️ Error enviando email de bienvenida: {email_err}")
+
         logger.info(f"✅ Tenant '{subdomain}' creado exitosamente")
         
         return {
@@ -1413,6 +2115,10 @@ async def create_tenant_from_template(
             "url": f"https://{subdomain}.{BASE_DOMAIN}",
             "admin_login": final_login,
             "admin_password": final_password,
+            "client_login": client_login,
+            "client_password": client_password if client_password else None,
+            "partner_login": partner_login,
+            "partner_password": partner_password,
             "created_at": datetime.utcnow().isoformat()
         }
         
@@ -1428,7 +2134,10 @@ async def create_tenant_api(
     server_id: str = None,
     admin_login: str = DEFAULT_ADMIN_LOGIN,
     admin_password: str = DEFAULT_ADMIN_PASSWORD,
-    use_fast_method: bool = True
+    use_fast_method: bool = True,
+    partner_id: int = None,   # ID del partner en erp-core (branding + usuario socio)
+    country_code: str = None,  # Código ISO país para localización
+    blueprint_package_name: str = None,  # Nombre del paquete/blueprint
 ) -> Dict[str, Any]:
     """
     Endpoint: crea un nuevo tenant
@@ -1440,6 +2149,9 @@ async def create_tenant_api(
         admin_login: Email admin (from env ODOO_DEFAULT_ADMIN_LOGIN)
         admin_password: Password admin (from env ODOO_DEFAULT_ADMIN_PASSWORD)
         use_fast_method: Si usar SQL directo (más rápido) vs HTTP API
+        partner_id: ID del partner en erp-core (para branding + usuario socio)
+        country_code: Código ISO del país (DO, US, MX, etc.)
+        blueprint_package_name: Nombre del paquete/blueprint (ej: pkg_restaurantes)
     
     Returns:
         Dict con resultado de la creación
@@ -1452,6 +2164,9 @@ async def create_tenant_api(
             server_id=server_id,
             admin_login=admin_login,
             admin_password=admin_password,
+            partner_id=partner_id,
+            country_code=country_code,
+            blueprint_package_name=blueprint_package_name,
         )
     else:
         # Método tradicional via HTTP API de Odoo
@@ -1460,5 +2175,7 @@ async def create_tenant_api(
             company_name=company_name,
             admin_login=admin_login,
             admin_password=admin_password,
-            server_id=server_id
+            server_id=server_id,
+            country_code=country_code,
+            blueprint_package_name=blueprint_package_name,
         )

@@ -475,8 +475,8 @@
           <p class="font-semibold">Flujo automático al crear:</p>
           <ol class="list-decimal list-inside space-y-0.5 ml-2">
             <li>Se registra el dominio y se vincula a <code>{selectedCustomer?.subdomain ?? '???'}.sajet.us</code></li>
-            <li>Se crea CNAME en Cloudflare (zona sajet.us)</li>
-            <li>El cliente configura CNAME en su DNS externo</li>
+            <li>Se crea el CNAME interno en Cloudflare para <code>{selectedCustomer?.subdomain ?? '???'}.sajet.us</code></li>
+            <li>El cliente configura un registro A en su DNS externo hacia la IP publica de PCT160</li>
             <li>Se verifica propagación DNS</li>
             <li>Se configura nginx (PCT160 + CT105) y se activa</li>
           </ol>
@@ -498,7 +498,7 @@
         </div>
       </form>
 
-      <!-- CNAME Instructions after creation -->
+      <!-- DNS instructions after creation -->
       {#if createInstructions}
         <div class="mt-4 bg-emerald-50 border border-emerald-200 p-4 rounded-md">
           <p class="text-xs uppercase tracking-widest font-semibold text-emerald-700 mb-3 flex items-center gap-2">

@@ -247,6 +247,196 @@ def send_tenant_credentials(
     )
 
 
+def _partner_template(content: str, brand: dict) -> str:
+    """
+    Wrapper HTML con branding del partner.
+    `brand` puede tener: brand_name, brand_color_primary, brand_color_accent, logo_url.
+    Si los campos están vacíos se usan los defaults de SAJET.
+    """
+    name    = brand.get("brand_name") or "SAJET"
+    color1  = brand.get("brand_color_primary") or "#c0392b"
+    color2  = brand.get("brand_color_accent")  or "#e74c3c"
+    logo    = brand.get("logo_url") or ""
+
+    logo_html = (
+        f'<img src="{logo}" alt="{name}" style="max-height:48px;max-width:180px;'
+        f'display:block;margin-bottom:6px;" />'
+        if logo else
+        f'<h1 style="margin:0;color:#fff;font-size:24px;font-weight:700;">{name}</h1>'
+    )
+
+    return f"""
+    <!DOCTYPE html>
+    <html>
+    <head><meta charset="utf-8"></head>
+    <body style="font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+                 background: #1a1a2e; color: #e0e0e0; padding: 40px 20px; margin: 0;">
+      <div style="max-width: 600px; margin: 0 auto; background: #16213e; border-radius: 12px;
+                  border: 1px solid #2a2a4a; overflow: hidden;">
+        <!-- Header con branding del partner -->
+        <div style="background: linear-gradient(135deg, {color1}, {color2}); padding: 24px 32px;">
+          {logo_html}
+          <p style="margin: 4px 0 0; color: rgba(255,255,255,0.8); font-size: 13px;">Powered by SAJET Platform</p>
+        </div>
+        <!-- Content -->
+        <div style="padding: 32px;">
+          {content}
+        </div>
+        <!-- Footer -->
+        <div style="padding: 16px 32px; background: #0f1629; text-align: center; font-size: 12px; color: #666;">
+          <p style="margin: 0;">{name} — Powered by <strong>SAJET</strong></p>
+          <p style="margin: 4px 0 0;">Este es un mensaje automático, no responda a este correo.</p>
+        </div>
+      </div>
+    </body>
+    </html>
+    """
+
+
+def send_tenant_welcome(
+    to_email: str,
+    company_name: str,
+    subdomain: str,
+    plan_name: str,
+    admin_login: str,
+    admin_password: str,
+    client_login: str,
+    client_password: str,
+    partner_login: Optional[str] = None,
+    partner_password: Optional[str] = None,
+    customer_id: Optional[int] = None,
+    # Branding del partner (si el tenant fue provisionado por un socio)
+    partner_brand: Optional[dict] = None,
+) -> dict:
+    """
+    Email de bienvenida con las 3 credenciales del tenant:
+      1. Administrador Odoo  — backend ERP completo
+      2. Usuario cliente     — portal Sajet (suscripción/facturación)
+      3. Partner/Reseller    — panel partner (opcional)
+
+    Si se pasa `partner_brand` (dict con brand_name, brand_color_primary,
+    brand_color_accent, logo_url, smtp_from_name, smtp_from_email),
+    el email se envía con el branding del partner en lugar del de SAJET.
+    """
+    url        = f"https://{subdomain}.sajet.us"
+    portal_url = f"{APP_URL}/tenant/portal"
+
+    # Determinar si hay branding de partner
+    use_partner_brand = bool(partner_brand and any(partner_brand.values()))
+    brand = partner_brand or {}
+
+    # From personalizado del partner (o default SAJET)
+    from_name  = brand.get("smtp_from_name")  or SMTP_FROM_NAME
+    from_email = brand.get("smtp_from_email") or SMTP_FROM_EMAIL
+
+    accent_admin  = brand.get("brand_color_primary") or "#e74c3c"
+    accent_client = brand.get("brand_color_accent")  or "#3498db"
+
+    def _row(label, value):
+        return (
+            f'<tr>'
+            f'<td style="padding:6px 0;color:#999;width:130px;vertical-align:top;">{label}</td>'
+            f'<td style="padding:6px 0;font-family:monospace;background:#2a2a4a;'
+            f'padding:4px 10px;border-radius:4px;">{value}</td>'
+            f'</tr>'
+        )
+
+    partner_block = ""
+    if partner_login and partner_password:
+        partner_block = f"""
+    <div style="background:#1a1a2e;border-radius:8px;padding:20px;margin:20px 0;
+                border-left:4px solid #9b59b6;">
+      <h3 style="margin-top:0;color:#fff;">👤 Partner / Reseller</h3>
+      <p style="color:#aaa;font-size:13px;margin-top:0;">Acceso al portal de socio.</p>
+      <table style="width:100%;border-collapse:collapse;">
+        {_row("Portal:", f'<a href="{APP_URL}/partner" style="color:#9b59b6;">{APP_URL}/partner</a>')}
+        {_row("Usuario:", partner_login)}
+        {_row("Contraseña:", partner_password)}
+      </table>
+    </div>"""
+
+    content = f"""
+    <h2 style="color:{accent_admin};margin-top:0;">¡Bienvenido! 🎉</h2>
+    <p>El tenant de <strong>{company_name}</strong> fue creado exitosamente — plan <strong>{plan_name}</strong>.</p>
+    <p style="color:#aaa;font-size:13px;">A continuación encontrará las credenciales de acceso para cada perfil.</p>
+
+    <div style="background:#1a1a2e;border-radius:8px;padding:20px;margin:20px 0;
+                border-left:4px solid {accent_admin};">
+      <h3 style="margin-top:0;color:#fff;">🔧 Administrador Odoo (ERP)</h3>
+      <p style="color:#aaa;font-size:13px;margin-top:0;">Acceso completo al backend del sistema.</p>
+      <table style="width:100%;border-collapse:collapse;">
+        {_row("URL:", f'<a href="{url}" style="color:{accent_admin};">{url}</a>')}
+        {_row("Usuario:", admin_login)}
+        {_row("Contraseña:", admin_password)}
+      </table>
+    </div>
+
+    <div style="background:#1a1a2e;border-radius:8px;padding:20px;margin:20px 0;
+                border-left:4px solid {accent_client};">
+      <h3 style="margin-top:0;color:#fff;">🌐 Cliente (Portal SAJET)</h3>
+      <p style="color:#aaa;font-size:13px;margin-top:0;">Gestión de suscripción, facturación y soporte.</p>
+      <table style="width:100%;border-collapse:collapse;">
+        {_row("Portal:", f'<a href="{portal_url}" style="color:{accent_client};">{portal_url}</a>')}
+        {_row("Usuario:", client_login)}
+        {_row("Contraseña:", client_password)}
+      </table>
+    </div>
+
+    {partner_block}
+
+    <p style="color:#f39c12;font-size:13px;">⚠️ Por seguridad, cambie las contraseñas tras el primer inicio de sesión.</p>
+    <p style="color:#999;font-size:12px;">Soporte: <a href="mailto:soporte@sajet.us" style="color:{accent_admin};">soporte@sajet.us</a></p>
+    """
+
+    text = (
+        f"Bienvenido — {company_name}\n\n"
+        f"=== Administrador Odoo ===\n"
+        f"URL: {url}\nUsuario: {admin_login}\nContraseña: {admin_password}\n\n"
+        f"=== Cliente Portal SAJET ===\n"
+        f"Portal: {portal_url}\nUsuario: {client_login}\nContraseña: {client_password}\n"
+    )
+    if partner_login and partner_password:
+        text += (
+            f"\n=== Partner ===\n"
+            f"Portal: {APP_URL}/partner\nUsuario: {partner_login}\nContraseña: {partner_password}\n"
+        )
+
+    html_body = _partner_template(content, brand) if use_partner_brand else _base_template(content)
+
+    # Construir mensaje con From personalizado del partner si aplica
+    if use_partner_brand and brand.get("smtp_from_email"):
+        try:
+            import smtplib
+            from email.mime.multipart import MIMEMultipart
+            from email.mime.text import MIMEText as _MIMEText
+            msg = MIMEMultipart("alternative")
+            msg["From"]    = f"{from_name} <{from_email}>"
+            msg["To"]      = to_email
+            msg["Subject"] = f"🔑 Credenciales de acceso — {company_name}"
+            if text:
+                msg.attach(_MIMEText(text, "plain", "utf-8"))
+            msg.attach(_MIMEText(html_body, "html", "utf-8"))
+            smtp_conn = _get_smtp_connection()
+            smtp_conn.sendmail(from_email, to_email, msg.as_string())
+            smtp_conn.quit()
+            logger.info(f"✅ Email bienvenida (partner brand) enviado a {to_email}")
+            _log_to_db(to_email, f"Credenciales — {company_name}", "tenant_welcome",
+                       "sent", customer_id=customer_id)
+            return {"success": True, "to": to_email}
+        except Exception as e:
+            logger.warning(f"⚠️ Error enviando con From del partner, reintentando con SAJET SMTP: {e}")
+            # fallback → usa el SMTP de SAJET normal
+
+    return send_email(
+        to_email=to_email,
+        subject=f"🔑 Credenciales de acceso — {company_name}",
+        html_body=html_body,
+        text_body=text,
+        email_type="tenant_welcome",
+        customer_id=customer_id,
+    )
+
+
 def send_password_reset(
     to_email: str,
     company_name: str,

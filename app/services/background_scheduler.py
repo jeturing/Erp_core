@@ -101,11 +101,11 @@ class BackgroundScheduler:
         """Ejecuta reconciliación Stripe vs DB."""
         from ..models.database import SessionLocal
         from ..services.stripe_reconciliation import StripeReconciliationService
-        from ..config import STRIPE_SECRET_KEY
+        from ..config import get_runtime_setting
 
         db = SessionLocal()
         try:
-            service = StripeReconciliationService(db, STRIPE_SECRET_KEY)
+            service = StripeReconciliationService(db, get_runtime_setting("STRIPE_SECRET_KEY", ""))
             result = service.run_reconciliation(scope="all", dry_run=False)
             logger.info(
                 f"📊 Reconciliation complete: "
@@ -123,10 +123,10 @@ class BackgroundScheduler:
     def _run_stripe_sync(self):
         """Sincroniza datos de Stripe → BD local."""
         from ..models.database import SessionLocal
-        from ..config import STRIPE_SECRET_KEY
+        from ..config import get_runtime_setting
         import stripe
 
-        stripe.api_key = STRIPE_SECRET_KEY
+        stripe.api_key = get_runtime_setting("STRIPE_SECRET_KEY", "")
         db = SessionLocal()
         try:
             from ..services.stripe_sync import StripeSyncService

@@ -8,10 +8,10 @@ from fastapi import APIRouter, HTTPException, Depends
 from pydantic import BaseModel
 from typing import Optional
 from sqlalchemy.orm import Session
-import os
 import logging
 
 from ..models.database import ReconciliationRun, get_db
+from ..config import get_runtime_setting
 from ..services.stripe_reconciliation import StripeReconciliationService
 
 router = APIRouter(prefix="/api/reconciliation", tags=["Reconciliation"])
@@ -33,7 +33,7 @@ def run_reconciliation(
     - scope=legacy → Solo lee, no corrige (DB READONLY para legacy)
     - dry_run=True → Reporta sin modificar
     """
-    stripe_key = os.getenv("STRIPE_SECRET_KEY", "")
+    stripe_key = get_runtime_setting("STRIPE_SECRET_KEY", "")
     if not stripe_key:
         raise HTTPException(500, "STRIPE_SECRET_KEY not configured")
 

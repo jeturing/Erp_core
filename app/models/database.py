@@ -231,6 +231,36 @@ class AdminUserRole(enum.Enum):
     segrd_user = "segrd-user"
 
 
+# ═══════════════════════════════════════════════════════
+# ENUMS — Multi-Nodo: Runtime, Routing y Migración
+# ═══════════════════════════════════════════════════════
+
+class RuntimeMode(enum.Enum):
+    """Modo de ejecución del tenant en el nodo Odoo."""
+    shared_pool = "shared_pool"             # Servicio Odoo multi-tenant compartido
+    dedicated_service = "dedicated_service" # Instancia Odoo aislada por tenant
+
+
+class RoutingMode(enum.Enum):
+    """Cómo PCT160 enruta tráfico al backend del tenant."""
+    node_proxy = "node_proxy"         # PCT160 → nginx del nodo (:8080/:8072) con rewrite
+    direct_service = "direct_service" # PCT160 → backend_host:http_port/chat_port directo
+
+
+class MigrationState(enum.Enum):
+    """Estado de migración de un tenant entre nodos o modos de runtime."""
+    idle = "idle"                         # Sin migración activa
+    queued = "queued"                     # En cola para migrar
+    preflight = "preflight"               # Validando nodo destino
+    preparing_target = "preparing_target" # Creando runtime destino sin tráfico
+    warming_target = "warming_target"     # Precalentando en nodo destino
+    cutover = "cutover"                   # Cortando tráfico al destino
+    verifying = "verifying"               # Verificando post-migración
+    rollback = "rollback"                 # Revirtiendo al origen
+    completed = "completed"               # Migración exitosa
+    failed = "failed"                     # Migración fallida
+
+
 class AdminUser(Base):
     """
     Usuarios administrativos de la plataforma.
@@ -539,10 +569,48 @@ class ServiceCatalogItem(Base):
     is_addon = Column(Boolean, default=False)            # SOC requiere vCISO
     requires_service_id = Column(Integer, ForeignKey("service_catalog.id"))  # Dependencia
     min_quantity = Column(Integer, default=1)
+    service_code = Column(String(100), nullable=True, index=True)   # Ej: postal_email_package
+    metadata_json = Column(JSON, nullable=True)                     # Metadata flexible por servicio
     is_active = Column(Boolean, default=True)
     sort_order = Column(Integer, default=0)
     created_at = Column(DateTime, default=datetime.utcnow)
     updated_at = Column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
+
+
+class CustomerAddonSubscription(Base):
+    """
+    Servicios/add-ons comprados por un cliente fuera del plan base.
+    Se usan para:
+      - Vender paquetes desde portal tenant/partner
+      - Facturar add-ons de forma inmediata y recurrente
+      - Mantener snapshot del precio/metadata al momento de la compra
+    """
+    __tablename__ = "customer_addon_subscriptions"
+
+    id = Column(Integer, primary_key=True, index=True)
+    customer_id = Column(Integer, ForeignKey("customers.id", ondelete="CASCADE"), nullable=False, index=True)
+    subscription_id = Column(Integer, ForeignKey("subscriptions.id", ondelete="SET NULL"), nullable=True, index=True)
+    partner_id = Column(Integer, ForeignKey("partners.id", ondelete="SET NULL"), nullable=True, index=True)
+    catalog_item_id = Column(Integer, ForeignKey("service_catalog.id", ondelete="RESTRICT"), nullable=False, index=True)
+    status = Column(String(20), nullable=False, default="active", index=True)  # active | cancelled
+    quantity = Column(Integer, nullable=False, default=1)
+    unit_price_monthly = Column(Float, nullable=False, default=0)
+    currency = Column(String(3), nullable=False, default="USD")
+    service_code = Column(String(100), nullable=True, index=True)
+    metadata_json = Column(JSON, nullable=True)
+    acquired_via = Column(String(50), nullable=False, default="tenant_portal")
+    notes = Column(Text, nullable=True)
+    starts_at = Column(DateTime, nullable=False, default=datetime.utcnow)
+    ends_at = Column(DateTime, nullable=True)
+    last_invoiced_year = Column(Integer, nullable=True)
+    last_invoiced_month = Column(Integer, nullable=True)
+    created_at = Column(DateTime, default=datetime.utcnow)
+    updated_at = Column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
+
+    customer = relationship("Customer", foreign_keys=[customer_id], backref="addon_subscriptions")
+    subscription = relationship("Subscription", foreign_keys=[subscription_id], backref="addon_subscriptions")
+    partner = relationship("Partner", foreign_keys=[partner_id])
+    catalog_item = relationship("ServiceCatalogItem", foreign_keys=[catalog_item_id])
 
 
 # ===== PARTNER / SOCIO MODEL =====
@@ -602,6 +670,16 @@ class Partner(Base):
     totp_enabled = Column(Boolean, default=False)
     totp_backup_codes = Column(Text, nullable=True)
     totp_backup_codes_used = Column(Text, nullable=True)
+
+    # ── Branding del partner (White-label) ──
+    # Cuando un tenant es provisionado por este partner, los emails
+    # se envían con el branding del partner en lugar del de SAJET.
+    brand_name = Column(String(200), nullable=True)         # Nombre del partner en emails (ej: "TecHeels")
+    brand_color_primary = Column(String(10), nullable=True) # Hex primary (ej: "#3498db")
+    brand_color_accent = Column(String(10), nullable=True)  # Hex accent (ej: "#2ecc71")
+    logo_url = Column(String(500), nullable=True)           # URL pública del logo (PNG/SVG, 200x60px rec.)
+    smtp_from_name = Column(String(200), nullable=True)     # "From" name en email (ej: "TecHeels ERP")
+    smtp_from_email = Column(String(200), nullable=True)    # "From" email si partner tiene SMTP propio
 
     notes = Column(Text)
     created_at = Column(DateTime, default=datetime.utcnow)
@@ -805,6 +883,9 @@ class ProxmoxNode(Base):
     ssh_password = Column(String(255), nullable=True)  # Contraseña SSH (si no usa key)
     vmid = Column(Integer, nullable=True)              # VMID en Proxmox (para pct exec local)
 
+    # Puerto Odoo del nodo (para multi-nodo, cada nodo puede correr en puerto distinto)
+    odoo_port = Column(Integer, default=8069, nullable=True)  # ej: 8069 (CT105), 8089 (PCT161)
+
     # Metadatos
     created_at = Column(DateTime, default=datetime.utcnow)
     updated_at = Column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
@@ -855,7 +936,12 @@ class LXCContainer(Base):
 
 
 class TenantDeployment(Base):
-    """Relación entre Subscription y LXCContainer - donde está desplegado cada tenant"""
+    """Relación entre Subscription y LXCContainer - donde está desplegado cada tenant.
+    
+    Fuente de verdad del runtime activo del tenant. Los campos multi-nodo
+    (active_node_id, runtime_mode, routing_mode, backend_host, etc.) permiten
+    desacoplar el tenant de un nodo fijo y habilitar migración entre nodos.
+    """
     __tablename__ = "tenant_deployments"
     
     id = Column(Integer, primary_key=True, index=True)
@@ -879,7 +965,25 @@ class TenantDeployment(Base):
     # Plan y recursos
     plan_type = Column(Enum(PlanType), default=PlanType.basic)
     
-    # Metadatos
+    # ── Multi-nodo: runtime y routing ─────────────────────────────────────
+    active_node_id = Column(Integer, ForeignKey("proxmox_nodes.id"), nullable=True, index=True)
+    desired_node_id = Column(Integer, ForeignKey("proxmox_nodes.id"), nullable=True)
+    runtime_mode = Column(Enum(RuntimeMode), default=RuntimeMode.shared_pool, nullable=False,
+                          server_default="shared_pool")
+    routing_mode = Column(Enum(RoutingMode), default=RoutingMode.node_proxy, nullable=False,
+                          server_default="node_proxy")
+    backend_host = Column(String(100))                  # IP del nodo activo (ej: "10.10.10.100")
+    http_port = Column(Integer, default=8080)            # Puerto HTTP del backend nginx/dedicado
+    chat_port = Column(Integer, default=8072)            # Puerto websocket/longpolling
+    service_name = Column(String(150))                   # Nombre systemd (dedicated: "odoo-tenant@acme")
+    addons_overlay_path = Column(String(500))            # Path overlay addons (dedicated)
+    
+    # ── Migración ─────────────────────────────────────────────────────────
+    migration_state = Column(Enum(MigrationState), default=MigrationState.idle, nullable=False,
+                             server_default="idle")
+    
+    # ── Health & metadatos ────────────────────────────────────────────────
+    last_healthcheck_at = Column(DateTime, nullable=True)
     deployed_at = Column(DateTime, default=datetime.utcnow)
     last_accessed = Column(DateTime)
     
@@ -888,6 +992,9 @@ class TenantDeployment(Base):
     customer = relationship("Customer", foreign_keys=[customer_id], backref="deployments")
     subscription = relationship("Subscription", foreign_keys=[subscription_id])
     custom_domains = relationship("CustomDomain", back_populates="deployment")
+    active_node = relationship("ProxmoxNode", foreign_keys=[active_node_id],
+                               backref="active_deployments")
+    desired_node = relationship("ProxmoxNode", foreign_keys=[desired_node_id])
 
 
 class CustomDomain(Base):
@@ -1482,6 +1589,54 @@ class EmailLog(Base):
     partner = relationship("Partner", foreign_keys=[partner_id])
 
 
+class PostalEmailUsage(Base):
+    """
+    Registro de uso de correo enviado via Postal por tenant.
+
+    Cada fila representa un lote de emails de un tenant en un período.
+    Permite:
+      - Billing de uso: cobrar al tenant por emails enviados
+      - Auditoría: historial de volumen por tenant
+      - Límites: bloquear envíos si supera el plan
+
+    Fuente de datos:
+      - Webhooks de Postal → POST /api/v1/webhooks/postal-delivery
+      - O polling periódico de la API de Postal por servidor/organización
+    """
+    __tablename__ = "postal_email_usage"
+
+    id = Column(Integer, primary_key=True, index=True)
+    # Tenant y período
+    tenant_subdomain = Column(String(100), nullable=False, index=True)
+    customer_id = Column(Integer, ForeignKey("customers.id", ondelete="SET NULL"), nullable=True)
+    period_year  = Column(Integer, nullable=False)     # YYYY
+    period_month = Column(Integer, nullable=False)     # 1–12
+    # Métricas de envío
+    emails_sent = Column(Integer, default=0, nullable=False)
+    emails_delivered = Column(Integer, default=0, nullable=False)
+    emails_bounced  = Column(Integer, default=0, nullable=False)
+    emails_failed   = Column(Integer, default=0, nullable=False)
+    # Costo calculado
+    cost_per_email  = Column(Float, default=0.00020, nullable=False)   # USD por email
+    total_cost_usd  = Column(Float, default=0.0, nullable=False)       # emails_sent * cost_per_email
+    # Fuente del dato
+    postal_server_token = Column(String(50), nullable=True)            # token del servidor Postal
+    last_synced_at = Column(DateTime, nullable=True)
+    # Control
+    is_billed = Column(Boolean, default=False, nullable=False)         # True cuando se incluyó en factura
+    billed_at  = Column(DateTime, nullable=True)
+    notes = Column(Text, nullable=True)
+    created_at = Column(DateTime, default=datetime.utcnow)
+    updated_at = Column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
+
+    __table_args__ = (
+        UniqueConstraint("tenant_subdomain", "period_year", "period_month",
+                         name="uq_postal_usage_tenant_period"),
+    )
+
+    customer = relationship("Customer", foreign_keys=[customer_id])
+
+
 # ═══════════════════════════════════════════════════════
 # TESTIMONIALS — Gestionables desde Admin
 # ═══════════════════════════════════════════════════════
@@ -1652,6 +1807,11 @@ def set_config(key: str, value: str, description: str = None, category: str = "g
             )
             db.add(config)
         db.commit()
+        try:
+            from ..config import invalidate_runtime_config_cache
+            invalidate_runtime_config_cache(key)
+        except Exception:
+            pass
         return True
     except Exception as e:
         db.rollback()

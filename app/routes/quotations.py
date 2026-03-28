@@ -64,6 +64,8 @@ class CatalogItemCreate(BaseModel):
     is_addon: bool = False
     requires_service_id: Optional[int] = None
     min_quantity: int = 1
+    service_code: Optional[str] = None
+    metadata_json: Optional[dict] = None
     sort_order: int = 0
 
 
@@ -116,6 +118,8 @@ def _catalog_to_dict(c: ServiceCatalogItem) -> dict:
         "is_addon": c.is_addon,
         "requires_service_id": c.requires_service_id,
         "min_quantity": c.min_quantity,
+        "service_code": c.service_code,
+        "metadata_json": c.metadata_json or {},
         "is_active": c.is_active,
         "sort_order": c.sort_order,
         "created_at": c.created_at.isoformat() if c.created_at else None,
@@ -238,6 +242,8 @@ async def create_catalog_item(
             is_addon=payload.is_addon,
             requires_service_id=payload.requires_service_id,
             min_quantity=payload.min_quantity,
+            service_code=payload.service_code,
+            metadata_json=payload.metadata_json,
             sort_order=payload.sort_order,
         )
         db.add(item)

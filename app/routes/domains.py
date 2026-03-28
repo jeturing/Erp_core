@@ -410,7 +410,7 @@ async def create_domain(
     El sistema:
     1. Verifica límite de dominios del plan del cliente
     2. Vincula el dominio externo al subdominio SAJET del tenant
-    3. Devuelve instrucciones para configurar el CNAME en el DNS del cliente
+    3. Devuelve instrucciones para configurar un A record en el DNS del cliente
     """
     # Verificar límite de dominios del plan
     _check_domain_limit(db, data.customer_id)
@@ -560,8 +560,8 @@ async def verify_domain(
     current_user: dict = Depends(get_current_admin)
 ):
     """
-    Verifica que el dominio externo tenga el CNAME configurado correctamente.
-    Busca que apunte a {subdomain}.sajet.us
+    Verifica que el dominio externo apunte correctamente a la IP publica de PCT160
+    o que este proxied por Cloudflare hacia ese origen.
     """
     manager = DomainManager(db)
     result = await manager.verify_domain(domain_id)
@@ -724,7 +724,7 @@ async def early_domain_verification(
     
     1. Registra el dominio custom inmediatamente
     2. Lanza verificación DNS en background
-    3. Retorna instrucciones CNAME al frontend para que el cliente
+    3. Retorna instrucciones A record al frontend para que el cliente
        pueda ir configurando mientras el tenant se provisiona
     """
     import os
@@ -748,12 +748,17 @@ async def early_domain_verification(
         from ..config import DATABASE_URL as _cfg_db_url
         background_tasks.add_task(_background_domain_verify, domain_id, _cfg_db_url)
 
+    instructions = DomainManager._build_external_dns_instructions(data.external_domain)
+
     return {
         "success": True,
         "message": "Dominio registrado. Verificación DNS iniciada en background.",
         "domain": result.get("domain"),
         "instructions": {
-            "step_1": f"Crear CNAME: {data.external_domain} → {result.get('domain', {}).get('sajet_full_domain', 'N/A')}",
+            "step_1": instructions["step1"],
+            "record_type": instructions["record_type"],
+            "record_name": instructions["record_name"],
+            "record_value": instructions["record_value"],
             "step_2": "La verificación se completará automáticamente cuando el DNS propague",
             "note": "El flujo de onboarding NO se bloquea por la verificación del dominio",
         },
@@ -770,7 +775,7 @@ async def bulk_sync_cloudflare(
 ):
     """
     Sincroniza todos los dominios pendientes con Cloudflare.
-    Crea los registros CNAME faltantes.
+    Crea los CNAME internos faltantes en la zona sajet.us.
     """
     from ..models.database import CustomDomain
     
@@ -896,3 +901,40 @@ def _generate_yaml_config(rules: list) -> str:
             lines.append(f"  - service: {rule['service']}")
     
     return "\n".join(lines)
+
+
+# ==================== Routing Reconciler ====================
+
+@router.post("/routing/reconcile", response_model=dict)
+async def reconcile_routing(
+    dry_run: bool = Query(False, description="Solo calcular cambios, no aplicar"),
+    db: Session = Depends(get_db),
+    current_user: dict = Depends(get_current_admin),
+):
+    """
+    Reconcilia los nginx route maps de PCT160 con el estado actual de BD.
+    Lee TenantDeployments + CustomDomains y regenera odoo_http_routes.map
+    y odoo_chat_routes.map.
+
+    - dry_run=true: muestra cambios sin aplicar
+    - dry_run=false: aplica cambios, valida con nginx -t, recarga
+    """
+    from ..services.routing_reconciler import RoutingReconciler
+
+    reconciler = RoutingReconciler(db=db)
+    return await reconciler.reconcile(dry_run=dry_run)
+
+
+@router.get("/routing/state", response_model=dict)
+async def routing_desired_state(
+    db: Session = Depends(get_db),
+    current_user: dict = Depends(get_current_admin),
+):
+    """
+    Muestra el estado deseado de routing (sin aplicar cambios).
+    Útil para diagnóstico y auditoría.
+    """
+    from ..services.routing_reconciler import RoutingReconciler
+
+    reconciler = RoutingReconciler(db=db)
+    return await reconciler.get_desired_state_summary()

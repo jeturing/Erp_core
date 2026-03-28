@@ -2,11 +2,11 @@
 Partner Portal Routes — Endpoints accesibles por partners autenticados.
 Incluye: onboarding, dashboard, leads, clientes, Stripe Connect self-service.
 """
-from datetime import datetime
-from typing import Optional, List
+import logging
 import hashlib
 import secrets
-import logging
+from datetime import datetime
+from typing import Any, Dict, List, Optional
 
 from fastapi import APIRouter, Cookie, HTTPException, Request, status
 from fastapi.responses import JSONResponse
@@ -29,6 +29,11 @@ from ..services.stripe_connect import (
 from ..services.stripe_billing import (
     push_invoice_to_stripe,
     create_checkout_for_invoice,
+)
+from ..services.addon_billing_service import (
+    list_available_addon_services,
+    list_customer_addon_subscriptions,
+    purchase_customer_addon,
 )
 from .roles import _extract_token, verify_token_with_role
 
@@ -59,6 +64,18 @@ def _get_partner(db, payload: dict) -> Partner:
     if not partner:
         raise HTTPException(status_code=404, detail="Partner no encontrado")
     return partner
+
+
+def _apply_partner_stripe_status(partner: Partner, status_result: Dict[str, Any]) -> bool:
+    ready = bool(status_result.get("onboarding_ready"))
+    partner.stripe_charges_enabled = bool(status_result.get("charges_enabled", False))
+    partner.stripe_onboarding_complete = ready
+
+    if ready and partner.onboarding_step < 4:
+        partner.onboarding_step = 4
+        partner.onboarding_completed_at = datetime.utcnow()
+
+    return ready
 
 
 # ═══════════════════════════════════════════════
@@ -180,6 +197,20 @@ async def get_onboarding_status(
     db = SessionLocal()
     try:
         partner = _get_partner(db, auth)
+        stripe_requirements: List[str] = []
+        stripe_disabled_reason: Optional[str] = None
+        stripe_payouts_enabled = False
+        settlement_mode = "domestic"
+
+        if partner.stripe_account_id:
+            status_result = await get_account_status(partner.stripe_account_id)
+            if status_result.get("success"):
+                stripe_requirements = status_result.get("requirements_currently_due", []) or []
+                stripe_disabled_reason = status_result.get("requirements_disabled_reason")
+                stripe_payouts_enabled = bool(status_result.get("payouts_enabled", False))
+                settlement_mode = status_result.get("settlement_mode", settlement_mode)
+                _apply_partner_stripe_status(partner, status_result)
+                db.commit()
 
         steps = [
             {"step": 1, "name": "credentials", "label": "Acceso al Portal", "completed": partner.onboarding_step >= 1},
@@ -196,6 +227,13 @@ async def get_onboarding_status(
             "stripe_account_id": partner.stripe_account_id,
             "stripe_onboarding_complete": partner.stripe_onboarding_complete,
             "stripe_charges_enabled": partner.stripe_charges_enabled,
+            "stripe_payouts_enabled": stripe_payouts_enabled,
+            "stripe_requirements": stripe_requirements,
+            "stripe_disabled_reason": stripe_disabled_reason,
+            "billing_scenario": partner.billing_scenario.value if partner.billing_scenario else None,
+            "contract_signed_at": partner.contract_signed_at.isoformat() if partner.contract_signed_at else None,
+            "can_skip_stripe": bool(partner.onboarding_bypass),
+            "settlement_mode": settlement_mode,
         }
     finally:
         db.close()
@@ -270,6 +308,17 @@ async def onboarding_start_stripe(
     try:
         partner = _get_partner(db, auth)
 
+        if not partner.contract_signed_at:
+            raise HTTPException(
+                status_code=400,
+                detail="Debe firmar el acuerdo comercial antes de iniciar Stripe Connect.",
+            )
+        if not partner.country:
+            raise HTTPException(
+                status_code=400,
+                detail="Complete el país del partner antes de iniciar Stripe Connect.",
+            )
+
         # Si ya tiene cuenta, solo generar nuevo link
         if partner.stripe_account_id:
             link_result = await create_onboarding_link(
@@ -325,19 +374,16 @@ async def onboarding_verify_stripe(
         if not status_result["success"]:
             raise HTTPException(status_code=400, detail=status_result["error"])
 
-        partner.stripe_onboarding_complete = status_result.get("details_submitted", False)
-        partner.stripe_charges_enabled = status_result.get("charges_enabled", False)
-
-        if partner.stripe_onboarding_complete and partner.onboarding_step < 4:
-            partner.onboarding_step = 4
-            partner.onboarding_completed_at = datetime.utcnow()
+        _apply_partner_stripe_status(partner, status_result)
 
         db.commit()
 
         return {
             "charges_enabled": partner.stripe_charges_enabled,
-            "details_submitted": partner.stripe_onboarding_complete,
+            "details_submitted": status_result.get("details_submitted", False),
             "payouts_enabled": status_result.get("payouts_enabled", False),
+            "requirements_currently_due": status_result.get("requirements_currently_due", []),
+            "requirements_disabled_reason": status_result.get("requirements_disabled_reason"),
             "onboarding_step": partner.onboarding_step,
             "onboarding_complete": partner.onboarding_step >= 4,
         }
@@ -355,6 +401,11 @@ async def onboarding_skip_stripe(
     db = SessionLocal()
     try:
         partner = _get_partner(db, auth)
+        if not partner.onboarding_bypass:
+            raise HTTPException(
+                status_code=403,
+                detail="Stripe Connect es obligatorio para habilitar pagos del partner.",
+            )
         if partner.onboarding_step < 4:
             partner.onboarding_step = 4
             partner.onboarding_completed_at = datetime.utcnow()
@@ -397,7 +448,7 @@ async def partner_dashboard(
 
         # Stripe balance
         stripe_balance = None
-        if partner.stripe_account_id and partner.stripe_charges_enabled:
+        if partner.stripe_account_id and partner.stripe_onboarding_complete:
             try:
                 stripe_balance = await get_partner_balance(partner.stripe_account_id)
             except Exception:
@@ -410,6 +461,7 @@ async def partner_dashboard(
                 "status": partner.status.value,
                 "commission_rate": partner.commission_rate,
                 "onboarding_step": partner.onboarding_step,
+                "stripe_onboarding_complete": partner.stripe_onboarding_complete,
                 "stripe_charges_enabled": partner.stripe_charges_enabled,
             },
             "kpis": {
@@ -625,6 +677,11 @@ class PartnerClientCreate(BaseModel):
     notes: Optional[str] = None
 
 
+class PartnerClientAddonPurchase(BaseModel):
+    catalog_item_id: int
+    quantity: int = 1
+
+
 @router.post("/clients")
 async def create_partner_client(
     payload: PartnerClientCreate,
@@ -722,6 +779,8 @@ async def create_partner_client(
                 company_name=payload.company_name,
                 partner_id=partner.id,
                 plan_name=payload.plan_name,
+                subscription_id=sub.id,
+                customer_id=customer.id,
             )
             if tenant_result.get("success"):
                 response["tenant"] = {
@@ -755,6 +814,92 @@ async def create_partner_client(
         db.rollback()
         logger.error(f"Error partner creando cliente: {e}")
         raise HTTPException(status_code=500, detail=str(e))
+    finally:
+        db.close()
+
+
+@router.get("/clients/{customer_id}/services/catalog")
+async def list_partner_client_service_catalog(
+    customer_id: int,
+    request: Request,
+    access_token: Optional[str] = Cookie(None),
+):
+    """Catálogo de add-ons disponibles para un cliente del partner."""
+    auth = _require_partner(request, access_token)
+    db = SessionLocal()
+    try:
+        partner = _get_partner(db, auth)
+        customer = db.query(Customer).filter(
+            Customer.id == customer_id,
+            Customer.partner_id == partner.id,
+        ).first()
+        if not customer:
+            raise HTTPException(status_code=404, detail="Cliente no encontrado")
+
+        items = list_available_addon_services(db, customer.id)
+        return {"items": items, "total": len(items)}
+    finally:
+        db.close()
+
+
+@router.get("/clients/{customer_id}/services/subscriptions")
+async def list_partner_client_service_subscriptions(
+    customer_id: int,
+    request: Request,
+    access_token: Optional[str] = Cookie(None),
+):
+    """Servicios adicionales activos de un cliente del partner."""
+    auth = _require_partner(request, access_token)
+    db = SessionLocal()
+    try:
+        partner = _get_partner(db, auth)
+        customer = db.query(Customer).filter(
+            Customer.id == customer_id,
+            Customer.partner_id == partner.id,
+        ).first()
+        if not customer:
+            raise HTTPException(status_code=404, detail="Cliente no encontrado")
+
+        items = list_customer_addon_subscriptions(db, customer.id)
+        return {"items": items, "total": len(items)}
+    finally:
+        db.close()
+
+
+@router.post("/clients/{customer_id}/services/purchase")
+async def purchase_partner_client_service(
+    customer_id: int,
+    payload: PartnerClientAddonPurchase,
+    request: Request,
+    access_token: Optional[str] = Cookie(None),
+):
+    """Compra un add-on para un cliente gestionado por el partner."""
+    auth = _require_partner(request, access_token)
+    db = SessionLocal()
+    try:
+        partner = _get_partner(db, auth)
+        customer = db.query(Customer).filter(
+            Customer.id == customer_id,
+            Customer.partner_id == partner.id,
+        ).first()
+        if not customer:
+            raise HTTPException(status_code=404, detail="Cliente no encontrado")
+
+        result = purchase_customer_addon(
+            db=db,
+            customer_id=customer.id,
+            catalog_item_id=payload.catalog_item_id,
+            quantity=payload.quantity,
+            acquired_via="partner_portal",
+            notes=f"Compra gestionada por partner {partner.company_name}",
+        )
+        return {
+            "message": f"Servicio adicional adquirido para {customer.company_name}",
+            **result,
+        }
+    except ValueError as exc:
+        db.rollback()
+        raise HTTPException(status_code=400, detail=str(exc))
     finally:
         db.close()
 
@@ -827,8 +972,7 @@ async def partner_stripe_status(
 
         # Actualizar flags en BD
         if result.get("success"):
-            partner.stripe_charges_enabled = result.get("charges_enabled", False)
-            partner.stripe_onboarding_complete = result.get("details_submitted", False)
+            _apply_partner_stripe_status(partner, result)
             db.commit()
 
         result["has_account"] = True

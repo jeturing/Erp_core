@@ -14,7 +14,6 @@ Flujo bidireccional:
 """
 import stripe
 import logging
-import os
 from datetime import datetime, timezone
 from typing import Dict, Any, Optional, Tuple
 from sqlalchemy.orm import Session
@@ -22,13 +21,20 @@ from sqlalchemy.orm import Session
 from ..models.database import (
     Customer, Subscription, SubscriptionStatus, Plan,
     Invoice, InvoiceStatus, InvoiceType, InvoiceIssuer,
-    BillingMode, Partner, SessionLocal,
+    BillingMode, Partner, SessionLocal, CustomerAddonSubscription,
 )
+from ..config import get_runtime_setting
 
 logger = logging.getLogger(__name__)
 
-stripe.api_key = os.getenv("STRIPE_SECRET_KEY")
-APP_URL = os.getenv("APP_URL", "https://sajet.us")
+
+def _configure_stripe() -> str:
+    stripe.api_key = get_runtime_setting("STRIPE_SECRET_KEY", "")
+    return stripe.api_key
+
+
+def _app_url() -> str:
+    return get_runtime_setting("APP_URL", "https://sajet.us")
 
 
 # ═══════════════════════════════════════════════════════════════
@@ -41,6 +47,7 @@ def ensure_stripe_customer(db: Session, customer: Customer) -> str:
     Si no lo tiene, crea uno en Stripe.
     Retorna el stripe_customer_id.
     """
+    _configure_stripe()
     if customer.stripe_customer_id:
         return customer.stripe_customer_id
 
@@ -94,6 +101,7 @@ def push_invoice_to_stripe(
     Returns:
         {stripe_invoice_id, hosted_invoice_url, pdf_url, status}
     """
+    _configure_stripe()
     if invoice.stripe_invoice_id:
         # Ya tiene — obtener URL actualizada
         try:
@@ -202,6 +210,7 @@ def create_checkout_for_invoice(
     Returns:
         {checkout_url, session_id}
     """
+    _configure_stripe()
     customer = db.query(Customer).filter(Customer.id == invoice.customer_id).first()
     if not customer:
         raise ValueError("Customer not found")
@@ -251,8 +260,8 @@ def create_checkout_for_invoice(
         customer=stripe_cust_id,
         mode="payment",
         line_items=line_items,
-        success_url=success_url or f"{APP_URL}/tenant/portal?payment_success=true&invoice={invoice.invoice_number}",
-        cancel_url=cancel_url or f"{APP_URL}/tenant/portal?payment_cancelled=true",
+        success_url=success_url or f"{_app_url()}/tenant/portal?payment_success=true&invoice={invoice.invoice_number}",
+        cancel_url=cancel_url or f"{_app_url()}/tenant/portal?payment_cancelled=true",
         metadata={
             "erp_invoice_id": str(invoice.id),
             "erp_invoice_number": invoice.invoice_number,
@@ -281,6 +290,7 @@ def sync_subscription_quantity(
 
     Si new_qty no se proporciona, usa subscription.user_count actual.
     """
+    _configure_stripe()
     if not subscription.stripe_subscription_id:
         return {"error": "No stripe_subscription_id", "synced": False}
 
@@ -329,6 +339,7 @@ def change_subscription_plan(
     Cambia el plan de una suscripción en Stripe.
     Proration automática.
     """
+    _configure_stripe()
     if not subscription.stripe_subscription_id:
         return {"error": "No stripe_subscription_id", "changed": False}
 
@@ -393,6 +404,7 @@ def generate_consumption_invoice(
     Returns:
         {invoice_id, invoice_number, total, stripe_result}
     """
+    _configure_stripe()
     sub = db.query(Subscription).filter(Subscription.id == subscription_id).first()
     if not sub:
         raise ValueError(f"Subscription {subscription_id} not found")
@@ -406,6 +418,7 @@ def generate_consumption_invoice(
 
     lines = []
     total = 0.0
+    now = datetime.utcnow()
 
     if plan:
         base = plan.base_price
@@ -439,6 +452,37 @@ def generate_consumption_invoice(
             "unit_price": total,
             "subtotal": total,
         })
+
+    # Servicios adicionales recurrentes adquiridos por el cliente.
+    addon_rows = (
+        db.query(CustomerAddonSubscription)
+        .filter(
+            CustomerAddonSubscription.customer_id == customer.id,
+            CustomerAddonSubscription.status == "active",
+        )
+        .all()
+    )
+    for addon in addon_rows:
+        if addon.last_invoiced_year == now.year and addon.last_invoiced_month == now.month:
+            continue
+
+        qty = max(1, int(addon.quantity or 1))
+        unit_price = float(addon.unit_price_monthly or 0)
+        line_total = round(qty * unit_price, 6)
+        item_name = addon.catalog_item.name if addon.catalog_item else (addon.service_code or "Add-on")
+
+        lines.append({
+            "description": f"Servicio adicional — {item_name}",
+            "qty": qty,
+            "unit_price": unit_price,
+            "subtotal": line_total,
+            "catalog_item_id": addon.catalog_item_id,
+            "service_code": addon.service_code,
+            "metadata_json": addon.metadata_json or {},
+        })
+        total += line_total
+        addon.last_invoiced_year = now.year
+        addon.last_invoiced_month = now.month
 
     # Determinar partner
     partner = None

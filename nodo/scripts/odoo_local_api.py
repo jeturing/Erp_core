@@ -1,52 +1,233 @@
 #!/usr/bin/env python3
 """
-Odoo Local Provisioning API
-API REST local para provisionar tenants en cada nodo Odoo
-Escucha en puerto 8070 (accesible internamente desde otros nodos)
+Odoo Node Provisioning API v2
+API REST local para provisionar tenants en cada nodo Odoo.
+Escucha en puerto 8070 (accesible internamente desde PCT160).
 
-Este servicio debe ejecutarse con permisos de root para acceder a PostgreSQL
+Cambios vs v1:
+  - Usa psycopg2 contra PG remoto (PCT137) — no depende de sudo psql local
+  - Todas las queries parametrizadas (sin SQL injection)
+  - Compatible API: mismos endpoints y payloads
+  - createdb/dropdb via SQL (CREATE DATABASE … TEMPLATE …)
+
+Variables de entorno requeridas:
+  PG_HOST        = 10.10.10.137 (default)
+  PG_PORT        = 5432
+  PG_USER        = odoo
+  PG_PASSWORD    = <password>
+  PG_ADMIN_DB    = postgres
+  ODOO_DOMAIN    = sajet.us
+  PROVISIONING_API_KEY = prov-key-2026-secure
+  CLOUDFLARE_API_TOKEN = (opcional)
+  CF_TUNNEL_ID   = (opcional)
 """
 
-from fastapi import FastAPI, HTTPException, Header
-from pydantic import BaseModel, Field
-from typing import Optional, List
-import subprocess
+from __future__ import annotations
+
 import json
-import os
 import logging
+import os
+import re
+from contextlib import contextmanager
+from typing import Any, Dict, List, Optional
+
+import psycopg2
+import psycopg2.extensions
+import psycopg2.sql as sql
 import requests
+from fastapi import FastAPI, Header, HTTPException, Query
+from pydantic import BaseModel, Field
 
 logging.basicConfig(
     level=logging.INFO,
-    format='%(asctime)s - %(name)s - %(levelname)s - %(message)s'
+    format="%(asctime)s - %(name)s - %(levelname)s - %(message)s",
 )
 logger = logging.getLogger(__name__)
 
 app = FastAPI(
     title="Odoo Node Provisioning API",
-    description="API interna para provisionar tenants Odoo en este nodo",
-    version="1.0.0"
+    description="API interna para provisionar tenants Odoo en este nodo (v2 — PG remoto, parametrizado)",
+    version="2.0.0",
 )
 
-# Configuración desde variables de entorno o valores por defecto
-DOMAIN = os.getenv("ODOO_DOMAIN", "sajet.us")
-CF_API_TOKEN = os.getenv("CLOUDFLARE_API_TOKEN", "")
-CF_ZONES = {}
-CF_TUNNEL_ID = os.getenv("CF_TUNNEL_ID", "")
-API_KEY = os.getenv("PROVISIONING_API_KEY", "prov-key-2026-secure")
-PG_USER = None
+# ── Configuración ─────────────────────────────────────────────────────────────
 
-# Cargar configuración de dominios desde archivo si existe
+PG_HOST = os.getenv("PG_HOST", "10.10.10.137")
+PG_PORT = int(os.getenv("PG_PORT", "5432"))
+PG_USER = os.getenv("PG_USER", "odoo")
+PG_PASSWORD = os.getenv("PG_PASSWORD", "")
+PG_ADMIN_DB = os.getenv("PG_ADMIN_DB", "postgres")
+DOMAIN = os.getenv("ODOO_DOMAIN", "sajet.us")
+API_KEY = os.getenv("PROVISIONING_API_KEY", "prov-key-2026-secure")
+CF_API_TOKEN = os.getenv("CLOUDFLARE_API_TOKEN", "")
+CF_TUNNEL_ID = os.getenv("CF_TUNNEL_ID", "")
+CF_ZONES: Dict[str, str] = {}
+
 DOMAINS_CONFIG_FILE = "/opt/odoo/config/domains.json"
 if os.path.exists(DOMAINS_CONFIG_FILE):
     try:
-        with open(DOMAINS_CONFIG_FILE, 'r') as f:
-            config = json.load(f)
-            CF_ZONES = config.get("zones", {})
-            CF_TUNNEL_ID = config.get("tunnel_id", CF_TUNNEL_ID)
+        with open(DOMAINS_CONFIG_FILE, "r") as f:
+            _cfg = json.load(f)
+            CF_ZONES = _cfg.get("zones", {})
+            CF_TUNNEL_ID = _cfg.get("tunnel_id", CF_TUNNEL_ID)
     except Exception as e:
         logger.warning(f"No se pudo cargar {DOMAINS_CONFIG_FILE}: {e}")
 
+
+# ── Database helpers ──────────────────────────────────────────────────────────
+
+def _connect(dbname: str = PG_ADMIN_DB) -> psycopg2.extensions.connection:
+    """Abre conexión a PostgreSQL remoto."""
+    return psycopg2.connect(
+        host=PG_HOST,
+        port=PG_PORT,
+        user=PG_USER,
+        password=PG_PASSWORD,
+        dbname=dbname,
+        connect_timeout=10,
+    )
+
+
+@contextmanager
+def _db_conn(dbname: str = PG_ADMIN_DB, autocommit: bool = False):
+    """Context manager para conexiones PG."""
+    conn = _connect(dbname)
+    if autocommit:
+        conn.autocommit = True
+    try:
+        yield conn
+    finally:
+        conn.close()
+
+
+def _db_exists(dbname: str) -> bool:
+    """Verifica si una base de datos existe."""
+    with _db_conn() as conn:
+        with conn.cursor() as cur:
+            cur.execute(
+                "SELECT 1 FROM pg_database WHERE datname = %s",
+                (dbname,),
+            )
+            return cur.fetchone() is not None
+
+
+def _terminate_connections(dbname: str) -> None:
+    """Termina todas las conexiones a una BD (excepto la nuestra)."""
+    with _db_conn(autocommit=True) as conn:
+        with conn.cursor() as cur:
+            cur.execute(
+                "SELECT pg_terminate_backend(pid) "
+                "FROM pg_stat_activity "
+                "WHERE datname = %s AND pid <> pg_backend_pid()",
+                (dbname,),
+            )
+
+
+def _list_databases() -> List[str]:
+    """Lista todas las bases de datos no-sistema."""
+    system_dbs = {"postgres", "template0", "template1"}
+    with _db_conn() as conn:
+        with conn.cursor() as cur:
+            cur.execute(
+                "SELECT datname FROM pg_database "
+                "WHERE datistemplate = false "
+                "ORDER BY datname"
+            )
+            return [
+                row[0]
+                for row in cur.fetchall()
+                if row[0] not in system_dbs
+            ]
+
+
+# ── Cloudflare helpers ────────────────────────────────────────────────────────
+
+def _create_cloudflare_dns(subdomain: str, domain: str) -> bool:
+    """Crea registro CNAME en Cloudflare."""
+    if not CF_API_TOKEN or not CF_ZONES:
+        logger.warning("Cloudflare no configurado, saltando DNS")
+        return False
+
+    zone_id = CF_ZONES.get(domain)
+    if not zone_id:
+        logger.error(f"Zone ID no encontrado para {domain}")
+        return False
+
+    url = f"https://api.cloudflare.com/client/v4/zones/{zone_id}/dns_records"
+    headers = {
+        "Authorization": f"Bearer {CF_API_TOKEN}",
+        "Content-Type": "application/json",
+    }
+
+    try:
+        resp = requests.get(
+            url,
+            headers=headers,
+            params={"type": "CNAME", "name": f"{subdomain}.{domain}"},
+            timeout=10,
+        )
+        if resp.status_code == 200 and resp.json().get("result"):
+            logger.info(f"DNS ya existe: {subdomain}.{domain}")
+            return True
+
+        data = {
+            "type": "CNAME",
+            "name": subdomain,
+            "content": f"{CF_TUNNEL_ID}.cfargotunnel.com",
+            "ttl": 1,
+            "proxied": True,
+            "comment": f"Auto-provisioned {subdomain}",
+        }
+        resp = requests.post(url, headers=headers, json=data, timeout=10)
+        if resp.json().get("success"):
+            logger.info(f"DNS creado: {subdomain}.{domain}")
+            return True
+        else:
+            logger.error(f"Error Cloudflare: {resp.json().get('errors')}")
+            return False
+    except Exception as e:
+        logger.error(f"Error accediendo Cloudflare: {e}")
+        return False
+
+
+def _delete_cloudflare_dns(subdomain: str, domain: str) -> bool:
+    """Elimina registro DNS en Cloudflare."""
+    if not CF_API_TOKEN or not CF_ZONES:
+        return False
+
+    zone_id = CF_ZONES.get(domain)
+    if not zone_id:
+        return False
+
+    url = f"https://api.cloudflare.com/client/v4/zones/{zone_id}/dns_records"
+    headers = {
+        "Authorization": f"Bearer {CF_API_TOKEN}",
+        "Content-Type": "application/json",
+    }
+
+    try:
+        resp = requests.get(
+            url,
+            headers=headers,
+            params={"type": "CNAME", "name": f"{subdomain}.{domain}"},
+            timeout=10,
+        )
+        if resp.status_code != 200:
+            return False
+
+        result = resp.json().get("result", [])
+        if not result:
+            return True
+
+        record_id = result[0]["id"]
+        resp = requests.delete(f"{url}/{record_id}", headers=headers, timeout=10)
+        return resp.json().get("success", False)
+    except Exception as e:
+        logger.error(f"Error eliminando DNS: {e}")
+        return False
+
+
+# ── Pydantic models ───────────────────────────────────────────────────────────
 
 class TenantCreateRequest(BaseModel):
     subdomain: str = Field(..., min_length=3, max_length=30)
@@ -80,142 +261,64 @@ class TenantAccountCredentialsRequest(BaseModel):
     active: Optional[bool] = None
 
 
-def get_pg_user():
-    """Detecta automáticamente el usuario PostgreSQL"""
-    global PG_USER
-    if PG_USER:
-        return PG_USER
-    try:
-        result = subprocess.run(
-            ['sudo', '-u', 'postgres', 'psql', '-t', '-c',
-             "SELECT usename FROM pg_user WHERE usename NOT IN ('postgres') LIMIT 1;"],
-            capture_output=True, text=True, timeout=5
+# ── Validación de nombres de BD ───────────────────────────────────────────────
+
+_VALID_DB_NAME = re.compile(r"^[a-z0-9_]{3,63}$")
+SYSTEM_DBS = frozenset({
+    "postgres", "template0", "template1",
+    "erp_core_db", "erp_core",
+})
+
+
+def _validate_dbname(name: str) -> str:
+    """Valida y normaliza un nombre de BD. Retorna nombre limpio o lanza."""
+    clean = name.lower().strip().replace("-", "_")
+    if not _VALID_DB_NAME.match(clean):
+        raise HTTPException(
+            status_code=400,
+            detail="Nombre de BD inválido: solo letras, números y _ (3-63 chars)",
         )
-        PG_USER = result.stdout.strip() or 'odoo'
-        logger.info(f"PostgreSQL user detectado: {PG_USER}")
-    except Exception as e:
-        logger.error(f"Error detectando usuario PostgreSQL: {e}")
-        PG_USER = 'odoo'
-    return PG_USER
-
-
-def run_sql(db, sql):
-    """Ejecuta SQL en una base de datos específica"""
-    try:
-        result = subprocess.run(
-            ['sudo', '-u', 'postgres', 'psql', '-d', db, '-c', sql],
-            capture_output=True, text=True, timeout=30
+    if clean in SYSTEM_DBS:
+        raise HTTPException(
+            status_code=400,
+            detail=f"'{clean}' es una BD del sistema — no se puede operar",
         )
-        if result.returncode != 0:
-            logger.error(f"Error ejecutando SQL en {db}: {result.stderr}")
-        return result.returncode == 0
-    except Exception as e:
-        logger.error(f"Error ejecutando SQL: {e}")
-        return False
+    return clean
 
 
-def create_cloudflare_dns(subdomain, domain):
-    """Crea registro CNAME en Cloudflare"""
-    if not CF_API_TOKEN or not CF_ZONES:
-        logger.warning("Cloudflare no configurado, saltando DNS")
-        return False
-    
-    zone_id = CF_ZONES.get(domain)
-    if not zone_id:
-        logger.error(f"Zone ID no encontrado para {domain}")
-        return False
-    
-    url = f"https://api.cloudflare.com/client/v4/zones/{zone_id}/dns_records"
-    headers = {"Authorization": f"Bearer {CF_API_TOKEN}", "Content-Type": "application/json"}
-    
-    try:
-        # Verificar si ya existe
-        resp = requests.get(
-            url, headers=headers,
-            params={"type": "CNAME", "name": f"{subdomain}.{domain}"},
-            timeout=10
-        )
-        if resp.status_code == 200 and resp.json().get("result"):
-            logger.info(f"DNS ya existe: {subdomain}.{domain}")
-            return True
-        
-        # Crear nuevo registro
-        data = {
-            "type": "CNAME",
-            "name": subdomain,
-            "content": f"{CF_TUNNEL_ID}.cfargotunnel.com",
-            "ttl": 1,
-            "proxied": True,
-            "comment": f"Auto-provisioned {subdomain}"
-        }
-        
-        resp = requests.post(url, headers=headers, json=data, timeout=10)
-        if resp.json().get("success"):
-            logger.info(f"DNS creado: {subdomain}.{domain}")
-            return True
-        else:
-            logger.error(f"Error Cloudflare: {resp.json().get('errors')}")
-            return False
-    except Exception as e:
-        logger.error(f"Error accediendo Cloudflare: {e}")
-        return False
-
-
-def delete_cloudflare_dns(subdomain, domain):
-    """Elimina registro DNS en Cloudflare"""
-    if not CF_API_TOKEN or not CF_ZONES:
-        return False
-    
-    zone_id = CF_ZONES.get(domain)
-    if not zone_id:
-        return False
-    
-    url = f"https://api.cloudflare.com/client/v4/zones/{zone_id}/dns_records"
-    headers = {"Authorization": f"Bearer {CF_API_TOKEN}", "Content-Type": "application/json"}
-    
-    try:
-        resp = requests.get(
-            url, headers=headers,
-            params={"type": "CNAME", "name": f"{subdomain}.{domain}"},
-            timeout=10
-        )
-        if resp.status_code != 200:
-            return False
-        
-        result = resp.json().get("result", [])
-        if not result:
-            return True
-        
-        record_id = result[0]["id"]
-        resp = requests.delete(f"{url}/{record_id}", headers=headers, timeout=10)
-        return resp.json().get("success", False)
-    except Exception as e:
-        logger.error(f"Error eliminando DNS: {e}")
-        return False
-
+# ── Endpoints ─────────────────────────────────────────────────────────────────
 
 @app.get("/health")
 async def health():
-    """Healthcheck endpoint"""
-    return {"status": "ok", "service": "odoo-provisioning"}
+    """Healthcheck endpoint."""
+    pg_ok = False
+    try:
+        conn = _connect()
+        conn.close()
+        pg_ok = True
+    except Exception:
+        pass
+
+    return {
+        "status": "ok" if pg_ok else "degraded",
+        "service": "odoo-provisioning",
+        "pg_host": PG_HOST,
+        "pg_reachable": pg_ok,
+    }
 
 
 @app.get("/api/tenants")
 async def list_tenants(x_api_key: str = Header(None)):
-    """Lista todos los tenants en este nodo"""
+    """Lista todos los tenants en este nodo."""
     if x_api_key != API_KEY:
         raise HTTPException(status_code=401, detail="Invalid API key")
-    
+
     try:
-        result = subprocess.run(
-            ['sudo', '-u', 'postgres', 'psql', '-t', '-c',
-             "SELECT datname FROM pg_database WHERE datistemplate = false AND datname NOT IN ('postgres');"],
-            capture_output=True, text=True, timeout=10
-        )
-        
-        dbs = [db.strip() for db in result.stdout.split('\n') if db.strip()]
-        tenants = [{"database": db, "url": f"https://{db}.{DOMAIN}"} for db in dbs]
-        
+        dbs = _list_databases()
+        tenants = [
+            {"database": db, "url": f"https://{db}.{DOMAIN}"}
+            for db in dbs
+        ]
         logger.info(f"Listando {len(tenants)} tenants")
         return {"tenants": tenants, "total": len(tenants)}
     except Exception as e:
@@ -224,169 +327,220 @@ async def list_tenants(x_api_key: str = Header(None)):
 
 
 @app.post("/api/tenant")
-async def create_tenant(request: TenantCreateRequest, x_api_key: str = Header(None)):
-    """Crea un nuevo tenant"""
+async def create_tenant(
+    request: TenantCreateRequest,
+    x_api_key: str = Header(None),
+):
+    """Crea un nuevo tenant."""
     if x_api_key != API_KEY:
         raise HTTPException(status_code=401, detail="Invalid API key")
-    
-    subdomain = request.subdomain.lower().replace("-", "_")
+
+    subdomain = _validate_dbname(request.subdomain)
+    template = _validate_dbname(request.template_db)
     domain = request.domain
-    pg_user = get_pg_user()
-    
-    logger.info(f"Creando tenant: {subdomain}")
-    
-    # Verificar si ya existe
-    result = subprocess.run(
-        ['sudo', '-u', 'postgres', 'psql', '-lqt'],
-        capture_output=True, text=True
-    )
-    if subdomain in result.stdout:
-        raise HTTPException(status_code=409, detail=f"Database {subdomain} already exists")
-    
+
+    logger.info(f"Creando tenant: {subdomain} desde template {template}")
+
+    if _db_exists(subdomain):
+        raise HTTPException(
+            status_code=409,
+            detail=f"Database {subdomain} already exists",
+        )
+
+    if not _db_exists(template):
+        raise HTTPException(
+            status_code=404,
+            detail=f"Template database {template} not found",
+        )
+
     # Terminar conexiones a BD plantilla
-    run_sql('postgres', 
-        f"SELECT pg_terminate_backend(pid) FROM pg_stat_activity WHERE datname = '{request.template_db}' AND pid <> pg_backend_pid();")
-    
-    # Crear BD
-    result = subprocess.run(
-        ['sudo', '-u', 'postgres', 'createdb', '-O', pg_user, '-T', request.template_db, subdomain],
-        capture_output=True, text=True, timeout=60
-    )
-    if result.returncode != 0:
-        logger.error(f"Error creando BD {subdomain}: {result.stderr}")
-        raise HTTPException(status_code=500, detail=f"Error creating database: {result.stderr}")
-    
-    # Configurar BD
-    config_sql = f"""
-    UPDATE res_users SET password = '{request.admin_password}' WHERE login = 'admin';
-    UPDATE res_company SET name = '{subdomain}' WHERE id = 1;
-    UPDATE res_partner SET name = '{subdomain}' WHERE id = 1;
-    UPDATE ir_config_parameter SET value = gen_random_uuid()::text WHERE key = 'database.uuid';
-    DELETE FROM ir_sessions;
-    INSERT INTO ir_config_parameter (key, value, create_date, write_date, create_uid, write_uid)
-    VALUES ('web.base.url', 'https://{subdomain}.{domain}', NOW(), NOW(), 1, 1)
-    ON CONFLICT (key) DO UPDATE SET value = EXCLUDED.value;
-    UPDATE ir_config_parameter SET value = 'False' WHERE key = 'web.base.url.freeze';
-    """
-    run_sql(subdomain, config_sql)
-    
+    _terminate_connections(template)
+
+    # Crear BD desde template
+    try:
+        with _db_conn(autocommit=True) as conn:
+            with conn.cursor() as cur:
+                # CREATE DATABASE no soporta parámetros — usar sql.Identifier
+                cur.execute(
+                    sql.SQL("CREATE DATABASE {} OWNER {} TEMPLATE {}").format(
+                        sql.Identifier(subdomain),
+                        sql.Identifier(PG_USER),
+                        sql.Identifier(template),
+                    )
+                )
+    except Exception as e:
+        logger.error(f"Error creando BD {subdomain}: {e}")
+        raise HTTPException(
+            status_code=500,
+            detail=f"Error creating database: {e}",
+        )
+
+    # Configurar BD del nuevo tenant (todo parametrizado)
+    try:
+        with _db_conn(subdomain) as conn:
+            with conn.cursor() as cur:
+                # Resetear password admin
+                cur.execute(
+                    "UPDATE res_users SET password = %s WHERE login = 'admin'",
+                    (request.admin_password,),
+                )
+                # Resetear nombre empresa
+                cur.execute(
+                    "UPDATE res_company SET name = %s WHERE id = 1",
+                    (subdomain,),
+                )
+                cur.execute(
+                    "UPDATE res_partner SET name = %s WHERE id = 1",
+                    (subdomain,),
+                )
+                # Regenerar UUID
+                cur.execute(
+                    "UPDATE ir_config_parameter "
+                    "SET value = gen_random_uuid()::text "
+                    "WHERE key = 'database.uuid'"
+                )
+                # Limpiar sesiones
+                cur.execute("DELETE FROM ir_sessions")
+                # Base URL
+                base_url = f"https://{subdomain}.{domain}"
+                cur.execute(
+                    "INSERT INTO ir_config_parameter "
+                    "(key, value, create_date, write_date, create_uid, write_uid) "
+                    "VALUES ('web.base.url', %s, NOW(), NOW(), 1, 1) "
+                    "ON CONFLICT (key) DO UPDATE SET value = EXCLUDED.value",
+                    (base_url,),
+                )
+                cur.execute(
+                    "UPDATE ir_config_parameter "
+                    "SET value = 'False' WHERE key = 'web.base.url.freeze'"
+                )
+            conn.commit()
+    except Exception as e:
+        logger.error(f"Error configurando BD {subdomain}: {e}")
+        # BD fue creada pero config falló — seguir, no es fatal
+
     # Crear DNS
-    dns_created = create_cloudflare_dns(subdomain, domain)
-    
+    dns_created = _create_cloudflare_dns(subdomain, domain)
+
     logger.info(f"Tenant {subdomain} creado exitosamente")
     return {
         "success": True,
         "subdomain": subdomain,
         "url": f"https://{subdomain}.{domain}",
         "database": subdomain,
-        "dns_created": dns_created
+        "dns_created": dns_created,
     }
 
 
 @app.delete("/api/tenant")
-async def delete_tenant(request: TenantDeleteRequest, x_api_key: str = Header(None)):
-    """Elimina un tenant"""
+async def delete_tenant(
+    request: TenantDeleteRequest,
+    x_api_key: str = Header(None),
+):
+    """Elimina un tenant."""
     if x_api_key != API_KEY:
         raise HTTPException(status_code=401, detail="Invalid API key")
-    
-    subdomain = request.subdomain.lower()
-    
+
+    subdomain = _validate_dbname(request.subdomain)
     logger.info(f"Eliminando tenant: {subdomain}")
-    
-    # Terminar conexiones
-    run_sql('postgres', 
-        f"SELECT pg_terminate_backend(pid) FROM pg_stat_activity WHERE datname = '{subdomain}';")
-    
-    # Eliminar BD
-    result = subprocess.run(
-        ['sudo', '-u', 'postgres', 'dropdb', subdomain],
-        capture_output=True, text=True
+
+    if not _db_exists(subdomain):
+        raise HTTPException(status_code=404, detail=f"Database {subdomain} not found")
+
+    _terminate_connections(subdomain)
+
+    try:
+        with _db_conn(autocommit=True) as conn:
+            with conn.cursor() as cur:
+                cur.execute(
+                    sql.SQL("DROP DATABASE IF EXISTS {}").format(
+                        sql.Identifier(subdomain)
+                    )
+                )
+        db_deleted = True
+    except Exception as e:
+        logger.error(f"Error eliminando BD {subdomain}: {e}")
+        db_deleted = False
+
+    dns_deleted = (
+        _delete_cloudflare_dns(subdomain, "sajet.us")
+        if request.delete_dns
+        else False
     )
-    
-    # Eliminar DNS
-    dns_deleted = delete_cloudflare_dns(subdomain, "sajet.us") if request.delete_dns else False
-    
+
     logger.info(f"Tenant {subdomain} eliminado")
     return {
         "success": True,
-        "database_deleted": result.returncode == 0,
-        "dns_deleted": dns_deleted
+        "database_deleted": db_deleted,
+        "dns_deleted": dns_deleted,
     }
 
 
 @app.get("/api/domains")
 async def list_domains():
-    """Lista dominios configurados"""
+    """Lista dominios configurados."""
     return {"domains": list(CF_ZONES.keys())}
 
 
 @app.get("/api/tenant/accounts")
-async def list_tenant_accounts(subdomain: str, include_inactive: bool = True, x_api_key: str = Header(None)):
+async def list_tenant_accounts(
+    subdomain: str,
+    include_inactive: bool = True,
+    x_api_key: str = Header(None),
+):
     """Lista cuentas de un tenant y resume asientos facturables."""
     if x_api_key != API_KEY:
         raise HTTPException(status_code=401, detail="Invalid API key")
 
-    db_name = subdomain.lower().replace("-", "_")
-    where = ""
-    if not include_inactive:
-        where = "WHERE u.active = true"
+    db_name = _validate_dbname(subdomain)
 
-    sql = f"""
-    SELECT
-      u.id,
-      u.login,
-      u.email,
-      p.name,
-      u.active,
-      COALESCE(u.share, false) AS share,
-      u.write_date,
-      u.create_date
-    FROM res_users u
-    LEFT JOIN res_partner p ON p.id = u.partner_id
-    {where}
-    ORDER BY u.active DESC, u.id ASC;
-    """
+    if not _db_exists(db_name):
+        raise HTTPException(status_code=404, detail=f"Database {db_name} not found")
 
     try:
-        result = subprocess.run(
-            ['sudo', '-u', 'postgres', 'psql', '-d', db_name, '-t', '-A', '-F', '|', '-c', sql],
-            capture_output=True,
-            text=True,
-            timeout=20
-        )
-        if result.returncode != 0:
-            raise HTTPException(status_code=500, detail=result.stderr.strip() or "Error listando cuentas")
+        with _db_conn(db_name) as conn:
+            with conn.cursor() as cur:
+                query = (
+                    "SELECT u.id, u.login, u.email, p.name, "
+                    "u.active, COALESCE(u.share, false), "
+                    "u.write_date, u.create_date "
+                    "FROM res_users u "
+                    "LEFT JOIN res_partner p ON p.id = u.partner_id "
+                )
+                if not include_inactive:
+                    query += "WHERE u.active = true "
+                query += "ORDER BY u.active DESC, u.id ASC"
+
+                cur.execute(query)
+                rows = cur.fetchall()
 
         accounts = []
         active_accounts = 0
         billable_active_accounts = 0
 
-        for line in result.stdout.splitlines():
-            line = line.strip()
-            if not line:
-                continue
-            parts = line.split('|')
-            if len(parts) < 8:
-                continue
+        for row in rows:
+            uid, login, email, name, active, share, write_date, create_date = row
+
+            login_str = (login or "").strip().lower()
+            is_admin = login_str in {"admin", "admin@sajet.us"}
+            is_billable = bool(active) and not bool(share) and not is_admin
 
             account = {
-                "id": int(parts[0]) if parts[0].isdigit() else None,
-                "login": parts[1] or None,
-                "email": parts[2] or None,
-                "name": parts[3] or None,
-                "active": parts[4].lower() == 't',
-                "share": parts[5].lower() == 't',
-                "write_date": parts[6] or None,
-                "create_date": parts[7] or None,
+                "id": uid,
+                "login": login,
+                "email": email,
+                "name": name,
+                "active": active,
+                "share": share,
+                "write_date": str(write_date) if write_date else None,
+                "create_date": str(create_date) if create_date else None,
+                "is_admin": is_admin,
+                "is_billable": is_billable,
             }
 
-            login = (account.get("login") or "").strip().lower()
-            account["is_admin"] = login in {"admin", "admin@sajet.us"}
-            account["is_billable"] = bool(account["active"]) and not bool(account["share"]) and not bool(account["is_admin"])
-
-            if account["active"]:
+            if active:
                 active_accounts += 1
-            if account["is_billable"]:
+            if is_billable:
                 billable_active_accounts += 1
 
             accounts.append(account)
@@ -407,127 +561,205 @@ async def list_tenant_accounts(subdomain: str, include_inactive: bool = True, x_
 
 
 @app.post("/api/tenant/account/credentials")
-async def update_tenant_account_credentials(request: TenantAccountCredentialsRequest, x_api_key: str = Header(None)):
+async def update_tenant_account_credentials(
+    request: TenantAccountCredentialsRequest,
+    x_api_key: str = Header(None),
+):
     """Actualiza credenciales o estado de una cuenta de tenant."""
     if x_api_key != API_KEY:
         raise HTTPException(status_code=401, detail="Invalid API key")
 
     if not request.user_id and not request.login:
-        raise HTTPException(status_code=400, detail="user_id o login es requerido")
+        raise HTTPException(
+            status_code=400,
+            detail="user_id o login es requerido",
+        )
 
-    updates = []
+    db_name = _validate_dbname(request.subdomain)
+
+    if not _db_exists(db_name):
+        raise HTTPException(status_code=404, detail=f"Database {db_name} not found")
+
+    # Construir SET dinámico con parámetros
+    set_parts: List[str] = []
+    params: List[Any] = []
+
     if request.new_email is not None:
-        safe_email = request.new_email.replace("'", "''")
-        updates.append(f"login = '{safe_email}'")
-        updates.append(f"email = '{safe_email}'")
+        set_parts.append("login = %s")
+        params.append(request.new_email)
+        set_parts.append("email = %s")
+        params.append(request.new_email)
     if request.new_password is not None:
-        safe_password = request.new_password.replace("'", "''")
-        updates.append(f"password = '{safe_password}'")
+        set_parts.append("password = %s")
+        params.append(request.new_password)
     if request.active is not None:
-        updates.append(f"active = {'true' if request.active else 'false'}")
+        set_parts.append("active = %s")
+        params.append(request.active)
 
-    if not updates:
-        raise HTTPException(status_code=400, detail="No hay cambios para aplicar")
+    if not set_parts:
+        raise HTTPException(
+            status_code=400,
+            detail="No hay cambios para aplicar",
+        )
 
-    db_name = request.subdomain.lower().replace("-", "_")
+    set_parts.append("write_date = NOW()")
+
+    # WHERE clause
     if request.user_id:
-        where = f"id = {int(request.user_id)}"
+        where = "id = %s"
+        params.append(request.user_id)
     else:
-        safe_login = (request.login or "").replace("'", "''")
-        where = f"login = '{safe_login}'"
+        where = "login = %s"
+        params.append(request.login)
 
-    sql = f"""
-    UPDATE res_users
-    SET {', '.join(updates)}, write_date = NOW()
-    WHERE {where};
-    """
+    query = f"UPDATE res_users SET {', '.join(set_parts)} WHERE {where}"
 
-    ok = run_sql(db_name, sql)
-    if not ok:
-        raise HTTPException(status_code=500, detail="Error actualizando credenciales de cuenta")
+    try:
+        with _db_conn(db_name) as conn:
+            with conn.cursor() as cur:
+                cur.execute(query, tuple(params))
+                if cur.rowcount == 0:
+                    raise HTTPException(
+                        status_code=404,
+                        detail="Usuario no encontrado",
+                    )
+            conn.commit()
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.error(f"Error actualizando credenciales: {e}")
+        raise HTTPException(
+            status_code=500,
+            detail="Error actualizando credenciales de cuenta",
+        )
 
     return {
         "success": True,
         "subdomain": db_name,
-        "message": "Cuenta actualizada exitosamente"
+        "message": "Cuenta actualizada exitosamente",
     }
 
 
 @app.put("/api/tenant/password")
-async def change_password(request: TenantPasswordRequest, x_api_key: str = Header(None)):
-    """Cambia la contraseña del admin de un tenant"""
+async def change_password(
+    request: TenantPasswordRequest,
+    x_api_key: str = Header(None),
+):
+    """Cambia la contraseña del admin de un tenant."""
     if x_api_key != API_KEY:
         raise HTTPException(status_code=401, detail="Invalid API key")
-    
-    subdomain = request.subdomain.lower()
-    new_password = request.new_password
-    
-    logger.info(f"Cambiando contraseña para tenant: {subdomain}")
-    
-    # Actualizar contraseña en la BD
-    sql = f"""
-    UPDATE res_users 
-    SET password = '{new_password}', write_date = NOW() 
-    WHERE login = 'admin';
-    """
-    
-    if run_sql(subdomain, sql):
-        logger.info(f"Contraseña actualizada para {subdomain}")
-        return {
-            "success": True,
-            "subdomain": subdomain,
-            "message": "Contraseña actualizada exitosamente"
-        }
-    else:
+
+    db_name = _validate_dbname(request.subdomain)
+
+    if not _db_exists(db_name):
+        raise HTTPException(status_code=404, detail=f"Database {db_name} not found")
+
+    logger.info(f"Cambiando contraseña para tenant: {db_name}")
+
+    try:
+        with _db_conn(db_name) as conn:
+            with conn.cursor() as cur:
+                cur.execute(
+                    "UPDATE res_users SET password = %s, write_date = NOW() "
+                    "WHERE login = 'admin'",
+                    (request.new_password,),
+                )
+                if cur.rowcount == 0:
+                    raise HTTPException(
+                        status_code=404,
+                        detail="Admin user not found",
+                    )
+            conn.commit()
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.error(f"Error actualizando contraseña: {e}")
         raise HTTPException(status_code=500, detail="Error updating password")
+
+    return {
+        "success": True,
+        "subdomain": db_name,
+        "message": "Contraseña actualizada exitosamente",
+    }
 
 
 @app.put("/api/tenant/suspend")
-async def suspend_tenant(request: TenantSuspendRequest, x_api_key: str = Header(None)):
-    """Suspende o reactiva un tenant"""
+async def suspend_tenant(
+    request: TenantSuspendRequest,
+    x_api_key: str = Header(None),
+):
+    """Suspende o reactiva un tenant."""
     if x_api_key != API_KEY:
         raise HTTPException(status_code=401, detail="Invalid API key")
-    
-    subdomain = request.subdomain.lower()
+
+    db_name = _validate_dbname(request.subdomain)
+
+    if not _db_exists(db_name):
+        raise HTTPException(status_code=404, detail=f"Database {db_name} not found")
+
     reason = request.reason or "Suspension por falta de pago"
-    
     action = "Suspendiendo" if request.suspend else "Reactivando"
-    logger.info(f"{action} tenant: {subdomain}")
-    
-    if request.suspend:
-        # Deshabilitar usuarios
-        sql = f"""
-        UPDATE res_users SET active = false WHERE id != 1;
-        INSERT INTO ir_config_parameter (key, value, create_date, write_date, create_uid, write_uid)
-        VALUES ('tenant.suspended', 'true', NOW(), NOW(), 1, 1)
-        ON CONFLICT (key) DO UPDATE SET value = EXCLUDED.value;
-        INSERT INTO ir_config_parameter (key, value, create_date, write_date, create_uid, write_uid)
-        VALUES ('tenant.suspend_reason', '{reason}', NOW(), NOW(), 1, 1)
-        ON CONFLICT (key) DO UPDATE SET value = EXCLUDED.value;
-        """
-        message = "Tenant suspendido exitosamente"
-    else:
-        # Reactivar usuarios
-        sql = f"""
-        UPDATE res_users SET active = true WHERE id != 1;
-        UPDATE ir_config_parameter SET value = 'false' WHERE key = 'tenant.suspended';
-        """
-        message = "Tenant reactivado exitosamente"
-    
-    if run_sql(subdomain, sql):
-        logger.info(f"Tenant {subdomain} {('suspendido' if request.suspend else 'reactivado')}")
-        return {
-            "success": True,
-            "subdomain": subdomain,
-            "suspended": request.suspend,
-            "reason": reason if request.suspend else None,
-            "message": message
-        }
-    else:
-        raise HTTPException(status_code=500, detail=f"Error changing tenant status")
+    logger.info(f"{action} tenant: {db_name}")
+
+    try:
+        with _db_conn(db_name) as conn:
+            with conn.cursor() as cur:
+                if request.suspend:
+                    # Deshabilitar todos los usuarios excepto superuser
+                    cur.execute(
+                        "UPDATE res_users SET active = false WHERE id != 1"
+                    )
+                    # Marcar como suspendido
+                    cur.execute(
+                        "INSERT INTO ir_config_parameter "
+                        "(key, value, create_date, write_date, create_uid, write_uid) "
+                        "VALUES ('tenant.suspended', 'true', NOW(), NOW(), 1, 1) "
+                        "ON CONFLICT (key) DO UPDATE SET value = EXCLUDED.value"
+                    )
+                    cur.execute(
+                        "INSERT INTO ir_config_parameter "
+                        "(key, value, create_date, write_date, create_uid, write_uid) "
+                        "VALUES ('tenant.suspend_reason', %s, NOW(), NOW(), 1, 1) "
+                        "ON CONFLICT (key) DO UPDATE SET value = EXCLUDED.value",
+                        (reason,),
+                    )
+                else:
+                    cur.execute(
+                        "UPDATE res_users SET active = true WHERE id != 1"
+                    )
+                    cur.execute(
+                        "UPDATE ir_config_parameter "
+                        "SET value = 'false' WHERE key = 'tenant.suspended'"
+                    )
+            conn.commit()
+    except Exception as e:
+        logger.error(f"Error cambiando estado de {db_name}: {e}")
+        raise HTTPException(
+            status_code=500,
+            detail=f"Error changing tenant status: {e}",
+        )
+
+    logger.info(
+        f"Tenant {db_name} {'suspendido' if request.suspend else 'reactivado'}"
+    )
+    return {
+        "success": True,
+        "subdomain": db_name,
+        "suspended": request.suspend,
+        "reason": reason if request.suspend else None,
+        "message": (
+            "Tenant suspendido exitosamente"
+            if request.suspend
+            else "Tenant reactivado exitosamente"
+        ),
+    }
 
 
 if __name__ == "__main__":
     import uvicorn
-    logger.info("Iniciando Odoo Local Provisioning API en puerto 8070")
+
+    logger.info(
+        f"Iniciando Odoo Local Provisioning API v2 en puerto 8070 "
+        f"(PG: {PG_USER}@{PG_HOST}:{PG_PORT})"
+    )
     uvicorn.run(app, host="0.0.0.0", port=8070)

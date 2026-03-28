@@ -38,6 +38,13 @@ export interface PartnerOnboardingStatus {
   stripe_account_id: string | null;
   stripe_onboarding_complete: boolean;
   stripe_charges_enabled: boolean;
+  stripe_payouts_enabled: boolean;
+  stripe_requirements: string[];
+  stripe_disabled_reason: string | null;
+  billing_scenario: string | null;
+  contract_signed_at: string | null;
+  can_skip_stripe: boolean;
+  settlement_mode: 'domestic' | 'cross_border';
 }
 
 export interface PartnerDashboard {
@@ -47,6 +54,7 @@ export interface PartnerDashboard {
     status: string;
     commission_rate: number;
     onboarding_step: number;
+    stripe_onboarding_complete: boolean;
     stripe_charges_enabled: boolean;
   };
   kpis: {
@@ -92,6 +100,7 @@ export interface PartnerClientItem {
   customer_id: number;
   company_name: string;
   email: string;
+  subdomain?: string | null;
   plan: string;
   status: string | null;
   billing_mode: string | null;
@@ -210,6 +219,8 @@ export interface Tenant {
   tunnel_active?: boolean;
   server?: string;
   server_id?: string;
+  node_name?: string | null;
+  backend_host?: string | null;
   created_at?: string | null;
   url?: string;
   partner_id?: number | null;
@@ -835,6 +846,19 @@ export interface ServiceCatalogItemType {
   is_addon: boolean;
   requires_service_id: number | null;
   min_quantity: number;
+  service_code?: string | null;
+  metadata_json?: {
+    kind?: string;
+    email_quota_monthly?: number;
+    email_burst_limit_60m?: number;
+    email_overage_price?: number;
+    [key: string]: unknown;
+  };
+  effective_price_monthly?: number;
+  discount_percent?: number;
+  included_quantity?: number;
+  is_included_in_plan?: boolean;
+  active_quantity?: number;
   is_active: boolean;
   sort_order: number;
   created_at: string | null;
@@ -853,6 +877,25 @@ export interface CatalogResponse {
   total: number;
   by_category: Record<string, ServiceCatalogItemType[]>;
   categories: Array<{ value: string; label: string }>;
+}
+
+export interface AddonSubscriptionItem {
+  id: number;
+  customer_id: number;
+  subscription_id: number | null;
+  partner_id: number | null;
+  catalog_item_id: number;
+  status: string;
+  quantity: number;
+  unit_price_monthly: number;
+  currency: string;
+  service_code?: string | null;
+  metadata_json?: Record<string, unknown>;
+  acquired_via: string;
+  starts_at: string | null;
+  last_invoiced_year?: number | null;
+  last_invoiced_month?: number | null;
+  catalog_item: ServiceCatalogItemType | null;
 }
 
 // ── Plan ↔ Catalog Link Types ──
@@ -1083,15 +1126,7 @@ export interface ModuleDetail {
   rejected: boolean;
 }
 
-export interface BlueprintPackage {
-  id: number;
-  name: string;
-  display_name: string;
-  description: string | null;
-  module_list: string[];
-  module_count: number;
-  partner_allowed: boolean;
-}
+// BlueprintPackage — definición principal en línea ~937
 
 export interface WorkOrderItem {
   id: number;

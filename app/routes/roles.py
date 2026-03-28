@@ -14,7 +14,7 @@ from pydantic import BaseModel
 from ..models.database import Customer, SessionLocal, SystemConfig
 from ..services.spa_shell import render_spa_shell
 
-from ..config import JWT_SECRET_KEY, JWT_ALGORITHM, ADMIN_USERNAME, ADMIN_PASSWORD
+from ..config import get_runtime_setting
 
 router = APIRouter(tags=["Roles"])
 
@@ -23,6 +23,14 @@ JWT_EXPIRATION_HOURS = 24
 ROLES_CONFIG_KEY = "SPA_ROLES_JSON"
 
 BASE_DIR = os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
+
+
+def _jwt_secret_key() -> str:
+    return get_runtime_setting("JWT_SECRET_KEY", "")
+
+
+def _jwt_algorithm() -> str:
+    return get_runtime_setting("JWT_ALGORITHM", "HS256")
 
 # ── Catálogo maestro de permisos agrupados por módulo ──
 PERMISSION_CATALOG: Dict[str, Dict[str, Any]] = {
@@ -362,7 +370,7 @@ def create_access_token(username: str, role: str, user_id: int = None, tenant_id
         "exp": datetime.utcnow() + timedelta(hours=JWT_EXPIRATION_HOURS),
         "iat": datetime.utcnow(),
     }
-    encoded_jwt = jwt.encode(payload, JWT_SECRET_KEY, algorithm=JWT_ALGORITHM)
+    encoded_jwt = jwt.encode(payload, _jwt_secret_key(), algorithm=_jwt_algorithm())
     return encoded_jwt
 
 
@@ -370,7 +378,7 @@ def verify_token_with_role(token: str, required_role: str = None) -> dict:
     """Verifica un token JWT y retorna los datos del usuario.
     El rol 'admin' tiene acceso universal a todos los endpoints."""
     try:
-        payload = jwt.decode(token, JWT_SECRET_KEY, algorithms=[JWT_ALGORITHM])
+        payload = jwt.decode(token, _jwt_secret_key(), algorithms=[_jwt_algorithm()])
 
         user_role = payload.get("role")
 

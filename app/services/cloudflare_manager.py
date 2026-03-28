@@ -11,10 +11,8 @@ from typing import Dict, Any, List, Optional
 from datetime import datetime
 
 from ..config import (
-    CLOUDFLARE_API_TOKEN,
-    CLOUDFLARE_ACCOUNT_ID,
-    CLOUDFLARE_ZONE_ID,
-    CLOUDFLARE_ZONES,
+    get_runtime_kv_map,
+    get_runtime_setting,
 )
 
 logger = logging.getLogger(__name__)
@@ -27,22 +25,35 @@ class CloudflareManager:
 
     # ─── Headers ────────────────────────────────────────
     @classmethod
+    def _api_token(cls) -> str:
+        return get_runtime_setting("CLOUDFLARE_API_TOKEN", "")
+
+    @classmethod
+    def _account_id(cls) -> str:
+        return get_runtime_setting("CLOUDFLARE_ACCOUNT_ID", "")
+
+    @classmethod
+    def _default_zone_id(cls) -> str:
+        return get_runtime_setting("CLOUDFLARE_ZONE_ID", "")
+
+    @classmethod
+    def _zones(cls) -> Dict[str, str]:
+        return get_runtime_kv_map("CLOUDFLARE_ZONES", {})
+
+    @classmethod
     def _headers(cls) -> Dict[str, str]:
         return {
-            "Authorization": f"Bearer {CLOUDFLARE_API_TOKEN}",
+            "Authorization": f"Bearer {cls._api_token()}",
             "Content-Type": "application/json",
         }
 
     @classmethod
-    def _account_id(cls) -> str:
-        return CLOUDFLARE_ACCOUNT_ID
-
-    @classmethod
     def _zone_id(cls, domain: str = "sajet.us") -> str:
         """Retorna zone_id para el dominio dado."""
-        if CLOUDFLARE_ZONES.get(domain):
-            return CLOUDFLARE_ZONES[domain]
-        return CLOUDFLARE_ZONE_ID
+        zones = cls._zones()
+        if zones.get(domain):
+            return zones[domain]
+        return cls._default_zone_id()
 
     # ─── Listar todos los tunnels ───────────────────────
     @classmethod
@@ -56,7 +67,7 @@ class CloudflareManager:
         GET /accounts/{account_id}/cfd_tunnel
         """
         account_id = cls._account_id()
-        if not account_id or not CLOUDFLARE_API_TOKEN:
+        if not account_id or not cls._api_token():
             return {
                 "success": False,
                 "tunnels": [],
@@ -659,9 +670,11 @@ class CloudflareManager:
         3) Archivo legacy dominios.json
         """
         domains: List[Dict[str, str]] = []
+        zones = cls._zones()
+        default_zone_id = cls._default_zone_id()
 
         # 1) Dominios declarados explícitamente en env
-        for domain, zone_id in CLOUDFLARE_ZONES.items():
+        for domain, zone_id in zones.items():
             if not domain:
                 continue
             domains.append({
@@ -671,10 +684,10 @@ class CloudflareManager:
             })
 
         # 2) Fallback principal si no hay lista
-        if not domains and CLOUDFLARE_ZONE_ID:
+        if not domains and default_zone_id:
             domains.append({
                 "domain": "sajet.us",
-                "zone_id": CLOUDFLARE_ZONE_ID,
+                "zone_id": default_zone_id,
                 "source": "env:default",
             })
 

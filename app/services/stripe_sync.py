@@ -10,7 +10,6 @@ Flujo: Stripe API → match por email → actualizar BD local.
 """
 import stripe
 import logging
-import os
 from datetime import datetime, timezone
 from typing import Dict, Any, List, Optional, Tuple
 from sqlalchemy.orm import Session
@@ -20,10 +19,14 @@ from ..models.database import (
     Invoice, InvoiceStatus, InvoiceType, InvoiceIssuer,
     BillingMode, Partner, SessionLocal,
 )
+from ..config import get_runtime_setting
 
 logger = logging.getLogger(__name__)
 
-stripe.api_key = os.getenv("STRIPE_SECRET_KEY")
+
+def _configure_stripe() -> str:
+    stripe.api_key = get_runtime_setting("STRIPE_SECRET_KEY", "")
+    return stripe.api_key
 
 
 # ── Helpers ──
@@ -119,6 +122,7 @@ def sync_subscriptions(db: Session) -> Dict[str, Any]:
     Returns:
         {linked, created, updated, skipped, errors, details}
     """
+    _configure_stripe()
     results = {
         "linked": 0,
         "created": 0,
@@ -156,6 +160,7 @@ def sync_subscriptions(db: Session) -> Dict[str, Any]:
 
 def _fetch_all_stripe_subscriptions(statuses: List[str] = None) -> list:
     """Pagina por TODAS las suscripciones de Stripe."""
+    _configure_stripe()
     all_subs = []
     for status in (statuses or ["active"]):
         has_more = True
@@ -353,6 +358,7 @@ def sync_invoices(
     Solo importa facturas tipo 'subscription' (recurrentes).
     Las vincula a suscripciones locales por stripe_subscription_id.
     """
+    _configure_stripe()
     results = {
         "imported": 0,
         "updated": 0,
@@ -391,6 +397,7 @@ def sync_invoices(
 
 def _fetch_stripe_invoices(since_ts: int) -> list:
     """Pagina facturas de Stripe desde since_ts."""
+    _configure_stripe()
     all_invoices = []
     has_more = True
     starting_after = None
@@ -566,6 +573,7 @@ def sync_stripe_customers(db: Session) -> Dict[str, Any]:
     Sincroniza stripe_customer_id para todos los clientes
     buscando por email en Stripe.
     """
+    _configure_stripe()
     results = {"linked": 0, "already_linked": 0, "not_found": 0, "details": []}
 
     customers_without = db.query(Customer).filter(

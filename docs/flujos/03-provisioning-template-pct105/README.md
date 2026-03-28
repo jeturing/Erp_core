@@ -1,13 +1,18 @@
 # 03 - Provisioning con template en PCT105
 
 Estado: vigente  
-Validado: 2026-02-22  
+Validado: 2026-03-28  
 Entorno objetivo: `/opt/Erp_core`
 
 
 ## Objetivo
 Crear un tenant nuevo clonando `template_tenant` en PostgreSQL/Odoo del servidor PCT105,
 con DNS automático en Cloudflare, módulos Odoo instalados, y opcionalmente dominio custom.
+
+## Runtime config
+- En `app/routes/provisioning.py`, las claves críticas ya se leen en runtime desde `system_config` con fallback a `.env`.
+- Incluye: `PROVISIONING_API_KEY`, `CLOUDFLARE_API_TOKEN`, `CLOUDFLARE_ZONES`, `CLOUDFLARE_TUNNEL_ID`, `ODOO_EXTRA_NODES_JSON`, `ODOO_PRIMARY_*`, `ODOO_DB_*`.
+- Cambios en esas claves aplican sin reinicio para las rutas ya migradas.
 
 ## Servicios Involucrados (PCT105)
 
@@ -133,8 +138,15 @@ map $host $odoo_proxy_host {
 
 ### 3. DNS del cliente
 ```
-joficreditosrd.com CNAME → da2bc763-a93b-41f5-9a22-1731403127e3.cfargotunnel.com
+joficreditosrd.com A → 208.115.125.29
 ```
+
+## Regla vigente para dominios custom
+
+- Dominio externo del cliente: termina en PCT 160 (`208.115.125.29`).
+- Dominio interno SAJET del tenant: sigue usando `*.sajet.us` y túnel Cloudflare donde aplique.
+- No recomendar `CNAME` externo a `tenant.sajet.us`.
+- No recomendar `CNAME` externo a `*.cfargotunnel.com`.
 
 ## DB Watcher
 
@@ -159,6 +171,7 @@ joficreditosrd.com CNAME → da2bc763-a93b-41f5-9a22-1731403127e3.cfargotunnel.c
 | no pg_hba.conf entry | Firewall PG | Agregar subnet |
 | DNS already exists | CNAME previo | Se reutiliza, no es error |
 | Cloudflare no configurado | Token vacío | `/opt/odoo/config/domains.json` |
+| Dominio externo 404 en apex | Se publicó CNAME a tunnel/tenant interno | Corregir a `A -> 208.115.125.29` |
 
 ## Validación
 ```bash

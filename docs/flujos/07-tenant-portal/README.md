@@ -1,7 +1,7 @@
 # 07 - Portal Tenant
 
 Estado: vigente  
-Validado: 2026-02-22  
+Validado: 2026-03-28  
 Entorno objetivo: `/opt/Erp_core`
 
 
@@ -37,6 +37,11 @@ Permitir al tenant autenticado ver su plan, estado, facturas y acciones de pago.
 - `GET /tenant/api/billing`
 - `POST /tenant/api/update-payment`
 - `POST /tenant/api/cancel-subscription`
+
+## Runtime config
+- El portal tenant ya resuelve `STRIPE_SECRET_KEY` y `APP_URL` en runtime desde `system_config` con fallback a `.env`.
+- Cambios de Stripe o URL base en BD aplican sin reinicio para las rutas del portal ya migradas.
+- Facturas pendientes pueden volver a consultar `hosted_invoice_url` en Stripe con la clave activa del momento.
 
 ## Errores típicos
 - `403 contexto tenant inválido`

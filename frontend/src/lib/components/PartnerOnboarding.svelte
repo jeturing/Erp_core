@@ -223,6 +223,9 @@
     verifying = true;
     try {
       const result = await partnerPortalApi.verifyStripe();
+      onboardingStatus.stripe_requirements = result.requirements_currently_due || [];
+      onboardingStatus.stripe_disabled_reason = result.requirements_disabled_reason || null;
+      onboardingStatus.stripe_payouts_enabled = result.payouts_enabled;
       if (result.onboarding_complete) {
         success = '¡KYC completado! Tu cuenta Stripe está activa.';
         onboardingStatus.current_step = 5;
@@ -230,8 +233,12 @@
         onboardingStatus.steps[4].completed = true;
         onboardingStatus.stripe_onboarding_complete = true;
         onboardingStatus.stripe_charges_enabled = result.charges_enabled;
+        onboardingStatus.stripe_requirements = [];
+        onboardingStatus.stripe_disabled_reason = null;
       } else {
-        error = 'El KYC de Stripe aún no está completo. Revisa tu email o completa los pasos pendientes.';
+        error = result.requirements_currently_due?.length
+          ? `Stripe aún requiere información: ${result.requirements_currently_due.join(', ')}`
+          : 'El KYC de Stripe aún no está completo. Revisa los pasos pendientes en Stripe.';
       }
     } catch (err) {
       error = err instanceof Error ? err.message : 'Error al verificar Stripe';
@@ -578,9 +585,13 @@
                 ✅ Tu cuenta Stripe Connect está verificada y activa.
                 Puedes recibir pagos automáticos.
               </p>
+            {:else if onboardingStatus.can_skip_stripe}
+              <p class="text-sm text-amber-700">
+                ⚠️ Stripe quedó pendiente por bypass administrativo.
+              </p>
             {:else}
               <p class="text-sm text-amber-700">
-                ⚠️ Stripe fue omitido. Puedes configurarlo desde el portal.
+                ⚠️ Stripe Connect sigue pendiente antes de habilitar pagos y dispersión.
               </p>
             {/if}
           </div>
@@ -589,16 +600,23 @@
           <h2 class="text-lg font-bold text-[#1a1a1a] mb-1">Conecta tu cuenta Stripe</h2>
           <p class="text-sm text-gray-500 mb-6">
             Para recibir pagos y comisiones, necesitas completar la verificación KYC de Stripe Connect.
-            Este paso asegura el split automático de ingresos 50/50.
+            Este paso habilita la dispersión automática según tu acuerdo comercial.
           </p>
           <div class="space-y-4">
             {#if !stripeUrl}
               <div class="rounded-lg border border-blue-100 bg-blue-50 p-4">
                 <p class="text-sm text-blue-800">
                   <strong>¿Qué es esto?</strong> Stripe Connect te permite recibir pagos directamente.
-                  Cuando tus clientes paguen, el ingreso se divide automáticamente entre tu cuenta y Jeturing.
+                  Cuando tus clientes paguen, Stripe aplicará el flujo de cobro y dispersión definido para tu acuerdo.
                 </p>
               </div>
+              {#if onboardingStatus.settlement_mode === 'cross_border'}
+                <div class="rounded-lg border border-amber-100 bg-amber-50 p-4">
+                  <p class="text-sm text-amber-800">
+                    Tu cuenta está marcada como operación transfronteriza. Stripe puede pedir validaciones adicionales antes de habilitar payouts.
+                  </p>
+                </div>
+              {/if}
               <button
                 class="w-full bg-[#635BFF] text-white font-semibold py-2.5 rounded-lg hover:bg-[#5851e0] transition-colors flex items-center justify-center gap-2 text-sm disabled:opacity-60"
                 on:click={handleStartStripe}
@@ -628,6 +646,21 @@
                 <CheckCircle class="w-4 h-4" />
                 Verificar KYC completado
               </button>
+              {#if onboardingStatus.stripe_requirements?.length}
+                <div class="rounded-lg border border-amber-100 bg-amber-50 p-4">
+                  <p class="text-sm font-semibold text-amber-900 mb-2">Pendientes en Stripe</p>
+                  <ul class="list-disc list-inside space-y-1 text-sm text-amber-800">
+                    {#each onboardingStatus.stripe_requirements as requirement}
+                      <li>{requirement}</li>
+                    {/each}
+                  </ul>
+                  {#if onboardingStatus.stripe_disabled_reason}
+                    <p class="text-xs text-amber-700 mt-3">
+                      Motivo reportado por Stripe: {onboardingStatus.stripe_disabled_reason}
+                    </p>
+                  {/if}
+                </div>
+              {/if}
             {/if}
             <div class="flex gap-3">
               <button
@@ -636,12 +669,14 @@
               >
                 <ArrowLeft class="w-4 h-4" /> Atrás
               </button>
-              <button
-                class="flex-1 text-gray-500 text-sm hover:text-gray-700 transition-colors py-2"
-                on:click={handleSkipStripe}
-              >
-                Saltar (configurar después)
-              </button>
+              {#if onboardingStatus.can_skip_stripe}
+                <button
+                  class="flex-1 text-gray-500 text-sm hover:text-gray-700 transition-colors py-2"
+                  on:click={handleSkipStripe}
+                >
+                  Saltar (bypass)
+                </button>
+              {/if}
             </div>
           </div>
         {/if}
@@ -658,7 +693,7 @@
           </p>
           {#if !onboardingStatus.stripe_onboarding_complete}
             <div class="rounded-lg border border-amber-100 bg-amber-50 p-3 text-sm text-amber-700 mb-6">
-              ⚠️ Recuerda completar la verificación de Stripe para recibir pagos automáticos.
+              ⚠️ La activación de Stripe Connect sigue pendiente.
             </div>
           {/if}
           <button

@@ -101,9 +101,10 @@
     | 'accountant-portal'
     | 'notfound';
 
-  let currentRoute = 'landing';
-  let currentPage: AppPage = 'landing';
-  let partnerSlug = '';
+  let currentRoute = $state('landing');
+  let currentPage = $state<AppPage>('landing');
+  let partnerSlug = $state('');
+  let authBootstrapped = $state(false);
 
   function getRouteFromLocation(): string {
     const hash = window.location.hash.replace(/^#\/?/, '');
@@ -285,6 +286,7 @@
 
     const init = async () => {
       await auth.init();
+      authBootstrapped = true;
       if (active) {
         handleRouteChange();
       }
@@ -299,15 +301,17 @@
     };
   });
 
-  $: if (!$auth.isLoading) {
-    handleRouteChange();
-  }
+  $effect(() => {
+    if (!$auth.isLoading) {
+      handleRouteChange();
+    }
+  });
 </script>
 
 <Toast />
 <OfflineBanner />
 
-{#if $auth.isLoading && currentPage !== 'landing'}
+{#if !authBootstrapped && currentPage !== 'landing'}
   <div class="min-h-screen bg-bg-page flex items-center justify-center">
     <div class="text-center">
       <Spinner size="lg" />

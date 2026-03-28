@@ -45,7 +45,13 @@
     requires_service_id: null as number | null,
     min_quantity: 1,
     sort_order: 0,
+    is_email_package: false,
+    email_quota_monthly: 0,
+    email_burst_limit_60m: 0,
+    email_overage_price: 0,
   });
+
+  const EMAIL_PACKAGE_CODE = 'postal_email_package';
 
   const unitOptions = [
     'Por mes', 'Por usuario', 'Por servidor', 'Por cuenta',
@@ -131,6 +137,14 @@
     return colors[cat] || 'text-gray-400';
   }
 
+  function isEmailPackage(item: Pick<ServiceCatalogItemType, 'service_code' | 'metadata_json'>): boolean {
+    return item.service_code === EMAIL_PACKAGE_CODE || item.metadata_json?.kind === EMAIL_PACKAGE_CODE;
+  }
+
+  function formatInteger(value: number | null | undefined): string {
+    return new Intl.NumberFormat('es-DO').format(Number(value || 0));
+  }
+
   // ── CRUD ──
 
   function openCreate() {
@@ -146,11 +160,16 @@
       requires_service_id: null,
       min_quantity: 1,
       sort_order: catalog.length + 1,
+      is_email_package: false,
+      email_quota_monthly: 0,
+      email_burst_limit_60m: 0,
+      email_overage_price: 0,
     };
     showItemModal = true;
   }
 
   function openEdit(item: ServiceCatalogItemType) {
+    const emailPackage = isEmailPackage(item);
     editingItem = item;
     form = {
       category: item.category,
@@ -163,6 +182,10 @@
       requires_service_id: item.requires_service_id,
       min_quantity: item.min_quantity,
       sort_order: item.sort_order,
+      is_email_package: emailPackage,
+      email_quota_monthly: Number(item.metadata_json?.email_quota_monthly || 0),
+      email_burst_limit_60m: Number(item.metadata_json?.email_burst_limit_60m || 0),
+      email_overage_price: Number(item.metadata_json?.email_overage_price || 0),
     };
     showItemModal = true;
   }
@@ -172,10 +195,25 @@
     if (form.price_monthly <= 0) { toasts.error('Precio debe ser mayor a 0'); return; }
     saving = true;
     try {
+      const isEmailAddon = form.is_email_package;
       const payload: any = {
-        ...form,
+        category: form.category,
+        name: form.name,
+        description: form.description,
+        unit: isEmailAddon ? 'Por mes' : form.unit,
+        price_monthly: form.price_monthly,
         price_max: form.price_max || null,
+        is_addon: isEmailAddon ? true : form.is_addon,
         requires_service_id: form.requires_service_id || null,
+        min_quantity: form.min_quantity,
+        sort_order: form.sort_order,
+        service_code: isEmailAddon ? EMAIL_PACKAGE_CODE : null,
+        metadata_json: isEmailAddon ? {
+          kind: EMAIL_PACKAGE_CODE,
+          email_quota_monthly: Number(form.email_quota_monthly || 0),
+          email_burst_limit_60m: Number(form.email_burst_limit_60m || 0),
+          email_overage_price: Number(form.email_overage_price || 0),
+        } : null,
       };
 
       if (editingItem) {
@@ -355,6 +393,9 @@
                       {#if item.is_addon}
                         <span class="text-[10px] px-1.5 py-0.5 rounded bg-amber-500/20 text-amber-400 font-semibold uppercase">Add-on</span>
                       {/if}
+                      {#if isEmailPackage(item)}
+                        <span class="text-[10px] px-1.5 py-0.5 rounded bg-blue-500/20 text-blue-300 font-semibold uppercase">Correo</span>
+                      {/if}
                       {#if !item.is_active}
                         <span class="text-[10px] px-1.5 py-0.5 rounded bg-red-500/20 text-red-400 font-semibold uppercase">Inactivo</span>
                       {/if}
@@ -369,6 +410,22 @@
                         <span class="text-amber-400">Requiere servicio #{item.requires_service_id}</span>
                       {/if}
                     </div>
+                    {#if isEmailPackage(item)}
+                      <div class="mt-3 grid grid-cols-1 md:grid-cols-3 gap-2 text-xs">
+                        <div class="rounded border border-blue-500/20 bg-blue-500/5 px-2.5 py-2">
+                          <span class="block text-gray-500 uppercase text-[10px] mb-1">Cuota mensual</span>
+                          <span class="font-semibold text-blue-300">{formatInteger(Number(item.metadata_json?.email_quota_monthly || 0))} emails</span>
+                        </div>
+                        <div class="rounded border border-emerald-500/20 bg-emerald-500/5 px-2.5 py-2">
+                          <span class="block text-gray-500 uppercase text-[10px] mb-1">Ventana 60m</span>
+                          <span class="font-semibold text-emerald-300">{formatInteger(Number(item.metadata_json?.email_burst_limit_60m || 0))} envíos</span>
+                        </div>
+                        <div class="rounded border border-terracotta/20 bg-terracotta/5 px-2.5 py-2">
+                          <span class="block text-gray-500 uppercase text-[10px] mb-1">Sobreuso</span>
+                          <span class="font-semibold text-terracotta">{formatCurrency(Number(item.metadata_json?.email_overage_price || 0))}</span>
+                        </div>
+                      </div>
+                    {/if}
                   </div>
 
                   <!-- Pricing -->
@@ -510,6 +567,66 @@
             <input type="checkbox" bind:checked={form.is_addon} class="accent-terracotta" />
             Es un add-on (requiere servicio base)
           </label>
+        </div>
+
+        <div class="rounded-lg border border-blue-500/20 bg-blue-500/5 p-4 space-y-3">
+          <label class="flex items-center gap-2 cursor-pointer select-none text-sm text-blue-100 font-medium">
+            <input
+              type="checkbox"
+              bind:checked={form.is_email_package}
+              class="accent-terracotta"
+              onchange={() => {
+                if (form.is_email_package) {
+                  form.is_addon = true;
+                  form.unit = 'Por mes';
+                }
+              }}
+            />
+            Configurar como paquete de correo transaccional / masivo
+          </label>
+
+          {#if form.is_email_package}
+            <p class="text-xs text-blue-200/80">
+              Este servicio quedará listo para venderse en el portal del cliente y en el portal partner como paquete mensual de correo.
+            </p>
+
+            <div class="grid grid-cols-1 sm:grid-cols-3 gap-4">
+              <div>
+                <label class="label" for="cat-email-quota">Cuota mensual</label>
+                <input
+                  id="cat-email-quota"
+                  type="number"
+                  min="0"
+                  class="input w-full"
+                  bind:value={form.email_quota_monthly}
+                  placeholder="50000"
+                />
+              </div>
+              <div>
+                <label class="label" for="cat-email-burst">Límite 60 min</label>
+                <input
+                  id="cat-email-burst"
+                  type="number"
+                  min="0"
+                  class="input w-full"
+                  bind:value={form.email_burst_limit_60m}
+                  placeholder="10000"
+                />
+              </div>
+              <div>
+                <label class="label" for="cat-email-overage">Precio sobreuso</label>
+                <input
+                  id="cat-email-overage"
+                  type="number"
+                  min="0"
+                  step="0.0001"
+                  class="input w-full"
+                  bind:value={form.email_overage_price}
+                  placeholder="0.0025"
+                />
+              </div>
+            </div>
+          {/if}
         </div>
 
         <div class="flex gap-3 pt-2">

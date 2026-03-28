@@ -3,6 +3,9 @@ Test Onboarding - Customer registration and checkout flow
 """
 import pytest
 from fastapi import status
+from types import SimpleNamespace
+
+from app.models.database import BillingScenario, Partner, PartnerStatus, Plan
 
 
 class TestOnboardingPages:
@@ -54,8 +57,12 @@ class TestCheckoutAPI:
             "plan": "pro"
         }
         response = client.post("/api/checkout", json=checkout_data)
-        # May fail with Stripe error in test env, but should not be 422
-        assert response.status_code in [status.HTTP_200_OK, status.HTTP_500_INTERNAL_SERVER_ERROR]
+        # Puede fallar si el plan no está sembrado en la BD de pruebas
+        assert response.status_code in [
+            status.HTTP_200_OK,
+            status.HTTP_400_BAD_REQUEST,
+            status.HTTP_500_INTERNAL_SERVER_ERROR,
+        ]
     
     def test_checkout_missing_email(self, client):
         """Test checkout without email"""
@@ -101,8 +108,162 @@ class TestCheckoutAPI:
                 "plan": plan
             }
             response = client.post("/api/checkout", json=checkout_data)
-            # Should accept all plans
-            assert response.status_code in [status.HTTP_200_OK, status.HTTP_500_INTERNAL_SERVER_ERROR]
+            assert response.status_code in [
+                status.HTTP_200_OK,
+                status.HTTP_400_BAD_REQUEST,
+                status.HTTP_500_INTERNAL_SERVER_ERROR,
+            ]
+
+    def test_checkout_partner_jeturing_collects_uses_destination_charge(
+        self,
+        client,
+        db_session,
+        monkeypatch,
+    ):
+        plan = Plan(
+            name="partner_pro",
+            display_name="Partner Pro",
+            base_price=100,
+            price_per_user=10,
+            included_users=1,
+            stripe_price_id="price_partner_pro",
+            is_active=True,
+        )
+        partner = Partner(
+            company_name="Partner One",
+            contact_email="partner@example.com",
+            country="US",
+            status=PartnerStatus.active,
+            partner_code="PARTNER1",
+            billing_scenario=BillingScenario.jeturing_collects,
+            commission_rate=65.0,
+            stripe_account_id="acct_partner_123",
+            stripe_onboarding_complete=True,
+            stripe_charges_enabled=True,
+        )
+        db_session.add(plan)
+        db_session.add(partner)
+        db_session.commit()
+
+        captured = {}
+
+        def fake_create(**kwargs):
+            captured.update(kwargs)
+            return SimpleNamespace(url="https://checkout.test/session", id="cs_test_partner")
+
+        monkeypatch.setattr("app.routes.onboarding.stripe.checkout.Session.create", fake_create)
+
+        checkout_data = {
+            "full_name": "Buyer Test",
+            "email": "buyer@example.com",
+            "company_name": "Buyer Co",
+            "subdomain": "buyerco",
+            "plan": "partner_pro",
+            "partner_code": "PARTNER1",
+        }
+
+        response = client.post("/api/checkout", json=checkout_data)
+
+        assert response.status_code == status.HTTP_200_OK
+        assert response.json()["billing_mode"] == "partner_direct"
+        assert "stripe_account" not in captured
+        assert captured["subscription_data"]["transfer_data"]["destination"] == "acct_partner_123"
+        assert captured["subscription_data"]["application_fee_percent"] == 35.0
+        assert captured["subscription_data"]["on_behalf_of"] == "acct_partner_123"
+
+    def test_checkout_partner_collects_keeps_external_collection(
+        self,
+        client,
+        db_session,
+        monkeypatch,
+    ):
+        plan = Plan(
+            name="partner_external",
+            display_name="Partner External",
+            base_price=120,
+            price_per_user=15,
+            included_users=1,
+            stripe_price_id="price_partner_external",
+            is_active=True,
+        )
+        partner = Partner(
+            company_name="Partner External",
+            contact_email="partner2@example.com",
+            country="DO",
+            status=PartnerStatus.active,
+            partner_code="PARTNER2",
+            billing_scenario=BillingScenario.partner_collects,
+            commission_rate=50.0,
+        )
+        db_session.add(plan)
+        db_session.add(partner)
+        db_session.commit()
+
+        captured = {}
+
+        def fake_create(**kwargs):
+            captured.update(kwargs)
+            return SimpleNamespace(url="https://checkout.test/session", id="cs_test_external")
+
+        monkeypatch.setattr("app.routes.onboarding.stripe.checkout.Session.create", fake_create)
+
+        checkout_data = {
+            "full_name": "Buyer Two",
+            "email": "buyer2@example.com",
+            "company_name": "Buyer Two Co",
+            "subdomain": "buyertwo",
+            "plan": "partner_external",
+            "partner_code": "PARTNER2",
+        }
+
+        response = client.post("/api/checkout", json=checkout_data)
+
+        assert response.status_code == status.HTTP_200_OK
+        assert response.json()["billing_mode"] == "partner_pays_for_client"
+        assert "subscription_data" not in captured
+
+    def test_checkout_partner_without_ready_connect_is_blocked(
+        self,
+        client,
+        db_session,
+    ):
+        plan = Plan(
+            name="partner_blocked",
+            display_name="Partner Blocked",
+            base_price=100,
+            price_per_user=10,
+            included_users=1,
+            stripe_price_id="price_partner_blocked",
+            is_active=True,
+        )
+        partner = Partner(
+            company_name="Partner Blocked",
+            contact_email="partner3@example.com",
+            country="US",
+            status=PartnerStatus.active,
+            partner_code="PARTNER3",
+            billing_scenario=BillingScenario.jeturing_collects,
+            commission_rate=50.0,
+            stripe_account_id="acct_partner_blocked",
+            stripe_onboarding_complete=False,
+        )
+        db_session.add(plan)
+        db_session.add(partner)
+        db_session.commit()
+
+        checkout_data = {
+            "full_name": "Buyer Three",
+            "email": "buyer3@example.com",
+            "company_name": "Buyer Three Co",
+            "subdomain": "buyerthree",
+            "plan": "partner_blocked",
+            "partner_code": "PARTNER3",
+        }
+
+        response = client.post("/api/checkout", json=checkout_data)
+
+        assert response.status_code == status.HTTP_409_CONFLICT
+        assert "Stripe Connect" in response.json()["detail"]
 
 
 class TestStripeWebhook:
@@ -169,4 +330,8 @@ class TestCustomerValidation:
         response2 = client.post("/api/checkout", json=checkout_data)
         
         # One should succeed, other may fail or both succeed depending on DB state
-        assert response1.status_code in [status.HTTP_200_OK, status.HTTP_500_INTERNAL_SERVER_ERROR]
+        assert response1.status_code in [
+            status.HTTP_200_OK,
+            status.HTTP_400_BAD_REQUEST,
+            status.HTTP_500_INTERNAL_SERVER_ERROR,
+        ]

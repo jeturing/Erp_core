@@ -5,17 +5,15 @@ Refresh tokens se persisten en BD (tabla refresh_tokens) para sobrevivir reinici
 from datetime import datetime, timedelta
 from typing import Optional, Tuple
 import jwt
-import os
 import secrets
 import hashlib
 import logging
 from jwt import ExpiredSignatureError, InvalidTokenError
 
 from ..config import (
-    JWT_SECRET_KEY,
-    JWT_REFRESH_SECRET_KEY,
-    JWT_ALGORITHM,
-    JWT_ACCESS_TOKEN_EXPIRE_MINUTES,
+    get_runtime_bool,
+    get_runtime_int,
+    get_runtime_setting,
 )
 
 logger = logging.getLogger(__name__)
@@ -26,13 +24,25 @@ def _db():
     from ..models.database import RefreshToken, SessionLocal
     return RefreshToken, SessionLocal()
 
-# Token expiry config
-ACCESS_TOKEN_EXPIRE_MINUTES = JWT_ACCESS_TOKEN_EXPIRE_MINUTES
-REFRESH_TOKEN_EXPIRE_DAYS = int(os.getenv("REFRESH_TOKEN_EXPIRE_DAYS", "7"))
+def _jwt_secret_key() -> str:
+    return get_runtime_setting("JWT_SECRET_KEY", "")
 
-# Cookie security configuration
-# Solo usar cookies secure si FORCE_HTTPS está habilitado
-USE_SECURE_COOKIES = os.getenv("FORCE_HTTPS", "false").lower() == "true"
+
+def _jwt_algorithm() -> str:
+    return get_runtime_setting("JWT_ALGORITHM", "HS256")
+
+
+def _access_token_expire_minutes() -> int:
+    return get_runtime_int("JWT_ACCESS_TOKEN_EXPIRE_MINUTES", 60)
+
+
+def _refresh_token_expire_days() -> int:
+    return get_runtime_int("REFRESH_TOKEN_EXPIRE_DAYS", 7)
+
+
+def _use_secure_cookies() -> bool:
+    # Solo usar cookies secure si FORCE_HTTPS está habilitado.
+    return get_runtime_bool("FORCE_HTTPS", False)
 
 
 class TokenManager:
@@ -60,7 +70,7 @@ class TokenManager:
             Token JWT codificado
         """
         if expires_delta is None:
-            expires_delta = timedelta(minutes=ACCESS_TOKEN_EXPIRE_MINUTES)
+            expires_delta = timedelta(minutes=_access_token_expire_minutes())
         
         now = datetime.utcnow()
         expire = now + expires_delta
@@ -76,7 +86,7 @@ class TokenManager:
             "jti": secrets.token_hex(16)  # JWT ID único
         }
         
-        encoded_jwt = jwt.encode(payload, JWT_SECRET_KEY, algorithm=JWT_ALGORITHM)
+        encoded_jwt = jwt.encode(payload, _jwt_secret_key(), algorithm=_jwt_algorithm())
         return encoded_jwt
     
     @staticmethod
@@ -97,7 +107,7 @@ class TokenManager:
             ValueError: Tipo de token incorrecto o rol no autorizado
         """
         try:
-            payload = jwt.decode(token, JWT_SECRET_KEY, algorithms=[JWT_ALGORITHM])
+            payload = jwt.decode(token, _jwt_secret_key(), algorithms=[_jwt_algorithm()])
         except ExpiredSignatureError as e:
             raise ValueError("Token expirado") from e
         except InvalidTokenError as e:
@@ -122,13 +132,13 @@ class TokenManager:
     def set_token_cookie(response, token: str, max_age: int = None):
         """Configura la cookie httpOnly con el token."""
         if max_age is None:
-            max_age = ACCESS_TOKEN_EXPIRE_MINUTES * 60
-        
+            max_age = _access_token_expire_minutes() * 60
+
         response.set_cookie(
             key="access_token",
             value=token,
             httponly=True,
-            secure=USE_SECURE_COOKIES,
+            secure=_use_secure_cookies(),
             samesite="lax",
             max_age=max_age,
             path="/"
@@ -141,7 +151,7 @@ class TokenManager:
             key="access_token",
             path="/",
             httponly=True,
-            secure=USE_SECURE_COOKIES,
+            secure=_use_secure_cookies(),
             samesite="lax"
         )
 
@@ -163,7 +173,7 @@ class RefreshTokenManager:
         """Crea un refresh token opaco de larga duración y lo persiste en BD."""
         token = secrets.token_urlsafe(64)
         token_hash = hashlib.sha256(token.encode()).hexdigest()
-        expires_at = datetime.utcnow() + timedelta(days=REFRESH_TOKEN_EXPIRE_DAYS)
+        expires_at = datetime.utcnow() + timedelta(days=_refresh_token_expire_days())
 
         RefreshToken, session = _db()
         try:
@@ -271,12 +281,12 @@ class RefreshTokenManager:
     @classmethod
     def set_refresh_token_cookie(cls, response, token: str):
         """Configura la cookie httpOnly con el refresh token."""
-        max_age = REFRESH_TOKEN_EXPIRE_DAYS * 24 * 60 * 60
+        max_age = _refresh_token_expire_days() * 24 * 60 * 60
         response.set_cookie(
             key="refresh_token",
             value=token,
             httponly=True,
-            secure=USE_SECURE_COOKIES,
+            secure=_use_secure_cookies(),
             samesite="lax",
             max_age=max_age,
             path="/api/auth",
@@ -289,7 +299,7 @@ class RefreshTokenManager:
             key="refresh_token",
             path="/api/auth",
             httponly=True,
-            secure=USE_SECURE_COOKIES,
+            secure=_use_secure_cookies(),
             samesite="lax",
         )
 

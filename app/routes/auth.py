@@ -6,14 +6,21 @@ from fastapi.responses import HTMLResponse
 from pydantic import BaseModel
 from datetime import datetime, timedelta
 import jwt
-import os
 
-from ..config import JWT_SECRET_KEY, JWT_ALGORITHM, ADMIN_USERNAME, ADMIN_PASSWORD
+from ..config import get_runtime_setting
 
 router = APIRouter(prefix="/api/admin", tags=["Authentication"])
 
 # JWT Configuration
 JWT_EXPIRATION_HOURS = 24
+
+
+def _jwt_secret_key() -> str:
+    return get_runtime_setting("JWT_SECRET_KEY", "")
+
+
+def _jwt_algorithm() -> str:
+    return get_runtime_setting("JWT_ALGORITHM", "HS256")
 
 
 # DTOs
@@ -40,14 +47,14 @@ def create_access_token(username: str) -> str:
         "exp": datetime.utcnow() + timedelta(hours=JWT_EXPIRATION_HOURS),
         "iat": datetime.utcnow()
     }
-    encoded_jwt = jwt.encode(payload, JWT_SECRET_KEY, algorithm=JWT_ALGORITHM)
+    encoded_jwt = jwt.encode(payload, _jwt_secret_key(), algorithm=_jwt_algorithm())
     return encoded_jwt
 
 
 def verify_token(token: str) -> str:
     """Verifica un token JWT y retorna el username."""
     try:
-        payload = jwt.decode(token, JWT_SECRET_KEY, algorithms=[JWT_ALGORITHM])
+        payload = jwt.decode(token, _jwt_secret_key(), algorithms=[_jwt_algorithm()])
         username: str = payload.get("sub")
         if username is None:
             raise HTTPException(

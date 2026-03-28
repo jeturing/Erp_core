@@ -13,20 +13,25 @@ from sqlalchemy.orm import Session
 from sqlalchemy import func
 from datetime import datetime, timedelta
 import stripe
-import os
 import logging
 
 from ..models.database import (
     SeatEvent, SeatHighWater, Subscription, SeatEventType,
     BillingMode, get_db
 )
+from ..config import get_runtime_int, get_runtime_setting
 
 router = APIRouter(prefix="/api/seats", tags=["Seats"])
 logger = logging.getLogger(__name__)
 
-stripe.api_key = os.getenv("STRIPE_SECRET_KEY", "")
 
-GRACE_HOURS = int(os.getenv("SEAT_GRACE_HOURS", "8"))
+def _configure_stripe() -> str:
+    stripe.api_key = get_runtime_setting("STRIPE_SECRET_KEY", "")
+    return stripe.api_key
+
+
+def _grace_hours() -> int:
+    return get_runtime_int("SEAT_GRACE_HOURS", 8)
 
 
 # ── DTOs ──
@@ -74,6 +79,7 @@ def _update_hwm(db: Session, sub_id: int, count: int) -> SeatHighWater:
 
 def _sync_stripe_quantity(sub: Subscription, qty: int) -> bool:
     """Actualiza quantity en Stripe subscription item."""
+    _configure_stripe()
     if not sub.stripe_subscription_id:
         logger.warning(f"No stripe_subscription_id for sub {sub.id}")
         return False
@@ -119,7 +125,7 @@ def record_seat_event(payload: SeatEventCreate, db: Session = Depends(get_db)):
         # Épica 4: Solo FIRST_LOGIN es billable, con grace de 8h
         if event_type == SeatEventType.FIRST_LOGIN:
             is_billable = True
-            grace_expires = datetime.utcnow() + timedelta(hours=GRACE_HOURS)
+            grace_expires = datetime.utcnow() + timedelta(hours=_grace_hours())
     else:
         # Épica 3: Todo evento que incrementa cuenta es billable
         if event_type in (SeatEventType.USER_CREATED, SeatEventType.USER_REACTIVATED, SeatEventType.FIRST_LOGIN):

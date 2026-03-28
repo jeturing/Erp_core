@@ -1,5 +1,5 @@
 import api from './client';
-import type { TenantPortalBilling, TenantPortalInfo } from '../types';
+import type { AddonSubscriptionItem, ServiceCatalogItemType, TenantPortalBilling, TenantPortalInfo } from '../types';
 
 export interface PortalDomain {
   id: number;
@@ -63,6 +63,22 @@ export const portalApi = {
 
   async getUsers(): Promise<PortalUsersResponse> {
     return api.get('/tenant/api/users');
+  },
+
+  async getServiceCatalog(): Promise<{ items: ServiceCatalogItemType[]; total: number }> {
+    return api.get('/tenant/api/services/catalog');
+  },
+
+  async getServiceSubscriptions(): Promise<{ items: AddonSubscriptionItem[]; total: number }> {
+    return api.get('/tenant/api/services/subscriptions');
+  },
+
+  async purchaseService(catalog_item_id: number, quantity = 1): Promise<{
+    message: string;
+    addon: AddonSubscriptionItem;
+    invoice?: { id: number; invoice_number: string; total: number; currency: string; status: string; stripe_invoice_id?: string | null; payment_url?: string | null } | null;
+  }> {
+    return api.post('/tenant/api/services/purchase', { catalog_item_id, quantity });
   },
 };
 

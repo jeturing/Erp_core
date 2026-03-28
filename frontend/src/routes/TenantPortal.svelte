@@ -9,7 +9,7 @@
   import { auth, currentUser } from '../lib/stores';
   import { Spinner } from '../lib/components';
   import portalApi from '../lib/api/portal';
-  import type { TenantPortalInfo, TenantPortalBilling } from '../lib/types';
+  import type { AddonSubscriptionItem, ServiceCatalogItemType, TenantPortalInfo, TenantPortalBilling } from '../lib/types';
   import type { PortalDomain, PortalUsersResponse } from '../lib/api/portal';
   import { formatDate } from '../lib/utils/formatters';
 
@@ -20,7 +20,7 @@
   let billing: TenantPortalBilling | null = null;
 
   // ── Tabs ──
-  type Tab = 'dashboard' | 'domains' | 'users' | 'security';
+  type Tab = 'dashboard' | 'domains' | 'users' | 'services' | 'security';
   let activeTab: Tab = 'dashboard';
 
   // ── Dominios ──
@@ -37,6 +37,15 @@
   let usersData: PortalUsersResponse | null = null;
   let usersLoading = false;
   let usersError = '';
+
+  // ── Servicios adicionales ──
+  let serviceCatalog: ServiceCatalogItemType[] = [];
+  let serviceSubscriptions: AddonSubscriptionItem[] = [];
+  let servicesLoading = false;
+  let servicesError = '';
+  let serviceMsg = '';
+  let serviceMsgType: 'success' | 'error' = 'success';
+  let purchasingServiceId: number | null = null;
 
   // ── Seguridad / cambio de contraseña ──
   let pwCurrent = '';
@@ -112,10 +121,36 @@
     }
   }
 
+  function isEmailPackage(item: Pick<ServiceCatalogItemType, 'service_code' | 'metadata_json'>): boolean {
+    return item.service_code === 'postal_email_package' || item.metadata_json?.kind === 'postal_email_package';
+  }
+
+  function formatInteger(value: number | null | undefined): string {
+    return new Intl.NumberFormat('es-DO').format(Number(value || 0));
+  }
+
+  async function loadServices() {
+    servicesLoading = true;
+    servicesError = '';
+    try {
+      const [catalogRes, subscriptionsRes] = await Promise.all([
+        portalApi.getServiceCatalog(),
+        portalApi.getServiceSubscriptions(),
+      ]);
+      serviceCatalog = catalogRes.items ?? [];
+      serviceSubscriptions = subscriptionsRes.items ?? [];
+    } catch (err) {
+      servicesError = err instanceof Error ? err.message : 'Error al cargar servicios adicionales';
+    } finally {
+      servicesLoading = false;
+    }
+  }
+
   async function switchTab(tab: Tab) {
     activeTab = tab;
     if (tab === 'domains' && domains.length === 0 && !domainsLoading) loadDomains();
     if (tab === 'users' && !usersData && !usersLoading) loadUsers();
+    if (tab === 'services' && serviceCatalog.length === 0 && !servicesLoading) loadServices();
   }
 
   async function submitDomain() {
@@ -162,6 +197,26 @@
       pwMsgType = 'error';
     } finally {
       pwSubmitting = false;
+    }
+  }
+
+  async function purchaseAddon(item: ServiceCatalogItemType) {
+    purchasingServiceId = item.id;
+    serviceMsg = '';
+    try {
+      const result = await portalApi.purchaseService(item.id, 1);
+      serviceMsg = result.message || `Servicio ${item.name} adquirido correctamente`;
+      serviceMsgType = 'success';
+      await loadServices();
+      billing = await portalApi.getBilling().catch(() => billing);
+      if (result.invoice?.payment_url) {
+        window.open(result.invoice.payment_url, '_blank', 'noopener,noreferrer');
+      }
+    } catch (err) {
+      serviceMsg = err instanceof Error ? err.message : 'No se pudo adquirir el servicio';
+      serviceMsgType = 'error';
+    } finally {
+      purchasingServiceId = null;
     }
   }
 
@@ -266,6 +321,7 @@
         { id: 'dashboard', label: 'MI PORTAL',  icon: LayoutGrid },
         { id: 'domains',   label: 'DOMINIOS',   icon: Globe },
         { id: 'users',     label: 'USUARIOS',   icon: Users },
+        { id: 'services',  label: 'SERVICIOS',  icon: Package },
         { id: 'security',  label: 'SEGURIDAD',  icon: Shield },
       ] as tab}
         <button
@@ -477,12 +533,12 @@
         <p class="text-sm font-semibold text-amber-800 mb-2">Cómo configurar el DNS</p>
         <ol class="text-xs text-amber-700 space-y-1 list-decimal list-inside">
           <li>Agrega tu dominio usando el botón "Agregar dominio"</li>
-          <li>En tu proveedor DNS crea un registro CNAME apuntando a:</li>
+          <li>En tu proveedor DNS crea un registro A hacia la IP pública de Sajet:</li>
         </ol>
         <div class="mt-2 p-2 bg-amber-100 rounded font-mono text-xs text-amber-900">
-          {info?.subdomain || 'tusubdominio'}.sajet.us
+          208.115.125.29
         </div>
-        <p class="text-xs text-amber-600 mt-2">La verificación puede tardar hasta 48 horas.</p>
+        <p class="text-xs text-amber-600 mt-2">No uses CNAME hacia <code>{info?.subdomain || 'tusubdominio'}.sajet.us</code>; la verificación puede tardar hasta 48 horas.</p>
       </div>
 
     <!-- ===== USUARIOS ===== -->
@@ -557,6 +613,182 @@
         {/if}
       </div>
 
+    <!-- ===== SERVICIOS ===== -->
+    {:else if activeTab === 'services'}
+      <div class="space-y-6">
+        <div class="card">
+          <div class="flex flex-col md:flex-row md:items-center md:justify-between gap-3 mb-5">
+            <div>
+              <span class="section-heading block">SERVICIOS ADICIONALES</span>
+              <p class="text-xs text-gray-500 mt-1">Compra paquetes complementarios y se facturan automáticamente a tu cuenta.</p>
+            </div>
+          </div>
+
+          {#if serviceMsg}
+            <div class="mb-4 rounded border px-4 py-3 text-sm
+              {serviceMsgType === 'success' ? 'border-green-200 bg-green-50 text-green-700' : 'border-red-200 bg-red-50 text-red-700'}">
+              {serviceMsg}
+            </div>
+          {/if}
+
+          {#if servicesLoading}
+            <div class="py-10 flex justify-center"><Spinner /></div>
+          {:else if servicesError}
+            <div class="rounded border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-700">{servicesError}</div>
+          {:else}
+            <div class="grid grid-cols-1 lg:grid-cols-3 gap-4 mb-6">
+              <div class="rounded border border-border-light bg-bg-page p-4">
+                <p class="text-xs text-gray-500 uppercase tracking-widest">Servicios disponibles</p>
+                <p class="mt-2 text-2xl font-bold text-text-primary">{serviceCatalog.length}</p>
+              </div>
+              <div class="rounded border border-border-light bg-bg-page p-4">
+                <p class="text-xs text-gray-500 uppercase tracking-widest">Servicios activos</p>
+                <p class="mt-2 text-2xl font-bold text-[#C05A3C]">{serviceSubscriptions.length}</p>
+              </div>
+              <div class="rounded border border-border-light bg-bg-page p-4">
+                <p class="text-xs text-gray-500 uppercase tracking-widest">Facturación</p>
+                <p class="mt-2 text-sm text-text-secondary">Las compras generan factura inmediata y se reflejan en próximas renovaciones.</p>
+              </div>
+            </div>
+
+            <div class="grid grid-cols-1 xl:grid-cols-[0.9fr,1.1fr] gap-6">
+              <div class="card">
+                <div class="mb-4">
+                  <span class="section-heading block">MIS SERVICIOS ACTIVOS</span>
+                </div>
+
+                {#if serviceSubscriptions.length === 0}
+                  <div class="py-10 flex flex-col items-center gap-2 text-center">
+                    <Package class="w-8 h-8 text-border-light" />
+                    <p class="text-sm text-gray-500">Aún no tienes servicios adicionales activos.</p>
+                  </div>
+                {:else}
+                  <div class="space-y-3">
+                    {#each serviceSubscriptions as addon}
+                      <div class="rounded border border-border-light bg-bg-page p-4">
+                        <div class="flex items-start justify-between gap-3">
+                          <div>
+                            <div class="flex items-center gap-2 flex-wrap">
+                              <p class="font-semibold text-text-primary">{addon.catalog_item?.name || addon.service_code || 'Servicio adicional'}</p>
+                              {#if addon.catalog_item && isEmailPackage(addon.catalog_item)}
+                                <span class="badge badge-info">Correo</span>
+                              {/if}
+                            </div>
+                            {#if addon.catalog_item?.description}
+                              <p class="text-sm text-gray-500 mt-1">{addon.catalog_item.description}</p>
+                            {/if}
+                          </div>
+                          <div class="text-right">
+                            <p class="text-sm font-semibold text-[#C05A3C]">{formatCurrency(addon.unit_price_monthly, addon.currency)}</p>
+                            <p class="text-xs text-gray-500">x {addon.quantity} / mes</p>
+                          </div>
+                        </div>
+
+                        {#if addon.catalog_item && isEmailPackage(addon.catalog_item)}
+                          <div class="grid grid-cols-1 sm:grid-cols-3 gap-3 mt-4">
+                            <div class="rounded border border-blue-100 bg-blue-50 px-3 py-2">
+                              <p class="text-[10px] uppercase tracking-widest text-blue-700">Cuota mensual</p>
+                              <p class="text-sm font-semibold text-blue-900">{formatInteger(Number(addon.catalog_item.metadata_json?.email_quota_monthly || 0))} emails</p>
+                            </div>
+                            <div class="rounded border border-emerald-100 bg-emerald-50 px-3 py-2">
+                              <p class="text-[10px] uppercase tracking-widest text-emerald-700">Ventana 60 min</p>
+                              <p class="text-sm font-semibold text-emerald-900">{formatInteger(Number(addon.catalog_item.metadata_json?.email_burst_limit_60m || 0))} envíos</p>
+                            </div>
+                            <div class="rounded border border-amber-100 bg-amber-50 px-3 py-2">
+                              <p class="text-[10px] uppercase tracking-widest text-amber-700">Sobreuso</p>
+                              <p class="text-sm font-semibold text-amber-900">{formatCurrency(Number(addon.catalog_item.metadata_json?.email_overage_price || 0), addon.currency)}</p>
+                            </div>
+                          </div>
+                        {/if}
+                      </div>
+                    {/each}
+                  </div>
+                {/if}
+              </div>
+
+              <div class="card">
+                <div class="mb-4">
+                  <span class="section-heading block">CATÁLOGO DISPONIBLE</span>
+                </div>
+
+                {#if serviceCatalog.length === 0}
+                  <div class="py-10 flex flex-col items-center gap-2 text-center">
+                    <Package class="w-8 h-8 text-border-light" />
+                    <p class="text-sm text-gray-500">No hay servicios disponibles en este momento.</p>
+                  </div>
+                {:else}
+                  <div class="space-y-4">
+                    {#each serviceCatalog as item}
+                      <div class="rounded-xl border border-border-light bg-bg-page p-4">
+                        <div class="flex flex-col lg:flex-row lg:items-start lg:justify-between gap-4">
+                          <div class="flex-1">
+                            <div class="flex items-center gap-2 flex-wrap">
+                              <p class="font-semibold text-text-primary">{item.name}</p>
+                              {#if item.is_included_in_plan}
+                                <span class="badge badge-success">Incluido en tu plan</span>
+                              {/if}
+                              {#if item.discount_percent && item.discount_percent > 0}
+                                <span class="badge badge-warning">-{item.discount_percent}%</span>
+                              {/if}
+                              {#if isEmailPackage(item)}
+                                <span class="badge badge-info">Correo</span>
+                              {/if}
+                            </div>
+                            {#if item.description}
+                              <p class="text-sm text-gray-500 mt-1">{item.description}</p>
+                            {/if}
+
+                            {#if isEmailPackage(item)}
+                              <div class="grid grid-cols-1 sm:grid-cols-3 gap-3 mt-4">
+                                <div class="rounded border border-blue-100 bg-blue-50 px-3 py-2">
+                                  <p class="text-[10px] uppercase tracking-widest text-blue-700">Cuota mensual</p>
+                                  <p class="text-sm font-semibold text-blue-900">{formatInteger(Number(item.metadata_json?.email_quota_monthly || 0))} emails</p>
+                                </div>
+                                <div class="rounded border border-emerald-100 bg-emerald-50 px-3 py-2">
+                                  <p class="text-[10px] uppercase tracking-widest text-emerald-700">Ventana 60 min</p>
+                                  <p class="text-sm font-semibold text-emerald-900">{formatInteger(Number(item.metadata_json?.email_burst_limit_60m || 0))} envíos</p>
+                                </div>
+                                <div class="rounded border border-amber-100 bg-amber-50 px-3 py-2">
+                                  <p class="text-[10px] uppercase tracking-widest text-amber-700">Sobreuso</p>
+                                  <p class="text-sm font-semibold text-amber-900">{formatCurrency(Number(item.metadata_json?.email_overage_price || 0), 'USD')}</p>
+                                </div>
+                              </div>
+                            {/if}
+                          </div>
+
+                          <div class="w-full lg:w-56 rounded-lg border border-border-light bg-white px-4 py-3">
+                            <p class="text-[10px] uppercase tracking-widest text-gray-500">Precio mensual</p>
+                            <p class="text-2xl font-bold text-[#C05A3C] mt-1">{formatCurrency(item.effective_price_monthly ?? item.price_monthly, 'USD')}</p>
+                            <p class="text-xs text-gray-500 mt-1">
+                              {#if item.active_quantity && item.active_quantity > 0}
+                                Activo: {item.active_quantity} paquete(s)
+                              {:else}
+                                Compra inmediata
+                              {/if}
+                            </p>
+
+                            <button
+                              class="btn btn-primary btn-sm w-full mt-4 flex items-center justify-center gap-2"
+                              disabled={Boolean(item.is_included_in_plan) || purchasingServiceId === item.id}
+                              on:click={() => purchaseAddon(item)}
+                            >
+                              {#if purchasingServiceId === item.id}
+                                <Spinner size="sm" />
+                              {/if}
+                              {item.is_included_in_plan ? 'INCLUIDO' : item.active_quantity && item.active_quantity > 0 ? 'COMPRAR OTRO' : 'ADQUIRIR'}
+                            </button>
+                          </div>
+                        </div>
+                      </div>
+                    {/each}
+                  </div>
+                {/if}
+              </div>
+            </div>
+          {/if}
+        </div>
+      </div>
+
     <!-- ===== SEGURIDAD ===== -->
     {:else if activeTab === 'security'}
       <div class="card max-w-lg">
@@ -572,9 +804,9 @@
 
         <form on:submit|preventDefault={submitChangePassword} class="space-y-4">
           <div>
-            <label class="block text-xs font-semibold text-text-secondary uppercase tracking-widest mb-1">Contraseña actual</label>
+            <label for="tenant-current-password" class="block text-xs font-semibold text-text-secondary uppercase tracking-widest mb-1">Contraseña actual</label>
             <div class="relative">
-              <input type={showCurrent ? 'text' : 'password'} bind:value={pwCurrent} required
+              <input id="tenant-current-password" type={showCurrent ? 'text' : 'password'} bind:value={pwCurrent} required
                 placeholder="••••••••" class="input input-bordered w-full pr-10" />
               <button type="button" class="absolute right-3 top-1/2 -translate-y-1/2 text-gray-400 hover:text-gray-600"
                 on:click={() => showCurrent = !showCurrent}>
@@ -584,9 +816,9 @@
           </div>
 
           <div>
-            <label class="block text-xs font-semibold text-text-secondary uppercase tracking-widest mb-1">Nueva contraseña</label>
+            <label for="tenant-new-password" class="block text-xs font-semibold text-text-secondary uppercase tracking-widest mb-1">Nueva contraseña</label>
             <div class="relative">
-              <input type={showNew ? 'text' : 'password'} bind:value={pwNew} required minlength="8"
+              <input id="tenant-new-password" type={showNew ? 'text' : 'password'} bind:value={pwNew} required minlength="8"
                 placeholder="Mínimo 8 caracteres" class="input input-bordered w-full pr-10" />
               <button type="button" class="absolute right-3 top-1/2 -translate-y-1/2 text-gray-400 hover:text-gray-600"
                 on:click={() => showNew = !showNew}>
@@ -596,9 +828,9 @@
           </div>
 
           <div>
-            <label class="block text-xs font-semibold text-text-secondary uppercase tracking-widest mb-1">Confirmar nueva contraseña</label>
+            <label for="tenant-confirm-password" class="block text-xs font-semibold text-text-secondary uppercase tracking-widest mb-1">Confirmar nueva contraseña</label>
             <div class="relative">
-              <input type={showConfirm ? 'text' : 'password'} bind:value={pwConfirm} required minlength="8"
+              <input id="tenant-confirm-password" type={showConfirm ? 'text' : 'password'} bind:value={pwConfirm} required minlength="8"
                 placeholder="Repite la nueva contraseña" class="input input-bordered w-full pr-10" />
               <button type="button" class="absolute right-3 top-1/2 -translate-y-1/2 text-gray-400 hover:text-gray-600"
                 on:click={() => showConfirm = !showConfirm}>
@@ -648,13 +880,13 @@
 
       <p class="text-xs text-gray-500 mb-4">
         Introduce el dominio que quieres asociar a tu instancia Odoo.
-        Después deberás crear un registro CNAME en tu proveedor DNS.
+        Después deberás crear un registro A hacia la IP pública de Sajet.
       </p>
 
       <form on:submit|preventDefault={submitDomain} class="space-y-4">
         <div>
-          <label class="block text-xs font-semibold text-text-secondary uppercase tracking-widest mb-1">Dominio</label>
-          <input type="text" bind:value={domainInput} placeholder="ej: miempresa.com" required
+          <label for="tenant-domain-input" class="block text-xs font-semibold text-text-secondary uppercase tracking-widest mb-1">Dominio</label>
+          <input id="tenant-domain-input" type="text" bind:value={domainInput} placeholder="ej: miempresa.com" required
             class="input input-bordered w-full font-mono" />
         </div>
 

@@ -15,9 +15,9 @@
 
   onMount(() => darkMode.init());
 
-  export let currentRoute: string = 'dashboard';
+  const { currentRoute = 'dashboard' }: { currentRoute?: string } = $props();
 
-  let mobileOpen = false;
+  let mobileOpen = $state(false);
 
   type NavItem = { id: string; label: string; icon: any; href: string };
   type NavGroup = { id: string; label: string; icon: any; children: NavItem[] };
@@ -118,7 +118,7 @@
   }
 
   // Expanded groups — persisted in localStorage
-  let expandedGroups: Set<string> = new Set();
+  let expandedGroups = $state<Set<string>>(new Set());
 
   function initExpandedGroups() {
     try {
@@ -132,13 +132,13 @@
 
   initExpandedGroups();
 
-  $: {
+  $effect(() => {
     const grp = findGroupForRoute(currentRoute);
     if (grp && !expandedGroups.has(grp)) {
       expandedGroups.add(grp);
       expandedGroups = new Set(expandedGroups);
     }
-  }
+  });
 
   function toggleGroup(groupId: string) {
     if (expandedGroups.has(groupId)) expandedGroups.delete(groupId);
@@ -162,7 +162,7 @@
     <button
       type="button"
       class="fixed inset-0 bg-black/50 z-40 lg:hidden cursor-default"
-      on:click={() => (mobileOpen = false)}
+      onclick={() => (mobileOpen = false)}
       aria-label="Cerrar menú"
     ></button>
   {/if}
@@ -185,7 +185,7 @@
           <button
             type="button"
             class="sidebar-group-toggle {groupHasActive(entry) ? 'sidebar-group-active' : ''}"
-            on:click={() => toggleGroup(entry.id)}
+            onclick={() => toggleGroup(entry.id)}
             aria-expanded={expandedGroups.has(entry.id)}
           >
             <div class="flex items-center gap-2.5 min-w-0">
@@ -210,7 +210,7 @@
                 <a
                   href={item.href}
                   class={currentRoute === item.id ? 'sidebar-child-active' : 'sidebar-child'}
-                  on:click={() => (mobileOpen = false)}
+                  onclick={() => (mobileOpen = false)}
                 >
                   <svelte:component this={item.icon} size={15} />
                   <span>{item.label}</span>
@@ -223,7 +223,7 @@
           <a
             href={entry.href}
             class="sidebar-direct-link {currentRoute === entry.id ? 'sidebar-direct-active' : ''}"
-            on:click={() => (mobileOpen = false)}
+            onclick={() => (mobileOpen = false)}
           >
             <svelte:component this={entry.icon} size={18} />
             <span>{entry.label}</span>
@@ -246,7 +246,7 @@
             <p class="text-[11px] text-gray-500 truncate font-body">{$auth.user?.email || ''}</p>
           </div>
         </div>
-        <button type="button" class="p-1.5 text-gray-500 hover:text-error transition-colors flex-shrink-0" on:click={handleLogout} title="Cerrar sesión" aria-label="Cerrar sesión">
+        <button type="button" class="p-1.5 text-gray-500 hover:text-error transition-colors flex-shrink-0" onclick={handleLogout} title="Cerrar sesión" aria-label="Cerrar sesión">
           <LogOut size={16} />
         </button>
       </div>
@@ -257,7 +257,7 @@
   <div class="flex-1 flex flex-col min-w-0">
     <!-- Header -->
     <header class="h-16 bg-charcoal border-b border-border-dark flex items-center px-6 gap-4">
-      <button type="button" class="lg:hidden p-2 text-gray-400 hover:text-text-light" on:click={() => (mobileOpen = !mobileOpen)} aria-label="Menú">
+      <button type="button" class="lg:hidden p-2 text-gray-400 hover:text-text-light" onclick={() => (mobileOpen = !mobileOpen)} aria-label="Menú">
         {#if mobileOpen}<X size={22} />{:else}<Menu size={22} />{/if}
       </button>
 
@@ -272,7 +272,7 @@
         <!-- Dark mode toggle -->
         <button
           type="button"
-          on:click={() => darkMode.toggle()}
+          onclick={() => darkMode.toggle()}
           class="p-2 rounded-md text-gray-400 hover:text-text-light hover:bg-white/10 transition-colors"
           title={$darkMode ? 'Cambiar a modo claro' : 'Cambiar a modo oscuro'}
           aria-label="Toggle dark mode"

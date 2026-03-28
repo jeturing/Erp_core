@@ -11,9 +11,17 @@ Environment selection:
 Set ERP_ENV before starting the app or export it in your shell.
 If not set, defaults to 'development' (.env).
 """
+import json
+import logging
 import os
+import threading
+import time
 from pathlib import Path
+from typing import Any
 from dotenv import load_dotenv
+from sqlalchemy import create_engine, text
+
+logger = logging.getLogger(__name__)
 
 # ── Resolve which .env file to load ──
 _project_root = Path(__file__).resolve().parent.parent
@@ -116,6 +124,7 @@ ODOO_PRIMARY_PORT = int(os.getenv("ODOO_PRIMARY_PORT", "8069"))
 ODOO_PRIMARY_API_PORT = int(os.getenv("ODOO_PRIMARY_API_PORT", "8070"))
 
 ERP_CORE_IP = os.getenv("ERP_CORE_IP", "10.10.10.20")
+ERP_CORE_PUBLIC_IP = os.getenv("ERP_CORE_PUBLIC_IP", "208.115.125.29")
 
 CT105_IP = os.getenv("CT105_IP", ODOO_PRIMARY_IP)
 CT105_NGINX_PORT = int(os.getenv("CT105_NGINX_PORT", "8080"))
@@ -137,6 +146,145 @@ if _cf_zones_raw:
         if "=" in pair:
             k, v = pair.strip().split("=", 1)
             CLOUDFLARE_ZONES[k.strip()] = v.strip()
+
+
+# ═══════════════════════════════════════════════════════
+# Runtime Config — DB first, env fallback
+# ═══════════════════════════════════════════════════════
+_RUNTIME_CACHE_TTL_SECONDS = float(os.getenv("RUNTIME_CONFIG_CACHE_TTL_SECONDS", "5"))
+_RUNTIME_CACHE_LOCK = threading.RLock()
+_RUNTIME_CACHE: dict[str, tuple[Any, float]] = {}
+_RUNTIME_ENGINE = None
+_RUNTIME_ENGINE_URL = None
+_RUNTIME_DB_MISS = object()
+
+
+def _get_runtime_engine():
+    """Create a lightweight engine for runtime config reads using bootstrap DATABASE_URL."""
+    global _RUNTIME_ENGINE, _RUNTIME_ENGINE_URL
+
+    if not DATABASE_URL:
+        return None
+
+    with _RUNTIME_CACHE_LOCK:
+        if _RUNTIME_ENGINE is not None and _RUNTIME_ENGINE_URL == DATABASE_URL:
+            return _RUNTIME_ENGINE
+
+        connect_args = {}
+        if DATABASE_URL.startswith("sqlite"):
+            connect_args["check_same_thread"] = False
+
+        _RUNTIME_ENGINE = create_engine(
+            DATABASE_URL,
+            pool_pre_ping=True,
+            future=True,
+            connect_args=connect_args,
+        )
+        _RUNTIME_ENGINE_URL = DATABASE_URL
+        return _RUNTIME_ENGINE
+
+
+def _get_runtime_value_from_db(key: str):
+    """Read a config value from system_config without importing ORM models."""
+    engine = _get_runtime_engine()
+    if engine is None:
+        return _RUNTIME_DB_MISS
+
+    try:
+        with engine.connect() as conn:
+            row = conn.execute(
+                text("SELECT value FROM system_config WHERE key = :key LIMIT 1"),
+                {"key": key},
+            ).first()
+            if row is None:
+                return _RUNTIME_DB_MISS
+            return row[0]
+    except Exception as exc:
+        logger.debug("Runtime config DB lookup failed for %s: %s", key, exc)
+        return _RUNTIME_DB_MISS
+
+
+def invalidate_runtime_config_cache(*keys: str) -> None:
+    """Invalidate cached runtime config values."""
+    with _RUNTIME_CACHE_LOCK:
+        if not keys:
+            _RUNTIME_CACHE.clear()
+            return
+        for key in keys:
+            _RUNTIME_CACHE.pop(key, None)
+
+
+def get_runtime_setting(key: str, default: Any = None) -> Any:
+    """
+    Runtime config lookup with priority: DB > env > default.
+    Uses a short TTL cache so admin changes apply without service restart.
+    """
+    now = time.monotonic()
+    with _RUNTIME_CACHE_LOCK:
+        cached = _RUNTIME_CACHE.get(key)
+        if cached and cached[1] > now:
+            return cached[0]
+
+    db_value = _get_runtime_value_from_db(key)
+    if db_value is not _RUNTIME_DB_MISS and db_value is not None:
+        value = db_value
+    else:
+        value = os.getenv(key, default)
+
+    with _RUNTIME_CACHE_LOCK:
+        _RUNTIME_CACHE[key] = (value, now + _RUNTIME_CACHE_TTL_SECONDS)
+    return value
+
+
+def get_runtime_int(key: str, default: int) -> int:
+    value = get_runtime_setting(key, default)
+    try:
+        return int(value)
+    except (TypeError, ValueError):
+        return int(default)
+
+
+def get_runtime_float(key: str, default: float) -> float:
+    value = get_runtime_setting(key, default)
+    try:
+        return float(value)
+    except (TypeError, ValueError):
+        return float(default)
+
+
+def get_runtime_bool(key: str, default: bool = False) -> bool:
+    value = get_runtime_setting(key, default)
+    if isinstance(value, bool):
+        return value
+    if value is None:
+        return default
+    return str(value).strip().lower() in {"true", "1", "yes", "on"}
+
+
+def get_runtime_json(key: str, default: Any):
+    value = get_runtime_setting(key, None)
+    if value in (None, ""):
+        return default
+    if isinstance(value, (dict, list)):
+        return value
+    try:
+        return json.loads(value)
+    except Exception:
+        return default
+
+
+def get_runtime_kv_map(key: str, default: dict[str, str] | None = None) -> dict[str, str]:
+    raw = get_runtime_setting(key, "")
+    parsed = dict(default or {})
+    if not raw:
+        return parsed
+    for pair in str(raw).split(","):
+        if "=" not in pair:
+            continue
+        k, v = pair.strip().split("=", 1)
+        if k.strip():
+            parsed[k.strip()] = v.strip()
+    return parsed
 
 
 # ═══════════════════════════════════════════════════════

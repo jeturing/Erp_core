@@ -16,7 +16,6 @@ Eventos soportados:
 import hmac
 import hashlib
 import logging
-import os
 from datetime import datetime
 from typing import Optional, Dict, Any, List
 from urllib.parse import urlparse
@@ -36,14 +35,18 @@ from ..models.database import (
     SubscriptionStatus,
     TenantDeployment,
 )
-from ..config import PROVISIONING_API_KEY
+from ..config import PROVISIONING_API_KEY, get_runtime_setting
 
 logger = logging.getLogger(__name__)
 
 router = APIRouter(prefix="/api/webhooks/odoo", tags=["Odoo Webhooks"])
 
-# Shared secret for webhook HMAC validation
-ODOO_WEBHOOK_SECRET = os.getenv("ODOO_WEBHOOK_SECRET", PROVISIONING_API_KEY)
+def _provisioning_api_key() -> str:
+    return get_runtime_setting("PROVISIONING_API_KEY", PROVISIONING_API_KEY)
+
+
+def _odoo_webhook_secret() -> str:
+    return get_runtime_setting("ODOO_WEBHOOK_SECRET", _provisioning_api_key())
 
 
 def _verify_webhook(x_api_key: Optional[str], x_webhook_signature: Optional[str], body: bytes) -> bool:
@@ -51,14 +54,17 @@ def _verify_webhook(x_api_key: Optional[str], x_webhook_signature: Optional[str]
     Verifica autenticidad del webhook.
     Acepta API key directa O firma HMAC del body.
     """
+    provisioning_api_key = _provisioning_api_key()
+    webhook_secret = _odoo_webhook_secret()
+
     # Method 1: Direct API key
-    if x_api_key and x_api_key == PROVISIONING_API_KEY:
+    if x_api_key and x_api_key == provisioning_api_key:
         return True
 
     # Method 2: HMAC signature
-    if x_webhook_signature and ODOO_WEBHOOK_SECRET:
+    if x_webhook_signature and webhook_secret:
         expected = hmac.new(
-            ODOO_WEBHOOK_SECRET.encode(),
+            webhook_secret.encode(),
             body,
             hashlib.sha256,
         ).hexdigest()
@@ -379,7 +385,9 @@ def _resolve_latest_tenant_deployment(db, customer: Customer) -> Optional[Tenant
 
 def _extract_target_from_deployment(deployment: Optional[TenantDeployment]) -> tuple[str, int]:
     """Obtiene IP/puerto del deployment si existe."""
-    target_node_ip = "localhost"
+    from ..config import ODOO_PRIMARY_IP
+
+    target_node_ip = ODOO_PRIMARY_IP
     target_port = 8069
 
     if not deployment or not deployment.direct_url:

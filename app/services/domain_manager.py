@@ -5,13 +5,11 @@ Gestiona dominios personalizados de clientes, integración con Cloudflare y conf
 Flujo:
 1. Cliente registra dominio externo (www.impulse-max.com)
 2. Sistema lo vincula al subdominio SAJET del tenant (ej: techeels.sajet.us)
-3. Sistema crea CNAME en Cloudflare (impulse-max → tunnel)
-4. Script en PCT 105 actualiza ingress rules del tunnel
-5. Cliente configura CNAME en su DNS externo
-6. Sistema verifica y activa el dominio
+3. Sistema crea/asegura el CNAME interno en Cloudflare para el subdominio SAJET
+4. Cliente configura su dominio externo hacia la IP pública de PCT160
+5. Sistema verifica y activa el dominio
 """
 
-import os
 import re
 import secrets
 import logging
@@ -20,6 +18,7 @@ from typing import Optional, List, Dict, Any
 from datetime import datetime
 from sqlalchemy.orm import Session
 
+from ..config import get_runtime_setting
 from ..models.database import CustomDomain, Customer, TenantDeployment, DomainVerificationStatus
 from .nginx_domain_configurator import NginxDomainConfigurator
 from .odoo_website_configurator import OdooWebsiteConfigurator
@@ -27,11 +26,6 @@ from .odoo_website_configurator import OdooWebsiteConfigurator
 logger = logging.getLogger("domain_manager")
 
 
-# Cloudflare Configuration
-CF_API_TOKEN = os.getenv("CLOUDFLARE_API_TOKEN", "")
-CF_ZONE_ID = os.getenv("CLOUDFLARE_ZONE_ID", "4a83b88793ac3688486ace69b6ae80f9")  # sajet.us
-CF_TUNNEL_ID = os.getenv("CLOUDFLARE_TUNNEL_ID", "")
-CF_TUNNEL_NAME = os.getenv("CLOUDFLARE_TUNNEL_NAME", "tcs-sajet-tunnel")
 CF_API_BASE = "https://api.cloudflare.com/client/v4"
 
 # Lista negra de subdominios reservados
@@ -46,14 +40,60 @@ RESERVED_SUBDOMAINS = {
 }
 
 
+def _effective_target_node_ip(node_ip: Optional[str]) -> str:
+    """Normaliza placeholders locales hacia la IP real del nodo Odoo."""
+    value = (node_ip or "").strip()
+    if not value or value.lower() in {"localhost", "127.0.0.1", "0.0.0.0", "::1"}:
+        return get_runtime_setting("ODOO_PRIMARY_IP", "")
+    return value
+
+
+def _cf_api_token() -> str:
+    return get_runtime_setting("CLOUDFLARE_API_TOKEN", "")
+
+
+def _cf_zone_id() -> str:
+    return get_runtime_setting("CLOUDFLARE_ZONE_ID", "4a83b88793ac3688486ace69b6ae80f9")
+
+
+def _cf_tunnel_id() -> str:
+    return get_runtime_setting("CLOUDFLARE_TUNNEL_ID", "")
+
+
+def _cf_tunnel_name() -> str:
+    return get_runtime_setting("CLOUDFLARE_TUNNEL_NAME", "tcs-sajet-tunnel")
+
+
+def _public_ip() -> str:
+    return get_runtime_setting("ERP_CORE_PUBLIC_IP", "208.115.125.29")
+
+
 class DomainManager:
     """Gestor de dominios personalizados"""
     
     def __init__(self, db: Session):
         self.db = db
         self.cf_headers = {
-            "Authorization": f"Bearer {CF_API_TOKEN}",
+            "Authorization": f"Bearer {_cf_api_token()}",
             "Content-Type": "application/json"
+        }
+
+    @staticmethod
+    def _build_external_dns_instructions(external_domain: str) -> Dict[str, str]:
+        """Instrucciones correctas para dominios externos: A record al frontend público."""
+        return {
+            "step1": (
+                "Configure un registro A en el DNS publico del dominio. "
+                "No use CNAME hacia *.sajet.us ni hacia *.cfargotunnel.com:"
+            ),
+            "record_type": "A",
+            "record_name": external_domain,
+            "record_value": _public_ip(),
+            "step2": (
+                "Luego verifique la propagacion DNS. "
+                "Si su proveedor usa nombres relativos, use @ para el dominio raiz "
+                "o el host correspondiente."
+            ),
         }
     
     # ==================== CRUD Operations ====================
@@ -124,18 +164,24 @@ class DomainManager:
                 )
         
         # Obtener IP del nodo si hay deployment
+        # Prioridad: backend_host (multi-nodo) → direct_url (legacy) → fallback
         target_node_ip = None
         target_port = 8069
         if tenant_deployment_id:
             deployment = self.db.query(TenantDeployment).filter(
                 TenantDeployment.id == tenant_deployment_id
             ).first()
-            if deployment and deployment.direct_url:
-                # Parsear IP:puerto del direct_url
-                parts = deployment.direct_url.replace("http://", "").split(":")
-                target_node_ip = parts[0]
-                if len(parts) > 1:
-                    target_port = int(parts[1])
+            if deployment:
+                # 1. Campos multi-nodo (Fase 0+)
+                if deployment.backend_host:
+                    target_node_ip = deployment.backend_host
+                    target_port = deployment.http_port or 8080
+                # 2. Legacy: parsear direct_url
+                elif deployment.direct_url:
+                    parts = deployment.direct_url.replace("http://", "").split(":")
+                    target_node_ip = parts[0]
+                    if len(parts) > 1:
+                        target_port = int(parts[1])
         
         # Crear registro
         domain = CustomDomain(
@@ -145,7 +191,7 @@ class DomainManager:
             sajet_subdomain=sajet_subdomain,
             verification_status=DomainVerificationStatus.pending,
             verification_token=verification_token,
-            target_node_ip=target_node_ip or "localhost",
+            target_node_ip=_effective_target_node_ip(target_node_ip),
             target_port=target_port,
             created_by=created_by
         )
@@ -154,6 +200,8 @@ class DomainManager:
         self.db.commit()
         self.db.refresh(domain)
         
+        instructions = self._build_external_dns_instructions(external_domain)
+
         return {
             "success": True,
             "domain": {
@@ -166,13 +214,7 @@ class DomainManager:
                 "is_active": domain.is_active,
                 "created_at": domain.created_at.isoformat()
             },
-            "instructions": {
-                "step1": f"Configure un registro CNAME en su DNS:",
-                "record_type": "CNAME",
-                "record_name": external_domain,
-                "record_value": f"{sajet_subdomain}.sajet.us",
-                "step2": "Una vez configurado, haga clic en 'Verificar' para activar el dominio"
-            }
+            "instructions": instructions,
         }
     
     def get_domain(self, domain_id: int = None, external_domain: str = None) -> Optional[CustomDomain]:
@@ -289,7 +331,7 @@ class DomainManager:
     
     async def _create_cloudflare_dns(self, subdomain: str) -> Dict[str, Any]:
         """Crea un registro CNAME en Cloudflare"""
-        tunnel_ref = (CF_TUNNEL_ID or CF_TUNNEL_NAME or "").strip()
+        tunnel_ref = (_cf_tunnel_id() or _cf_tunnel_name() or "").strip()
         if not tunnel_ref:
             return {
                 "success": False,
@@ -304,7 +346,7 @@ class DomainManager:
 
         async with httpx.AsyncClient() as client:
             response = await client.post(
-                f"{CF_API_BASE}/zones/{CF_ZONE_ID}/dns_records",
+                f"{CF_API_BASE}/zones/{_cf_zone_id()}/dns_records",
                 headers=self.cf_headers,
                 json={
                     "type": "CNAME",
@@ -330,7 +372,7 @@ class DomainManager:
         """Busca un registro DNS existente"""
         async with httpx.AsyncClient() as client:
             response = await client.get(
-                f"{CF_API_BASE}/zones/{CF_ZONE_ID}/dns_records",
+                f"{CF_API_BASE}/zones/{_cf_zone_id()}/dns_records",
                 headers=self.cf_headers,
                 params={"name": f"{subdomain}.sajet.us"}
             )
@@ -346,7 +388,7 @@ class DomainManager:
         import requests
         try:
             response = requests.delete(
-                f"{CF_API_BASE}/zones/{CF_ZONE_ID}/dns_records/{record_id}",
+                f"{CF_API_BASE}/zones/{_cf_zone_id()}/dns_records/{record_id}",
                 headers=self.cf_headers
             )
             return response.json().get("success", False)
@@ -381,7 +423,7 @@ class DomainManager:
         import requests
         try:
             response = requests.get(
-                f"{CF_API_BASE}/zones/{CF_ZONE_ID}/dns_records",
+                f"{CF_API_BASE}/zones/{_cf_zone_id()}/dns_records",
                 headers=self.cf_headers,
                 params={"name": domain_name, "type": "CNAME,A,AAAA"},
                 timeout=10,
@@ -412,7 +454,7 @@ class DomainManager:
         
         Estrategias de verificación (en orden):
         1. Subdominios internos (.sajet.us): verifica via API de Cloudflare
-        2. CNAME apuntando a .sajet.us o .cfargotunnel.com
+        2. Rechaza CNAME externos hacia .sajet.us o .cfargotunnel.com
         3. A record apuntando a nuestra IP o a IPs de Cloudflare (proxy mode)
         4. Verificación via API de Cloudflare como fallback
         """
@@ -492,20 +534,24 @@ class DomainManager:
                 answers = dns.resolver.resolve(domain.external_domain, "CNAME")
                 cname_target = str(answers[0].target).rstrip(".")
 
-                expected = domain.sajet_full_domain
-                if (
-                    cname_target == expected
-                    or cname_target.endswith(".sajet.us")
+                if not is_sajet_subdomain and (
+                    cname_target.endswith(".sajet.us")
                     or cname_target.endswith(".cfargotunnel.com")
                 ):
-                    return _mark_verified(
-                        "CNAME",
-                        {"cname_detected": cname_target, "expected": expected},
+                    return _mark_failed(
+                        "Los dominios externos no deben usar CNAME hacia sajet.us ni hacia Cloudflare Tunnel",
+                        {
+                            "cname_detected": cname_target,
+                            **self._build_external_dns_instructions(domain.external_domain),
+                        },
                     )
-                else:
+
+                # Para aliases externos legitimos (ej. www -> raiz) dejamos que la
+                # resolucion A continue y valide el destino final.
+                if is_sajet_subdomain:
                     return _mark_failed(
                         "CNAME no apunta al destino correcto",
-                        {"cname_detected": cname_target, "expected": expected},
+                        {"cname_detected": cname_target, "expected": domain.sajet_full_domain},
                     )
 
             except (dns.resolver.NoAnswer, dns.resolver.NoNameservers):
@@ -523,7 +569,7 @@ class DomainManager:
                 a_records = [str(r) for r in answers]
 
                 # Nuestra IP pública directa
-                our_ips = {"208.115.125.29"}
+                our_ips = {_public_ip()}
                 if our_ips & set(a_records):
                     return _mark_verified("A record directo", {"a_records": a_records})
 
@@ -536,10 +582,10 @@ class DomainManager:
                     )
 
                 return _mark_failed(
-                    "A record no apunta a sajet.us ni a Cloudflare",
+                    "A record no apunta a la IP publica esperada ni a Cloudflare",
                     {
                         "a_records": a_records,
-                        "instructions": f"Configure: {domain.external_domain} CNAME {domain.sajet_full_domain}",
+                        **self._build_external_dns_instructions(domain.external_domain),
                     },
                 )
 
@@ -557,9 +603,7 @@ class DomainManager:
 
             return _mark_failed(
                 "No se encontró registro DNS válido",
-                {
-                    "instructions": f"Configure: {domain.external_domain} CNAME {domain.sajet_full_domain}",
-                },
+                self._build_external_dns_instructions(domain.external_domain),
             )
 
         except Exception as e:
@@ -717,8 +761,12 @@ class DomainManager:
         """Configura nginx en PCT160 y CT105 para un dominio."""
         try:
             info = self._resolve_tenant_info(domain)
-            from ..config import ODOO_PRIMARY_IP
-            node_ip = domain.target_node_ip or ODOO_PRIMARY_IP
+            node_ip = _effective_target_node_ip(
+                domain.target_node_ip or get_runtime_setting("ODOO_PRIMARY_IP", "")
+            )
+            if node_ip != domain.target_node_ip:
+                domain.target_node_ip = node_ip
+                self.db.commit()
 
             configurator = NginxDomainConfigurator()
             result = configurator.configure_domain(
@@ -741,14 +789,21 @@ class DomainManager:
             return {"success": False, "error": str(e)}
 
     def _remove_nginx_for_domain(self, domain: CustomDomain) -> Dict[str, Any]:
-        """Elimina configuración nginx de PCT160 y CT105 para un dominio."""
+        """Elimina configuración nginx de PCT160 y nodo Odoo para un dominio."""
         try:
             info = self._resolve_tenant_info(domain)
+            node_ip = _effective_target_node_ip(
+                domain.target_node_ip or get_runtime_setting("ODOO_PRIMARY_IP", "")
+            )
+            if node_ip != domain.target_node_ip:
+                domain.target_node_ip = node_ip
+                self.db.commit()
 
             configurator = NginxDomainConfigurator()
             result = configurator.remove_domain(
                 external_domain=domain.external_domain,
                 tenant_subdomain=info["tenant_subdomain"],
+                node_ip=node_ip,
             )
 
             if result["success"]:

@@ -10,15 +10,18 @@ from ..models.database import (
     TenantDeployment, CustomDomain, SessionLocal
 )
 from .roles import verify_token_with_role
+from ..config import get_runtime_setting
 import stripe
 import logging
-import os
 import secrets
 
 router = APIRouter(prefix="/api/customers", tags=["Customers"])
 logger = logging.getLogger(__name__)
 
-stripe.api_key = os.getenv("STRIPE_SECRET_KEY")
+
+def _configure_stripe() -> str:
+    stripe.api_key = get_runtime_setting("STRIPE_SECRET_KEY", "")
+    return stripe.api_key
 
 
 def _verify_admin(request: Request, token: str = None):
@@ -155,6 +158,7 @@ async def update_customer(
     access_token: str = Cookie(None)
 ) -> Dict[str, Any]:
     """Actualiza un cliente: user_count, plan, is_admin, email, Stripe vinculación, etc."""
+    _configure_stripe()
     _verify_admin(request, access_token)
     db = SessionLocal()
     try:
@@ -428,6 +432,8 @@ async def create_customer(
                     company_name=payload.company_name,
                     partner_id=partner_id,
                     plan_name=payload.plan_name,
+                    subscription_id=sub.id,
+                    customer_id=customer.id,
                 )
                 if tenant_result.get("success"):
                     response["tenant"] = {
@@ -465,12 +471,15 @@ async def _auto_provision_tenant(
     company_name: str,
     partner_id: Optional[int] = None,
     plan_name: str = "basic",
+    subscription_id: Optional[int] = None,
+    customer_id: Optional[int] = None,
 ) -> Dict[str, Any]:
     """
     Provisiona un tenant Odoo automáticamente:
     1. Clona template_tenant via create_tenant_from_template (fast path)
     2. Provisiona subdominio en nginx
-    3. Retorna credenciales generadas
+    3. Crea TenantDeployment con campos multi-nodo (si subscription_id disponible)
+    4. Retorna credenciales generadas
 
     Esta función NO crea Customer/Subscription — eso lo hace el caller.
     """
@@ -505,12 +514,38 @@ async def _auto_provision_tenant(
     except Exception as ng_err:
         logger.warning(f"Nginx error for {subdomain}: {ng_err}")
 
+    # 3. Crear TenantDeployment con campos multi-nodo
+    deployment_id = None
+    if subscription_id:
+        try:
+            from ..services.deployment_writer import ensure_tenant_deployment
+            dep_result = ensure_tenant_deployment(
+                subdomain=subdomain,
+                subscription_id=subscription_id,
+                customer_id=customer_id,
+                server_id=result.get("server"),
+                plan_name=plan_name,
+            )
+            if dep_result.get("success"):
+                deployment_id = dep_result["deployment_id"]
+                logger.info(
+                    f"✅ TenantDeployment #{deployment_id} ({dep_result['status']}) "
+                    f"para '{subdomain}' via _auto_provision_tenant"
+                )
+            else:
+                logger.warning(
+                    f"⚠️ TenantDeployment no creado para '{subdomain}': {dep_result.get('error')}"
+                )
+        except Exception as dep_err:
+            logger.warning(f"⚠️ Error creando TenantDeployment para '{subdomain}': {dep_err}")
+
     return {
         "success": True,
         "url": f"https://{subdomain}.sajet.us",
         "admin_login": admin_login,
         "admin_password": admin_password,
         "server": result.get("server", "primary"),
+        "deployment_id": deployment_id,
     }
 
 
@@ -592,6 +627,7 @@ async def create_stripe_customer(
     Crea automáticamente un Stripe Customer para este cliente.
     Si ya tiene stripe_customer_id, retorna error.
     """
+    _configure_stripe()
     _verify_admin(request, access_token)
     db = SessionLocal()
     try:
@@ -820,6 +856,7 @@ async def bulk_create_stripe_customers(
     access_token: str = Cookie(None),
 ) -> Dict[str, Any]:
     """Crea Stripe Customer para todos los clientes que no lo tengan."""
+    _configure_stripe()
     _verify_admin(request, access_token)
     db = SessionLocal()
     try:

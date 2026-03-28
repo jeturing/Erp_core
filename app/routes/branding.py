@@ -12,10 +12,24 @@ from typing import Optional
 from sqlalchemy.orm import Session
 import logging
 
-from ..models.database import PartnerBrandingProfile, Partner, get_db
+from ..models.database import PartnerBrandingProfile, Partner, Customer, get_db
 
 router = APIRouter(prefix="/api/branding", tags=["Branding"])
 logger = logging.getLogger(__name__)
+
+# ── Defaults de Jeturing (fallback cuando no hay branding de partner) ──
+JETURING_DEFAULTS = {
+    "brand_name": "Jeturing",
+    "product_name": "Sajet",
+    "logo_url": "/jeturing_branding/static/img/JEturing.png",
+    "favicon_url": None,
+    "primary_color": "#4F46E5",
+    "secondary_color": "#7C3AED",
+    "support_email": "help@jeturing.com",
+    "support_url": "https://jeturing.com/help",
+    "custom_css": None,
+    "is_partner_branded": False,
+}
 
 
 class CreateBrandingProfile(BaseModel):
@@ -167,6 +181,62 @@ def update_branding_profile(
         "is_active": p.is_active,
         "updated": list(update_data.keys()),
     }
+
+
+@router.get("/tenant/{subdomain}")
+def resolve_branding_by_subdomain(subdomain: str, db: Session = Depends(get_db)):
+    """
+    Resuelve branding de partner por subdomain del tenant.
+    Público — no requiere autenticación. Usado por Odoo para branding dinámico.
+    
+    Flow: subdomain → Customer → partner_id → Partner → PartnerBrandingProfile
+    Si no hay partner o no tiene branding configurado → defaults Jeturing.
+    """
+    try:
+        customer = db.query(Customer).filter(Customer.subdomain == subdomain).first()
+        if not customer or not customer.partner_id:
+            logger.debug(f"[branding] No partner for subdomain '{subdomain}', returning defaults")
+            return JETURING_DEFAULTS
+
+        profile = db.query(PartnerBrandingProfile).filter(
+            PartnerBrandingProfile.partner_id == customer.partner_id,
+            PartnerBrandingProfile.is_active == True,
+        ).first()
+
+        if not profile:
+            # Partner existe pero no tiene branding profile → check campos Partner
+            partner = db.query(Partner).filter(Partner.id == customer.partner_id).first()
+            if partner and partner.brand_name:
+                return {
+                    "brand_name": partner.brand_name or JETURING_DEFAULTS["brand_name"],
+                    "product_name": partner.brand_name or JETURING_DEFAULTS["product_name"],
+                    "logo_url": partner.logo_url or JETURING_DEFAULTS["logo_url"],
+                    "favicon_url": JETURING_DEFAULTS["favicon_url"],
+                    "primary_color": partner.brand_color_primary or JETURING_DEFAULTS["primary_color"],
+                    "secondary_color": partner.brand_color_accent or JETURING_DEFAULTS["secondary_color"],
+                    "support_email": partner.smtp_from_email or JETURING_DEFAULTS["support_email"],
+                    "support_url": JETURING_DEFAULTS["support_url"],
+                    "custom_css": None,
+                    "is_partner_branded": True,
+                }
+            logger.debug(f"[branding] Partner {customer.partner_id} has no branding profile, returning defaults")
+            return JETURING_DEFAULTS
+
+        return {
+            "brand_name": profile.brand_name or JETURING_DEFAULTS["brand_name"],
+            "product_name": profile.brand_name or JETURING_DEFAULTS["product_name"],
+            "logo_url": profile.logo_url or JETURING_DEFAULTS["logo_url"],
+            "favicon_url": profile.favicon_url or JETURING_DEFAULTS["favicon_url"],
+            "primary_color": profile.primary_color or JETURING_DEFAULTS["primary_color"],
+            "secondary_color": profile.secondary_color or JETURING_DEFAULTS["secondary_color"],
+            "support_email": profile.support_email or JETURING_DEFAULTS["support_email"],
+            "support_url": profile.support_url or JETURING_DEFAULTS["support_url"],
+            "custom_css": profile.custom_css,
+            "is_partner_branded": True,
+        }
+    except Exception as e:
+        logger.error(f"[branding] Error resolving branding for '{subdomain}': {e}")
+        return JETURING_DEFAULTS
 
 
 @router.get("/resolve/{domain}")

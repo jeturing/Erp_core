@@ -2,7 +2,9 @@
   import { onMount } from 'svelte';
   import { tenantsApi } from '../lib/api';
   import { partnersApi } from '../lib/api/partners';
+  import { blueprintsApi } from '../lib/api/blueprints';
   import type { TenantAccountItem } from '../lib/api/tenants';
+  import type { BlueprintPackage } from '../lib/types';
   import { toasts } from '../lib/stores/toast';
   import { currentUser } from '../lib/stores';
   import { formatDate } from '../lib/utils/formatters';
@@ -28,6 +30,9 @@
   let formPassword = $state('');
   let formConfirmPassword = $state('');
   let formPartnerId = $state<number | null>(null);
+  let formCountryCode = $state('DO');
+  let formBlueprintPackage = $state<string | null>(null);
+  let blueprintPackages = $state<BlueprintPackage[]>([]);
   let formLoading = $state(false);
 
   // Per-row action state
@@ -58,12 +63,14 @@
   async function loadTenants() {
     loading = true;
     try {
-      const [data, pData] = await Promise.all([
+      const [data, pData, bpData] = await Promise.all([
         tenantsApi.list(),
         partnersApi.getPartners('active').catch(() => ({ items: [] })),
+        blueprintsApi.getPackages().catch(() => ({ items: [] })),
       ]);
       tenants = data.items ?? [];
       partners = pData.items ?? [];
+      blueprintPackages = Array.isArray(bpData) ? bpData : (bpData as any)?.items ?? [];
     } catch (e: any) {
       toasts.error(e?.message ?? 'Error al cargar tenants');
     } finally {
@@ -86,6 +93,8 @@
         admin_password: formPassword,
         plan: formPlan,
         partner_id: formPartnerId,
+        country_code: formCountryCode,
+        blueprint_package_name: formBlueprintPackage || undefined,
       });
       toasts.success('Tenant creado exitosamente');
       showForm = false;
@@ -96,6 +105,8 @@
       formPassword = '';
       formConfirmPassword = '';
       formPartnerId = null;
+      formCountryCode = 'DO';
+      formBlueprintPackage = null;
       await loadTenants();
     } catch (e: any) {
       const msg = e?.message ?? 'Error al crear tenant';
@@ -460,11 +471,38 @@
             </select>
           </div>
           <div>
+            <label class="label" for="f-country">País</label>
+            <select id="f-country" class="input w-full px-3 py-2" bind:value={formCountryCode}>
+              <option value="DO">🇩🇴 República Dominicana</option>
+              <option value="US">🇺🇸 Estados Unidos</option>
+              <option value="MX">🇲🇽 México</option>
+              <option value="CO">🇨🇴 Colombia</option>
+              <option value="ES">🇪🇸 España</option>
+              <option value="PA">🇵🇦 Panamá</option>
+              <option value="CL">🇨🇱 Chile</option>
+              <option value="AR">🇦🇷 Argentina</option>
+              <option value="PE">🇵🇪 Perú</option>
+            </select>
+          </div>
+          <div>
             <label class="label" for="f-partner">Partner (opcional)</label>
             <select id="f-partner" class="input w-full px-3 py-2" bind:value={formPartnerId}>
               <option value={null}>— Directo (sin partner) —</option>
               {#each partners as p (p.id)}
                 <option value={p.id}>{p.company_name}</option>
+              {/each}
+            </select>
+          </div>
+          <div>
+            <label class="label" for="f-blueprint">Blueprint / Paquete (opcional)</label>
+            <select id="f-blueprint" class="input w-full px-3 py-2" bind:value={formBlueprintPackage}>
+              <option value={null}>— Sin paquete adicional —</option>
+              {#each blueprintPackages as bp (bp.id)}
+                <option value={bp.name}>
+                  {bp.display_name || bp.name}
+                  {bp.plan_type ? `(${bp.plan_type})` : ''}
+                  — {bp.module_count ?? '?'} módulos
+                </option>
               {/each}
             </select>
           </div>
@@ -563,7 +601,7 @@
             <th>PLAN</th>
             <th>PARTNER</th>
             <th>ESTADO</th>
-            <th>SERVIDOR</th>
+            <th>NODO</th>
             <th>CREADO</th>
             <th>ACCIONES</th>
           </tr>
@@ -604,7 +642,14 @@
                   <span class="badge-neutral">{tenant.status}</span>
                 {/if}
               </td>
-              <td class="text-sm text-gray-600">{tenant.server ?? '-'}</td>
+              <td>
+                <div class="text-sm text-text-primary font-mono" title={tenant.backend_host ?? ''}>
+                  {tenant.node_name ?? tenant.server ?? '-'}
+                </div>
+                {#if tenant.backend_host}
+                  <div class="text-[10px] text-gray-500 font-mono">{tenant.backend_host}</div>
+                {/if}
+              </td>
               <td class="text-sm text-gray-500">{formatDate(tenant.created_at)}</td>
               <td>
                 <div class="flex items-center gap-2 flex-wrap">

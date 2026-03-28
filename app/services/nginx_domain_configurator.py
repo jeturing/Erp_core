@@ -30,6 +30,7 @@ Flujo:
   5. Si falla, rollback automático
 """
 
+import os
 import subprocess
 import logging
 import re
@@ -41,62 +42,165 @@ from ..config import CT105_IP, CT105_NGINX_PORT
 logger = logging.getLogger("nginx_configurator")
 
 # ── Constantes ────────────────────────────────────────────────────────────────────
-CT105_SSH = f"root@{CT105_IP}"
+# CT105_SSH removido — ahora se construye dinámicamente en _run_node(node_ip=...)
 
 PCT160_ERP_CONF = "/etc/nginx/sites-available/external-domains"
 PCT160_HTTP_MAP = "/etc/nginx/conf.d/odoo_http_routes.map"
 PCT160_CHAT_MAP = "/etc/nginx/conf.d/odoo_chat_routes.map"
 CT105_ODOO_CONF = "/etc/nginx/sites-enabled/odoo"
+NGINX_ADMIN_HELPER = os.getenv("NGINX_ADMIN_HELPER", "/usr/local/bin/sajet-nginx-admin")
+
+_LOCAL_HELPER_COMMANDS = {
+    "nginx -t": ["test-local"],
+    "systemctl reload nginx": ["reload-local"],
+    "nginx -t && systemctl reload nginx": ["test-and-reload-local"],
+}
+
+_REMOTE_HELPER_COMMANDS = {
+    "nginx -t": "test-remote",
+    "systemctl reload nginx": "reload-remote",
+    "nginx -t && systemctl reload nginx": "test-and-reload-remote",
+}
 
 
 # ── Helpers ───────────────────────────────────────────────────────────────────
 
 def _run_local(cmd: str, timeout: int = 15) -> Tuple[int, str, str]:
     """Ejecuta comando local y devuelve (rc, stdout, stderr)."""
+    normalized = " ".join(cmd.strip().split())
+    if _should_use_admin_helper() and normalized in _LOCAL_HELPER_COMMANDS:
+        return _run_admin_helper(_LOCAL_HELPER_COMMANDS[normalized], timeout=timeout)
+
     r = subprocess.run(
         cmd, shell=True, capture_output=True, text=True, timeout=timeout
     )
     return r.returncode, r.stdout.strip(), r.stderr.strip()
 
 
-def _run_ct105(cmd: str, timeout: int = 15) -> Tuple[int, str, str]:
-    """Ejecuta comando en CT105 via SSH."""
+def _run_node(cmd: str, node_ip: str = CT105_IP, timeout: int = 15) -> Tuple[int, str, str]:
+    """Ejecuta comando en un nodo Odoo via SSH.
+    
+    Args:
+        cmd: Comando a ejecutar
+        node_ip: IP del nodo destino (default: CT105_IP para backward compat)
+        timeout: Timeout en segundos
+    """
+    normalized = " ".join(cmd.strip().split())
+    if _should_use_admin_helper() and normalized in _REMOTE_HELPER_COMMANDS:
+        return _run_admin_helper([_REMOTE_HELPER_COMMANDS[normalized], node_ip], timeout=timeout)
+
     safe = cmd.replace("'", "'\\''")
-    full = f"ssh -o BatchMode=yes -o ConnectTimeout=5 {CT105_SSH} '{safe}'"
+    ssh_target = f"root@{node_ip}"
+    full = f"ssh -o BatchMode=yes -o ConnectTimeout=5 {ssh_target} '{safe}'"
     return _run_local(full, timeout=timeout)
 
 
+# Alias para backward compatibility
+def _run_ct105(cmd: str, timeout: int = 15) -> Tuple[int, str, str]:
+    """Alias legacy → _run_node con CT105_IP."""
+    return _run_node(cmd, node_ip=CT105_IP, timeout=timeout)
+
+
+def _should_use_admin_helper() -> bool:
+    """Usa helper privilegiado cuando el proceso no es root y el helper existe."""
+    return (
+        os.geteuid() != 0
+        and os.path.exists(NGINX_ADMIN_HELPER)
+    )
+
+
+def _run_admin_helper(args: List[str], timeout: int = 15) -> Tuple[int, str, str]:
+    """Ejecuta el helper privilegiado para operaciones de nginx/SSH."""
+    result = subprocess.run(
+        ["sudo", "-n", NGINX_ADMIN_HELPER, *args],
+        capture_output=True,
+        text=True,
+        timeout=timeout,
+    )
+    return result.returncode, result.stdout.strip(), result.stderr.strip()
+
+
 def _read_file_local(path: str) -> str:
-    with open(path, "r") as f:
-        return f.read()
+    try:
+        with open(path, "r") as f:
+            return f.read()
+    except PermissionError:
+        if not _should_use_admin_helper():
+            raise
+        rc, out, err = _run_admin_helper(["read-local", path], timeout=15)
+        if rc != 0:
+            raise RuntimeError(f"No se pudo leer {path} localmente: {err or out}")
+        return out
 
 
 def _write_file_local(path: str, content: str) -> None:
-    with open(path, "w") as f:
-        f.write(content)
+    try:
+        with open(path, "w") as f:
+            f.write(content)
+        return
+    except PermissionError:
+        if not _should_use_admin_helper():
+            raise
+
+    import tempfile
+
+    tmp = tempfile.NamedTemporaryFile(mode="w", suffix=".conf", delete=False)
+    try:
+        tmp.write(content)
+        tmp.close()
+        rc, out, err = _run_admin_helper(["write-local", path, tmp.name], timeout=20)
+        if rc != 0:
+            raise RuntimeError(f"No se pudo escribir {path} localmente: {err or out}")
+    finally:
+        try:
+            os.unlink(tmp.name)
+        except FileNotFoundError:
+            pass
 
 
-def _read_file_ct105(path: str) -> str:
-    rc, out, err = _run_ct105(f"cat {path}")
+def _read_file_node(path: str, node_ip: str = CT105_IP) -> str:
+    """Lee archivo de un nodo remoto via SSH."""
+    if _should_use_admin_helper():
+        rc, out, err = _run_admin_helper(["read-remote", node_ip, path], timeout=20)
+    else:
+        rc, out, err = _run_node(f"cat {shlex.quote(path)}", node_ip=node_ip)
     if rc != 0:
-        raise RuntimeError(f"No se pudo leer {path} en CT105: {err}")
+        raise RuntimeError(f"No se pudo leer {path} en {node_ip}: {err}")
     return out
 
 
-def _write_file_ct105(path: str, content: str) -> None:
-    """Escribe archivo en CT105 via SSH + heredoc."""
-    import tempfile, os
+def _write_file_node(path: str, content: str, node_ip: str = CT105_IP) -> None:
+    """Escribe archivo en un nodo remoto via SSH + scp."""
+    import tempfile
+
     tmp = tempfile.NamedTemporaryFile(mode="w", suffix=".conf", delete=False)
     tmp.write(content)
     tmp.close()
-    # Copiar via scp
-    rc, _, err = _run_local(
-        f"scp -o BatchMode=yes -o ConnectTimeout=5 {tmp.name} {CT105_SSH}:{path}",
-        timeout=20,
-    )
-    os.unlink(tmp.name)
-    if rc != 0:
-        raise RuntimeError(f"No se pudo escribir {path} en CT105: {err}")
+    try:
+        if _should_use_admin_helper():
+            rc, out, err = _run_admin_helper(["write-remote", node_ip, path, tmp.name], timeout=25)
+        else:
+            ssh_target = f"root@{node_ip}"
+            rc, out, err = _run_local(
+                f"scp -o BatchMode=yes -o ConnectTimeout=5 {tmp.name} {ssh_target}:{path}",
+                timeout=20,
+            )
+        if rc != 0:
+            raise RuntimeError(f"No se pudo escribir {path} en {node_ip}: {err or out}")
+    finally:
+        try:
+            os.unlink(tmp.name)
+        except FileNotFoundError:
+            pass
+
+
+# Aliases legacy para backward compatibility
+def _read_file_ct105(path: str) -> str:
+    return _read_file_node(path, node_ip=CT105_IP)
+
+
+def _write_file_ct105(path: str, content: str) -> None:
+    _write_file_node(path, content, node_ip=CT105_IP)
 
 
 # ── Funciones de edición de nginx maps ────────────────────────────────────────
@@ -107,9 +211,6 @@ def _add_to_map(content: str, map_var: str, domain: str, value: str) -> str:
     Inserta la línea justo antes del cierre '}' del map o antes de un comentario
     tipo '# --- Agregar más'.
     """
-    if re.search(rf"^\s+{re.escape(domain)}\s", content, re.MULTILINE):
-        return content  # Ya existe
-
     # Encontrar el bloque map correcto
     pattern = rf"(map\s+\S+\s+\${re.escape(map_var)}\s*\{{)(.*?)(\}})"
     match = re.search(pattern, content, re.DOTALL)
@@ -117,8 +218,17 @@ def _add_to_map(content: str, map_var: str, domain: str, value: str) -> str:
         logger.warning(f"Map ${map_var} no encontrado")
         return content
 
-    map_body = match.group(2)
     entry = f"    {domain} {value};\n"
+    map_body = match.group(2)
+    existing_pattern = rf"^(\s*){re.escape(domain)}\s+([^;]+);(\s*)$"
+    existing_match = re.search(existing_pattern, map_body, re.MULTILINE)
+    if existing_match:
+        current_value = existing_match.group(2).strip()
+        if current_value == value:
+            return content  # Ya existe con el valor correcto en este map
+        replacement = f"{existing_match.group(1)}{domain} {value};{existing_match.group(3)}"
+        new_body = re.sub(existing_pattern, replacement, map_body, count=1, flags=re.MULTILINE)
+        return content[: match.start()] + match.group(1) + new_body + match.group(3) + content[match.end() :]
 
     # Insertar antes de '# --- Agregar' si existe, o antes del cierre
     marker = re.search(r"(\s*# --- Agregar.*\n)", map_body)
@@ -140,9 +250,6 @@ def _remove_from_map(content: str, map_var: str, domain: str) -> str:
 
 def _add_to_server_name(content: str, section_marker: str, domain: str) -> str:
     """Agrega un dominio al server_name del bloque indicado."""
-    if domain in content:
-        return content  # Ya presente
-
     # Buscar server_name dentro de la sección
     # Buscamos el server_name más cercano después del marker
     idx = content.find(section_marker)
@@ -150,15 +257,16 @@ def _add_to_server_name(content: str, section_marker: str, domain: str) -> str:
         return content
 
     section = content[idx:]
-    sn_match = re.search(r"(server_name\s*\n?\s*)((?:\S+\s*)+)(;)", section)
+    sn_match = re.search(r"(server_name\b)([^;]*)(;)", section, re.DOTALL)
     if not sn_match:
-        # server_name en una sola línea
-        sn_match = re.search(r"(server_name\s+)((?:\S+\s*)+)(;)", section)
-        if not sn_match:
-            return content
+        return content
 
-    current_names = sn_match.group(2).strip()
-    new_names = current_names + f"\n        {domain}"
+    if re.search(rf"\b{re.escape(domain)}\b", sn_match.group(2)):
+        return content  # Ya presente en este server_name
+
+    current_names = sn_match.group(2).rstrip()
+    separator = "\n" if current_names else " "
+    new_names = f"{current_names}{separator}        {domain}"
     new_section = section[: sn_match.start()] + sn_match.group(1) + new_names + sn_match.group(3) + section[sn_match.end() :]
 
     return content[:idx] + new_section
@@ -174,11 +282,9 @@ def _remove_from_server_name(content: str, domain: str) -> str:
 def _add_to_route_map(filepath: str, domain: str, backend: str) -> None:
     """Agrega una línea 'domain backend;' a un archivo .map"""
     content = _read_file_local(filepath)
-    entry = f"{domain} {backend};"
-    if domain in content:
-        return  # Ya existe
-    content = content.rstrip("\n") + f"\n{entry}\n"
-    _write_file_local(filepath, content)
+    updated = _add_to_route_map_content(content, domain, backend)
+    if updated != content:
+        _write_file_local(filepath, updated)
 
 
 def _remove_from_route_map(filepath: str, domain: str) -> None:
@@ -342,40 +448,40 @@ class NginxDomainConfigurator:
             _run_local("systemctl reload nginx")
             logger.info("PCT160 nginx recargado ✅")
 
-            # ── 4. CT105: editar /etc/nginx/sites-enabled/odoo ────────────
-            ct105_content = _read_file_ct105(CT105_ODOO_CONF)
-            backups["ct105_odoo"] = ct105_content
+            # ── 4. Nodo Odoo: editar /etc/nginx/sites-enabled/odoo ────────────
+            node_content = _read_file_node(CT105_ODOO_CONF, node_ip=node_ip)
+            backups["node_odoo"] = node_content
 
             # Map $tenant_db → dominio → BD
-            ct105_content = _add_to_map(ct105_content, "tenant_db", external_domain, tenant_db)
-            ct105_content = _add_to_map(ct105_content, "tenant_db", www_domain, tenant_db)
+            node_content = _add_to_map(node_content, "tenant_db", external_domain, tenant_db)
+            node_content = _add_to_map(node_content, "tenant_db", www_domain, tenant_db)
             # Map $odoo_proxy_host → subdominio INTERNO (para dbfilter + website match)
-            ct105_content = _add_to_map(ct105_content, "odoo_proxy_host", external_domain, internal_subdomain)
-            ct105_content = _add_to_map(ct105_content, "odoo_proxy_host", www_domain, internal_subdomain)
+            node_content = _add_to_map(node_content, "odoo_proxy_host", external_domain, internal_subdomain)
+            node_content = _add_to_map(node_content, "odoo_proxy_host", www_domain, internal_subdomain)
             # server_name en ambos bloques (8080 y 8443)
-            ct105_content = _add_to_server_name(ct105_content, "listen 8080", external_domain)
-            ct105_content = _add_to_server_name(ct105_content, "listen 8080", www_domain)
-            ct105_content = _add_to_server_name(ct105_content, "listen 8443", external_domain)
-            ct105_content = _add_to_server_name(ct105_content, "listen 8443", www_domain)
+            node_content = _add_to_server_name(node_content, "listen 8080", external_domain)
+            node_content = _add_to_server_name(node_content, "listen 8080", www_domain)
+            node_content = _add_to_server_name(node_content, "listen 8443", external_domain)
+            node_content = _add_to_server_name(node_content, "listen 8443", www_domain)
             # proxy_redirect: reescribir URLs internas a dominio real
-            ct105_content = _add_proxy_redirect_ct105(ct105_content, internal_subdomain.replace(".sajet.us", ""))
+            node_content = _add_proxy_redirect_ct105(node_content, internal_subdomain.replace(".sajet.us", ""))
 
-            _write_file_ct105(CT105_ODOO_CONF, ct105_content)
+            _write_file_node(CT105_ODOO_CONF, node_content, node_ip=node_ip)
 
-            # ── 5. CT105: validar y recargar ──────────────────────────────
-            rc, _, err = _run_ct105("nginx -t")
+            # ── 5. Nodo Odoo: validar y recargar ──────────────────────────
+            rc, _, err = _run_node("nginx -t", node_ip=node_ip)
             if rc != 0:
-                raise RuntimeError(f"nginx -t CT105 falló: {err}")
+                raise RuntimeError(f"nginx -t nodo {node_ip} falló: {err}")
 
-            _run_ct105("systemctl reload nginx")
-            logger.info("CT105 nginx recargado ✅")
+            _run_node("systemctl reload nginx", node_ip=node_ip)
+            logger.info(f"Nodo {node_ip} nginx recargado ✅")
 
             return {
                 "success": True,
                 "message": f"Nginx configurado: {external_domain} → {internal_subdomain}",
                 "internal_subdomain": internal_subdomain,
                 "pct160": "ok",
-                "ct105": "ok",
+                "node": node_ip,
             }
 
         except Exception as e:
@@ -387,9 +493,13 @@ class NginxDomainConfigurator:
         self,
         external_domain: str,
         tenant_subdomain: str,
+        node_ip: str = CT105_IP,
     ) -> Dict[str, Any]:
         """
         Elimina un dominio externo de la configuración nginx de ambos servidores.
+        
+        Args:
+            node_ip: IP del nodo Odoo (default: CT105_IP)
         """
         logger.info(f"Eliminando nginx config para {external_domain}")
         backups: Dict[str, str] = {}
@@ -419,43 +529,43 @@ class NginxDomainConfigurator:
             _run_local("systemctl reload nginx")
             logger.info("PCT160: dominio eliminado y nginx recargado ✅")
 
-            # ── CT105 ────────────────────────────────────────────────────
-            ct105_content = _read_file_ct105(CT105_ODOO_CONF)
-            backups["ct105_odoo"] = ct105_content
+            # ── Nodo Odoo ────────────────────────────────────────────────
+            node_content = _read_file_node(CT105_ODOO_CONF, node_ip=node_ip)
+            backups["node_odoo"] = node_content
 
             # Leer el subdominio interno actual del map antes de eliminar
             internal_sub_match = re.search(
                 rf"^\s+{re.escape(external_domain)}\s+(\S+);",
-                ct105_content, re.MULTILINE
+                node_content, re.MULTILINE
             )
             internal_subdomain = None
             if internal_sub_match:
                 internal_subdomain = internal_sub_match.group(1)
 
             for map_var in ("tenant_db", "odoo_proxy_host"):
-                ct105_content = _remove_from_map(ct105_content, map_var, external_domain)
-                ct105_content = _remove_from_map(ct105_content, map_var, www_domain)
-            ct105_content = _remove_from_server_name(ct105_content, external_domain)
-            ct105_content = _remove_from_server_name(ct105_content, www_domain)
+                node_content = _remove_from_map(node_content, map_var, external_domain)
+                node_content = _remove_from_map(node_content, map_var, www_domain)
+            node_content = _remove_from_server_name(node_content, external_domain)
+            node_content = _remove_from_server_name(node_content, www_domain)
 
             # Eliminar proxy_redirect del subdominio interno si lo encontramos
             if internal_subdomain:
                 sub_prefix = internal_subdomain.replace(".sajet.us", "")
-                ct105_content = _remove_proxy_redirect_ct105(ct105_content, sub_prefix)
+                node_content = _remove_proxy_redirect_ct105(node_content, sub_prefix)
 
-            _write_file_ct105(CT105_ODOO_CONF, ct105_content)
+            _write_file_node(CT105_ODOO_CONF, node_content, node_ip=node_ip)
 
-            rc, _, err = _run_ct105("nginx -t")
+            rc, _, err = _run_node("nginx -t", node_ip=node_ip)
             if rc != 0:
-                raise RuntimeError(f"nginx -t CT105 falló: {err}")
-            _run_ct105("systemctl reload nginx")
-            logger.info("CT105: dominio eliminado y nginx recargado ✅")
+                raise RuntimeError(f"nginx -t nodo {node_ip} falló: {err}")
+            _run_node("systemctl reload nginx", node_ip=node_ip)
+            logger.info(f"Nodo {node_ip}: dominio eliminado y nginx recargado ✅")
 
             return {
                 "success": True,
                 "message": f"Nginx: {external_domain} eliminado",
                 "pct160": "ok",
-                "ct105": "ok",
+                "node": node_ip,
             }
 
         except Exception as e:
@@ -463,10 +573,10 @@ class NginxDomainConfigurator:
             self._rollback(backups)
             return {"success": False, "error": str(e)}
 
-    def check_domain_configured(self, external_domain: str) -> Dict[str, bool]:
+    def check_domain_configured(self, external_domain: str, node_ip: str = CT105_IP) -> Dict[str, bool]:
         """Verifica si un dominio ya está configurado en ambos servidores."""
         pct160 = False
-        ct105 = False
+        node = False
 
         try:
             erp = _read_file_local(PCT160_ERP_CONF)
@@ -475,14 +585,14 @@ class NginxDomainConfigurator:
             pass
 
         try:
-            odoo = _read_file_ct105(CT105_ODOO_CONF)
-            ct105 = external_domain in odoo
+            odoo = _read_file_node(CT105_ODOO_CONF, node_ip=node_ip)
+            node = external_domain in odoo
         except Exception:
             pass
 
-        return {"pct160": pct160, "ct105": ct105}
+        return {"pct160": pct160, "node": node}
 
-    def _rollback(self, backups: Dict[str, str]) -> None:
+    def _rollback(self, backups: Dict[str, str], node_ip: str = CT105_IP) -> None:
         """Restaura archivos originales si algo falló."""
         logger.warning("Ejecutando rollback de nginx...")
 
@@ -504,11 +614,11 @@ class NginxDomainConfigurator:
             except Exception as e:
                 logger.error(f"Rollback PCT160 chat_map falló: {e}")
 
-        if "ct105_odoo" in backups:
+        if "node_odoo" in backups:
             try:
-                _write_file_ct105(CT105_ODOO_CONF, backups["ct105_odoo"])
+                _write_file_node(CT105_ODOO_CONF, backups["node_odoo"], node_ip=node_ip)
             except Exception as e:
-                logger.error(f"Rollback CT105 falló: {e}")
+                logger.error(f"Rollback nodo {node_ip} falló: {e}")
 
         # Intentar recargar nginx en ambos
         try:
@@ -517,7 +627,7 @@ class NginxDomainConfigurator:
             pass
 
         try:
-            _run_ct105("nginx -t && systemctl reload nginx")
+            _run_node("nginx -t && systemctl reload nginx", node_ip=node_ip)
         except Exception:
             pass
 
@@ -526,22 +636,33 @@ class NginxDomainConfigurator:
 
 # ── Subdominio .sajet.us automático (para nuevos tenants) ─────────────────────
 
-def provision_sajet_subdomain(subdomain: str) -> Dict[str, Any]:
+def provision_sajet_subdomain(
+    subdomain: str,
+    node_ip: str = CT105_IP,
+    http_port: int = CT105_NGINX_PORT,
+    chat_port: int = 8072,
+) -> Dict[str, Any]:
     """
-    Registra un nuevo subdominio.sajet.us en los nginx maps de LXC 160 y LXC 105.
+    Registra un nuevo subdominio.sajet.us en los nginx maps de LXC 160 y el nodo Odoo.
     Solo para el subdominio propio del tenant (no dominios externos).
 
+    Args:
+        subdomain: nombre del tenant (ej: "acme")
+        node_ip: IP del nodo Odoo destino (default: CT105_IP)
+        http_port: puerto HTTP del nginx/odoo en el nodo (default: 8080)
+        chat_port: puerto chat/longpolling en el nodo (default: 8072)
+
     Modifica:
-      - PCT160 /etc/nginx/conf.d/odoo_http_routes.map  → subdomain.sajet.us → 10.10.10.100:8080
-      - PCT160 /etc/nginx/conf.d/odoo_chat_routes.map  → subdomain.sajet.us → 10.10.10.100:8072
-      - CT105 /etc/nginx/sites-enabled/odoo → map $tenant_db + $odoo_proxy_host
+      - PCT160 /etc/nginx/conf.d/odoo_http_routes.map  → subdomain.sajet.us → node_ip:http_port
+      - PCT160 /etc/nginx/conf.d/odoo_chat_routes.map  → subdomain.sajet.us → node_ip:chat_port
+      - Nodo Odoo /etc/nginx/sites-enabled/odoo → map $tenant_db + $odoo_proxy_host
 
     Returns:
         {"success": True/False, "steps": [...], "error": str}
     """
     steps = []
-    backend_http = f"{CT105_IP}:{CT105_NGINX_PORT}"
-    backend_chat = f"{CT105_IP}:8072"
+    backend_http = f"{node_ip}:{http_port}"
+    backend_chat = f"{node_ip}:{chat_port}"
     full_domain = f"{subdomain}.sajet.us"
     www_domain = f"www.{full_domain}"
 
@@ -557,22 +678,22 @@ def provision_sajet_subdomain(subdomain: str) -> Dict[str, Any]:
         _run_local("systemctl reload nginx")
         steps.append({"step": "pct160_maps", "status": "ok"})
 
-        # ── CT105: agregar a maps tenant_db y odoo_proxy_host ─────────────
-        ct105_content = _read_file_ct105(CT105_ODOO_CONF)
+        # ── Nodo Odoo: agregar a maps tenant_db y odoo_proxy_host ─────────────
+        node_content = _read_file_node(CT105_ODOO_CONF, node_ip=node_ip)
 
         # Map $tenant_db: subdomain.sajet.us → subdomain
-        ct105_content = _add_to_map(ct105_content, "tenant_db", full_domain, subdomain)
+        node_content = _add_to_map(node_content, "tenant_db", full_domain, subdomain)
         # Map $odoo_proxy_host: subdomain.sajet.us → subdomain.sajet.us (pasa tal cual)
-        ct105_content = _add_to_map(ct105_content, "odoo_proxy_host", full_domain, f"{subdomain}.sajet.us")
+        node_content = _add_to_map(node_content, "odoo_proxy_host", full_domain, f"{subdomain}.sajet.us")
         # Agregar a server_name
-        ct105_content = _add_to_server_name(ct105_content, "listen 8080", full_domain)
+        node_content = _add_to_server_name(node_content, "listen 8080", full_domain)
 
-        _write_file_ct105(CT105_ODOO_CONF, ct105_content)
+        _write_file_node(CT105_ODOO_CONF, node_content, node_ip=node_ip)
 
-        rc105, _, err105 = _run_ct105("nginx -t && systemctl reload nginx")
+        rc105, _, err105 = _run_node("nginx -t && systemctl reload nginx", node_ip=node_ip)
         if rc105 != 0:
-            logger.warning(f"nginx reload CT105 warning (no fatal): {err105}")
-        steps.append({"step": "ct105_maps", "status": "ok"})
+            logger.warning(f"nginx reload nodo {node_ip} warning (no fatal): {err105}")
+        steps.append({"step": "node_maps", "status": "ok", "node_ip": node_ip})
 
         logger.info(f"✅ Subdominio {full_domain} registrado en nginx")
         return {"success": True, "subdomain": full_domain, "steps": steps}
@@ -582,9 +703,12 @@ def provision_sajet_subdomain(subdomain: str) -> Dict[str, Any]:
         return {"success": False, "subdomain": full_domain, "error": str(e), "steps": steps}
 
 
-def remove_sajet_subdomain(subdomain: str) -> Dict[str, Any]:
+def remove_sajet_subdomain(subdomain: str, node_ip: str = CT105_IP) -> Dict[str, Any]:
     """
     Elimina un subdominio.sajet.us de los nginx maps (al borrar un tenant).
+    
+    Args:
+        node_ip: IP del nodo Odoo (default: CT105_IP)
     """
     steps = []
     full_domain = f"{subdomain}.sajet.us"
@@ -600,13 +724,13 @@ def remove_sajet_subdomain(subdomain: str) -> Dict[str, Any]:
         _run_local("nginx -t && systemctl reload nginx")
         steps.append({"step": "pct160_maps", "status": "ok"})
 
-        ct105_content = _read_file_ct105(CT105_ODOO_CONF)
-        ct105_content = _remove_from_map(ct105_content, "tenant_db", full_domain)
-        ct105_content = _remove_from_map(ct105_content, "odoo_proxy_host", full_domain)
-        ct105_content = _remove_from_server_name(ct105_content, "listen 8080", full_domain)
-        _write_file_ct105(CT105_ODOO_CONF, ct105_content)
-        _run_ct105("nginx -t && systemctl reload nginx")
-        steps.append({"step": "ct105_maps", "status": "ok"})
+        node_content = _read_file_node(CT105_ODOO_CONF, node_ip=node_ip)
+        node_content = _remove_from_map(node_content, "tenant_db", full_domain)
+        node_content = _remove_from_map(node_content, "odoo_proxy_host", full_domain)
+        node_content = _remove_from_server_name(node_content, "listen 8080", full_domain)
+        _write_file_node(CT105_ODOO_CONF, node_content, node_ip=node_ip)
+        _run_node("nginx -t && systemctl reload nginx", node_ip=node_ip)
+        steps.append({"step": "node_maps", "status": "ok", "node_ip": node_ip})
 
         logger.info(f"✅ Subdominio {full_domain} eliminado de nginx")
         return {"success": True, "subdomain": full_domain, "steps": steps}
@@ -617,15 +741,22 @@ def remove_sajet_subdomain(subdomain: str) -> Dict[str, Any]:
 
 
 def _add_to_route_map_content(content: str, domain: str, backend: str) -> str:
-    """Agrega dominio→backend a un archivo de route map."""
-    if re.search(rf"^\s*{re.escape(domain)}\s", content, re.MULTILINE):
-        return content
-    new_line = f"    {domain}    {backend};\n"
+    """Agrega o corrige dominio→backend en un archivo de route map."""
+    existing_pattern = rf"^(\s*){re.escape(domain)}\s+([^;]+);(\s*)$"
+    existing_match = re.search(existing_pattern, content, re.MULTILINE)
+    if existing_match:
+        current_backend = existing_match.group(2).strip()
+        if current_backend == backend:
+            return content
+        replacement = f"{existing_match.group(1)}{domain} {backend};{existing_match.group(3)}"
+        return re.sub(existing_pattern, replacement, content, count=1, flags=re.MULTILINE)
+
+    new_line = f"{domain} {backend};\n"
     # Insertar antes del cierre del último bloque }
     if "}" in content:
         last_brace = content.rfind("}")
         return content[:last_brace] + new_line + content[last_brace:]
-    return content + new_line
+    return content.rstrip("\n") + f"\n{new_line}"
 
 
 def _remove_from_route_map_content(content: str, domain: str) -> str:
