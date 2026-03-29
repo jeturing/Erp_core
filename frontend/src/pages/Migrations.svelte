@@ -188,7 +188,12 @@
     if (!selectedSubdomain || !selectedTargetNodeId) return;
     migrating = true;
     try {
-      const res = await migrationApi.startMigration(selectedSubdomain, selectedTargetNodeId);
+      const res = await migrationApi.startMigration(
+        selectedSubdomain,
+        selectedTargetNodeId,
+        undefined,
+        targetRuntimeMode,
+      );
       if (res.success) {
         toasts.success(`Migración iniciada para ${selectedSubdomain}`);
         activeJob = res.data;
@@ -217,6 +222,55 @@
       toasts.error(`Error al cancelar: ${err.message}`);
     } finally {
       cancelling = false;
+    }
+  }
+
+  // ── Dedicated Service actions ──
+  async function handleProvisionDedicated() {
+    if (!selectedSubdomain) return;
+    provisioning = true;
+    try {
+      const res = await migrationApi.provisionDedicated(selectedSubdomain);
+      if (res.success) {
+        toasts.success(`Servicio dedicado creado: ${res.data.service_name ?? selectedSubdomain}`);
+        await loadAll();
+        await loadDedicatedStats();
+      }
+    } catch (err: any) {
+      toasts.error(`Error provisioning: ${err.message}`);
+    } finally {
+      provisioning = false;
+    }
+  }
+
+  async function handleDeprovisionDedicated() {
+    if (!selectedSubdomain) return;
+    if (!confirm(`¿Revertir ${selectedSubdomain} a shared_pool? Se detendrá su servicio dedicado.`)) return;
+    deprovisioning = true;
+    try {
+      const res = await migrationApi.deprovisionDedicated(selectedSubdomain);
+      if (res.success) {
+        toasts.success(`Revertido a shared_pool: ${selectedSubdomain}`);
+        dedicatedStats = null;
+        await loadAll();
+      }
+    } catch (err: any) {
+      toasts.error(`Error deprovisioning: ${err.message}`);
+    } finally {
+      deprovisioning = false;
+    }
+  }
+
+  async function loadDedicatedStats() {
+    if (!selectedSubdomain) return;
+    loadingStats = true;
+    try {
+      const res = await migrationApi.getDedicatedStats(selectedSubdomain);
+      dedicatedStats = res.data;
+    } catch {
+      dedicatedStats = null;
+    } finally {
+      loadingStats = false;
     }
   }
 
@@ -289,7 +343,7 @@
             id="tenant-select"
             bind:value={selectedSubdomain}
             class="input-field w-full mt-2"
-            onchange={() => { selectedTargetNodeId = null; activeJob = null; stopPolling(); }}
+            onchange={() => { selectedTargetNodeId = null; activeJob = null; stopPolling(); loadDedicatedStats(); }}
           >
             <option value="">— Seleccionar tenant —</option>
             {#each filteredTenants as t (t.subdomain)}
@@ -350,10 +404,25 @@
             <p class="text-xs text-orange-400 mt-1">No hay nodos elegibles disponibles</p>
           {/if}
 
-          <!-- dedicated_service notice -->
-          <div class="mt-3 bg-slate-800/40 rounded p-2 border border-slate-700/50">
-            <p class="text-xs text-slate-500 italic">
-              ⚠ Modo <code>dedicated_service</code> pendiente de backend — solo <code>shared_pool</code> disponible.
+          <!-- Runtime mode selector for migration -->
+          <div class="mt-3">
+            <label for="runtime-mode-select" class="block text-xs text-slate-400 mb-1 uppercase tracking-wider">
+              Runtime destino
+            </label>
+            <select
+              id="runtime-mode-select"
+              bind:value={targetRuntimeMode}
+              class="input-field w-full text-sm"
+            >
+              <option value="shared_pool">Shared Pool (recurso compartido)</option>
+              <option value="dedicated_service">Dedicated Service (proceso aislado)</option>
+            </select>
+            <p class="text-xs text-slate-500 mt-1">
+              {#if targetRuntimeMode === 'dedicated_service'}
+                El tenant tendrá puertos y proceso Odoo propios.
+              {:else}
+                El tenant comparte el proceso Odoo del nodo.
+              {/if}
             </p>
           </div>
         </div>
@@ -442,6 +511,113 @@
           <div class="bg-orange-900/20 border border-orange-800/40 rounded p-3 mt-2">
             <p class="text-xs text-orange-400 font-semibold uppercase">Motivo Rollback</p>
             <p class="text-sm text-orange-300">{activeJob.rollback_reason}</p>
+          </div>
+        {/if}
+      </div>
+    {/if}
+
+    <!-- ═══ Panel: Servicio Dedicado ═══ -->
+    {#if selectedTenant?.deployment}
+      {@const dep = selectedTenant.deployment}
+      <div class="card p-6 space-y-4 border-l-4 {dep.runtime_mode === 'dedicated_service' ? 'border-emerald-500' : 'border-slate-600'}">
+        <h2 class="text-lg font-semibold text-white flex items-center gap-2">
+          <Zap size={18} />
+          Servicio Dedicado
+          {#if dep.runtime_mode === 'dedicated_service'}
+            <span class="text-xs px-2 py-0.5 rounded-full bg-emerald-900/40 text-emerald-400">ACTIVO</span>
+          {:else}
+            <span class="text-xs px-2 py-0.5 rounded-full bg-slate-700 text-slate-400">INACTIVO</span>
+          {/if}
+        </h2>
+
+        {#if dep.runtime_mode === 'dedicated_service'}
+          <!-- Info del servicio dedicado activo -->
+          <div class="grid grid-cols-2 md:grid-cols-4 gap-4">
+            <div>
+              <p class="text-xs text-slate-400 uppercase">Service Name</p>
+              <p class="text-sm text-white font-mono">{dep.service_name || '—'}</p>
+            </div>
+            <div>
+              <p class="text-xs text-slate-400 uppercase">Puerto HTTP</p>
+              <p class="text-sm text-white font-mono">{dep.http_port || '—'}</p>
+            </div>
+            <div>
+              <p class="text-xs text-slate-400 uppercase">Puerto Chat</p>
+              <p class="text-sm text-white font-mono">{dep.chat_port || '—'}</p>
+            </div>
+            <div>
+              <p class="text-xs text-slate-400 uppercase">Routing</p>
+              <p class="text-sm text-white font-mono">{dep.routing_mode || '—'}</p>
+            </div>
+          </div>
+
+          {#if dep.addons_overlay_path}
+            <div>
+              <p class="text-xs text-slate-400 uppercase">Overlay de Addons</p>
+              <p class="text-sm text-slate-300 font-mono">{dep.addons_overlay_path}</p>
+            </div>
+          {/if}
+
+          <button
+            class="btn-secondary px-4 py-2 flex items-center gap-2 text-orange-400 border-orange-500/30 hover:bg-orange-900/20"
+            onclick={handleDeprovisionDedicated}
+            disabled={deprovisioning}
+          >
+            {#if deprovisioning}
+              <Loader size={14} class="animate-spin" />
+            {:else}
+              <Package size={14} />
+            {/if}
+            Revertir a Shared Pool
+          </button>
+        {:else}
+          <!-- Botón para provisionar servicio dedicado -->
+          <div class="space-y-2">
+            <p class="text-sm text-slate-400">
+              El tenant <span class="text-white font-mono">{selectedSubdomain}</span> usa actualmente el proceso Odoo compartido del nodo.
+              Puede promocionarlo a un servicio dedicado con puertos y proceso propios sin migrar de nodo.
+            </p>
+            <button
+              class="btn-accent px-5 py-2 flex items-center gap-2"
+              onclick={handleProvisionDedicated}
+              disabled={provisioning || dep.has_active_migration}
+            >
+              {#if provisioning}
+                <Loader size={14} class="animate-spin" />
+              {:else}
+                <Zap size={14} />
+              {/if}
+              Provisionar Servicio Dedicado
+            </button>
+          </div>
+        {/if}
+
+        <!-- Stats del nodo -->
+        {#if dedicatedStats}
+          <div class="bg-slate-800/40 rounded-lg p-3 border border-slate-700/50 mt-2">
+            <p class="text-xs text-slate-400 uppercase mb-2">Stats del Nodo</p>
+            <div class="grid grid-cols-2 md:grid-cols-4 gap-3 text-sm">
+              <div>
+                <span class="text-slate-500">Puertos usados:</span>
+                <span class="text-white ml-1">{dedicatedStats.used_http_ports?.length ?? 0}</span>
+              </div>
+              <div>
+                <span class="text-slate-500">Slots disponibles:</span>
+                <span class="text-white ml-1">{dedicatedStats.available_slots ?? 0}</span>
+              </div>
+              <div>
+                <span class="text-slate-500">Dedicados:</span>
+                <span class="text-emerald-400 ml-1">{dedicatedStats.dedicated_deployments ?? 0}</span>
+              </div>
+              <div>
+                <span class="text-slate-500">Compartidos:</span>
+                <span class="text-blue-400 ml-1">{dedicatedStats.shared_deployments ?? 0}</span>
+              </div>
+            </div>
+          </div>
+        {:else if loadingStats}
+          <div class="flex items-center gap-2 text-sm text-slate-400 mt-2">
+            <Loader size={14} class="animate-spin" /> Cargando stats del nodo...
           </div>
         {/if}
       </div>

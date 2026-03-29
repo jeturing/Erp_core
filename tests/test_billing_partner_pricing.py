@@ -12,6 +12,7 @@ from app.models.database import (
     SubscriptionStatus,
 )
 from app.services.stripe_billing import generate_consumption_invoice
+from app.services.stripe_sync import sync_stripe_customers, upsert_stripe_subscription
 
 
 def test_generate_consumption_invoice_uses_partner_override_and_is_idempotent(db_session, monkeypatch):
@@ -90,3 +91,83 @@ def test_generate_consumption_invoice_uses_partner_override_and_is_idempotent(db
     assert invoice.billing_period_key == "2026-03-01__2026-04-01"
     assert second["invoice_id"] == first["invoice_id"]
     assert second["pricing_source"] == "existing_invoice"
+
+
+def test_sync_stripe_customers_skips_duplicate_local_customers_for_same_email(db_session, monkeypatch):
+    db_session.add_all([
+        Customer(
+            email="dup@example.com",
+            full_name="Dup One",
+            company_name="Dup One",
+            subdomain="dupone",
+        ),
+        Customer(
+            email="dup@example.com",
+            full_name="Dup Two",
+            company_name="Dup Two",
+            subdomain="duptwo",
+        ),
+    ])
+    db_session.commit()
+
+    monkeypatch.setattr(
+        "app.services.stripe_sync.stripe.Customer.list",
+        lambda email, limit=1: {"data": [{"id": "cus_duplicate_email"}]},
+    )
+
+    result = sync_stripe_customers(db_session)
+    customers = db_session.query(Customer).filter(Customer.email == "dup@example.com").all()
+
+    assert result["conflicts"] == 2
+    assert result["linked"] == 0
+    assert all(customer.stripe_customer_id is None for customer in customers)
+
+
+def test_upsert_stripe_subscription_skips_duplicate_local_customers_for_same_email(db_session):
+    db_session.add_all([
+        Customer(
+            email="dup-sub@example.com",
+            full_name="Dup Sub One",
+            company_name="Dup Sub One",
+            subdomain="dupsubone",
+        ),
+        Customer(
+            email="dup-sub@example.com",
+            full_name="Dup Sub Two",
+            company_name="Dup Sub Two",
+            subdomain="dupsubtwo",
+        ),
+    ])
+    db_session.commit()
+
+    results = {
+        "linked": 0,
+        "created": 0,
+        "updated": 0,
+        "skipped": 0,
+        "errors": [],
+        "details": [],
+    }
+
+    upsert_stripe_subscription(
+        db_session,
+        {
+            "id": "sub_dup_email",
+            "status": "active",
+            "customer": {
+                "id": "cus_dup_sub_email",
+                "email": "dup-sub@example.com",
+                "name": "Dup Sub Tenant",
+            },
+            "metadata": {},
+            "items": {"data": []},
+        },
+        results,
+        reserved_customer_links={},
+    )
+
+    customers = db_session.query(Customer).filter(Customer.email == "dup-sub@example.com").all()
+
+    assert results["skipped"] == 1
+    assert results["created"] == 0
+    assert all(customer.stripe_customer_id is None for customer in customers)

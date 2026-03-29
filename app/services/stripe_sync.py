@@ -13,6 +13,7 @@ import logging
 from datetime import datetime, timezone
 from typing import Dict, Any, List, Optional, Tuple
 from sqlalchemy.orm import Session
+from sqlalchemy.exc import IntegrityError
 
 from ..models.database import (
     Customer, Subscription, SubscriptionStatus, Plan,
@@ -83,6 +84,13 @@ def _find_customer_by_email(db: Session, email: str) -> Optional[Customer]:
     if not email:
         return None
     return db.query(Customer).filter(Customer.email == email).first()
+
+
+def _find_customers_by_email(db: Session, email: str) -> list[Customer]:
+    """Busca todos los customers locales por email."""
+    if not email:
+        return []
+    return db.query(Customer).filter(Customer.email == email).all()
 
 
 def _find_customer_by_stripe_id(db: Session, stripe_cust_id: str) -> Optional[Customer]:
@@ -242,6 +250,11 @@ def sync_subscriptions(db: Session) -> Dict[str, Any]:
         "errors": [],
         "details": [],
     }
+    reserved_customer_links = {
+        row.stripe_customer_id: row.id
+        for row in db.query(Customer).filter(Customer.stripe_customer_id != None).all()
+        if row.stripe_customer_id
+    }
 
     try:
         # Fetch suscripciones activas de Stripe
@@ -252,7 +265,7 @@ def sync_subscriptions(db: Session) -> Dict[str, Any]:
 
         for s_sub in stripe_subs:
             try:
-                upsert_stripe_subscription(db, s_sub, results)
+                upsert_stripe_subscription(db, s_sub, results, reserved_customer_links=reserved_customer_links)
             except Exception as e:
                 results["errors"].append({
                     "stripe_sub_id": s_sub.get("id"),
@@ -260,7 +273,13 @@ def sync_subscriptions(db: Session) -> Dict[str, Any]:
                 })
                 logger.error(f"Error procesando sub {s_sub.get('id')}: {e}")
 
-        db.commit()
+        try:
+            db.commit()
+        except IntegrityError as e:
+            db.rollback()
+            results["errors"].append({
+                "error": f"subscription_commit_failed: {e}",
+            })
 
     except stripe.error.StripeError as e:
         results["errors"].append({"error": f"Stripe API: {e}"})
@@ -289,9 +308,13 @@ def _fetch_all_stripe_subscriptions(statuses: List[str] = None) -> list:
 
 
 def upsert_stripe_subscription(
-    db: Session, s_sub: dict, results: dict
+    db: Session,
+    s_sub: dict,
+    results: dict,
+    reserved_customer_links: Optional[dict[str, int]] = None,
 ) -> None:
     """Procesa una suscripción individual de Stripe."""
+    reserved_customer_links = reserved_customer_links or {}
     stripe_sub_id = s_sub["id"]
     stripe_cust = s_sub.get("customer", {})
 
@@ -310,10 +333,16 @@ def upsert_stripe_subscription(
     # ── Match customer local ──
     local_customer = None
 
-    # 1. Por stripe_customer_id directo
-    local_customer = _find_customer_by_stripe_id(db, stripe_cust_id)
+    # 1. Por stripe_customer_id ya vinculado/reservado
+    reserved_customer_id = reserved_customer_links.get(stripe_cust_id) if stripe_cust_id else None
+    if reserved_customer_id:
+        local_customer = db.query(Customer).filter(Customer.id == reserved_customer_id).first()
 
-    # 2. Por metadata.erp_customer_id
+    # 2. Por stripe_customer_id directo persistido
+    if not local_customer:
+        local_customer = _find_customer_by_stripe_id(db, stripe_cust_id)
+
+    # 3. Por metadata.erp_customer_id
     if not local_customer and metadata.get("erp_customer_id"):
         try:
             cid = int(metadata["erp_customer_id"])
@@ -321,24 +350,35 @@ def upsert_stripe_subscription(
         except (ValueError, TypeError):
             pass
 
-    # 3. Por email (puede haber múltiples — buscar el que NO sea admin)
+    # 4. Por email solo si hay un único customer local elegible
     if not local_customer and stripe_email:
-        candidates = db.query(Customer).filter(
-            Customer.email == stripe_email
-        ).all()
-        # Preferir no-admin
-        for c in candidates:
-            if not c.is_admin_account:
-                local_customer = c
-                break
-        if not local_customer and candidates:
-            local_customer = candidates[0]
+        candidates = _find_customers_by_email(db, stripe_email)
+        non_admin_candidates = [candidate for candidate in candidates if not candidate.is_admin_account]
+        effective_candidates = non_admin_candidates or candidates
 
-    # 4. Si aún no hay match → buscar por nombre de empresa
+        if len(effective_candidates) == 1:
+            local_customer = effective_candidates[0]
+        elif len(effective_candidates) > 1:
+            results["skipped"] += 1
+            results["details"].append({
+                "action": "skipped",
+                "stripe_sub_id": stripe_sub_id,
+                "stripe_customer_id": stripe_cust_id,
+                "stripe_email": stripe_email,
+                "reason": "duplicate_local_customers_for_email",
+                "customer_ids": [candidate.id for candidate in effective_candidates],
+            })
+            return
+
+    # 5. Si aún no hay match → buscar por nombre de empresa solo si es único
     if not local_customer and stripe_name:
-        local_customer = db.query(Customer).filter(
+        candidates = db.query(Customer).filter(
             Customer.company_name.ilike(f"%{stripe_name}%")
-        ).first()
+        ).all()
+        non_admin_candidates = [candidate for candidate in candidates if not candidate.is_admin_account]
+        effective_candidates = non_admin_candidates or candidates
+        if len(effective_candidates) == 1:
+            local_customer = effective_candidates[0]
 
     if not local_customer:
         results["skipped"] += 1
@@ -353,7 +393,22 @@ def upsert_stripe_subscription(
 
     # ── Actualizar stripe_customer_id si falta ──
     if not local_customer.stripe_customer_id and stripe_cust_id:
+        linked_customer_id = reserved_customer_links.get(stripe_cust_id)
+        if linked_customer_id and linked_customer_id != local_customer.id:
+            results["skipped"] += 1
+            results["details"].append({
+                "action": "skipped",
+                "stripe_sub_id": stripe_sub_id,
+                "stripe_customer_id": stripe_cust_id,
+                "reason": "stripe_customer_reserved_for_other_customer",
+                "customer_id": local_customer.id,
+                "reserved_customer_id": linked_customer_id,
+            })
+            return
         local_customer.stripe_customer_id = stripe_cust_id
+        reserved_customer_links[stripe_cust_id] = local_customer.id
+    elif stripe_cust_id and local_customer.stripe_customer_id == stripe_cust_id:
+        reserved_customer_links[stripe_cust_id] = local_customer.id
 
     # ── Buscar suscripción local existente ──
     local_sub = db.query(Subscription).filter(
@@ -689,23 +744,89 @@ def sync_stripe_customers(db: Session) -> Dict[str, Any]:
     buscando por email en Stripe.
     """
     _configure_stripe()
-    results = {"linked": 0, "already_linked": 0, "not_found": 0, "details": []}
+    results = {
+        "linked": 0,
+        "already_linked": 0,
+        "not_found": 0,
+        "conflicts": 0,
+        "details": [],
+    }
 
     customers_without = db.query(Customer).filter(
         Customer.stripe_customer_id == None,
         Customer.is_admin_account == False,
     ).all()
+    existing_links = {
+        row.stripe_customer_id: row.id
+        for row in db.query(Customer).filter(Customer.stripe_customer_id != None).all()
+        if row.stripe_customer_id
+    }
+    email_groups: dict[str, list[int]] = {}
+    for row in db.query(Customer).filter(Customer.is_admin_account == False).all():
+        normalized_email = (row.email or "").strip().lower()
+        if normalized_email:
+            email_groups.setdefault(normalized_email, []).append(row.id)
 
     for customer in customers_without:
         try:
-            stripe_custs = stripe.Customer.list(email=customer.email, limit=1)
-            if stripe_custs["data"]:
-                customer.stripe_customer_id = stripe_custs["data"][0]["id"]
-                results["linked"] += 1
+            normalized_email = (customer.email or "").strip().lower()
+            if not normalized_email:
+                results["not_found"] += 1
                 results["details"].append({
                     "customer": customer.company_name,
-                    "stripe_customer_id": customer.stripe_customer_id,
+                    "reason": "missing_email",
                 })
+                continue
+
+            stripe_custs = stripe.Customer.list(email=customer.email, limit=1)
+            if stripe_custs["data"]:
+                stripe_customer_id = stripe_custs["data"][0]["id"]
+                holder_id = existing_links.get(stripe_customer_id)
+                duplicate_email_ids = email_groups.get(normalized_email, [])
+
+                if holder_id and holder_id != customer.id:
+                    results["conflicts"] += 1
+                    results["details"].append({
+                        "customer": customer.company_name,
+                        "customer_id": customer.id,
+                        "stripe_customer_id": stripe_customer_id,
+                        "reason": "stripe_customer_id_already_linked",
+                        "linked_customer_id": holder_id,
+                    })
+                    continue
+
+                if len(duplicate_email_ids) > 1:
+                    results["conflicts"] += 1
+                    results["details"].append({
+                        "customer": customer.company_name,
+                        "customer_id": customer.id,
+                        "email": customer.email,
+                        "stripe_customer_id": stripe_customer_id,
+                        "reason": "duplicate_local_customers_for_email",
+                        "customer_ids": duplicate_email_ids,
+                    })
+                    continue
+
+                customer.stripe_customer_id = stripe_customer_id
+                try:
+                    db.commit()
+                    existing_links[stripe_customer_id] = customer.id
+                    results["linked"] += 1
+                    results["details"].append({
+                        "customer": customer.company_name,
+                        "customer_id": customer.id,
+                        "stripe_customer_id": customer.stripe_customer_id,
+                    })
+                except IntegrityError as exc:
+                    db.rollback()
+                    results["conflicts"] += 1
+                    results["details"].append({
+                        "customer": customer.company_name,
+                        "customer_id": customer.id,
+                        "stripe_customer_id": stripe_customer_id,
+                        "reason": "unique_violation",
+                        "error": str(exc),
+                    })
             else:
                 results["not_found"] += 1
         except Exception as e:
@@ -714,7 +835,6 @@ def sync_stripe_customers(db: Session) -> Dict[str, Any]:
                 "error": str(e),
             })
 
-    db.commit()
     return results
 
 
