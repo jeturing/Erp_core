@@ -28,7 +28,7 @@ import string
 import bcrypt
 
 from ..models.database import (
-    Plan, Customer, Partner, PartnerBrandingProfile, PartnerPricingOverride,
+    Plan, Customer, Partner, PartnerBrandingProfile,
     ModuleCatalog, ModulePackage, ModulePackageItem,
     ServiceCatalogItem, ServiceCategory, PlanCatalogLink,
     Testimonial, LandingSection, Translation, AccountantTenantAccess,
@@ -412,7 +412,7 @@ async def get_public_partners():
 @router.get("/partner/{code}")
 async def get_partner_landing(code: str):
     """
-    Retorna branding + planes de un partner para su URL personalizada.
+    Retorna branding + planes públicos para la URL personalizada de un partner.
     Busca primero por slug, luego por partner_code.
     Usado por PartnerLanding.svelte (ruta #/plt/{code}).
     """
@@ -439,7 +439,9 @@ async def get_partner_landing(code: str):
             PartnerBrandingProfile.is_active == True,
         ).first()
 
-        # Obtener planes con pricing override del partner
+        # Los clientes siempre deben ver precios públicos.
+        # El pricing interno del partner vive en /api/partner-portal/pricing
+        # y /api/partners/{partner_id}/pricing.
         plans = db.query(Plan).filter(
             Plan.is_active == True,
         ).order_by(Plan.sort_order).all()
@@ -450,25 +452,8 @@ async def get_partner_landing(code: str):
             if not is_public:
                 continue
 
-            # Buscar pricing override para este partner
-            override = db.query(PartnerPricingOverride).filter(
-                PartnerPricingOverride.partner_id == partner.id,
-                PartnerPricingOverride.plan_name == plan.name,
-                PartnerPricingOverride.is_active == True,
-            ).first()
-
             plan_dict = _plan_to_dict(plan)
-            if override:
-                if override.base_price_override is not None:
-                    plan_dict["base_price"] = override.base_price_override
-                if override.price_per_user_override is not None:
-                    plan_dict["price_per_user"] = override.price_per_user_override
-                if override.included_users_override is not None:
-                    plan_dict["included_users"] = override.included_users_override
-                plan_dict["has_partner_pricing"] = True
-            else:
-                plan_dict["has_partner_pricing"] = False
-
+            plan_dict["has_partner_pricing"] = False
             plans_data.append(plan_dict)
 
         result = {
@@ -507,8 +492,9 @@ async def get_partner_landing(code: str):
 async def calculate_price(payload: PriceCalculateRequest):
     """
     Calcula precio por plan + cantidad de usuarios.
-    Soporta billing mensual/anual y pricing override de partner.
-    Usado por UserSelector.svelte para mostrar precio en tiempo real.
+    Soporta billing mensual/anual.
+    El partner_code puede venir como contexto de referral, pero NO debe
+    alterar el precio público mostrado al cliente final.
     """
     db = SessionLocal()
     try:
@@ -520,22 +506,7 @@ async def calculate_price(payload: PriceCalculateRequest):
         if not plan:
             raise HTTPException(404, f"Plan '{payload.plan_name}' not found")
 
-        # Resolver partner si viene código
-        partner_id = None
-        if payload.partner_code:
-            partner = db.query(Partner).filter(
-                Partner.partner_code == payload.partner_code,
-                Partner.status == PartnerStatus.active,
-            ).first()
-            if not partner:
-                partner = db.query(Partner).filter(
-                    Partner.slug == payload.partner_code,
-                    Partner.status == PartnerStatus.active,
-                ).first()
-            if partner:
-                partner_id = partner.id
-
-        monthly_price = plan.calculate_monthly(payload.user_count, partner_id)
+        monthly_price = plan.calculate_monthly(payload.user_count)
 
         # Calcular anual con descuento
         discount = getattr(plan, "annual_discount_percent", 20) or 20
@@ -564,7 +535,7 @@ async def calculate_price(payload: PriceCalculateRequest):
                 "savings": round((monthly_price * 12) - annual_total, 2),
             },
             "currency": plan.currency,
-            "has_partner_pricing": partner_id is not None,
+            "has_partner_pricing": False,
         }
     finally:
         db.close()

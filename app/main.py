@@ -43,6 +43,7 @@ from .routes import admin_control_panel  # 🔧 Panel de control administrativo 
 from .routes import api_keys             # 🔑 API Key Management (rate limit, RBAC, rotación estilo Stripe)
 from .routes import odoo_webhooks        # 🔄 Webhooks Odoo → Portal (sync bidireccional)
 from .routes import postal_webhooks      # 📧 Postal Mail webhooks + uso de correo
+from .routes import migration            # 🚚 Migración live de tenants entre nodos (Fase 2)
 from .routes.roles import _require_admin as _require_admin_base
 
 # Import security middleware
@@ -230,6 +231,7 @@ app.include_router(admin_control_panel.router)   # 🔧 Panel de control: SMTP, 
 app.include_router(api_keys.router)              # 🔑 API Key Management (rate limit, rotación Stripe)
 app.include_router(odoo_webhooks.router)         # 🔄 Webhooks Odoo → Portal (sync bidireccional)
 app.include_router(postal_webhooks.router)       # 📧 Postal Mail webhooks + uso de correo
+app.include_router(migration.router)             # 🚚 Migración live de tenants entre nodos (Fase 2)
 app.include_router(stripe_sync.router)           # Stripe → BD sync (source of truth)
 app.include_router(public_landing.router)        # Endpoints públicos para landing page (sin auth)
 app.include_router(accountant_portal.router)     # Portal para contadores/CPA multi-empresa

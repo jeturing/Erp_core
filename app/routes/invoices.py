@@ -13,7 +13,7 @@ from fastapi import APIRouter, HTTPException, Depends, Request, Cookie
 from pydantic import BaseModel
 from typing import Optional
 from sqlalchemy.orm import Session
-from datetime import datetime, timedelta
+from datetime import date, datetime, time, timedelta
 import logging
 
 from ..models.database import (
@@ -189,6 +189,7 @@ def list_invoices(
     request: Request,
     access_token: str = Cookie(None),
     status: Optional[str] = None,
+    subscription_id: Optional[int] = None,
     customer_id: Optional[int] = None,
     partner_id: Optional[int] = None,
     limit: int = 50,
@@ -200,6 +201,8 @@ def list_invoices(
     q = db.query(Invoice)
     if status:
         q = q.filter(Invoice.status == status)
+    if subscription_id:
+        q = q.filter(Invoice.subscription_id == subscription_id)
     if customer_id:
         q = q.filter(Invoice.customer_id == customer_id)
     if partner_id:
@@ -230,6 +233,9 @@ def list_invoices(
             "currency": inv.currency,
             "stripe_invoice_id": inv.stripe_invoice_id,
             "stripe_payment_intent_id": inv.stripe_payment_intent_id,
+            "billing_period_key": inv.billing_period_key,
+            "period_start": inv.period_start.isoformat() if inv.period_start else None,
+            "period_end": inv.period_end.isoformat() if inv.period_end else None,
             "status": inv.status.value if inv.status else None,
             "issued_at": inv.issued_at.isoformat() if inv.issued_at else None,
             "due_date": inv.due_date.isoformat() if inv.due_date else None,
@@ -272,6 +278,9 @@ def get_invoice(
         "lines": inv.lines_json,
         "stripe_invoice_id": inv.stripe_invoice_id,
         "stripe_payment_intent_id": inv.stripe_payment_intent_id,
+        "billing_period_key": inv.billing_period_key,
+        "period_start": inv.period_start.isoformat() if inv.period_start else None,
+        "period_end": inv.period_end.isoformat() if inv.period_end else None,
         "status": inv.status.value if inv.status else None,
         "issued_at": inv.issued_at.isoformat() if inv.issued_at else None,
         "paid_at": inv.paid_at.isoformat() if inv.paid_at else None,
@@ -413,6 +422,8 @@ def create_checkout(
 
 class ConsumptionInvoiceRequest(BaseModel):
     subscription_id: int
+    period_start: Optional[date] = None
+    period_end: Optional[date] = None
 
 
 @router.post("/generate-consumption")
@@ -428,7 +439,14 @@ def generate_consumption(
     """
     _require_admin_base(request, access_token)
     try:
-        result = generate_consumption_invoice(db, payload.subscription_id)
+        period_start_dt = datetime.combine(payload.period_start, time.min) if payload.period_start else None
+        period_end_dt = datetime.combine(payload.period_end, time.min) if payload.period_end else None
+        result = generate_consumption_invoice(
+            db,
+            payload.subscription_id,
+            period_start=period_start_dt,
+            period_end=period_end_dt,
+        )
         return result
     except ValueError as e:
         raise HTTPException(404, str(e))

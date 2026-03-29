@@ -18,11 +18,16 @@
     loading = true;
     try {
       const subId = subFilter ? parseInt(subFilter) : undefined;
+      if (!subId) {
+        hwmRecords = [];
+        summary = null;
+        return;
+      }
       const [hwmRes, sumRes] = await Promise.all([
         seatsApi.getHWM(subId),
         seatsApi.getSummary(subId),
       ]);
-      hwmRecords = hwmRes.items ?? [];
+      hwmRecords = hwmRes.items ?? hwmRes.records ?? [];
       summary = sumRes;
     } catch (e: any) {
       toasts.error(e.message);
@@ -49,7 +54,9 @@
     return new Date(d).toLocaleDateString('es-ES', { day: '2-digit', month: 'short', year: 'numeric' });
   }
 
-  onMount(loadData);
+  onMount(() => {
+    loading = false;
+  });
 </script>
 
 <div class="p-6 space-y-6">
@@ -74,15 +81,15 @@
     <div class="grid grid-cols-2 lg:grid-cols-5 gap-4">
       <div class="stat-card">
         <span class="stat-label">Usuarios actuales</span>
-        <span class="stat-value">{summary.current_count}</span>
+        <span class="stat-value">{summary.current_count ?? summary.current_user_count ?? 0}</span>
       </div>
       <div class="stat-card">
         <span class="stat-label">HWM del período</span>
-        <span class="stat-value text-terracotta">{summary.hwm_count}</span>
+        <span class="stat-value text-terracotta">{summary.hwm_count ?? summary.month_hwm ?? 0}</span>
       </div>
       <div class="stat-card">
         <span class="stat-label">En gracia</span>
-        <span class="stat-value text-warning">{summary.grace_count}</span>
+        <span class="stat-value text-warning">{summary.grace_count ?? summary.grace_active_count ?? 0}</span>
         <span class="text-[11px] text-gray-500">ventana 8h</span>
       </div>
       <div class="stat-card">
@@ -99,7 +106,7 @@
   <!-- Filter -->
   <div class="flex gap-3">
     <div class="relative flex-1 max-w-xs">
-      <input type="text" bind:value={subFilter} placeholder="Subscription ID (opcional)..." class="input w-full" on:keydown={(e) => e.key === 'Enter' && loadData()} />
+      <input type="text" bind:value={subFilter} placeholder="Subscription ID..." class="input w-full" on:keydown={(e) => e.key === 'Enter' && loadData()} />
     </div>
     <button class="btn-secondary btn-sm" on:click={loadData}>Filtrar</button>
   </div>
@@ -111,53 +118,59 @@
       <p class="mt-3">Cargando datos de seats...</p>
     </div>
   {:else}
-    <div class="card p-0 overflow-hidden">
-      <div class="px-6 py-4 border-b border-border-light flex items-center justify-between">
-        <span class="section-heading flex items-center gap-2"><BarChart3 size={16} /> Historial High Water Mark</span>
-        <span class="text-[11px] text-gray-500">{hwmRecords.length} registros</span>
+    {#if !subFilter}
+      <div class="card p-8 text-center text-gray-500">
+        Selecciona un `subscription_id` para cargar el historial de seats.
       </div>
-      <div class="overflow-x-auto">
-        <table class="table w-full">
-          <thead>
-            <tr>
-              <th>ID</th>
-              <th>Subscription</th>
-              <th>Período</th>
-              <th>HWM Count</th>
-              <th>Stripe Sync</th>
-              <th>Sync Date</th>
-            </tr>
-          </thead>
-          <tbody>
-            {#each hwmRecords as r}
+    {:else}
+      <div class="card p-0 overflow-hidden">
+        <div class="px-6 py-4 border-b border-border-light flex items-center justify-between">
+          <span class="section-heading flex items-center gap-2"><BarChart3 size={16} /> Historial High Water Mark</span>
+          <span class="text-[11px] text-gray-500">{hwmRecords.length} registros</span>
+        </div>
+        <div class="overflow-x-auto">
+          <table class="table w-full">
+            <thead>
               <tr>
-                <td class="font-mono text-[11px] text-gray-400">{r.id}</td>
-                <td class="font-mono text-sm">{r.subscription_id}</td>
-                <td class="text-sm">{r.period_date}</td>
-                <td>
-                  <span class="inline-flex items-center gap-1.5 font-bold text-text-primary">
-                    <TrendingUp size={14} class="text-terracotta" />
-                    {r.hwm_count}
-                  </span>
-                </td>
-                <td>
-                  {#if r.stripe_qty_updated}
-                    <span class="badge-success">Sincronizado</span>
-                  {:else}
-                    <span class="badge-warning">Pendiente</span>
-                  {/if}
-                </td>
-                <td class="text-sm text-text-secondary">{formatDate(r.stripe_qty_updated_at)}</td>
+                <th>ID</th>
+                <th>Subscription</th>
+                <th>Período</th>
+                <th>HWM Count</th>
+                <th>Stripe Sync</th>
+                <th>Sync Date</th>
               </tr>
-            {:else}
-              <tr>
-                <td colspan="6" class="text-center text-gray-500 py-12">No hay registros HWM</td>
-              </tr>
-            {/each}
-          </tbody>
-        </table>
+            </thead>
+            <tbody>
+              {#each hwmRecords as r}
+                <tr>
+                  <td class="font-mono text-[11px] text-gray-400">{r.id}</td>
+                  <td class="font-mono text-sm">{r.subscription_id}</td>
+                  <td class="text-sm">{r.period_date}</td>
+                  <td>
+                    <span class="inline-flex items-center gap-1.5 font-bold text-text-primary">
+                      <TrendingUp size={14} class="text-terracotta" />
+                      {r.hwm_count}
+                    </span>
+                  </td>
+                  <td>
+                    {#if r.stripe_qty_updated}
+                      <span class="badge-success">Sincronizado</span>
+                    {:else}
+                      <span class="badge-warning">Pendiente</span>
+                    {/if}
+                  </td>
+                  <td class="text-sm text-text-secondary">{formatDate(r.stripe_qty_updated_at)}</td>
+                </tr>
+              {:else}
+                <tr>
+                  <td colspan="6" class="text-center text-gray-500 py-12">No hay registros HWM</td>
+                </tr>
+              {/each}
+            </tbody>
+          </table>
+        </div>
       </div>
-    </div>
+    {/if}
 
     <!-- Last Event -->
     {#if summary?.last_event}

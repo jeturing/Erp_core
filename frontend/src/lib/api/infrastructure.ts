@@ -70,6 +70,20 @@ export const infrastructureApi = {
   async setMaintenance(nodeId: number, enable: boolean): Promise<{ message: string; status: string }> {
     return api.post(`/api/nodes/${nodeId}/maintenance?enable=${enable ? 'true' : 'false'}`);
   },
+
+  /**
+   * Devuelve nodos elegibles para recibir una migración.
+   * Filtra: can_host_tenants=true, status=online, y excluye el nodo indicado.
+   */
+  async getEligibleMigrationTargets(excludeNodeId?: number): Promise<NodeSummary[]> {
+    const res = await api.get<NodesListResponse>('/api/nodes');
+    return res.items.filter(
+      (n) =>
+        n.can_host_tenants &&
+        n.status === 'online' &&
+        (excludeNodeId == null || n.id !== excludeNodeId),
+    );
+  },
 };
 
 export type { NodeSummary, ContainerItem };

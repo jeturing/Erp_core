@@ -48,7 +48,6 @@
               plan_name: plan.name,
               user_count: userCount,
               billing_period: annual ? 'annual' : 'monthly',
-              partner_code: partnerCode || null,
             }),
           });
 
@@ -73,7 +72,7 @@
     }
   }
 
-  $: priceKey = `${userCount}|${annual}|${partnerCode}|${displayPlans.map((p) => p.name).join(',')}`;
+  $: priceKey = `${userCount}|${annual}|${displayPlans.map((p) => p.name).join(',')}`;
   $: if (displayPlans.length > 0 && priceKey !== lastPriceKey) {
     lastPriceKey = priceKey;
     updatePrices();
@@ -116,6 +115,7 @@
 
   function goCheckout(plan: any) {
     const params = new URLSearchParams({
+      mode: 'tenant',
       plan: plan.id || plan.name,
       users: String(userCount),
       billing: annual ? 'annual' : 'monthly',
@@ -283,7 +283,7 @@
         </p>
         <div class="flex flex-wrap gap-3">
           <a
-            href="#/contact?subject=fel"
+            href="mailto:ventas@sajet.us?subject=Consulta%20integracion%20FEL%20-%20SAJET"
             class="inline-flex items-center gap-1 text-xs font-inter font-semibold text-amber-700 hover:text-amber-900 transition-colors"
           >
             Consultar integración FEL →

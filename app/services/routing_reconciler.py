@@ -58,11 +58,17 @@ from ..models.database import (
     TenantDeployment,
 )
 from .nginx_domain_configurator import (
+    CT105_ODOO_CONF,
     PCT160_CHAT_MAP,
     PCT160_HTTP_MAP,
+    _add_to_map,
+    _add_to_server_name,
     _read_file_local,
+    _read_file_node,
     _run_local,
+    _run_node,
     _write_file_local,
+    _write_file_node,
 )
 
 logger = logging.getLogger("routing_reconciler")
@@ -152,23 +158,27 @@ class RoutingReconciler:
         self,
         *,
         dry_run: bool = False,
+        include_remote_nodes: bool = True,
     ) -> Dict[str, Any]:
         """
         Reconcilia el estado de routing nginx con la BD.
 
         Args:
             dry_run: si True, calcula cambios pero no los aplica
+            include_remote_nodes: si True, también reconcilia nodos remotos (incremental)
 
         Returns:
             {
                 "success": bool,
-                "tenants": int,         # Total de tenant routes
-                "external_domains": int, # Total de external domain routes
-                "changes": [str, ...],  # Descripción de cada cambio
+                "tenants": int,
+                "external_domains": int,
+                "changes": [str, ...],
+                "remote_nodes": [{node_ip, status, changes}],
                 "dry_run": bool,
             }
         """
         changes: List[str] = []
+        remote_results: List[Dict[str, Any]] = []
 
         try:
             # 1. Leer estado deseado desde BD
@@ -191,12 +201,17 @@ class RoutingReconciler:
                 changes.append(f"odoo_chat_routes.map: {self._diff_summary(current_chat, chat_map_content)}")
 
             if not changes:
-                logger.info("RoutingReconciler: sin cambios detectados")
+                logger.info("RoutingReconciler: sin cambios detectados en PCT160")
+                # Aún así, verificar nodos remotos si se solicita
+                if include_remote_nodes and not dry_run:
+                    remote_results = self._reconcile_remote_nodes(state)
+
                 return {
                     "success": True,
                     "tenants": len(state.tenant_routes),
                     "external_domains": len(state.external_routes),
                     "changes": [],
+                    "remote_nodes": remote_results,
                     "dry_run": dry_run,
                 }
 
@@ -207,6 +222,7 @@ class RoutingReconciler:
                     "tenants": len(state.tenant_routes),
                     "external_domains": len(state.external_routes),
                     "changes": changes,
+                    "remote_nodes": [],
                     "dry_run": True,
                 }
 
@@ -224,6 +240,10 @@ class RoutingReconciler:
                     f"{len(state.tenant_routes)} tenants, "
                     f"{len(state.external_routes)} dominios externos"
                 )
+
+                # 5. Reconciliar nodos remotos incrementalmente
+                if include_remote_nodes:
+                    remote_results = self._reconcile_remote_nodes(state)
             else:
                 changes.append(f"ERROR: {result.get('error', 'desconocido')}")
 
@@ -232,6 +252,7 @@ class RoutingReconciler:
                 "tenants": len(state.tenant_routes),
                 "external_domains": len(state.external_routes),
                 "changes": changes,
+                "remote_nodes": remote_results,
                 "dry_run": False,
                 **({} if result["success"] else {"error": result.get("error")}),
             }
@@ -269,6 +290,149 @@ class RoutingReconciler:
                 for r in state.external_routes
             ],
         }
+
+    async def diagnose_routing(self) -> Dict[str, Any]:
+        """
+        Compara estado deseado (BD) vs estado real (nginx maps) por nodo.
+        Retorna discrepancias para validación post-reconciliación.
+        """
+        state = self._load_desired_state()
+        discrepancies: List[Dict[str, Any]] = []
+
+        # --- PCT160: comparar map files ---
+        desired_http = self._render_http_map(state)
+        desired_chat = self._render_chat_map(state)
+        current_http = self._safe_read(PCT160_HTTP_MAP)
+        current_chat = self._safe_read(PCT160_CHAT_MAP)
+
+        pct160_http_ok = not self._content_differs(current_http, desired_http)
+        pct160_chat_ok = not self._content_differs(current_chat, desired_chat)
+
+        pct160_status = {
+            "node": "PCT160 (local)",
+            "http_map_synced": pct160_http_ok,
+            "chat_map_synced": pct160_chat_ok,
+        }
+        if not pct160_http_ok:
+            pct160_status["http_diff"] = self._diff_summary(current_http, desired_http)
+        if not pct160_chat_ok:
+            pct160_status["chat_diff"] = self._diff_summary(current_chat, desired_chat)
+        discrepancies.append(pct160_status)
+
+        # --- Nodos remotos: verificar que los subdominios del nodo están en su nginx ---
+        nodes_with_tenants = self._group_routes_by_node(state)
+
+        for node_ip, routes in nodes_with_tenants.items():
+            node_result: Dict[str, Any] = {
+                "node": node_ip,
+                "tenants_expected": len(routes),
+                "missing_in_nginx": [],
+                "reachable": True,
+            }
+            try:
+                node_conf = _read_file_node(CT105_ODOO_CONF, node_ip=node_ip)
+                for route in routes:
+                    # Verificar que el subdomain.sajet.us aparezca en tenant_db map
+                    if route.full_domain not in node_conf:
+                        node_result["missing_in_nginx"].append(route.full_domain)
+            except Exception as e:
+                node_result["reachable"] = False
+                node_result["error"] = str(e)
+
+            node_result["synced"] = (
+                node_result["reachable"]
+                and len(node_result["missing_in_nginx"]) == 0
+            )
+            discrepancies.append(node_result)
+
+        all_synced = all(d.get("synced", d.get("http_map_synced", False)) for d in discrepancies)
+
+        return {
+            "synced": all_synced,
+            "nodes_checked": len(discrepancies),
+            "total_tenants": len(state.tenant_routes),
+            "total_external_domains": len(state.external_routes),
+            "details": discrepancies,
+        }
+
+    # ── Reconciliación remota incremental ─────────────────────────────────
+
+    def _reconcile_remote_nodes(self, state: _ReconcileState) -> List[Dict[str, Any]]:
+        """
+        Reconcilia la configuración nginx en cada nodo remoto,
+        solo para los tenants que pertenecen a ese nodo.
+        Incremental: un nodo falla → los demás se procesan igual.
+        """
+        results: List[Dict[str, Any]] = []
+        nodes_routes = self._group_routes_by_node(state)
+
+        for node_ip, routes in nodes_routes.items():
+            node_result: Dict[str, Any] = {
+                "node_ip": node_ip,
+                "tenants": len(routes),
+                "status": "ok",
+                "changes": [],
+            }
+            try:
+                node_conf = _read_file_node(CT105_ODOO_CONF, node_ip=node_ip)
+                original_conf = node_conf
+                changed = False
+
+                for route in routes:
+                    full_domain = route.full_domain
+                    # Verificar y agregar a map $tenant_db
+                    if full_domain not in node_conf or f"{full_domain} {route.subdomain};" not in node_conf.replace("    ", ""):
+                        node_conf = _add_to_map(node_conf, "tenant_db", full_domain, route.subdomain)
+                        changed = True
+                        node_result["changes"].append(f"+tenant_db: {full_domain}")
+
+                    # Verificar y agregar a map $odoo_proxy_host
+                    expected_proxy = f"{route.subdomain}.sajet.us"
+                    if f"{full_domain} {expected_proxy};" not in node_conf.replace("    ", ""):
+                        node_conf = _add_to_map(node_conf, "odoo_proxy_host", full_domain, expected_proxy)
+                        changed = True
+                        node_result["changes"].append(f"+odoo_proxy_host: {full_domain}")
+
+                    # server_name
+                    if full_domain not in node_conf:
+                        node_conf = _add_to_server_name(node_conf, "listen 8080", full_domain)
+                        changed = True
+                        node_result["changes"].append(f"+server_name: {full_domain}")
+
+                if changed:
+                    _write_file_node(CT105_ODOO_CONF, node_conf, node_ip=node_ip)
+                    rc, _, err = _run_node("nginx -t", node_ip=node_ip)
+                    if rc != 0:
+                        # Rollback
+                        _write_file_node(CT105_ODOO_CONF, original_conf, node_ip=node_ip)
+                        node_result["status"] = "rollback"
+                        node_result["error"] = f"nginx -t failed: {err}"
+                        logger.error(f"RoutingReconciler: rollback nodo {node_ip}: {err}")
+                    else:
+                        _run_node("systemctl reload nginx", node_ip=node_ip)
+                        logger.info(f"RoutingReconciler: nodo {node_ip} actualizado ({len(node_result['changes'])} cambios)")
+                else:
+                    node_result["status"] = "no_changes"
+
+            except Exception as e:
+                node_result["status"] = "error"
+                node_result["error"] = str(e)
+                logger.warning(f"RoutingReconciler: error en nodo {node_ip}: {e}")
+
+            results.append(node_result)
+
+        return results
+
+    @staticmethod
+    def _group_routes_by_node(state: _ReconcileState) -> Dict[str, List[_TenantRoute]]:
+        """Agrupa tenant routes por backend_host (nodo IP)."""
+        groups: Dict[str, List[_TenantRoute]] = {}
+        for route in state.tenant_routes:
+            ip = route.backend_host
+            if ip not in groups:
+                groups[ip] = []
+            groups[ip].append(route)
+        return groups
 
     # ── Carga desde BD ────────────────────────────────────────────────────
 

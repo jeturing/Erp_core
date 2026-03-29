@@ -5,7 +5,7 @@ import pytest
 from fastapi import status
 from types import SimpleNamespace
 
-from app.models.database import BillingScenario, Partner, PartnerStatus, Plan
+from app.models.database import BillingScenario, Customer, Lead, Partner, PartnerStatus, Plan
 
 
 class TestOnboardingPages:
@@ -222,6 +222,62 @@ class TestCheckoutAPI:
         assert response.json()["billing_mode"] == "partner_pays_for_client"
         assert "subscription_data" not in captured
 
+    def test_checkout_partner_sets_customer_and_lead_alignment(
+        self,
+        client,
+        db_session,
+        monkeypatch,
+    ):
+        plan = Plan(
+            name="partner_aligned",
+            display_name="Partner Aligned",
+            base_price=160,
+            price_per_user=40,
+            included_users=1,
+            stripe_price_id="price_partner_aligned",
+            is_active=True,
+        )
+        partner = Partner(
+            company_name="Aligned Partner",
+            contact_email="aligned@example.com",
+            country="US",
+            status=PartnerStatus.active,
+            partner_code="ALIGN1",
+            billing_scenario=BillingScenario.jeturing_collects,
+            commission_rate=50.0,
+            stripe_account_id="acct_partner_aligned",
+            stripe_onboarding_complete=True,
+            stripe_charges_enabled=True,
+        )
+        db_session.add(plan)
+        db_session.add(partner)
+        db_session.commit()
+
+        monkeypatch.setattr(
+            "app.routes.onboarding.stripe.checkout.Session.create",
+            lambda **kwargs: SimpleNamespace(url="https://checkout.test/aligned", id="cs_test_aligned"),
+        )
+
+        response = client.post("/api/checkout", json={
+            "full_name": "Aligned Buyer",
+            "email": "aligned-buyer@example.com",
+            "company_name": "Aligned Buyer Co",
+            "subdomain": "alignedbuyer",
+            "plan": "partner_aligned",
+            "partner_code": "ALIGN1",
+        })
+
+        assert response.status_code == status.HTTP_200_OK
+
+        customer = db_session.query(Customer).filter(Customer.email == "aligned-buyer@example.com").first()
+        assert customer is not None
+        assert customer.partner_id == partner.id
+
+        lead = db_session.query(Lead).filter(Lead.contact_email == "aligned-buyer@example.com").first()
+        assert lead is not None
+        assert lead.partner_id == partner.id
+        assert lead.converted_customer_id is None
+
     def test_checkout_partner_without_ready_connect_is_blocked(
         self,
         client,
@@ -286,6 +342,33 @@ class TestStripeWebhook:
         )
         # Should fail without signature
         assert response.status_code in [status.HTTP_400_BAD_REQUEST, status.HTTP_422_UNPROCESSABLE_ENTITY]
+
+    def test_webhook_is_idempotent_for_duplicate_event(self, client, monkeypatch):
+        event = {
+            "id": "evt_duplicate_123",
+            "type": "ping.unused",
+            "data": {"object": {}},
+        }
+
+        monkeypatch.setattr(
+            "app.routes.onboarding._construct_verified_event",
+            lambda payload, sig_header: (event, "STRIPE_TEST_WEBHOOK_SECRET"),
+        )
+
+        first = client.post(
+            "/webhook/stripe",
+            content=b"{}",
+            headers={"stripe-signature": "sig_test"},
+        )
+        second = client.post(
+            "/webhook/stripe",
+            content=b"{}",
+            headers={"stripe-signature": "sig_test"},
+        )
+
+        assert first.status_code == status.HTTP_200_OK
+        assert second.status_code == status.HTTP_200_OK
+        assert second.json()["duplicate"] is True
 
 
 class TestCustomerValidation:

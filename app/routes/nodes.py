@@ -12,7 +12,8 @@ from datetime import datetime
 
 from ..models.database import (
     SessionLocal, ProxmoxNode, LXCContainer, TenantDeployment,
-    NodeStatus, ContainerStatus, PlanType, CustomDomain
+    NodeStatus, ContainerStatus, PlanType, CustomDomain,
+    MigrationState,
 )
 from ..services.proxmox_manager import ProxmoxManager
 from ..security.tokens import TokenManager
@@ -90,6 +91,35 @@ async def list_nodes(access_token: str = Cookie(None)):
     try:
         nodes = db.query(ProxmoxNode).order_by(ProxmoxNode.priority.desc()).all()
 
+        # Count active deployments per node
+        from sqlalchemy import func
+        deployment_counts = dict(
+            db.query(
+                TenantDeployment.active_node_id,
+                func.count(TenantDeployment.id),
+            )
+            .filter(TenantDeployment.active_node_id.isnot(None))
+            .group_by(TenantDeployment.active_node_id)
+            .all()
+        )
+
+        # Count active migrations per node (as target)
+        active_migration_states = [
+            MigrationState.queued, MigrationState.preflight,
+            MigrationState.preparing_target, MigrationState.warming_target,
+            MigrationState.cutover, MigrationState.verifying,
+        ]
+        from ..models.database import TenantMigrationJob
+        migrating_to = dict(
+            db.query(
+                TenantMigrationJob.target_node_id,
+                func.count(TenantMigrationJob.id),
+            )
+            .filter(TenantMigrationJob.state.in_(active_migration_states))
+            .group_by(TenantMigrationJob.target_node_id)
+            .all()
+        )
+
         # Agrupar dominios activos por target_node_ip para vincularlos a cada nodo
         all_domains = db.query(CustomDomain).filter(CustomDomain.is_active == True).all()
         domains_by_ip: dict = {}
@@ -118,11 +148,16 @@ async def list_nodes(access_token: str = Cookie(None)):
                     "status": node.status.value,
                     "proxmox_version": node.proxmox_version,
                     "is_database_node": node.is_database_node,
+                    "can_host_tenants": getattr(node, 'can_host_tenants', False),
                     "priority": node.priority,
                     "containers": {
                         "current": node.current_containers,
                         "max": node.max_containers
                     },
+                    "active_deployments_count": deployment_counts.get(node.id, 0),
+                    "available_slots": max(0, node.max_containers - deployment_counts.get(node.id, 0)),
+                    "active_migrations_count": migrating_to.get(node.id, 0),
+                    "supported_runtime_modes": ["shared_pool"],
                     "resources": {
                         "cpu": {
                             "total_cores": node.total_cpu_cores,
@@ -542,6 +577,79 @@ async def run_health_check(access_token: str = Cookie(None)):
     """Ejecuta health check en todos los nodos"""
     verify_admin(access_token)
     return await ProxmoxManager.health_check_all()
+
+
+@router.post("/health-report")
+async def receive_health_report(request: Request):
+    """
+    Endpoint push: un nodo local reporta su estado de salud al orquestador.
+    El agente local (odoo_local_api.py) puede llamar aquí periódicamente.
+    
+    Autenticado via header X-API-KEY (la misma key del agente local).
+    Body esperado: {"hostname": "10.10.10.100", "status": "ok", "metrics": {...}}
+    """
+    # Validar API key del nodo
+    api_key = request.headers.get("X-API-KEY", "")
+    expected_key = os.getenv("PROVISIONING_API_KEY", "")
+    if not api_key or api_key != expected_key:
+        raise HTTPException(status_code=401, detail="API key inválida")
+
+    try:
+        body = await request.json()
+    except Exception:
+        raise HTTPException(status_code=400, detail="Body JSON inválido")
+
+    hostname = body.get("hostname", "").strip()
+    status = body.get("status", "").strip().lower()
+    metrics = body.get("metrics", {})
+
+    if not hostname:
+        raise HTTPException(status_code=400, detail="hostname requerido")
+
+    db = SessionLocal()
+    try:
+        node = db.query(ProxmoxNode).filter(ProxmoxNode.hostname == hostname).first()
+        if not node:
+            raise HTTPException(status_code=404, detail=f"Nodo {hostname} no registrado")
+
+        now = datetime.utcnow()
+        node.last_health_check = now
+
+        if status == "ok":
+            if node.status == NodeStatus.offline:
+                node.status = NodeStatus.online
+
+            # Actualizar métricas si se proporcionaron
+            if metrics.get("cpu_percent") is not None:
+                node.used_cpu_percent = float(metrics["cpu_percent"])
+            if metrics.get("ram_used_gb") is not None:
+                node.used_ram_gb = float(metrics["ram_used_gb"])
+            if metrics.get("disk_used_gb") is not None:
+                node.used_storage_gb = float(metrics["disk_used_gb"])
+
+            # Actualizar last_healthcheck_at en deployments del nodo
+            db.query(TenantDeployment).filter(
+                TenantDeployment.active_node_id == node.id
+            ).update(
+                {"last_healthcheck_at": now},
+                synchronize_session="fetch",
+            )
+
+        db.commit()
+        return {
+            "success": True,
+            "node": node.name,
+            "status": node.status.value,
+            "last_health_check": now.isoformat(),
+        }
+
+    except HTTPException:
+        raise
+    except Exception as e:
+        db.rollback()
+        raise HTTPException(status_code=500, detail=str(e))
+    finally:
+        db.close()
 
 
 @router.get("/metrics/scan")

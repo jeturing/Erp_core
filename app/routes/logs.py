@@ -158,7 +158,7 @@ async def get_app_logs(
 async def get_system_logs(
     request: Request,
     access_token: str = Cookie(None),
-    lines: int = Query(50, ge=10, le=200)
+    lines: int = Query(50, ge=10, le=1000)
 ) -> Dict[str, Any]:
     """Obtiene logs del sistema (journalctl)"""
     _require_admin_base(request, access_token)

@@ -14,6 +14,8 @@ Gestionar ciclo comercial de partners: leads, comisiones y cotizaciones con inte
   - `#/leads`
   - `#/commissions`
   - `#/quotations`
+  - `#/partner-signup`
+  - tarjeta/CTA partner dentro de `#/signup`
 
 ## Secuencia ASCII
 
@@ -44,6 +46,7 @@ Gestionar ciclo comercial de partners: leads, comisiones y cotizaciones con inte
 - `/api/partner-portal/onboarding/verify-stripe`
 
 ## Hallazgos operativos 2026-03-28
+- La entrada publica de partners ya no depende de encontrar el link escondido en el login: la home publica y `#/signup` exponen la ruta partner junto con empresa y firma contable. — Confirmado 2026-03-28 [frontend landing/signup]
 - El acceso partner productivo fue validado E2E con reset admin, login por email verification y lectura de endpoints del portal. — Confirmado 2026-03-28 [HTTP E2E]
 - `onboarding_step < 4` mantiene al usuario dentro del onboarding del portal partner; el shell principal no carga tabs operativos hasta completar ese estado. — Confirmado 2026-03-28 [inspección `PartnerPortal.svelte` + API]
 - Existe endpoint backend para `POST /api/partner-portal/change-password`, pero la recuperación de acceso previa al login sigue siendo soporte asistido; `#/recover-account` no resetea contraseña del partner por sí mismo. — Confirmado 2026-03-28 [frontend + backend]

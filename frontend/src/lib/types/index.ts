@@ -228,6 +228,7 @@ export interface Tenant {
   monthly_amount?: number;
   user_count?: number;
   billing_mode?: string | null;
+  deployment?: TenantDeploymentSummary | null;
 }
 
 export interface TenantListResponse {
@@ -433,6 +434,11 @@ export interface NodeSummary {
   status: 'online' | 'offline' | 'maintenance' | string;
   proxmox_version?: string | null;
   is_database_node: boolean;
+  can_host_tenants: boolean;
+  active_deployments_count: number;
+  available_slots: number;
+  active_migrations_count: number;
+  supported_runtime_modes: RuntimeMode[];
   priority: number;
   containers: {
     current: number;
@@ -996,18 +1002,27 @@ export interface SeatEventsResponse {
 }
 
 export interface SeatHWMResponse {
+  records?: SeatHWMRecord[];
   items: SeatHWMRecord[];
   total: number;
+  subscription_id?: number;
+  days?: number;
 }
 
 export interface SeatSummaryResponse {
   subscription_id: number;
+  current_user_count?: number;
   current_count: number;
+  month_hwm?: number;
   hwm_count: number;
+  grace_active_count?: number;
   grace_count: number;
   billable_count: number;
+  recent_events?: SeatEvent[];
   last_event: SeatEvent | null;
   period: string;
+  billing_mode?: string | null;
+  is_partner_metered?: boolean;
 }
 
 // ── Invoice Types (Épica 5) ──
@@ -1034,6 +1049,9 @@ export interface InvoiceItem {
   lines_json: string | null;
   stripe_invoice_id: string | null;
   stripe_payment_intent_id: string | null;
+  billing_period_key?: string | null;
+  period_start?: string | null;
+  period_end?: string | null;
   status: InvoiceStatus;
   issued_at: string | null;
   paid_at: string | null;
@@ -1258,4 +1276,93 @@ export interface PricingSimulation {
   ecf_passthrough?: boolean;
   ecf_monthly_cost?: number | null;
   partner: string;
+}
+
+// ── Multi-Node Migration Types (Fase 3) ──
+
+export type RuntimeMode = 'shared_pool' | 'dedicated_service';
+
+export type MigrationState =
+  | 'idle'
+  | 'queued'
+  | 'preflight'
+  | 'preparing_target'
+  | 'warming_target'
+  | 'cutover'
+  | 'verifying'
+  | 'rollback'
+  | 'completed'
+  | 'failed';
+
+export interface TenantDeploymentSummary {
+  active_node_id: number | null;
+  active_node_name: string | null;
+  desired_node_id: number | null;
+  desired_node_name: string | null;
+  runtime_mode: RuntimeMode | string | null;
+  routing_mode: string | null;
+  migration_state: MigrationState | string | null;
+  backend_host: string | null;
+  http_port: number | null;
+  chat_port: number | null;
+  service_name: string | null;
+  addons_overlay_path: string | null;
+  has_active_migration: boolean;
+  active_job_id: string | null;
+}
+
+export interface MigrationJob {
+  id: string;
+  deployment_id: number;
+  subdomain: string;
+  source_node_id: number;
+  target_node_id: number;
+  source_node_name: string | null;
+  target_node_name: string | null;
+  state: MigrationState | string;
+  source_runtime_mode: string | null;
+  target_runtime_mode: string | null;
+  initiated_by: string;
+  error_log: string | null;
+  preflight_result: Record<string, unknown> | null;
+  filestore_size_bytes: number | null;
+  filestore_synced_at: string | null;
+  cutover_started_at: string | null;
+  cutover_ended_at: string | null;
+  cutover_duration_seconds: number | null;
+  rollback_reason: string | null;
+  created_at: string | null;
+  updated_at: string | null;
+  completed_at: string | null;
+}
+
+export interface MigrationJobListItem {
+  id: string;
+  subdomain: string;
+  state: MigrationState | string;
+  source_node_id: number;
+  target_node_id: number;
+  source_node_name: string | null;
+  target_node_name: string | null;
+  initiated_by: string;
+  created_at: string | null;
+  completed_at: string | null;
+}
+
+export interface MigrationStartResponse {
+  success: boolean;
+  data: MigrationJob;
+  meta: { message?: string };
+}
+
+export interface MigrationStatusResponse {
+  success: boolean;
+  data: MigrationJob | null;
+  meta: { has_active_migration?: boolean };
+}
+
+export interface MigrationJobListResponse {
+  success: boolean;
+  data: MigrationJobListItem[];
+  meta: { total?: number; limit?: number; offset?: number };
 }

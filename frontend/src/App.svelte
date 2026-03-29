@@ -1,5 +1,5 @@
 <script lang="ts">
-  import { onMount } from 'svelte';
+  import { onMount, tick } from 'svelte';
   import './app.css';
   import { auth, isAuthenticated, currentUser, localeStore } from './lib/stores';
   import { getInitialLocale } from './lib/i18n';
@@ -12,6 +12,7 @@
   import OnboardingAccess from './routes/OnboardingAccess.svelte';
   import Signup from './routes/Signup.svelte';
   import RecoverAccount from './routes/RecoverAccount.svelte';
+  import PublicInfoPage from './routes/PublicInfoPage.svelte';
   import AccountantPortal from './routes/AccountantPortal.svelte';
   import Dashboard from './routes/Dashboard.svelte';
   import TenantPortal from './routes/TenantPortal.svelte';
@@ -49,6 +50,7 @@
   import Testimonials from './pages/Testimonials.svelte';
   import LandingSections from './pages/LandingSections.svelte';
   import Translations from './pages/Translations.svelte';
+  import Migrations from './pages/Migrations.svelte';
   import { Spinner } from './lib/components';
   import Toast from './lib/components/Toast.svelte';
   import OfflineBanner from './lib/components/OfflineBanner.svelte';
@@ -82,6 +84,7 @@
     | 'audit'
     | 'branding'
     | 'catalog'
+    | 'migrations'
     | 'partner-portal'
     | 'customer-onboarding'
     | 'onboarding-config'
@@ -98,12 +101,144 @@
     | 'plt'
     | 'partner-signup'
     | 'onboarding-access'
+    | 'about'
+    | 'privacy'
+    | 'terms'
+    | 'data-processing'
+    | 'security'
+    | 'sla'
     | 'accountant-portal'
     | 'notfound';
 
-  let currentRoute = $state('landing');
-  let currentPage = $state<AppPage>('landing');
-  let partnerSlug = $state('');
+  const landingSectionAliases: Record<string, string> = {
+    features: 'features',
+    pricing: 'pricing',
+    partners: 'partners',
+    faq: 'faq',
+    resources: 'faq',
+    testimonials: 'testimonials',
+    'how-it-works': 'how-it-works',
+    'cta-final': 'cta-final',
+  };
+
+  function isPublicPage(page: AppPage): boolean {
+    return [
+      'landing',
+      'accountants',
+      'plt',
+      'login',
+      'signup',
+      'recover-account',
+      'partner-signup',
+      'onboarding-access',
+      'about',
+      'privacy',
+      'terms',
+      'data-processing',
+      'security',
+      'sla',
+    ].includes(page);
+  }
+
+  function resolveInitialPage(route: string): AppPage {
+    if (landingSectionAliases[route]) {
+      return 'landing';
+    }
+
+    switch (route) {
+      case '':
+      case 'home':
+      case 'landing':
+        return 'landing';
+      case 'accountants':
+        return 'accountants';
+      case 'plt':
+        return 'plt';
+      case 'login':
+        return 'login';
+      case 'signup':
+        return 'signup';
+      case 'recover-account':
+        return 'recover-account';
+      case 'partner-signup':
+        return 'partner-signup';
+      case 'onboarding-access':
+        return 'onboarding-access';
+      case 'about':
+        return 'about';
+      case 'privacy':
+        return 'privacy';
+      case 'terms':
+        return 'terms';
+      case 'data-processing':
+        return 'data-processing';
+      case 'security':
+        return 'security';
+      case 'sla':
+        return 'sla';
+      case 'dashboard':
+      case 'portal':
+      case 'tenants':
+      case 'domains':
+      case 'infrastructure':
+      case 'billing':
+      case 'settings':
+      case 'logs':
+      case 'tunnels':
+      case 'roles':
+      case 'plans':
+      case 'clients':
+      case 'partners':
+      case 'leads':
+      case 'commissions':
+      case 'quotations':
+      case 'blueprints':
+      case 'seats':
+      case 'invoices':
+      case 'settlements':
+      case 'reconciliation':
+      case 'dispersion':
+      case 'workorders':
+      case 'audit':
+      case 'branding':
+      case 'catalog':
+      case 'partner-portal':
+      case 'customer-onboarding':
+      case 'onboarding-config':
+      case 'communications':
+      case 'reports':
+      case 'admin-users':
+      case 'agreements':
+      case 'testimonials':
+      case 'landing-sections':
+      case 'translations':
+      case 'migrations':
+      case 'accountant-portal':
+        return route as AppPage;
+      default:
+        return 'notfound';
+    }
+  }
+
+  function resolveInitialNavigation(): { route: string; page: AppPage; slug: string } {
+    if (typeof window === 'undefined') {
+      return { route: 'landing', page: 'landing', slug: '' };
+    }
+
+    const route = getRouteFromLocation();
+    return {
+      route,
+      page: resolveInitialPage(route),
+      slug: route === 'plt' ? getPartnerSlugFromHash() : '',
+    };
+  }
+
+  const initialNavigation = resolveInitialNavigation();
+
+  let currentRoute = $state(initialNavigation.route);
+  let currentPage = $state<AppPage>(initialNavigation.page);
+  let partnerSlug = $state(initialNavigation.slug);
+  let pendingSection = $state<string | null>(landingSectionAliases[initialNavigation.route] || null);
   let authBootstrapped = $state(false);
 
   function getRouteFromLocation(): string {
@@ -139,7 +274,14 @@
 
   function handleRouteChange() {
     const route = getRouteFromLocation();
-    currentRoute = route;
+    const landingSection = landingSectionAliases[route];
+    currentRoute = landingSection ? 'landing' : route;
+    pendingSection = landingSection || null;
+
+    if (landingSection) {
+      currentPage = 'landing';
+      return;
+    }
 
     if (route === 'landing' || route === 'home' || route === '') {
       currentPage = 'landing';
@@ -174,6 +316,18 @@
 
     if (route === 'partner-signup') {
       currentPage = 'partner-signup';
+      return;
+    }
+
+    if (
+      route === 'about' ||
+      route === 'privacy' ||
+      route === 'terms' ||
+      route === 'data-processing' ||
+      route === 'security' ||
+      route === 'sla'
+    ) {
+      currentPage = route as AppPage;
       return;
     }
 
@@ -264,6 +418,7 @@
       case 'testimonials':
       case 'landing-sections':
       case 'translations':
+      case 'migrations':
       case 'accountant-portal':
       case 'signup':
       case 'recover-account':
@@ -283,6 +438,7 @@
     // Sync locale store (i18n already initialized in main.ts)
     const initialLocale = getInitialLocale();
     localeStore.set(initialLocale as any);
+    handleRouteChange();
 
     const init = async () => {
       await auth.init();
@@ -306,12 +462,22 @@
       handleRouteChange();
     }
   });
+
+  $effect(() => {
+    if (currentPage === 'landing' && pendingSection) {
+      const targetSection = pendingSection;
+      tick().then(() => {
+        const target = document.getElementById(targetSection);
+        target?.scrollIntoView({ behavior: 'smooth', block: 'start' });
+      });
+    }
+  });
 </script>
 
 <Toast />
 <OfflineBanner />
 
-{#if !authBootstrapped && currentPage !== 'landing'}
+{#if !authBootstrapped && !isPublicPage(currentPage)}
   <div class="min-h-screen bg-bg-page flex items-center justify-center">
     <div class="text-center">
       <Spinner size="lg" />
@@ -334,6 +500,8 @@
   <PartnerSignup />
 {:else if currentPage === 'onboarding-access'}
   <OnboardingAccess />
+{:else if ['about', 'privacy', 'terms', 'data-processing', 'security', 'sla'].includes(currentPage)}
+  <PublicInfoPage slug={currentPage} />
 {:else if currentPage === 'portal'}
   <TenantPortal />
 {:else if currentPage === 'partner-portal'}
@@ -410,6 +578,8 @@
       <LandingSections />
     {:else if currentPage === 'translations'}
       <Translations />
+    {:else if currentPage === 'migrations'}
+      <Migrations />
     {:else}
       <div class="p-6">
         <h1 class="page-title">404 - Página no encontrada</h1>

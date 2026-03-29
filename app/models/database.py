@@ -1,9 +1,11 @@
-from sqlalchemy import create_engine, Column, Integer, String, DateTime, Boolean, Text, Enum, Float, ForeignKey, JSON, UniqueConstraint, Index
+from sqlalchemy import create_engine, Column, Integer, String, DateTime, Boolean, Text, Enum, Float, ForeignKey, JSON, UniqueConstraint, Index, BigInteger
+from sqlalchemy.dialects.postgresql import UUID as PG_UUID
 from sqlalchemy.ext.declarative import declarative_base
 from sqlalchemy.orm import sessionmaker, relationship
 from datetime import datetime
 import enum
 import os
+import uuid
 
 Base = declarative_base()
 
@@ -873,6 +875,7 @@ class ProxmoxNode(Base):
     # Estado y configuración
     status = Column(Enum(NodeStatus), default=NodeStatus.online)
     is_database_node = Column(Boolean, default=False)  # Si es nodo de BD centralizada
+    can_host_tenants = Column(Boolean, default=False, server_default="false")  # Si acepta nuevos tenants
     priority = Column(Integer, default=100)            # Mayor = más prioridad para nuevos tenants
     region = Column(String(50))                        # ej: "us-east", "eu-west"
     
@@ -995,6 +998,72 @@ class TenantDeployment(Base):
     active_node = relationship("ProxmoxNode", foreign_keys=[active_node_id],
                                backref="active_deployments")
     desired_node = relationship("ProxmoxNode", foreign_keys=[desired_node_id])
+
+
+class TenantMigrationJob(Base):
+    """
+    Job de migración de un tenant entre nodos.
+    
+    Cada job trackea una operación de migración completa:
+    preflight → preparing_target → warming_target → cutover → verifying → completed/failed
+    
+    La BD (PostgreSQL 137) es centralizada — solo se migra el runtime + filestore.
+    """
+    __tablename__ = "tenant_migration_jobs"
+
+    id = Column(PG_UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
+    deployment_id = Column(
+        Integer, ForeignKey("tenant_deployments.id", ondelete="CASCADE"), nullable=False
+    )
+    subdomain = Column(String(100), nullable=False)
+
+    # Nodos origen y destino
+    source_node_id = Column(Integer, ForeignKey("proxmox_nodes.id"), nullable=False)
+    target_node_id = Column(Integer, ForeignKey("proxmox_nodes.id"), nullable=False)
+
+    # Estado de la máquina de estados
+    state = Column(
+        Enum(MigrationState), nullable=False, default=MigrationState.queued,
+        server_default="queued",
+    )
+
+    # Modos de runtime (v1: shared_pool → shared_pool solamente)
+    source_runtime_mode = Column(String(30), default="shared_pool")
+    target_runtime_mode = Column(String(30), default="shared_pool")
+
+    # Quién inició la migración
+    initiated_by = Column(String(150), nullable=False)
+
+    # Logging y diagnóstico
+    error_log = Column(Text, nullable=True)
+    preflight_result = Column(JSON, nullable=True)
+
+    # Filestore metrics
+    filestore_size_bytes = Column(BigInteger, nullable=True)
+    filestore_synced_at = Column(DateTime, nullable=True)
+
+    # Ventana de corte
+    cutover_started_at = Column(DateTime, nullable=True)
+    cutover_ended_at = Column(DateTime, nullable=True)
+
+    # Rollback
+    rollback_reason = Column(Text, nullable=True)
+
+    # Timestamps
+    created_at = Column(DateTime, default=datetime.utcnow)
+    updated_at = Column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
+    completed_at = Column(DateTime, nullable=True)
+
+    # Relationships
+    deployment = relationship("TenantDeployment", backref="migration_jobs")
+    source_node = relationship("ProxmoxNode", foreign_keys=[source_node_id])
+    target_node = relationship("ProxmoxNode", foreign_keys=[target_node_id])
+
+    def append_error(self, msg: str) -> None:
+        """Agrega un mensaje al log de errores acumulado."""
+        ts = datetime.utcnow().strftime("%H:%M:%S")
+        entry = f"[{ts}] {msg}"
+        self.error_log = f"{self.error_log}\n{entry}" if self.error_log else entry
 
 
 class CustomDomain(Base):
@@ -1258,6 +1327,9 @@ class Invoice(Base):
     # Stripe reference
     stripe_invoice_id = Column(String(100), nullable=True)
     stripe_payment_intent_id = Column(String(100), nullable=True)
+    billing_period_key = Column(String(80), nullable=True, index=True)
+    period_start = Column(DateTime, nullable=True)
+    period_end = Column(DateTime, nullable=True)
 
     # Estado
     status = Column(Enum(InvoiceStatus), default=InvoiceStatus.draft)

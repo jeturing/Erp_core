@@ -21,7 +21,7 @@
         <ArrowRight class="w-4 h-4" />
       </a>
       <a
-        href="#/contact"
+        href="mailto:ventas@sajet.us?subject=Quiero%20hablar%20con%20SAJET"
         class="inline-flex items-center gap-2 border border-white/40 text-white font-jakarta font-semibold text-sm px-8 py-3.5 rounded-btn hover:bg-white/10 transition-all"
       >
         {$t('final_cta.cta_secondary')}

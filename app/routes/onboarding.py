@@ -6,12 +6,14 @@ from fastapi import APIRouter, HTTPException, Request, Form, BackgroundTasks
 from fastapi.responses import HTMLResponse, RedirectResponse, JSONResponse
 from pydantic import BaseModel
 from typing import Optional
+import json
 import stripe
 from datetime import datetime
+from sqlalchemy.exc import IntegrityError
 from ..models.database import (
     Customer, Subscription, StripeEvent, SubscriptionStatus, SessionLocal,
     BillingMode, BillingScenario, InvoiceIssuer, CollectorType, PayerType,
-    Partner, PartnerStatus, Plan, Lead, LeadStatus,
+    Partner, PartnerStatus, Plan, Lead, LeadStatus, Invoice, InvoiceStatus,
 )
 from ..services.tunnel_lifecycle import handle_stripe_subscription_event
 from ..services.odoo_provisioner import provision_tenant
@@ -33,6 +35,113 @@ def _configure_stripe() -> str:
 
 def _stripe_webhook_secret() -> str:
     return get_runtime_setting("STRIPE_WEBHOOK_SECRET", "")
+
+
+def _stripe_webhook_secret_candidates() -> list[tuple[str, str]]:
+    """Prueba secreto activo y secretos del modo configurado antes de fallar firma."""
+    mode = str(get_runtime_setting("STRIPE_MODE", "live") or "live").strip().lower()
+    candidates = [
+        ("STRIPE_WEBHOOK_SECRET", _stripe_webhook_secret()),
+        (
+            "ACTIVE_MODE_WEBHOOK_SECRET",
+            get_runtime_setting(
+                "STRIPE_LIVE_WEBHOOK_SECRET" if mode == "live" else "STRIPE_TEST_WEBHOOK_SECRET",
+                "",
+            ),
+        ),
+        ("STRIPE_LIVE_WEBHOOK_SECRET", get_runtime_setting("STRIPE_LIVE_WEBHOOK_SECRET", "")),
+        ("STRIPE_TEST_WEBHOOK_SECRET", get_runtime_setting("STRIPE_TEST_WEBHOOK_SECRET", "")),
+    ]
+
+    deduped: list[tuple[str, str]] = []
+    seen: set[str] = set()
+    for label, secret in candidates:
+        secret = (secret or "").strip()
+        if not secret or secret in seen:
+            continue
+        seen.add(secret)
+        deduped.append((label, secret))
+    return deduped
+
+
+def _construct_verified_event(payload: bytes, sig_header: Optional[str]) -> tuple[dict, str]:
+    """Construye evento Stripe probando múltiples secretos configurados."""
+    if not sig_header:
+        raise HTTPException(status_code=400, detail="Missing stripe-signature header")
+
+    last_error = None
+    candidates = _stripe_webhook_secret_candidates()
+    if not candidates:
+        raise HTTPException(status_code=500, detail="Stripe webhook secret not configured")
+
+    for label, secret in candidates:
+        try:
+            event = stripe.Webhook.construct_event(payload, sig_header, secret)
+            logger.info("Stripe webhook validated with %s", label)
+            return event, label
+        except stripe.error.SignatureVerificationError as exc:
+            last_error = exc
+
+    raise last_error
+
+
+def _map_invoice_status(status: Optional[str]) -> Optional[InvoiceStatus]:
+    mapping = {
+        "paid": InvoiceStatus.paid,
+        "open": InvoiceStatus.issued,
+        "draft": InvoiceStatus.draft,
+        "void": InvoiceStatus.void,
+        "voided": InvoiceStatus.void,
+        "uncollectible": InvoiceStatus.overdue,
+    }
+    return mapping.get((status or "").lower())
+
+
+def _update_local_subscription_from_event(db, stripe_sub: dict) -> Optional[Subscription]:
+    """Refleja el estado local mínimo de la suscripción desde un evento Stripe."""
+    from ..services.stripe_sync import upsert_stripe_subscription
+
+    results = {"linked": 0, "created": 0, "updated": 0, "skipped": 0, "errors": [], "details": []}
+    try:
+        upsert_stripe_subscription(db, stripe_sub, results)
+    except Exception:
+        # Fallback mínimo si el objeto del evento no trae suficiente contexto expandido.
+        pass
+
+    stripe_sub_id = stripe_sub.get("id")
+    if not stripe_sub_id:
+        return None
+
+    local_sub = db.query(Subscription).filter(
+        Subscription.stripe_subscription_id == stripe_sub_id
+    ).first()
+    if not local_sub:
+        return None
+
+    new_status = stripe_sub.get("status")
+    if new_status:
+        try:
+            local_sub.status = SubscriptionStatus(new_status)
+        except ValueError:
+            pass
+
+    if stripe_sub.get("current_period_start"):
+        local_sub.current_period_start = datetime.utcfromtimestamp(stripe_sub["current_period_start"])
+    if stripe_sub.get("current_period_end"):
+        local_sub.current_period_end = datetime.utcfromtimestamp(stripe_sub["current_period_end"])
+    local_sub.updated_at = datetime.utcnow()
+    return local_sub
+
+
+def _sync_local_invoice_from_event(db, invoice_obj: dict) -> Optional[Invoice]:
+    """Actualiza la factura local desde el payload del evento o la crea vía lógica compartida."""
+    from ..services.stripe_sync import upsert_stripe_invoice
+
+    results = {"imported": 0, "updated": 0, "skipped_existing": 0, "skipped_no_match": 0, "errors": [], "details": []}
+    upsert_stripe_invoice(db, invoice_obj, results)
+    if results["errors"]:
+        raise RuntimeError(results["errors"][0]["error"])
+    return db.query(Invoice).filter(Invoice.stripe_invoice_id == invoice_obj.get("id")).first()
 
 
 def _app_url() -> str:
@@ -157,6 +266,7 @@ async def create_checkout_session(payload: CheckoutRequest, background_tasks: Ba
             company_name=payload.company_name,
             subdomain=payload.subdomain,
             user_count=user_count,
+            partner_id=partner.id if partner else None,
             is_accountant=payload.is_accountant,
             accountant_firm_name=payload.company_name if payload.is_accountant else None,
         )
@@ -258,9 +368,7 @@ async def stripe_webhook(request: Request, background_tasks: BackgroundTasks):
     sig_header = request.headers.get("stripe-signature")
 
     try:
-        event = stripe.Webhook.construct_event(
-            payload, sig_header, _stripe_webhook_secret()
-        )
+        event, validated_with = _construct_verified_event(payload, sig_header)
     except ValueError:
         raise HTTPException(status_code=400, detail="Invalid payload")
     except stripe.error.SignatureVerificationError:
@@ -268,14 +376,26 @@ async def stripe_webhook(request: Request, background_tasks: BackgroundTasks):
 
     db = SessionLocal()
     try:
-        # Guardar evento
-        db.add(StripeEvent(
+        existing_event = db.query(StripeEvent).filter(
+            StripeEvent.event_id == event["id"]
+        ).first()
+        if existing_event:
+            logger.info("Stripe webhook duplicate ignored: %s", event["id"])
+            return JSONResponse(content={"status": "success", "duplicate": True})
+
+        stripe_event = StripeEvent(
             event_id=event["id"],
             event_type=event["type"],
-            payload=str(event),
-            processed=False
-        ))
-        db.commit()
+            payload=json.dumps(event, default=str),
+            processed=False,
+        )
+        db.add(stripe_event)
+        try:
+            db.commit()
+        except IntegrityError:
+            db.rollback()
+            logger.info("Stripe webhook duplicate on insert ignored: %s", event["id"])
+            return JSONResponse(content={"status": "success", "duplicate": True})
 
         # Procesar evento checkout.session.completed
         if event["type"] == "checkout.session.completed":
@@ -297,6 +417,9 @@ async def stripe_webhook(request: Request, background_tasks: BackgroundTasks):
             # Obtener customer
             customer = db.query(Customer).filter_by(id=customer_id).first()
             if customer:
+                if partner_id and customer.partner_id != partner_id:
+                    customer.partner_id = partner_id
+
                 # Crear suscripción con billing_mode
                 subscription = Subscription(
                     customer_id=customer.id,
@@ -332,6 +455,9 @@ async def stripe_webhook(request: Request, background_tasks: BackgroundTasks):
                     lead = db.query(Lead).filter(Lead.id == int(lead_id)).first()
                     if lead:
                         lead.status = LeadStatus.tenant_ready
+                        lead.converted_customer_id = customer.id
+                        if not lead.converted_at:
+                            lead.converted_at = datetime.utcnow()
                         db.commit()
 
                 # Provisionar tenant en background con subscription_id
@@ -386,6 +512,7 @@ async def stripe_webhook(request: Request, background_tasks: BackgroundTasks):
             stripe_sub = event["data"]["object"]
             stripe_sub_id = stripe_sub.get("id")
             new_status = stripe_sub.get("status", "")
+            _update_local_subscription_from_event(db, stripe_sub)
             if stripe_sub_id:
                 background_tasks.add_task(
                     handle_stripe_subscription_event,
@@ -400,6 +527,7 @@ async def stripe_webhook(request: Request, background_tasks: BackgroundTasks):
             attempt_count = invoice_obj.get("attempt_count", 1)
             next_payment_attempt = invoice_obj.get("next_payment_attempt")
             amount_due = (invoice_obj.get("amount_due", 0) / 100)  # cents → dollars
+            _sync_local_invoice_from_event(db, invoice_obj)
 
             if stripe_sub_id:
                 # Tunnel lifecycle — marcar como past_due
@@ -432,10 +560,37 @@ async def stripe_webhook(request: Request, background_tasks: BackgroundTasks):
                     )
                     logger.info(f"📧 Dunning email queued for {sub.customer.email} (attempt #{attempt_count})")
 
+        elif event["type"] in (
+            "invoice.paid",
+            "invoice.finalized",
+            "invoice.voided",
+            "invoice.marked_uncollectible",
+        ):
+            invoice_obj = event["data"]["object"]
+            local_invoice = _sync_local_invoice_from_event(db, invoice_obj)
+
+            stripe_sub_id = invoice_obj.get("subscription")
+            if stripe_sub_id:
+                local_sub = db.query(Subscription).filter_by(
+                    stripe_subscription_id=stripe_sub_id
+                ).first()
+                if local_sub:
+                    if event["type"] == "invoice.paid":
+                        local_sub.status = SubscriptionStatus.active
+                    elif event["type"] == "invoice.marked_uncollectible":
+                        local_sub.status = SubscriptionStatus.past_due
+                    local_sub.updated_at = datetime.utcnow()
+
+            if event["type"] == "invoice.paid" and local_invoice and local_invoice.paid_at is None:
+                local_invoice.paid_at = datetime.utcnow()
+
         # ═══ Suscripción cancelada — notificar al cliente ═══
         elif event["type"] == "customer.subscription.deleted":
             stripe_sub = event["data"]["object"]
             stripe_sub_id = stripe_sub.get("id")
+            local_sub = _update_local_subscription_from_event(db, stripe_sub)
+            if local_sub:
+                local_sub.status = SubscriptionStatus.cancelled
             if stripe_sub_id:
                 background_tasks.add_task(
                     handle_stripe_subscription_event,
@@ -456,8 +611,23 @@ async def stripe_webhook(request: Request, background_tasks: BackgroundTasks):
                     )
                     logger.info(f"📧 Cancellation email queued for {sub.customer.email}")
 
+        else:
+            logger.info(
+                "Stripe webhook event acknowledged without business handler: type=%s secret=%s",
+                event["type"],
+                validated_with,
+            )
+
+        stripe_event = db.query(StripeEvent).filter(
+            StripeEvent.event_id == event["id"]
+        ).first()
+        if stripe_event:
+            stripe_event.processed = True
+        db.commit()
+
         return JSONResponse(content={"status": "success"})
     except Exception as e:
+        db.rollback()
         logger.error(f"Error processing webhook: {e}")
         return JSONResponse(content={"status": "error", "message": str(e)}, status_code=500)
     finally:

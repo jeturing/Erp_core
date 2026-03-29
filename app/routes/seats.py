@@ -20,6 +20,11 @@ from ..models.database import (
     BillingMode, get_db
 )
 from ..config import get_runtime_int, get_runtime_setting
+from ..services.seat_events import (
+    is_partner_metered as _service_is_partner_metered,
+    record_hwm_snapshot,
+    record_seat_event as _service_record_seat_event,
+)
 
 router = APIRouter(prefix="/api/seats", tags=["Seats"])
 logger = logging.getLogger(__name__)
@@ -50,31 +55,7 @@ class SeatEventCreate(BaseModel):
 
 def _is_partner_metered(sub: Subscription) -> bool:
     """Determina si la suscripción es partner metered (Épica 4)."""
-    return sub.billing_mode in (
-        BillingMode.PARTNER_DIRECT,
-        BillingMode.PARTNER_PAYS_FOR_CLIENT,
-    )
-
-
-def _update_hwm(db: Session, sub_id: int, count: int) -> SeatHighWater:
-    """Actualiza high-water mark para hoy. Retorna o crea registro."""
-    today = datetime.utcnow().replace(hour=0, minute=0, second=0, microsecond=0)
-    hwm = db.query(SeatHighWater).filter(
-        SeatHighWater.subscription_id == sub_id,
-        SeatHighWater.period_date == today,
-    ).first()
-
-    if hwm:
-        if count > hwm.hwm_count:
-            hwm.hwm_count = count
-    else:
-        hwm = SeatHighWater(
-            subscription_id=sub_id,
-            period_date=today,
-            hwm_count=count,
-        )
-        db.add(hwm)
-    return hwm
+    return _service_is_partner_metered(sub)
 
 
 def _sync_stripe_quantity(sub: Subscription, qty: int) -> bool:
@@ -116,49 +97,24 @@ def record_seat_event(payload: SeatEventCreate, db: Session = Depends(get_db)):
         raise HTTPException(400, f"Invalid event_type: {payload.event_type}")
 
     is_partner = _is_partner_metered(sub)
-
-    # Determinar si es billable
-    is_billable = False
-    grace_expires = None
-
-    if is_partner:
-        # Épica 4: Solo FIRST_LOGIN es billable, con grace de 8h
-        if event_type == SeatEventType.FIRST_LOGIN:
-            is_billable = True
-            grace_expires = datetime.utcnow() + timedelta(hours=_grace_hours())
-    else:
-        # Épica 3: Todo evento que incrementa cuenta es billable
-        if event_type in (SeatEventType.USER_CREATED, SeatEventType.USER_REACTIVATED, SeatEventType.FIRST_LOGIN):
-            is_billable = True
-
-    # Crear evento
-    event = SeatEvent(
-        subscription_id=sub.id,
+    event, hwm = _service_record_seat_event(
+        db,
+        sub,
         event_type=event_type,
+        user_count_after=payload.user_count_after,
         odoo_user_id=payload.odoo_user_id,
         odoo_login=payload.odoo_login,
-        user_count_after=payload.user_count_after,
-        is_billable=is_billable,
-        grace_expires_at=grace_expires,
         source=payload.source,
-        metadata_json=payload.metadata,
+        metadata=payload.metadata,
     )
-    db.add(event)
-
-    # Actualizar HWM
-    hwm = _update_hwm(db, sub.id, payload.user_count_after)
 
     # Épica 3: Sync Stripe quantity en real-time si Direct
     stripe_synced = False
-    if not is_partner and is_billable and sub.stripe_subscription_id:
+    if not is_partner and event.is_billable and sub.stripe_subscription_id:
         stripe_synced = _sync_stripe_quantity(sub, payload.user_count_after)
         if stripe_synced:
             hwm.stripe_qty_updated = True
             hwm.stripe_qty_updated_at = datetime.utcnow()
-
-    # Actualizar user_count en subscription
-    sub.user_count = payload.user_count_after
-    sub.updated_at = datetime.utcnow()
 
     db.commit()
 
@@ -167,9 +123,9 @@ def record_seat_event(payload: SeatEventCreate, db: Session = Depends(get_db)):
         "subscription_id": sub.id,
         "event_type": event_type.value,
         "user_count_after": payload.user_count_after,
-        "is_billable": is_billable,
+        "is_billable": event.is_billable,
         "is_partner_metered": is_partner,
-        "grace_expires_at": grace_expires.isoformat() if grace_expires else None,
+        "grace_expires_at": event.grace_expires_at.isoformat() if event.grace_expires_at else None,
         "stripe_synced": stripe_synced,
         "hwm_today": hwm.hwm_count,
     }
@@ -189,12 +145,28 @@ def get_hwm(subscription_id: int, days: int = 30, db: Session = Depends(get_db))
         "days": days,
         "records": [
             {
+                "id": r.id,
+                "subscription_id": r.subscription_id,
+                "period_date": r.period_date.date().isoformat(),
                 "date": r.period_date.isoformat(),
                 "hwm_count": r.hwm_count,
                 "stripe_qty_updated": r.stripe_qty_updated,
+                "stripe_qty_updated_at": r.stripe_qty_updated_at.isoformat() if r.stripe_qty_updated_at else None,
             }
             for r in records
         ],
+        "items": [
+            {
+                "id": r.id,
+                "subscription_id": r.subscription_id,
+                "period_date": r.period_date.date().isoformat(),
+                "hwm_count": r.hwm_count,
+                "stripe_qty_updated": r.stripe_qty_updated,
+                "stripe_qty_updated_at": r.stripe_qty_updated_at.isoformat() if r.stripe_qty_updated_at else None,
+            }
+            for r in records
+        ],
+        "total": len(records),
     }
 
 
@@ -270,10 +242,15 @@ def seat_summary(subscription_id: int, db: Session = Depends(get_db)):
     return {
         "subscription_id": subscription_id,
         "current_user_count": sub.user_count or 0,
+        "current_count": sub.user_count or 0,
         "billing_mode": sub.billing_mode.value if sub.billing_mode else None,
         "is_partner_metered": _is_partner_metered(sub),
         "month_hwm": max_hwm,
+        "hwm_count": max_hwm,
         "grace_active_count": grace_count,
+        "grace_count": grace_count,
+        "billable_count": max_hwm if not _is_partner_metered(sub) else max(0, max_hwm - grace_count),
+        "period": month_start.strftime("%Y-%m"),
         "recent_events": [
             {
                 "id": e.id,
@@ -286,6 +263,18 @@ def seat_summary(subscription_id: int, db: Session = Depends(get_db)):
             }
             for e in events
         ],
+        "last_event": (
+            {
+                "id": events[0].id,
+                "event_type": events[0].event_type.value,
+                "odoo_login": events[0].odoo_login,
+                "user_count_after": events[0].user_count_after,
+                "is_billable": events[0].is_billable,
+                "grace_expires_at": events[0].grace_expires_at.isoformat() if events[0].grace_expires_at else None,
+                "created_at": events[0].created_at.isoformat() if events[0].created_at else None,
+            }
+            if events else None
+        ),
     }
 
 

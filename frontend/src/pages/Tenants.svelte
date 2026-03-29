@@ -644,9 +644,16 @@
               </td>
               <td>
                 <div class="text-sm text-text-primary font-mono" title={tenant.backend_host ?? ''}>
-                  {tenant.node_name ?? tenant.server ?? '-'}
+                  {tenant.deployment?.active_node_name ?? tenant.node_name ?? tenant.server ?? '-'}
                 </div>
-                {#if tenant.backend_host}
+                {#if tenant.deployment}
+                  <div class="text-[10px] text-gray-500">
+                    {tenant.deployment.runtime_mode ?? 'shared_pool'}
+                    {#if tenant.deployment.migration_state && tenant.deployment.migration_state !== 'idle'}
+                      · <span class="text-yellow-400">{tenant.deployment.migration_state}</span>
+                    {/if}
+                  </div>
+                {:else if tenant.backend_host}
                   <div class="text-[10px] text-gray-500 font-mono">{tenant.backend_host}</div>
                 {/if}
               </td>
@@ -683,6 +690,14 @@
                   >
                     ELIMINAR
                   </button>
+                  {#if tenant.deployment?.active_node_id != null && tenant.status === 'active'}
+                    <a
+                      href="#/migrations?tenant={tenant.subdomain}"
+                      class="btn-secondary btn-sm text-blue-400 border-blue-500/30 hover:bg-blue-900/20"
+                    >
+                      MIGRAR
+                    </a>
+                  {/if}
                 </div>
               </td>
             </tr>

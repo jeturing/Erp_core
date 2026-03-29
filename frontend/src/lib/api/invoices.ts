@@ -9,8 +9,17 @@ export const invoicesApi = {
     subscription_id: number;
     period_start?: string;
     period_end?: string;
-  }): Promise<{ message: string; invoice: InvoiceItem }> {
-    return api.post('/api/invoices/generate-on-ready', data);
+  }): Promise<{
+    invoice_id: number;
+    invoice_number: string;
+    total: number;
+    billing_period_key?: string;
+    period_start?: string | null;
+    period_end?: string | null;
+    pricing_source?: string;
+    stripe_result?: Record<string, unknown>;
+  }> {
+    return api.post('/api/invoices/generate-consumption', data);
   },
 
   async list(params?: {

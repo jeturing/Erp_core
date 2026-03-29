@@ -6,11 +6,11 @@
   export let partnerBranding: any = null;
 
   const navLinks = [
-    { labelKey: 'nav.product', href: '#features' },
+    { label: 'Clientes', href: '#/signup' },
+    { labelKey: 'nav.for_accountants', href: '#/accountants' },
+    { labelKey: 'nav.partners', href: '#/partner-signup' },
     { labelKey: 'nav.pricing', href: '#pricing' },
-    { labelKey: 'nav.partners', href: '#partners' },
-    { labelKey: 'nav.resources', href: '#resources' },
-    { labelKey: 'nav.onboarding', href: '#/signup' },
+    { labelKey: 'nav.resources', href: '#faq' },
   ];
 
   function goToLogin() {
@@ -18,7 +18,7 @@
   }
 
   function handleCTA() {
-    window.location.hash = '#/login';
+    window.location.hash = '#/signup';
   }
 
   function toggleLanguage() {
@@ -68,7 +68,7 @@
           href={link.href}
           class="text-sm font-inter transition-colors"
           style="color: {scrolled ? '#64748B' : '#64748B'}"
-        >{$t(link.labelKey)}</a>
+        >{link.label || (link.labelKey ? $t(link.labelKey) : '')}</a>
       {/each}
     </div>
 
@@ -87,10 +87,10 @@
       </button>
 
       <a
-        href="#/partner-signup"
+        href="#/accountants"
         class="text-sm font-inter text-slate hover:text-slate-dark transition-colors px-3 py-1.5"
       >
-        {$t('common.become_partner')}
+        {$t('common.join_accountant')}
       </a>
       <button
         class="text-sm font-inter text-slate hover:text-slate-dark transition-colors px-3 py-1.5"
@@ -103,7 +103,7 @@
         style="background: {logoColor}"
         on:click={handleCTA}
       >
-        {$t('common.get_started')}
+        {$localeStore === 'es' ? 'Crear empresa' : 'Create company'}
       </button>
     </div>
   </div>

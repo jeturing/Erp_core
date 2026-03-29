@@ -37,6 +37,7 @@
         { id: 'domains',        label: 'Dominios',   icon: Globe,  href: '#/domains' },
         { id: 'infrastructure', label: 'Servidores', icon: Server, href: '#/infrastructure' },
         { id: 'tunnels',        label: 'Tunnels',    icon: Route,  href: '#/tunnels' },
+        { id: 'migrations',     label: 'Migraciones', icon: ArrowRightLeft, href: '#/migrations' },
       ],
     },
 

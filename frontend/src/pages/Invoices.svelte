@@ -90,7 +90,7 @@
         period_start: generateForm.period_start || undefined,
         period_end: generateForm.period_end || undefined,
       });
-      toasts.success(`Factura ${res.invoice.invoice_number} generada`);
+      toasts.success(`Factura ${res.invoice_number} generada`);
       showGenerateForm = false;
       generateForm = { subscription_id: 0, period_start: '', period_end: '' };
       await loadInvoices(currentPage);
@@ -122,8 +122,16 @@
 
   function typeBadge(t: string) {
     const map: Record<string, string> = {
-      SUBSCRIPTION: 'badge-info', SETUP: 'badge-pro', ADDON: 'badge-warning',
-      INTERCOMPANY: 'badge-enterprise', CREDIT_NOTE: 'badge-error',
+      subscription: 'badge-info',
+      setup: 'badge-pro',
+      addon: 'badge-warning',
+      intercompany: 'badge-enterprise',
+      credit_note: 'badge-error',
+      SUBSCRIPTION: 'badge-info',
+      SETUP: 'badge-pro',
+      ADDON: 'badge-warning',
+      INTERCOMPANY: 'badge-enterprise',
+      CREDIT_NOTE: 'badge-error',
     };
     return map[t] || 'badge-neutral';
   }

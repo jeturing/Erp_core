@@ -19,7 +19,7 @@ export const seatsApi = {
 
   async getHWM(subscriptionId?: number): Promise<SeatHWMResponse> {
     if (!subscriptionId) {
-      throw new Error('subscriptionId requerido para consultar HWM');
+      return { items: [], records: [], total: 0 };
     }
     return api.get<SeatHWMResponse>(`/api/seats/hwm/${subscriptionId}`);
   },
@@ -30,7 +30,15 @@ export const seatsApi = {
 
   async getSummary(subscriptionId?: number): Promise<SeatSummaryResponse> {
     if (!subscriptionId) {
-      throw new Error('subscriptionId requerido para consultar summary');
+      return {
+        subscription_id: 0,
+        current_count: 0,
+        hwm_count: 0,
+        grace_count: 0,
+        billable_count: 0,
+        last_event: null,
+        period: '',
+      };
     }
     return api.get<SeatSummaryResponse>(`/api/seats/summary/${subscriptionId}`);
   },

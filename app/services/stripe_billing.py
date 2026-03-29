@@ -14,7 +14,8 @@ Flujo bidireccional:
 """
 import stripe
 import logging
-from datetime import datetime, timezone
+from datetime import datetime, timezone, timedelta
+from calendar import monthrange
 from typing import Dict, Any, Optional, Tuple
 from sqlalchemy.orm import Session
 
@@ -24,6 +25,10 @@ from ..models.database import (
     BillingMode, Partner, SessionLocal, CustomerAddonSubscription,
 )
 from ..config import get_runtime_setting
+from ..services.pricing import (
+    get_effective_plan_snapshot,
+    recalculate_subscription_monthly_amount,
+)
 
 logger = logging.getLogger(__name__)
 
@@ -35,6 +40,45 @@ def _configure_stripe() -> str:
 
 def _app_url() -> str:
     return get_runtime_setting("APP_URL", "https://sajet.us")
+
+
+def _normalize_period_start(value: Optional[datetime]) -> datetime:
+    if value is None:
+        now = datetime.utcnow()
+        return datetime(now.year, now.month, 1)
+    return value.replace(hour=0, minute=0, second=0, microsecond=0)
+
+
+def _resolve_billing_period(
+    subscription: Subscription,
+    period_start: Optional[datetime] = None,
+    period_end: Optional[datetime] = None,
+) -> tuple[datetime, datetime, str]:
+    """Resuelve período de facturación priorizando current_period_* de Stripe."""
+    if period_start is None:
+        period_start = subscription.current_period_start
+    if period_end is None:
+        period_end = subscription.current_period_end
+
+    if period_start is None:
+        now = datetime.utcnow()
+        period_start = datetime(now.year, now.month, 1)
+    else:
+        period_start = _normalize_period_start(period_start)
+
+    if period_end is None:
+        year = period_start.year
+        month = period_start.month
+        _, last_day = monthrange(year, month)
+        period_end = datetime(year, month, last_day) + timedelta(days=1)
+    else:
+        period_end = _normalize_period_start(period_end)
+
+    if period_end <= period_start:
+        period_end = period_start + timedelta(days=1)
+
+    billing_period_key = f"{period_start.date().isoformat()}__{period_end.date().isoformat()}"
+    return period_start, period_end, billing_period_key
 
 
 # ═══════════════════════════════════════════════════════════════
@@ -308,6 +352,7 @@ def sync_subscription_quantity(
 
         # Actualizar BD local
         subscription.user_count = qty
+        recalculate_subscription_monthly_amount(db, subscription, user_count=qty)
         subscription.updated_at = datetime.utcnow()
         db.commit()
 
@@ -368,7 +413,12 @@ def change_subscription_plan(
         # Actualizar BD local
         old_plan = subscription.plan_name
         subscription.plan_name = new_plan.name
-        subscription.monthly_amount = new_plan.base_price
+        recalculate_subscription_monthly_amount(
+            db,
+            subscription,
+            plan=new_plan,
+            user_count=subscription.user_count or 1,
+        )
         subscription.updated_at = datetime.utcnow()
         db.commit()
 
@@ -381,7 +431,7 @@ def change_subscription_plan(
             "changed": True,
             "old_plan": old_plan,
             "new_plan": new_plan.name,
-            "new_price": new_plan.base_price,
+            "new_price": subscription.monthly_amount,
         }
 
     except stripe.error.StripeError as e:
@@ -396,6 +446,8 @@ def change_subscription_plan(
 def generate_consumption_invoice(
     db: Session,
     subscription_id: int,
+    period_start: Optional[datetime] = None,
+    period_end: Optional[datetime] = None,
 ) -> Dict[str, Any]:
     """
     Genera una factura local basada en el consumo real de Stripe
@@ -413,15 +465,53 @@ def generate_consumption_invoice(
     if not customer:
         raise ValueError(f"Customer for sub {subscription_id} not found")
 
-    # Calcular monto basado en plan + usuarios
     plan = db.query(Plan).filter(Plan.name == sub.plan_name, Plan.is_active == True).first()
+    period_start, period_end, billing_period_key = _resolve_billing_period(
+        sub,
+        period_start=period_start,
+        period_end=period_end,
+    )
+
+    existing_invoice = None
+    for candidate in db.query(Invoice).filter(
+        Invoice.subscription_id == sub.id,
+    ).order_by(Invoice.id.asc()).all():
+        reference_dt = candidate.period_start or candidate.issued_at or candidate.created_at
+        if candidate.billing_period_key == billing_period_key or (
+            reference_dt and period_start <= reference_dt < period_end and candidate.status != InvoiceStatus.void
+        ):
+            existing_invoice = candidate
+            break
+    if existing_invoice:
+        return {
+            "invoice_id": existing_invoice.id,
+            "invoice_number": existing_invoice.invoice_number,
+            "total": existing_invoice.total,
+            "lines": existing_invoice.lines_json or [],
+            "billing_period_key": existing_invoice.billing_period_key,
+            "period_start": existing_invoice.period_start.isoformat() if existing_invoice.period_start else None,
+            "period_end": existing_invoice.period_end.isoformat() if existing_invoice.period_end else None,
+            "pricing_source": "existing_invoice",
+            "stripe_result": {
+                "stripe_invoice_id": existing_invoice.stripe_invoice_id,
+                "status": existing_invoice.status.value if existing_invoice.status else None,
+                "already_exists": True,
+            },
+        }
 
     lines = []
     total = 0.0
     now = datetime.utcnow()
+    pricing_snapshot = get_effective_plan_snapshot(
+        db,
+        sub,
+        customer=customer,
+        plan=plan,
+        user_count=sub.user_count or customer.user_count or 1,
+    )
 
     if plan:
-        base = plan.base_price
+        base = pricing_snapshot["base_price"]
         lines.append({
             "description": f"Plan {plan.name} — base mensual",
             "qty": 1,
@@ -431,15 +521,14 @@ def generate_consumption_invoice(
         total += base
 
         # Usuarios adicionales
-        included = plan.included_users or 1
-        actual_users = sub.user_count or 1
-        extra = max(0, actual_users - included)
-        if extra > 0 and plan.price_per_user:
-            user_cost = extra * plan.price_per_user
+        extra = pricing_snapshot["extra_users"]
+        price_per_user = pricing_snapshot["price_per_user"]
+        if extra > 0 and price_per_user:
+            user_cost = extra * price_per_user
             lines.append({
-                "description": f"Usuarios adicionales ({extra} × ${plan.price_per_user}/u)",
+                "description": f"Usuarios adicionales ({extra} × ${price_per_user}/u)",
                 "qty": extra,
-                "unit_price": plan.price_per_user,
+                "unit_price": price_per_user,
                 "subtotal": user_cost,
             })
             total += user_cost
@@ -505,9 +594,20 @@ def generate_consumption_invoice(
         currency=sub.currency or "USD",
         lines_json=lines,
         status=InvoiceStatus.draft,
+        billing_period_key=billing_period_key,
+        period_start=period_start,
+        period_end=period_end,
     )
     db.add(invoice)
     db.flush()
+
+    recalculate_subscription_monthly_amount(
+        db,
+        sub,
+        customer=customer,
+        plan=plan,
+        user_count=pricing_snapshot["user_count"],
+    )
 
     # Push a Stripe
     try:
@@ -523,5 +623,112 @@ def generate_consumption_invoice(
         "invoice_number": invoice.invoice_number,
         "total": total,
         "lines": lines,
+        "billing_period_key": billing_period_key,
+        "period_start": period_start.isoformat() if period_start else None,
+        "period_end": period_end.isoformat() if period_end else None,
+        "pricing_source": pricing_snapshot["pricing_source"],
         "stripe_result": stripe_result,
     }
+
+
+def reconcile_billing_periods(db: Session) -> Dict[str, Any]:
+    """
+    Reconciliación idempotente por período:
+    - enlaza/void duplicados locales del mismo período
+    - genera factura local solo para suscripciones sin Stripe cuando falta el período actual
+    """
+    results = {
+        "checked": 0,
+        "generated": 0,
+        "voided_duplicates": 0,
+        "pending_stripe_sync": 0,
+        "details": [],
+    }
+
+    subscriptions = db.query(Subscription).filter(
+        Subscription.status.in_([
+            SubscriptionStatus.active,
+            SubscriptionStatus.trialing,
+            SubscriptionStatus.past_due,
+        ])
+    ).all()
+
+    for sub in subscriptions:
+        period_start, period_end, billing_period_key = _resolve_billing_period(sub)
+        results["checked"] += 1
+
+        invoices = db.query(Invoice).filter(
+            Invoice.subscription_id == sub.id,
+        ).order_by(Invoice.id.asc()).all()
+
+        period_invoices = []
+        for invoice in invoices:
+            if invoice.billing_period_key == billing_period_key:
+                period_invoices.append(invoice)
+                continue
+
+            reference_dt = invoice.period_start or invoice.issued_at or invoice.created_at
+            if reference_dt and period_start <= reference_dt < period_end:
+                period_invoices.append(invoice)
+
+        valid_invoices = [inv for inv in period_invoices if inv.status != InvoiceStatus.void]
+        stripe_backed = [inv for inv in valid_invoices if inv.stripe_invoice_id]
+        manual_invoices = [inv for inv in valid_invoices if not inv.stripe_invoice_id]
+
+        if stripe_backed and manual_invoices:
+            for manual in manual_invoices:
+                manual.status = InvoiceStatus.void
+                note = f"replaced_by_stripe_period:{billing_period_key}"
+                if note not in (manual.notes or ""):
+                    manual.notes = f"{(manual.notes or '').strip()} {note}".strip()
+                results["voided_duplicates"] += 1
+            results["details"].append({
+                "subscription_id": sub.id,
+                "billing_period_key": billing_period_key,
+                "action": "void_manual_duplicates",
+            })
+            continue
+
+        if len(valid_invoices) > 1 and not stripe_backed:
+            keeper = valid_invoices[0]
+            for duplicate in valid_invoices[1:]:
+                duplicate.status = InvoiceStatus.void
+                note = f"duplicate_period_invoice:{billing_period_key}"
+                if note not in (duplicate.notes or ""):
+                    duplicate.notes = f"{(duplicate.notes or '').strip()} {note}".strip()
+                results["voided_duplicates"] += 1
+            results["details"].append({
+                "subscription_id": sub.id,
+                "billing_period_key": billing_period_key,
+                "action": "void_duplicate_manual_periods",
+                "keeper_invoice_id": keeper.id,
+            })
+            continue
+
+        if valid_invoices:
+            continue
+
+        if sub.stripe_subscription_id:
+            results["pending_stripe_sync"] += 1
+            results["details"].append({
+                "subscription_id": sub.id,
+                "billing_period_key": billing_period_key,
+                "action": "await_stripe_invoice_sync",
+            })
+            continue
+
+        generate_consumption_invoice(
+            db,
+            sub.id,
+            period_start=period_start,
+            period_end=period_end,
+        )
+        results["generated"] += 1
+        results["details"].append({
+            "subscription_id": sub.id,
+            "billing_period_key": billing_period_key,
+            "action": "generated_local_invoice",
+        })
+
+    db.commit()
+    return results

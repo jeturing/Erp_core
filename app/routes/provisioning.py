@@ -190,7 +190,11 @@ def _odoo_engine_for_db(db_name: str):
     return create_engine(url, pool_pre_ping=True)
 
 
-def _fetch_tenant_accounts_from_db(db_name: str, include_inactive: bool = True) -> "TenantAccountsQuery":
+def _fetch_tenant_accounts_from_db(
+    db_name: str,
+    include_inactive: bool = True,
+    excluded_logins: Optional[set[str]] = None,
+) -> "TenantAccountsQuery":
     engine = _odoo_engine_for_db(db_name)
     where = ""
     if not include_inactive:
@@ -218,16 +222,18 @@ def _fetch_tenant_accounts_from_db(db_name: str, include_inactive: bool = True) 
     accounts: list[dict] = []
     active_accounts = 0
     billable_active_accounts = 0
+    excluded = {item.strip().lower() for item in (excluded_logins or set()) if item}
     for row in rows:
         is_active = bool(row.get("active"))
         is_share = bool(row.get("share"))
         login = (row.get("login") or "").strip().lower()
         is_admin_login = login in {"admin", (_odoo_default_admin_login() or "").strip().lower()}
+        is_excluded_login = login in excluded
 
         if is_active:
             active_accounts += 1
 
-        is_billable = is_active and not is_share and not is_admin_login
+        is_billable = is_active and not is_share and not is_admin_login and not is_excluded_login
         if is_billable:
             billable_active_accounts += 1
 
@@ -239,6 +245,7 @@ def _fetch_tenant_accounts_from_db(db_name: str, include_inactive: bool = True) 
             "active": is_active,
             "share": is_share,
             "is_admin": is_admin_login,
+            "is_excluded": is_excluded_login,
             "is_billable": is_billable,
             "write_date": row.get("write_date").isoformat() if row.get("write_date") else None,
             "create_date": row.get("create_date").isoformat() if row.get("create_date") else None,
@@ -254,6 +261,8 @@ def _fetch_tenant_accounts_from_db(db_name: str, include_inactive: bool = True) 
 
 def _sync_seat_count_with_local_db(subdomain: str, billable_active_accounts: int) -> dict:
     from ..models.database import SessionLocal, Customer, Subscription, SubscriptionStatus, Plan
+    from ..services.pricing import recalculate_subscription_monthly_amount
+    from ..services.seat_events import record_hwm_snapshot
 
     db = SessionLocal()
     try:
@@ -277,11 +286,25 @@ def _sync_seat_count_with_local_db(subdomain: str, billable_active_accounts: int
         plan_name = None
         if subscription:
             subscription.user_count = billable_active_accounts
+            record_hwm_snapshot(
+                db,
+                subscription,
+                user_count_after=billable_active_accounts,
+                source="sync-seat-count",
+                metadata={"tenant_db": subdomain, "origin_event": "sync-seat-count"},
+            )
             plan_name = subscription.plan_name
             if subscription.plan_name:
                 plan = db.query(Plan).filter(Plan.name == subscription.plan_name).first()
                 if plan:
                     plan_user_limit = plan.max_users
+                    recalculate_subscription_monthly_amount(
+                        db,
+                        subscription,
+                        customer=customer,
+                        plan=plan,
+                        user_count=billable_active_accounts,
+                    )
 
         db.commit()
 
@@ -892,9 +915,23 @@ async def sync_tenant_accounts_seat_count(
 
     server_key, server_config = _resolve_server_config(request.server)
     db_name = _normalize_tenant_db_name(request.subdomain)
+    from ..models.database import SessionLocal, Customer
+    from ..services.seat_events import get_non_billable_logins
+
+    excluded_logins: set[str] = set()
+    db = SessionLocal()
+    try:
+        customer = db.query(Customer).filter(Customer.subdomain == db_name).first()
+        excluded_logins = get_non_billable_logins(db_name, customer=customer)
+    finally:
+        db.close()
 
     try:
-        accounts_query = _fetch_tenant_accounts_from_db(db_name, include_inactive=True)
+        accounts_query = _fetch_tenant_accounts_from_db(
+            db_name,
+            include_inactive=True,
+            excluded_logins=excluded_logins,
+        )
     except Exception:
         fallback = await call_odoo_local_api(
             server_config,
@@ -902,10 +939,24 @@ async def sync_tenant_accounts_seat_count(
             f"/api/tenant/accounts?subdomain={db_name}&include_inactive=true",
         )
         accounts_query = TenantAccountsQuery(
-            accounts=fallback.get("accounts", []),
+            accounts=[
+                {
+                    **row,
+                    "is_excluded": (row.get("login") or "").strip().lower() in excluded_logins,
+                    "is_billable": bool(row.get("active")) and not bool(row.get("share")) and (row.get("login") or "").strip().lower() not in excluded_logins and (row.get("login") or "").strip().lower() not in {"admin", (_odoo_default_admin_login() or "").strip().lower()},
+                }
+                for row in fallback.get("accounts", [])
+            ],
             total_accounts=fallback.get("total_accounts", len(fallback.get("accounts", []))),
             active_accounts=fallback.get("active_accounts", 0),
-            billable_active_accounts=fallback.get("billable_active_accounts", 0),
+            billable_active_accounts=sum(
+                1
+                for row in fallback.get("accounts", [])
+                if bool(row.get("active"))
+                and not bool(row.get("share"))
+                and (row.get("login") or "").strip().lower() not in excluded_logins
+                and (row.get("login") or "").strip().lower() not in {"admin", (_odoo_default_admin_login() or "").strip().lower()}
+            ) or fallback.get("billable_active_accounts", 0),
         )
     seat_sync = _sync_seat_count_with_local_db(db_name, accounts_query.billable_active_accounts)
 

@@ -938,3 +938,20 @@ async def routing_desired_state(
 
     reconciler = RoutingReconciler(db=db)
     return await reconciler.get_desired_state_summary()
+
+
+@router.get("/routing/diagnose", response_model=dict)
+async def diagnose_routing(
+    db: Session = Depends(get_db),
+    current_user: dict = Depends(get_current_admin),
+):
+    """
+    Compara estado deseado (BD) vs estado real (nginx maps) por nodo.
+    Reporta discrepancias: entradas faltantes, backends incorrectos, nodos inalcanzables.
+    
+    Útil como validación post-reconciliación o diagnóstico de problemas de routing.
+    """
+    from ..services.routing_reconciler import RoutingReconciler
+
+    reconciler = RoutingReconciler(db=db)
+    return await reconciler.diagnose_routing()

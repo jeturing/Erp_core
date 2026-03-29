@@ -20,6 +20,11 @@ from ..models.database import (
     BillingMode, Partner, SessionLocal,
 )
 from ..config import get_runtime_setting
+from ..services.pricing import (
+    calculate_effective_subscription_amount,
+    get_effective_plan_snapshot,
+    recalculate_subscription_monthly_amount,
+)
 
 logger = logging.getLogger(__name__)
 
@@ -106,6 +111,112 @@ def _next_invoice_number(db: Session) -> str:
     return f"INV-{year}-{seq:04d}"
 
 
+def _billing_period_key(period_start: Optional[datetime], period_end: Optional[datetime]) -> Optional[str]:
+    """Clave estable para idempotencia de facturas por período."""
+    if not period_start or not period_end:
+        return None
+    return f"{period_start.date().isoformat()}__{period_end.date().isoformat()}"
+
+
+def _extract_invoice_period_bounds(s_inv: dict) -> tuple[Optional[datetime], Optional[datetime]]:
+    """Intenta inferir el período real de la factura Stripe desde líneas o suscripción expandida."""
+    starts: list[datetime] = []
+    ends: list[datetime] = []
+
+    for line in s_inv.get("lines", {}).get("data", []):
+        start = _ts_to_dt(line.get("period", {}).get("start"))
+        end = _ts_to_dt(line.get("period", {}).get("end"))
+        if start:
+            starts.append(start)
+        if end:
+            ends.append(end)
+
+    if starts and ends:
+        return min(starts), max(ends)
+
+    stripe_sub = s_inv.get("subscription")
+    if isinstance(stripe_sub, dict):
+        return _ts_to_dt(stripe_sub.get("current_period_start")), _ts_to_dt(stripe_sub.get("current_period_end"))
+
+    return None, None
+
+
+def _find_local_invoice_for_period(
+    db: Session,
+    *,
+    local_sub: Optional[Subscription],
+    local_customer: Customer,
+    billing_period_key: Optional[str],
+) -> Optional[Invoice]:
+    """Busca una factura local del mismo período para vincularla a Stripe."""
+    if local_sub and billing_period_key:
+        candidate = db.query(Invoice).filter(
+            Invoice.subscription_id == local_sub.id,
+            Invoice.billing_period_key == billing_period_key,
+        ).order_by(Invoice.id.asc()).first()
+        if candidate:
+            return candidate
+
+    return None
+
+
+def _apply_stripe_invoice_to_local(
+    invoice: Invoice,
+    s_inv: dict,
+    *,
+    local_sub: Optional[Subscription],
+    local_partner: Optional[Partner],
+    billing_period_key: Optional[str],
+    period_start: Optional[datetime],
+    period_end: Optional[datetime],
+) -> None:
+    """Aplica el estado/importe de Stripe sobre una factura local."""
+    amount_total = (s_inv.get("amount_paid") or s_inv.get("total") or 0) / 100
+    amount_subtotal = (s_inv.get("subtotal") or 0) / 100
+    tax_amount = (s_inv.get("tax") or 0) / 100
+    inv_status = _map_invoice_status(s_inv.get("status"))
+    paid_at_ts = s_inv.get("status_transitions", {}).get("paid_at")
+
+    lines = []
+    for line in s_inv.get("lines", {}).get("data", []):
+        desc = line.get("description") or line.get("plan", {}).get("nickname") or "Suscripción"
+        line_period_start = _ts_to_dt(line.get("period", {}).get("start"))
+        line_period_end = _ts_to_dt(line.get("period", {}).get("end"))
+        lines.append({
+            "description": desc,
+            "qty": line.get("quantity", 1),
+            "unit_price": (line.get("amount") or 0) / 100,
+            "subtotal": (line.get("amount") or 0) / 100,
+            "period_start": line_period_start.isoformat() if line_period_start else None,
+            "period_end": line_period_end.isoformat() if line_period_end else None,
+        })
+
+    invoice.subscription_id = local_sub.id if local_sub else invoice.subscription_id
+    invoice.partner_id = local_partner.id if local_partner else invoice.partner_id
+    invoice.invoice_type = InvoiceType.SUBSCRIPTION
+    invoice.billing_mode = local_sub.billing_mode if local_sub else (invoice.billing_mode or BillingMode.JETURING_DIRECT_SUBSCRIPTION)
+    invoice.issuer = InvoiceIssuer.JETURING
+    invoice.subtotal = amount_subtotal
+    invoice.tax_amount = tax_amount
+    invoice.total = amount_total
+    invoice.currency = s_inv.get("currency", "usd").upper()
+    invoice.lines_json = lines
+    invoice.stripe_invoice_id = s_inv["id"]
+    invoice.stripe_payment_intent_id = s_inv.get("payment_intent")
+    invoice.status = inv_status
+    invoice.issued_at = _ts_to_dt(s_inv.get("created"))
+    invoice.paid_at = _ts_to_dt(paid_at_ts) if paid_at_ts else None
+    invoice.due_date = _ts_to_dt(s_inv.get("due_date"))
+    invoice.billing_period_key = billing_period_key
+    invoice.period_start = period_start
+    invoice.period_end = period_end
+
+    if inv_status == InvoiceStatus.void:
+        note = f"stripe_void:{s_inv['id']}"
+        if note not in (invoice.notes or ""):
+            invoice.notes = f"{(invoice.notes or '').strip()} {note}".strip()
+
+
 # ═══════════════════════════════════════════════════════════════
 #  SYNC SUBSCRIPTIONS: Stripe → BD
 # ═══════════════════════════════════════════════════════════════
@@ -141,7 +252,7 @@ def sync_subscriptions(db: Session) -> Dict[str, Any]:
 
         for s_sub in stripe_subs:
             try:
-                _process_stripe_subscription(db, s_sub, results)
+                upsert_stripe_subscription(db, s_sub, results)
             except Exception as e:
                 results["errors"].append({
                     "stripe_sub_id": s_sub.get("id"),
@@ -177,7 +288,7 @@ def _fetch_all_stripe_subscriptions(statuses: List[str] = None) -> list:
     return all_subs
 
 
-def _process_stripe_subscription(
+def upsert_stripe_subscription(
     db: Session, s_sub: dict, results: dict
 ) -> None:
     """Procesa una suscripción individual de Stripe."""
@@ -274,9 +385,6 @@ def _process_stripe_subscription(
     period_start = _ts_to_dt(s_sub.get("current_period_start"))
     period_end = _ts_to_dt(s_sub.get("current_period_end"))
 
-    # Monto real de Stripe (en USD)
-    monthly_amount = stripe_amount / 100 if stripe_amount else 0
-
     if local_sub:
         # ── UPDATE suscripción existente ──
         changed = []
@@ -293,13 +401,21 @@ def _process_stripe_subscription(
             local_sub.user_count = stripe_qty
             local_customer.user_count = stripe_qty
             changed.append(f"users→{stripe_qty}")
-        if monthly_amount > 0 and abs((local_sub.monthly_amount or 0) - monthly_amount) > 0.01:
-            local_sub.monthly_amount = monthly_amount
-            changed.append(f"amount→${monthly_amount:.2f}")
         if period_start:
             local_sub.current_period_start = period_start
         if period_end:
             local_sub.current_period_end = period_end
+
+        effective_amount = calculate_effective_subscription_amount(
+            db,
+            local_sub,
+            customer=local_customer,
+            plan=plan,
+            user_count=stripe_qty,
+        )
+        if abs((local_sub.monthly_amount or 0) - effective_amount) > 0.01:
+            local_sub.monthly_amount = effective_amount
+            changed.append(f"amount→${effective_amount:.2f}")
 
         local_sub.updated_at = datetime.utcnow()
 
@@ -326,20 +442,29 @@ def _process_stripe_subscription(
             plan_name=plan_name,
             status=stripe_status,
             user_count=stripe_qty,
-            monthly_amount=monthly_amount,
+            monthly_amount=0,
             currency="USD",
             current_period_start=period_start,
             current_period_end=period_end,
             billing_mode=BillingMode.JETURING_DIRECT_SUBSCRIPTION,
         )
         db.add(new_sub)
+        db.flush()
+        effective_amount = calculate_effective_subscription_amount(
+            db,
+            new_sub,
+            customer=local_customer,
+            plan=plan,
+            user_count=stripe_qty,
+        )
+        new_sub.monthly_amount = effective_amount
         results["created"] += 1
         results["details"].append({
             "action": "created",
             "customer": local_customer.company_name,
             "stripe_sub_id": stripe_sub_id,
             "plan": plan_name,
-            "amount": monthly_amount,
+            "amount": effective_amount,
         })
 
 
@@ -380,7 +505,7 @@ def sync_invoices(
 
         for s_inv in stripe_invoices:
             try:
-                _process_stripe_invoice(db, s_inv, results)
+                upsert_stripe_invoice(db, s_inv, results)
             except Exception as e:
                 results["errors"].append({
                     "stripe_invoice_id": s_inv.get("id"),
@@ -419,11 +544,13 @@ def _fetch_stripe_invoices(since_ts: int) -> list:
     return all_invoices
 
 
-def _process_stripe_invoice(
+def upsert_stripe_invoice(
     db: Session, s_inv: dict, results: dict
 ) -> None:
     """Procesa una factura individual de Stripe."""
     stripe_inv_id = s_inv["id"]
+    period_start, period_end = _extract_invoice_period_bounds(s_inv)
+    billing_period_key = _billing_period_key(period_start, period_end)
 
     # ¿Ya existe?
     existing = db.query(Invoice).filter(
@@ -431,15 +558,16 @@ def _process_stripe_invoice(
     ).first()
 
     if existing:
-        # Actualizar estado si cambió
-        new_status = _map_invoice_status(s_inv.get("status"))
-        if existing.status != new_status:
-            existing.status = new_status
-            if new_status == InvoiceStatus.paid and not existing.paid_at:
-                existing.paid_at = _ts_to_dt(s_inv.get("status_transitions", {}).get("paid_at"))
-            results["updated"] += 1
-        else:
-            results["skipped_existing"] += 1
+        _apply_stripe_invoice_to_local(
+            existing,
+            s_inv,
+            local_sub=existing.subscription,
+            local_partner=existing.partner,
+            billing_period_key=billing_period_key,
+            period_start=period_start,
+            period_end=period_end,
+        )
+        results["updated"] += 1
         return
 
     # ── Match customer ──
@@ -493,62 +621,48 @@ def _process_stripe_invoice(
     if not local_partner and stripe_email:
         local_partner = _find_partner_by_email(db, stripe_email)
 
-    # ── Datos factura ──
-    amount_total = (s_inv.get("amount_paid") or s_inv.get("total") or 0) / 100
-    amount_subtotal = (s_inv.get("subtotal") or 0) / 100
-    tax_amount = (s_inv.get("tax") or 0) / 100
-    inv_status = _map_invoice_status(s_inv.get("status"))
-    paid_at_ts = s_inv.get("status_transitions", {}).get("paid_at")
+    existing_period_invoice = _find_local_invoice_for_period(
+        db,
+        local_sub=local_sub,
+        local_customer=local_customer,
+        billing_period_key=billing_period_key,
+    )
 
-    # Líneas de la factura
-    lines = []
-    for line in s_inv.get("lines", {}).get("data", []):
-        desc = line.get("description") or line.get("plan", {}).get("nickname") or "Suscripción"
-        lines.append({
-            "description": desc,
-            "qty": line.get("quantity", 1),
-            "unit_price": (line.get("amount") or 0) / 100,
-            "subtotal": (line.get("amount") or 0) / 100,
-            "period_start": _ts_to_dt(line.get("period", {}).get("start")),
-            "period_end": _ts_to_dt(line.get("period", {}).get("end")),
-        })
-    # Serializar datetimes en lines para JSON
-    for line in lines:
-        for k in ("period_start", "period_end"):
-            if line.get(k) and hasattr(line[k], "isoformat"):
-                line[k] = line[k].isoformat()
-
-    invoice = Invoice(
+    invoice = existing_period_invoice or Invoice(
         invoice_number=_next_invoice_number(db),
         subscription_id=local_sub.id if local_sub else None,
         customer_id=local_customer.id,
         partner_id=local_partner.id if local_partner else None,
-        invoice_type=InvoiceType.SUBSCRIPTION,
-        billing_mode=local_sub.billing_mode if local_sub else BillingMode.JETURING_DIRECT_SUBSCRIPTION,
-        issuer=InvoiceIssuer.JETURING,
-        subtotal=amount_subtotal,
-        tax_amount=tax_amount,
-        total=amount_total,
-        currency=s_inv.get("currency", "usd").upper(),
-        lines_json=lines,
-        stripe_invoice_id=stripe_inv_id,
-        stripe_payment_intent_id=s_inv.get("payment_intent"),
-        status=inv_status,
-        issued_at=_ts_to_dt(s_inv.get("created")),
-        paid_at=_ts_to_dt(paid_at_ts) if paid_at_ts else None,
-        due_date=_ts_to_dt(s_inv.get("due_date")),
     )
-    db.add(invoice)
-    db.flush()
 
-    results["imported"] += 1
+    if existing_period_invoice is None:
+        db.add(invoice)
+        db.flush()
+
+    _apply_stripe_invoice_to_local(
+        invoice,
+        s_inv,
+        local_sub=local_sub,
+        local_partner=local_partner,
+        billing_period_key=billing_period_key,
+        period_start=period_start,
+        period_end=period_end,
+    )
+
+    if existing_period_invoice is None:
+        results["imported"] += 1
+        action = "imported"
+    else:
+        results["updated"] += 1
+        action = "linked_existing_period"
     results["details"].append({
-        "action": "imported",
+        "action": action,
         "invoice_number": invoice.invoice_number,
         "stripe_invoice_id": stripe_inv_id,
         "customer": local_customer.company_name,
-        "total": amount_total,
-        "status": inv_status.value,
+        "total": invoice.total,
+        "status": invoice.status.value,
+        "billing_period_key": billing_period_key,
     })
 
 
@@ -559,6 +673,7 @@ def _map_invoice_status(stripe_status: str) -> InvoiceStatus:
         "open": InvoiceStatus.issued,
         "draft": InvoiceStatus.draft,
         "void": InvoiceStatus.void,
+        "voided": InvoiceStatus.void,
         "uncollectible": InvoiceStatus.overdue,
     }
     return mapping.get(stripe_status, InvoiceStatus.issued)

@@ -34,8 +34,15 @@ from ..models.database import (
     Subscription,
     SubscriptionStatus,
     TenantDeployment,
+    SeatEventType,
 )
 from ..config import PROVISIONING_API_KEY, get_runtime_setting
+from ..services.pricing import recalculate_subscription_monthly_amount
+from ..services.seat_events import (
+    is_billable_user,
+    record_hwm_snapshot,
+    record_seat_event,
+)
 
 logger = logging.getLogger(__name__)
 
@@ -354,6 +361,12 @@ def _upsert_subscription_from_snapshot(db, customer: Customer, data: Dict[str, A
         )
         db.add(subscription)
         db.flush()
+        recalculate_subscription_monthly_amount(
+            db,
+            subscription,
+            customer=customer,
+            user_count=subscription.user_count,
+        )
         return subscription, subscription_created
 
     subscription.user_count = max(1, customer.user_count or subscription.user_count or 1)
@@ -366,6 +379,12 @@ def _upsert_subscription_from_snapshot(db, customer: Customer, data: Dict[str, A
         subscription.plan_name = plan_name
     if not subscription.plan_name:
         subscription.plan_name = plan_name
+    recalculate_subscription_monthly_amount(
+        db,
+        subscription,
+        customer=customer,
+        user_count=subscription.user_count,
+    )
 
     return subscription, subscription_created
 
@@ -491,6 +510,13 @@ async def _sync_tenant_snapshot(tenant_db: str, data: Dict[str, Any]) -> Dict[st
         customer, customer_created = _upsert_customer_from_snapshot(db, tenant_db, data)
         subscription, subscription_created = _upsert_subscription_from_snapshot(db, customer, data)
         domain_sync = _sync_domains_from_snapshot(db, customer, data)
+        record_hwm_snapshot(
+            db,
+            subscription,
+            user_count_after=max(1, customer.user_count or subscription.user_count or 1),
+            source="odoo_snapshot",
+            metadata={"tenant_db": tenant_db, "origin_event": "tenant.snapshot"},
+        )
         db.commit()
 
         return {
@@ -530,11 +556,15 @@ async def _handle_user_created(tenant_db: str, data: Dict[str, Any]) -> Dict[str
             return {"synced": False, "reason": "customer_not_found"}
 
         is_share = data.get("share", False)
-        is_admin = data.get("login", "").lower() in ("admin", f"{tenant_db}@sajet.us")
         is_active = data.get("active", True)
-
-        # Solo contar usuarios facturables (activos, no share, no admin)
-        if is_share or is_admin or not is_active:
+        if not is_billable_user(
+            tenant_db,
+            login=data.get("login"),
+            share=is_share,
+            active=is_active,
+            customer=customer,
+            admin_email=customer.email,
+        ):
             return {
                 "synced": False,
                 "reason": "non_billable_user",
@@ -551,16 +581,24 @@ async def _handle_user_created(tenant_db: str, data: Dict[str, Any]) -> Dict[str
             Subscription.status == SubscriptionStatus.active,
         ).first()
 
-        recalculated = False
         new_amount = None
         if sub:
-            sub.user_count = customer.user_count
-            plan = db.query(Plan).filter(Plan.name == sub.plan_name).first()
-            if plan:
-                effective_pid = sub.owner_partner_id or customer.partner_id
-                new_amount = plan.calculate_monthly(customer.user_count, partner_id=effective_pid)
-                sub.monthly_amount = new_amount
-                recalculated = True
+            new_amount = recalculate_subscription_monthly_amount(
+                db,
+                sub,
+                customer=customer,
+                user_count=customer.user_count,
+            )
+            record_seat_event(
+                db,
+                sub,
+                event_type=SeatEventType.USER_CREATED,
+                user_count_after=customer.user_count,
+                odoo_user_id=data.get("user_id"),
+                odoo_login=data.get("login"),
+                source="odoo_webhook",
+                metadata={"tenant_db": tenant_db, "origin_event": "user.created"},
+            )
 
         db.commit()
 
@@ -575,7 +613,7 @@ async def _handle_user_created(tenant_db: str, data: Dict[str, Any]) -> Dict[str
             "user_login": data.get("login"),
             "old_user_count": old_count,
             "new_user_count": customer.user_count,
-            "recalculated": recalculated,
+            "recalculated": bool(sub),
             "new_monthly_amount": new_amount,
         }
     finally:
@@ -601,14 +639,11 @@ async def _handle_user_updated(tenant_db: str, data: Dict[str, Any]) -> Dict[str
             db.commit()
             return {"synced": True, "email_updated": changes["login"]}
 
-        # Si cambió active status, necesitamos recalcular seat count
-        # Para esto necesitamos un full sync — mejor hacerlo vía el endpoint de sync
         if "active" in changes:
-            return {
-                "synced": False,
-                "reason": "active_change_needs_full_sync",
-                "hint": "Call POST /api/provisioning/tenant/accounts/sync-seat-count",
-            }
+            current_active = bool(data.get("active", False))
+            if current_active:
+                return await _handle_user_created(tenant_db, data)
+            return await _handle_user_deleted(tenant_db, data)
 
         return {"synced": False, "reason": "no_relevant_changes"}
     finally:
@@ -627,9 +662,14 @@ async def _handle_user_deleted(tenant_db: str, data: Dict[str, Any]) -> Dict[str
             return {"synced": False, "reason": "customer_not_found"}
 
         is_share = data.get("share", False)
-        is_admin = data.get("login", "").lower() in ("admin", f"{tenant_db}@sajet.us")
-
-        if is_share or is_admin:
+        if not is_billable_user(
+            tenant_db,
+            login=data.get("login"),
+            share=is_share,
+            active=True,
+            customer=customer,
+            admin_email=customer.email,
+        ):
             return {"synced": False, "reason": "non_billable_user"}
 
         old_count = customer.user_count or 1
@@ -642,12 +682,22 @@ async def _handle_user_deleted(tenant_db: str, data: Dict[str, Any]) -> Dict[str
 
         new_amount = None
         if sub:
-            sub.user_count = customer.user_count
-            plan = db.query(Plan).filter(Plan.name == sub.plan_name).first()
-            if plan:
-                effective_pid = sub.owner_partner_id or customer.partner_id
-                new_amount = plan.calculate_monthly(customer.user_count, partner_id=effective_pid)
-                sub.monthly_amount = new_amount
+            new_amount = recalculate_subscription_monthly_amount(
+                db,
+                sub,
+                customer=customer,
+                user_count=customer.user_count,
+            )
+            record_seat_event(
+                db,
+                sub,
+                event_type=SeatEventType.USER_DEACTIVATED,
+                user_count_after=customer.user_count,
+                odoo_user_id=data.get("user_id"),
+                odoo_login=data.get("login"),
+                source="odoo_webhook",
+                metadata={"tenant_db": tenant_db, "origin_event": "user.deleted"},
+            )
 
         db.commit()
 

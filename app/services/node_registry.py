@@ -63,6 +63,11 @@ def _node_status_to_server_status(ns: NodeStatus) -> ServerStatus:
 def _proxmox_node_to_odoo_server(node: ProxmoxNode) -> OdooServer:
     """Convierte un registro ProxmoxNode → OdooServer operativo."""
     pct_id = node.vmid or 0
+    # Usar can_host_tenants directo si existe, fallback a inferencia legacy
+    can_host = getattr(node, 'can_host_tenants', None)
+    if can_host is None:
+        can_host = not node.is_database_node
+
     return OdooServer(
         id=f"pct-{pct_id}" if pct_id else f"node-{node.id}",
         name=node.name or f"Nodo {node.hostname}",
@@ -74,7 +79,7 @@ def _proxmox_node_to_odoo_server(node: ProxmoxNode) -> OdooServer:
         status=_node_status_to_server_status(node.status),
         region=node.region or "default",
         priority=node.priority or 1,
-        can_host_tenants=not node.is_database_node,
+        can_host_tenants=can_host,
     )
 
 

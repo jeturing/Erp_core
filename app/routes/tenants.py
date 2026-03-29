@@ -8,6 +8,7 @@ from typing import Optional, List
 import re
 from ..models.database import Customer, Subscription, SubscriptionStatus, SessionLocal, Partner, Plan, BillingMode, PayerType, CollectorType, InvoiceIssuer
 from ..models.database import CustomDomain, DomainVerificationStatus, TenantDeployment
+from ..models.database import ProxmoxNode as _ProxmoxNode, MigrationState as _MigrationState, TenantMigrationJob as _TenantMigrationJob
 from ..services.odoo_database_manager import (
     get_available_servers,
     get_servers_status,
@@ -198,24 +199,71 @@ async def get_all_tenants_from_servers():
     all_tenants = []
 
     # Precargar TenantDeployment + nodo activo por subdomain
-    _deploy_map: dict = {}  # subdomain -> {node_name, backend_host}
+    _deploy_map: dict = {}  # subdomain -> {node_name, backend_host, ...deployment summary}
     try:
         _db_pre = SessionLocal()
-        from ..models.database import ProxmoxNode
         _deployments = (
             _db_pre.query(TenantDeployment)
             .options()
             .all()
         )
+        # Preload node names by id
+        _node_cache: dict = {}
         for _dep in _deployments:
-            _node_name = None
+            # Resolve active node name
+            _active_node_name = None
             if _dep.active_node_id:
-                _node = _db_pre.query(ProxmoxNode).filter(ProxmoxNode.id == _dep.active_node_id).first()
-                _node_name = _node.hostname if _node else None
+                if _dep.active_node_id not in _node_cache:
+                    _n = _db_pre.query(_ProxmoxNode).filter(_ProxmoxNode.id == _dep.active_node_id).first()
+                    _node_cache[_dep.active_node_id] = _n
+                _active_node = _node_cache.get(_dep.active_node_id)
+                _active_node_name = _active_node.name if _active_node else None
+            # Resolve desired node name
+            _desired_node_name = None
+            if _dep.desired_node_id:
+                if _dep.desired_node_id not in _node_cache:
+                    _n2 = _db_pre.query(_ProxmoxNode).filter(_ProxmoxNode.id == _dep.desired_node_id).first()
+                    _node_cache[_dep.desired_node_id] = _n2
+                _desired_node = _node_cache.get(_dep.desired_node_id)
+                _desired_node_name = _desired_node.name if _desired_node else None
+
             _deploy_map[_dep.subdomain] = {
-                "node_name": _node_name or _dep.backend_host,
+                "node_name": _active_node_name or _dep.backend_host,
                 "backend_host": _dep.backend_host,
+                "deployment": {
+                    "active_node_id": _dep.active_node_id,
+                    "active_node_name": _active_node_name,
+                    "desired_node_id": _dep.desired_node_id,
+                    "desired_node_name": _desired_node_name,
+                    "runtime_mode": _dep.runtime_mode.value if _dep.runtime_mode and hasattr(_dep.runtime_mode, 'value') else str(_dep.runtime_mode) if _dep.runtime_mode else "shared_pool",
+                    "routing_mode": _dep.routing_mode.value if _dep.routing_mode and hasattr(_dep.routing_mode, 'value') else str(_dep.routing_mode) if _dep.routing_mode else "node_proxy",
+                    "migration_state": _dep.migration_state.value if _dep.migration_state and hasattr(_dep.migration_state, 'value') else str(_dep.migration_state) if _dep.migration_state else "idle",
+                    "backend_host": _dep.backend_host,
+                    "http_port": _dep.http_port or 8080,
+                    "chat_port": _dep.chat_port or 8072,
+                    "service_name": _dep.service_name,
+                    "addons_overlay_path": _dep.addons_overlay_path,
+                    "has_active_migration": False,
+                    "active_job_id": None,
+                },
             }
+
+        # Find active migration jobs and attach to deploy_map
+        _active_mig_states = [
+            _MigrationState.queued, _MigrationState.preflight,
+            _MigrationState.preparing_target, _MigrationState.warming_target,
+            _MigrationState.cutover, _MigrationState.verifying,
+        ]
+        _active_jobs = (
+            _db_pre.query(_TenantMigrationJob)
+            .filter(_TenantMigrationJob.state.in_(_active_mig_states))
+            .all()
+        )
+        for _aj in _active_jobs:
+            if _aj.subdomain in _deploy_map:
+                _deploy_map[_aj.subdomain]["deployment"]["has_active_migration"] = True
+                _deploy_map[_aj.subdomain]["deployment"]["active_job_id"] = str(_aj.id)
+
         _db_pre.close()
     except Exception as _e:
         logger.warning(f"No se pudo precargar deploy_map: {_e}")
@@ -302,6 +350,7 @@ async def get_all_tenants_from_servers():
                         "monthly_amount": sub.monthly_amount or 0,
                         "user_count": sub.user_count or 1,
                         "billing_mode": sub.billing_mode.value if sub.billing_mode else None,
+                        "deployment": _dep_info.get("deployment"),
                     })
                 else:
                     # Tenant existe en Odoo pero no en BD local — auto-registrar
@@ -348,6 +397,7 @@ async def get_all_tenants_from_servers():
                             "monthly_amount": 0,
                             "user_count": 1,
                             "billing_mode": None,
+                            "deployment": _dep_info2.get("deployment"),
                         })
                     except Exception as auto_err:
                         logger.warning(f"No se pudo auto-registrar {db_name}: {auto_err}")
@@ -373,6 +423,7 @@ async def get_all_tenants_from_servers():
                             "monthly_amount": 0,
                             "user_count": 1,
                             "billing_mode": None,
+                            "deployment": _dep_info3.get("deployment"),
                         })
             except Exception as e:
                 logger.error(f"Error consultando BD local para {db_name}: {e}")
@@ -860,8 +911,30 @@ async def create_tenant(
             status_msg = "vinculado" if already_existed else "creado"
 
             # Provisionar subdominio .sajet.us en nginx automáticamente
+            # Resolver node_ip desde el deployment recién creado
+            _nginx_node_ip = None
+            _nginx_http_port = 8080
+            _nginx_chat_port = 8072
             try:
-                nginx_result = provision_sajet_subdomain(payload.subdomain)
+                _dep_db = SessionLocal()
+                _dep_row = _dep_db.query(TenantDeployment).filter(
+                    TenantDeployment.subdomain == payload.subdomain
+                ).first()
+                if _dep_row and _dep_row.backend_host:
+                    _nginx_node_ip = _dep_row.backend_host
+                    _nginx_http_port = _dep_row.http_port or 8080
+                    _nginx_chat_port = _dep_row.chat_port or 8072
+                _dep_db.close()
+            except Exception as _dep_err:
+                logger.warning(f"No se pudo resolver node_ip para nginx de '{payload.subdomain}': {_dep_err}")
+
+            try:
+                nginx_kwargs = {"subdomain": payload.subdomain}
+                if _nginx_node_ip:
+                    nginx_kwargs["node_ip"] = _nginx_node_ip
+                    nginx_kwargs["http_port"] = _nginx_http_port
+                    nginx_kwargs["chat_port"] = _nginx_chat_port
+                nginx_result = provision_sajet_subdomain(**nginx_kwargs)
                 if nginx_result.get("success"):
                     logger.info(f"✅ Subdominio {payload.subdomain}.sajet.us provisionado en nginx")
                     result["nginx_provisioned"] = True
@@ -1132,7 +1205,23 @@ async def delete_tenant_endpoint(
         # 5) Limpiar nginx solo si se eliminó la BD remota
         if deleted_remote:
             try:
-                remove_sajet_subdomain(subdomain)
+                # Resolver node_ip del deployment antes de limpiarlo
+                _del_node_ip = None
+                try:
+                    _del_db = SessionLocal()
+                    _del_dep = _del_db.query(TenantDeployment).filter(
+                        TenantDeployment.subdomain == subdomain
+                    ).first()
+                    if _del_dep and _del_dep.backend_host:
+                        _del_node_ip = _del_dep.backend_host
+                    _del_db.close()
+                except Exception:
+                    pass
+
+                if _del_node_ip:
+                    remove_sajet_subdomain(subdomain, node_ip=_del_node_ip)
+                else:
+                    remove_sajet_subdomain(subdomain)
                 logger.info(f"Subdominio {subdomain}.sajet.us eliminado de nginx")
             except Exception as ng_err:
                 logger.warning(f"No se pudo limpiar nginx para {subdomain}: {ng_err}")
