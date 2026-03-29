@@ -8,6 +8,7 @@ import type {
   PartnerProfile,
   PartnerClientItem,
   PartnerCommissionItem,
+  PartnerPortalInvoiceItem,
   ServiceCatalogItemType,
 } from '../types';
 
@@ -108,6 +109,23 @@ export const partnerPortalApi = {
     return api.get(`${BASE}/clients/${customerId}/services/catalog`);
   },
 
+  async getClientDomains(customerId: number): Promise<{
+    customer_id: number;
+    company_name: string;
+    subdomain: string;
+    domains: Array<{
+      domain: string;
+      sources: string[];
+      is_active: boolean;
+      verification_status: string | null;
+      custom_domain_id: number | null;
+    }>;
+    summary: { total: number; base: number; custom: number; odoo: number };
+    odoo_error: string | null;
+  }> {
+    return api.get(`${BASE}/clients/${customerId}/domains`);
+  },
+
   async getClientServiceSubscriptions(customerId: number): Promise<{ items: AddonSubscriptionItem[]; total: number }> {
     return api.get(`${BASE}/clients/${customerId}/services/subscriptions`);
   },
@@ -127,6 +145,19 @@ export const partnerPortalApi = {
     summary: { total_earned: number; pending: number; paid: number };
   }> {
     return api.get(`${BASE}/commissions`);
+  },
+
+  async getInvoices(status?: string): Promise<{
+    items: PartnerPortalInvoiceItem[];
+    total: number;
+    summary: { total_billed: number; total_paid: number; total_pending: number };
+  }> {
+    const qs = status ? `?status_filter=${status}` : '';
+    return api.get(`${BASE}/invoices${qs}`);
+  },
+
+  async getInvoicePaymentLink(invoiceId: number): Promise<{ payment_url?: string; method?: string; invoice_number: string }> {
+    return api.post(`${BASE}/invoices/${invoiceId}/pay`);
   },
 
   // ── Stripe ──

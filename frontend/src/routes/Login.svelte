@@ -1,5 +1,7 @@
 <script lang="ts">
   import { auth } from '../lib/stores';
+  import { goto } from '$app/navigation';
+  import { page } from '$app/stores';
 
   let email = $state('');
   let password = $state('');
@@ -17,10 +19,7 @@
 
   function getPostLoginRoute(): string {
     try {
-      const hash = window.location.hash || '';
-      const query = hash.split('?')[1] || '';
-      const params = new URLSearchParams(query);
-      const next = (params.get('next') || '').trim();
+      const next = ($page.url.searchParams.get('next') || '').trim();
       if (!next) return 'dashboard';
 
       // Allow only simple internal hash routes
@@ -64,7 +63,7 @@
     }
 
     if (result.success) {
-      window.location.hash = `#/${getPostLoginRoute()}`;
+      goto(`/${getPostLoginRoute()}`);
     }
 
     loading = false;
@@ -93,7 +92,7 @@
     }
 
     if (result.success) {
-      window.location.hash = `#/${getPostLoginRoute()}`;
+      goto(`/${getPostLoginRoute()}`);
     }
 
     loading = false;
@@ -118,7 +117,7 @@
     }
 
     if (result.success) {
-      window.location.hash = `#/${getPostLoginRoute()}`;
+      goto(`/${getPostLoginRoute()}`);
     }
 
     loading = false;
@@ -234,8 +233,8 @@
           </button>
 
           <div class="flex items-center justify-between text-xs mt-3">
-            <a href="#/signup" class="text-[#C05A3C] hover:underline">Crear cuenta</a>
-            <a href="#/recover-account" class="text-[#C05A3C] hover:underline">Recuperar cuenta</a>
+            <a href="/signup" class="text-[#C05A3C] hover:underline">Crear cuenta</a>
+            <a href="/recover-account" class="text-[#C05A3C] hover:underline">Recuperar cuenta</a>
           </div>
         </form>
       {:else if requiresTotp}

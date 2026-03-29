@@ -22,6 +22,7 @@ from ..config import (
     ODOO_DB_HOST, ODOO_DB_USER, ODOO_DB_PASSWORD,
     get_runtime_int, get_runtime_json, get_runtime_kv_map, get_runtime_setting,
 )
+from ..services.tenant_accounts import fetch_tenant_accounts_snapshot
 
 logger = logging.getLogger(__name__)
 
@@ -195,67 +196,16 @@ def _fetch_tenant_accounts_from_db(
     include_inactive: bool = True,
     excluded_logins: Optional[set[str]] = None,
 ) -> "TenantAccountsQuery":
-    engine = _odoo_engine_for_db(db_name)
-    where = ""
-    if not include_inactive:
-        where = "WHERE u.active = true"
-
-    sql = text(f"""
-        SELECT
-            u.id,
-            u.login,
-            u.email,
-            p.name,
-            u.active,
-            COALESCE(u.share, false) AS share,
-            u.write_date,
-            u.create_date
-        FROM res_users u
-        LEFT JOIN res_partner p ON p.id = u.partner_id
-        {where}
-        ORDER BY u.active DESC, u.id ASC
-    """)
-
-    with engine.connect() as conn:
-        rows = conn.execute(sql).mappings().all()
-
-    accounts: list[dict] = []
-    active_accounts = 0
-    billable_active_accounts = 0
-    excluded = {item.strip().lower() for item in (excluded_logins or set()) if item}
-    for row in rows:
-        is_active = bool(row.get("active"))
-        is_share = bool(row.get("share"))
-        login = (row.get("login") or "").strip().lower()
-        is_admin_login = login in {"admin", (_odoo_default_admin_login() or "").strip().lower()}
-        is_excluded_login = login in excluded
-
-        if is_active:
-            active_accounts += 1
-
-        is_billable = is_active and not is_share and not is_admin_login and not is_excluded_login
-        if is_billable:
-            billable_active_accounts += 1
-
-        accounts.append({
-            "id": row.get("id"),
-            "login": row.get("login"),
-            "email": row.get("email"),
-            "name": row.get("name"),
-            "active": is_active,
-            "share": is_share,
-            "is_admin": is_admin_login,
-            "is_excluded": is_excluded_login,
-            "is_billable": is_billable,
-            "write_date": row.get("write_date").isoformat() if row.get("write_date") else None,
-            "create_date": row.get("create_date").isoformat() if row.get("create_date") else None,
-        })
-
+    snapshot = fetch_tenant_accounts_snapshot(
+        db_name,
+        include_inactive=include_inactive,
+        excluded_logins=excluded_logins,
+    )
     return TenantAccountsQuery(
-        accounts=accounts,
-        total_accounts=len(accounts),
-        active_accounts=active_accounts,
-        billable_active_accounts=billable_active_accounts,
+        accounts=snapshot["accounts"],
+        total_accounts=snapshot["total_accounts"],
+        active_accounts=snapshot["active_accounts"],
+        billable_active_accounts=snapshot["billable_active_accounts"],
     )
 
 

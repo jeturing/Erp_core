@@ -63,6 +63,7 @@ from .nginx_domain_configurator import (
     PCT160_HTTP_MAP,
     _add_to_map,
     _add_to_server_name,
+    _external_domain_aliases,
     _read_file_local,
     _read_file_node,
     _run_local,
@@ -538,9 +539,12 @@ class RoutingReconciler:
         # Dominios externos
         if state.external_routes:
             lines.append("# --- Dominios externos ---")
+            external_hosts: Dict[str, str] = {}
             for r in sorted(state.external_routes, key=lambda x: x.external_domain):
-                lines.append(f"{r.external_domain} {r.backend};")
-                lines.append(f"www.{r.external_domain} {r.backend};")
+                for domain_host in _external_domain_aliases(r.external_domain):
+                    external_hosts[domain_host] = r.backend
+            for domain_host in sorted(external_hosts):
+                lines.append(f"{domain_host} {external_hosts[domain_host]};")
             lines.append("")
 
         return "\n".join(lines) + "\n"
@@ -559,9 +563,12 @@ class RoutingReconciler:
         # Dominios externos — chat también va al nginx del nodo
         if state.external_routes:
             lines.append("# --- Dominios externos ---")
+            external_hosts: Dict[str, str] = {}
             for r in sorted(state.external_routes, key=lambda x: x.external_domain):
-                lines.append(f"{r.external_domain} {r.backend};")
-                lines.append(f"www.{r.external_domain} {r.backend};")
+                for domain_host in _external_domain_aliases(r.external_domain):
+                    external_hosts[domain_host] = r.backend
+            for domain_host in sorted(external_hosts):
+                lines.append(f"{domain_host} {external_hosts[domain_host]};")
             lines.append("")
 
         return "\n".join(lines) + "\n"

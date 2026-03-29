@@ -14,15 +14,31 @@ export interface PortalDomain {
 export interface SeatEventEntry {
   id: number;
   event_type: string;
-  odoo_login: string | null;
-  odoo_user_id: number | null;
+  login: string | null;
+  user_id: number | null;
   user_count_after: number;
   is_billable: boolean;
   source: string;
   created_at: string | null;
 }
 
+export interface PortalUserAccount {
+  id: number;
+  login: string | null;
+  email: string | null;
+  name: string | null;
+  active: boolean;
+  is_admin: boolean;
+  is_excluded: boolean;
+  is_billable: boolean;
+  write_date: string | null;
+  create_date: string | null;
+}
+
 export interface PortalUsersResponse {
+  accounts: PortalUserAccount[];
+  active_accounts: number;
+  billable_active_accounts: number;
   current_user_count: number;
   plan_user_limit: number;
   seat_events: SeatEventEntry[];

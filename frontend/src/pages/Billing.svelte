@@ -3,13 +3,13 @@
   import { billingApi } from '../lib/api';
   import { toasts } from '../lib/stores/toast';
   import { formatDate, formatCurrency, formatPercent } from '../lib/utils/formatters';
-  import type { BillingMetrics, BillingInvoice } from '../lib/types';
+  import type { BillingMetrics, BillingSubscriptionItem } from '../lib/types';
   import { RefreshCw, ChevronLeft, ChevronRight, TrendingUp, TrendingDown } from 'lucide-svelte';
 
   let loading = true;
   let metrics: BillingMetrics | null = null;
-  let invoices: BillingInvoice[] = [];
-  let totalInvoices = 0;
+  let subscriptions: BillingSubscriptionItem[] = [];
+  let totalSubscriptions = 0;
   let comparison: any = null;
 
   const PAGE_SIZE = 20;
@@ -31,29 +31,29 @@
     }
   }
 
-  async function loadInvoices(page = 0) {
+  async function loadSubscriptions(page = 0) {
     try {
-      const res = await billingApi.getInvoices(PAGE_SIZE, page * PAGE_SIZE);
-      invoices = res.invoices ?? [];
-      totalInvoices = res.total;
+      const res = await billingApi.getSubscriptions(PAGE_SIZE, page * PAGE_SIZE);
+      subscriptions = res.items ?? [];
+      totalSubscriptions = res.total;
     } catch (err) {
-      toasts.error(err instanceof Error ? err.message : 'Error cargando facturas');
+      toasts.error(err instanceof Error ? err.message : 'Error cargando suscripciones');
     }
   }
 
   async function loadAll() {
     loading = true;
-    await Promise.all([loadMetrics(), loadComparison(), loadInvoices(currentPage)]);
+    await Promise.all([loadMetrics(), loadComparison(), loadSubscriptions(currentPage)]);
     loading = false;
   }
 
   onMount(loadAll);
 
   async function goToPage(page: number) {
-    const maxPage = Math.ceil(totalInvoices / PAGE_SIZE) - 1;
+    const maxPage = Math.ceil(totalSubscriptions / PAGE_SIZE) - 1;
     if (page < 0 || page > maxPage) return;
     currentPage = page;
-    await loadInvoices(currentPage);
+    await loadSubscriptions(currentPage);
   }
 
   function statusBadge(status: string) {
@@ -70,9 +70,9 @@
     return 'badge-basic';
   }
 
-  $: totalPages = Math.max(1, Math.ceil(totalInvoices / PAGE_SIZE));
+  $: totalPages = Math.max(1, Math.ceil(totalSubscriptions / PAGE_SIZE));
   $: startItem = currentPage * PAGE_SIZE + 1;
-  $: endItem = Math.min((currentPage + 1) * PAGE_SIZE, totalInvoices);
+  $: endItem = Math.min((currentPage + 1) * PAGE_SIZE, totalSubscriptions);
   $: mrmGrowth = comparison ? ((comparison.current_mrr - comparison.previous_mrr) / comparison.previous_mrr * 100) : 0;
   $: newTenants = comparison ? (comparison.new_customers - comparison.lost_customers) : 0;
 </script>
@@ -82,7 +82,7 @@
   <div class="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
     <div>
       <h1 class="page-title">BILLING</h1>
-      <p class="page-subtitle mt-1">Métricas financieras, facturas y distribución de planes</p>
+      <p class="page-subtitle mt-1">Métricas financieras, suscripciones del canal y distribución de planes</p>
     </div>
     <button class="btn btn-secondary btn-sm" on:click={loadAll} disabled={loading}>
       <RefreshCw size={13} class={loading ? 'animate-spin' : ''} />
@@ -109,7 +109,7 @@
       <div class="stat-card">
         <span class="stat-label">Pendiente</span>
         <span class="stat-value text-warning">{formatCurrency(metrics?.pending_amount ?? 0)}</span>
-        <span class="text-[11px] text-gray-500">{metrics?.pending_count ?? 0} facturas pendientes</span>
+        <span class="text-[11px] text-gray-500">{metrics?.pending_count ?? 0} suscripciones pendientes</span>
       </div>
       <div class="stat-card">
         <span class="stat-label">Churn Rate (30d)</span>
@@ -201,12 +201,12 @@
       </div>
     </div>
 
-    <!-- Invoices Table -->
+    <!-- Subscriptions Table -->
     <div class="card p-0 overflow-hidden">
       <div class="flex items-center justify-between px-6 py-4 border-b border-border-light">
-        <span class="section-heading">Facturas</span>
-        {#if totalInvoices > 0}
-          <span class="text-[11px] text-gray-500">{startItem}–{endItem} de {totalInvoices}</span>
+        <span class="section-heading">Suscripciones del canal</span>
+        {#if totalSubscriptions > 0}
+          <span class="text-[11px] text-gray-500">{startItem}–{endItem} de {totalSubscriptions}</span>
         {/if}
       </div>
 
@@ -223,28 +223,28 @@
             </tr>
           </thead>
           <tbody>
-            {#each invoices as invoice (invoice.id)}
+            {#each subscriptions as subscription (subscription.id)}
               <tr>
-                <td class="font-mono text-[11px] text-gray-400">{invoice.id}</td>
+                <td class="font-mono text-[11px] text-gray-400">{subscription.id}</td>
                 <td>
                   <div class="flex flex-col gap-0.5">
-                    <span class="font-semibold text-text-primary">{invoice.company_name}</span>
-                    <span class="text-[11px] text-gray-500">{invoice.email}</span>
-                    <span class="text-[11px] text-gray-400 font-mono">{invoice.subdomain}</span>
+                    <span class="font-semibold text-text-primary">{subscription.company_name}</span>
+                    <span class="text-[11px] text-gray-500">{subscription.email}</span>
+                    <span class="text-[11px] text-gray-400 font-mono">{subscription.subdomain}</span>
                   </div>
                 </td>
                 <td>
-                  <span class="badge {planBadge(invoice.plan)}">{invoice.plan}</span>
+                  <span class="badge {planBadge(subscription.plan)}">{subscription.plan}</span>
                 </td>
-                <td class="font-semibold text-text-primary">{formatCurrency(invoice.amount)}</td>
+                <td class="font-semibold text-text-primary">{formatCurrency(subscription.amount)}</td>
                 <td>
-                  <span class="badge {statusBadge(invoice.status)}">{invoice.status}</span>
+                  <span class="badge {statusBadge(subscription.status)}">{subscription.status}</span>
                 </td>
-                <td class="text-text-secondary text-sm">{formatDate(invoice.created_at)}</td>
+                <td class="text-text-secondary text-sm">{formatDate(subscription.created_at)}</td>
               </tr>
             {:else}
               <tr>
-                <td colspan="6" class="text-center text-gray-500 py-12 text-sm">No hay facturas disponibles</td>
+                <td colspan="6" class="text-center text-gray-500 py-12 text-sm">No hay suscripciones disponibles</td>
               </tr>
             {/each}
           </tbody>

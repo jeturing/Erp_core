@@ -51,7 +51,7 @@
 
     <div class="text-center">
       <a
-        href="#/accountants"
+        href="/accountants"
         class="inline-flex items-center gap-2 bg-primary hover:bg-navy text-white font-jakarta font-semibold text-sm px-6 py-3 rounded-btn shadow-soft hover:shadow-medium transition-all"
       >
         {$t('accountants.cta')}

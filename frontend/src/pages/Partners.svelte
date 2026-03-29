@@ -248,7 +248,7 @@
   }
 
   function copyCredentials() {
-    const text = `Email: ${credentialsEmail}\nContraseña temporal: ${credentialsTempPassword}\nURL: ${window.location.origin}/#/login`;
+    const text = `Email: ${credentialsEmail}\nContraseña temporal: ${credentialsTempPassword}\nURL: ${window.location.origin}/login`;
     navigator.clipboard.writeText(text).then(() => {
       credentialsCopied = true;
       setTimeout(() => credentialsCopied = false, 2500);
@@ -367,7 +367,7 @@
   <div class="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4">
     <div>
       <h1 class="page-title flex items-center gap-2"><Handshake size={24} /> Partners</h1>
-      <p class="page-subtitle">Gestión de socios comerciales — Modelo 50/50</p>
+      <p class="page-subtitle">Gestión de socios comerciales</p>
     </div>
     <button class="btn-accent flex items-center gap-2" on:click={() => { resetForm(); showForm = true; }}>
       <Plus size={16} /> Nuevo Partner
@@ -880,7 +880,7 @@
           <div class="font-mono text-xs space-y-1 text-gray-400">
             <div><span class="text-gray-500">Email:</span> {credentialsEmail}</div>
             <div><span class="text-gray-500">Password:</span> {showTempPassword ? credentialsTempPassword : '••••••••••••'}</div>
-            <div><span class="text-gray-500">URL:</span> {window.location.origin}/#/login</div>
+            <div><span class="text-gray-500">URL:</span> {window.location.origin}/login</div>
           </div>
         </div>
 

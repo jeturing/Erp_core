@@ -7,6 +7,7 @@
   import type { OnboardingConfig, OnboardingStep } from '../lib/api/onboardingConfig';
   import type { Plan, AgreementTemplate } from '../lib/types';
   import { toasts, isAuthenticated } from '../lib/stores';
+  import { goto } from '$app/navigation';
   import { api } from '../lib/api';
   import {
     CheckCircle, User, Building2, Globe, Phone, Mail, Lock,
@@ -105,7 +106,7 @@
     try {
       // Guard: if not authenticated, redirect to login
       if (!$isAuthenticated) {
-        window.location.hash = '#/login';
+        goto('/login');
         return;
       }
 
@@ -147,7 +148,7 @@
       // Session expired or not authenticated — redirect to login
       if (msg.includes('expirada') || msg.includes('401') || msg.includes('No autenticado')) {
         toasts.error('Su sesión ha expirado. Por favor, inicie sesión nuevamente.');
-        window.location.hash = '#/login';
+        goto('/login');
         return;
       }
       loadError = msg || 'Error cargando el estado del onboarding';
@@ -359,7 +360,7 @@
         <p class="text-gray-400">{loadError || 'No se pudo cargar el estado del onboarding.'}</p>
         <div class="flex justify-center gap-3">
           <button class="btn-accent px-4 py-2 text-sm" on:click={loadStatus}>Reintentar</button>
-          <a href="#/login" class="btn-secondary px-4 py-2 text-sm">Iniciar Sesión</a>
+          <a href="/login" class="btn-secondary px-4 py-2 text-sm">Iniciar Sesión</a>
         </div>
       </div>
     {:else if currentStep >= 4}
@@ -369,7 +370,7 @@
         <h2 class="text-2xl font-bold text-emerald-400">¡Onboarding Completado!</h2>
         <p class="text-gray-400">Su cuenta está lista. Ya puede acceder a todos los servicios de la plataforma.</p>
         <div class="pt-4">
-          <a href="#/dashboard" class="btn-accent inline-flex items-center gap-2 px-6 py-3">
+          <a href="/dashboard" class="btn-accent inline-flex items-center gap-2 px-6 py-3">
             Ir al Dashboard <ChevronRight size={16} />
           </a>
         </div>

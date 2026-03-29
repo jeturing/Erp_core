@@ -6,6 +6,7 @@
     Building2, ArrowRightLeft, BarChart3, UserPlus,
     Users, DollarSign, FileText, TrendingUp
   } from 'lucide-svelte';
+  import { goto } from '$app/navigation';
 
   let tenants: any[] = [];
   let dashboard: any = null;
@@ -39,7 +40,7 @@
       });
       if (res.ok) {
         // New JWT emitted — redirect to tenant portal
-        window.location.hash = '#/portal';
+        goto('/portal');
         window.location.reload();
       } else {
         error = 'Access denied for this tenant';
@@ -63,7 +64,7 @@
       </div>
       <button
         class="inline-flex items-center gap-2 bg-primary hover:bg-navy text-white font-jakarta font-semibold text-sm px-4 py-2 rounded-btn shadow-soft transition-all"
-        on:click={() => window.location.hash = '#/accountant-invite'}
+        on:click={() => goto('/accountant-invite')}
       >
         <UserPlus class="w-4 h-4" />
         Invite Client

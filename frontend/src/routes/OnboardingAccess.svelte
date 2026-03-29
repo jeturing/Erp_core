@@ -1,10 +1,12 @@
 <script lang="ts">
+  import { goto } from '$app/navigation';
+
   function goToLogin() {
-    window.location.hash = '#/login?next=customer-onboarding';
+    goto('/login?next=customer-onboarding');
   }
 
   function goToHome() {
-    window.location.hash = '#/';
+    goto('/');
   }
 </script>
 

@@ -1,12 +1,13 @@
 <script lang="ts">
   import { ArrowLeft, LifeBuoy } from 'lucide-svelte';
+  import { goto } from '$app/navigation';
 
   function goToLogin() {
-    window.location.hash = '#/login';
+    goto('/login');
   }
 
   function goToSignup() {
-    window.location.hash = '#/signup';
+    goto('/signup');
   }
 </script>
 

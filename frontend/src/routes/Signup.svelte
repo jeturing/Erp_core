@@ -17,6 +17,8 @@
     BadgeCheck,
     Lock,
   } from 'lucide-svelte';
+  import { goto } from '$app/navigation';
+  import { page } from '$app/stores';
 
   type Mode = 'landing' | 'tenant' | 'partner' | 'accountant';
   let mode = $state<Mode>('landing');
@@ -53,7 +55,7 @@
   const faqs = [
     {
       q: 'Cuanto tarda en activarse mi cuenta?',
-      a: 'Tu instancia Odoo se provisiona automaticamente en minutos una vez confirmado el pago. Recibiras un email con las credenciales.',
+      a: 'Tu instancia Sajet se provisiona automaticamente en minutos una vez confirmado el pago. Recibiras un email con las credenciales.',
     },
     {
       q: 'Puedo cambiar de plan despues?',
@@ -74,7 +76,7 @@
   ];
 
   const benefits = [
-    { icon: Zap, title: 'Activa en minutos', desc: 'Provisioning automatico. Tu Odoo listo en menos de 5 minutos.' },
+    { icon: Zap, title: 'Activa en minutos', desc: 'Provisioning automatico. Tu Sajet listo en menos de 5 minutos.' },
     { icon: ShieldCheck, title: 'Datos seguros', desc: 'Base de datos aislada por tenant. Cumplimiento y operacion separada por cliente.' },
     { icon: CheckCircle, title: 'Flujos claros', desc: 'Cada tipo de usuario entra por su onboarding correcto desde el primer clic.' },
     { icon: Star, title: 'Soporte LATAM', desc: 'Acompanamiento comercial y tecnico en espanol para toda la region.' },
@@ -94,7 +96,7 @@
       icon: Building2,
       kicker: 'Cliente / Empresa',
       title: 'Abrir mi empresa en SAJET',
-      desc: 'Crea tu instancia Odoo, elige plan y sal a produccion con dominio propio y checkout en Stripe.',
+      desc: 'Crea tu instancia Sajet, elige plan y sal a produccion con dominio propio y checkout en Stripe.',
       points: ['Instancia dedicada', 'Dominio .sajet.us', 'Activacion inmediata'],
       featured: true,
     },
@@ -254,8 +256,7 @@
 
   onMount(async () => {
     try {
-      const hash = window.location.hash || '';
-      const params = new URLSearchParams(hash.split('?')[1] || '');
+      const params = $page.url.searchParams;
       const m = params.get('mode');
       const role = params.get('role');
       if (m === 'partner') mode = 'partner';
@@ -280,7 +281,7 @@
   <div class="min-h-screen bg-[#F5F3EF]">
     <nav class="sticky top-0 z-30 bg-[#F5F3EF]/95 backdrop-blur border-b border-[#D1CCC4]">
       <div class="max-w-6xl mx-auto px-6 h-16 flex items-center justify-between gap-6">
-        <a href="#/" class="flex items-center gap-2.5">
+        <a href="/" class="flex items-center gap-2.5">
           <div class="w-7 h-7 bg-[#003B73] flex items-center justify-center">
             <span class="text-white font-bold text-xs">S</span>
           </div>
@@ -294,7 +295,7 @@
         </div>
 
         <div class="flex items-center gap-3">
-          <a href="#/login" class="text-sm text-gray-500 hover:text-[#1a1a1a] transition-colors hidden sm:block">Iniciar sesion</a>
+          <a href="/login" class="text-sm text-gray-500 hover:text-[#1a1a1a] transition-colors hidden sm:block">Iniciar sesion</a>
           <button
             type="button"
             onclick={() => (mode = 'tenant')}
@@ -443,7 +444,7 @@
         <div class="flex items-center gap-4 text-xs text-gray-400">
           <span class="flex items-center gap-1"><Lock size={11} /> SSL · Datos cifrados</span>
           <span class="flex items-center gap-1"><ShieldCheck size={11} /> Operacion separada por flujo</span>
-          <a href="#/login" class="hover:text-[#003B73] transition-colors">Iniciar sesion</a>
+          <a href="/login" class="hover:text-[#003B73] transition-colors">Iniciar sesion</a>
         </div>
       </div>
     </footer>
@@ -459,7 +460,7 @@
         >
           <ArrowLeft size={14} /> Volver
         </button>
-        <a href="#/login" class="text-sm text-[#C05A3C] hover:underline">Ya tengo cuenta</a>
+        <a href="/login" class="text-sm text-[#C05A3C] hover:underline">Ya tengo cuenta</a>
       </div>
 
       <div class="grid lg:grid-cols-[0.88fr_1.12fr] gap-8 items-start">
@@ -644,7 +645,7 @@
         <button type="button" class="text-[#003B73] hover:underline font-semibold" onclick={() => (mode = 'partner')}>Ir al flujo de partner</button>
         ·
         Prefieres ver la propuesta para contadores?
-        <a class="text-[#003B73] hover:underline font-semibold" href="#/accountants">Explorar landing contable</a>
+        <a class="text-[#003B73] hover:underline font-semibold" href="/accountants">Explorar landing contable</a>
       </p>
     </div>
   </div>
@@ -659,7 +660,7 @@
         >
           <ArrowLeft size={14} /> Volver
         </button>
-        <a href="#/login?next=partner-portal" class="text-sm text-[#C05A3C] hover:underline">Ya tengo cuenta</a>
+        <a href="/login?next=partner-portal" class="text-sm text-[#C05A3C] hover:underline">Ya tengo cuenta</a>
       </div>
 
       {#if partnerSuccess}
@@ -693,7 +694,7 @@
           </div>
           <button
             type="button"
-            onclick={() => (window.location.hash = '#/login?next=partner-portal')}
+            onclick={() => goto('/login?next=partner-portal')}
             class="bg-[#003B73] text-white font-bold uppercase tracking-widest text-xs px-8 py-3.5 hover:bg-[#002a55] transition-colors inline-flex items-center gap-2"
           >
             Ir a iniciar sesion <ArrowRight size={14} />

@@ -1,16 +1,15 @@
 import { defineConfig } from 'vite'
-import { svelte } from '@sveltejs/vite-plugin-svelte'
+import { sveltekit } from '@sveltejs/kit/vite'
 import { VitePWA } from 'vite-plugin-pwa'
 
 // https://vite.dev/config/
 export default defineConfig(({ command }) => ({
-  base: command === 'serve' ? '/' : '/static/spa/',
   plugins: [
-    svelte(),
+    sveltekit(),
     VitePWA({
       registerType: 'autoUpdate',
-      scope: '/static/spa/',
-      base: '/static/spa/',
+      scope: '/',
+      base: '/',
       includeAssets: ['favicon.svg', 'favicon.png', 'icons/apple-touch-icon.png'],
       manifest: {
         name: 'Sajet ERP',
@@ -20,8 +19,8 @@ export default defineConfig(({ command }) => ({
         background_color: '#0f172a',
         display: 'standalone',
         orientation: 'portrait-primary',
-        start_url: '/static/spa/',
-        scope: '/static/spa/',
+        start_url: '/',
+        scope: '/',
         lang: 'es',
         icons: [
           {
@@ -42,22 +41,22 @@ export default defineConfig(({ command }) => ({
             name: 'Dashboard',
             short_name: 'Panel',
             description: 'Ir al panel principal',
-            url: '/static/spa/#/dashboard',
+            url: '/dashboard',
             icons: [{ src: 'icons/icon-192.png', sizes: '192x192' }],
           },
           {
             name: 'Portal',
             short_name: 'Portal',
             description: 'Portal del cliente',
-            url: '/static/spa/#/portal',
+            url: '/portal',
             icons: [{ src: 'icons/icon-192.png', sizes: '192x192' }],
           },
         ],
       },
       workbox: {
         globPatterns: ['**/*.{js,css,html,ico,png,svg,woff2}'],
-        navigateFallback: '/static/spa/index.html',
-        navigateFallbackAllowlist: [/^\/static\/spa/],
+        navigateFallback: '/200.html',
+        navigateFallbackAllowlist: [/^(?!\/api)/],
         runtimeCaching: [
           // ── API GET: NetworkFirst (red → caché si offline) ──────────────
           {

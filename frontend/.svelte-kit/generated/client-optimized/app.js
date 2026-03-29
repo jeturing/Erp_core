@@ -1,0 +1,141 @@
+import * as client_hooks from '../../../src/hooks.client.ts';
+
+
+export { matchers } from './matchers.js';
+
+export const nodes = [
+	() => import('./nodes/0'),
+	() => import('./nodes/1'),
+	() => import('./nodes/2'),
+	() => import('./nodes/3'),
+	() => import('./nodes/4'),
+	() => import('./nodes/5'),
+	() => import('./nodes/6'),
+	() => import('./nodes/7'),
+	() => import('./nodes/8'),
+	() => import('./nodes/9'),
+	() => import('./nodes/10'),
+	() => import('./nodes/11'),
+	() => import('./nodes/12'),
+	() => import('./nodes/13'),
+	() => import('./nodes/14'),
+	() => import('./nodes/15'),
+	() => import('./nodes/16'),
+	() => import('./nodes/17'),
+	() => import('./nodes/18'),
+	() => import('./nodes/19'),
+	() => import('./nodes/20'),
+	() => import('./nodes/21'),
+	() => import('./nodes/22'),
+	() => import('./nodes/23'),
+	() => import('./nodes/24'),
+	() => import('./nodes/25'),
+	() => import('./nodes/26'),
+	() => import('./nodes/27'),
+	() => import('./nodes/28'),
+	() => import('./nodes/29'),
+	() => import('./nodes/30'),
+	() => import('./nodes/31'),
+	() => import('./nodes/32'),
+	() => import('./nodes/33'),
+	() => import('./nodes/34'),
+	() => import('./nodes/35'),
+	() => import('./nodes/36'),
+	() => import('./nodes/37'),
+	() => import('./nodes/38'),
+	() => import('./nodes/39'),
+	() => import('./nodes/40'),
+	() => import('./nodes/41'),
+	() => import('./nodes/42'),
+	() => import('./nodes/43'),
+	() => import('./nodes/44'),
+	() => import('./nodes/45'),
+	() => import('./nodes/46'),
+	() => import('./nodes/47'),
+	() => import('./nodes/48'),
+	() => import('./nodes/49'),
+	() => import('./nodes/50'),
+	() => import('./nodes/51'),
+	() => import('./nodes/52'),
+	() => import('./nodes/53'),
+	() => import('./nodes/54'),
+	() => import('./nodes/55'),
+	() => import('./nodes/56'),
+	() => import('./nodes/57'),
+	() => import('./nodes/58')
+];
+
+export const server_loads = [];
+
+export const dictionary = {
+		"/(public)": [43,[4]],
+		"/(public)/about": [44,[4]],
+		"/(portal)/accountant-portal": [39,[3]],
+		"/(public)/accountants": [45,[4]],
+		"/(admin)/admin-users": [5,[2]],
+		"/admin": [58],
+		"/(admin)/agreements": [6,[2]],
+		"/(admin)/audit": [7,[2]],
+		"/(admin)/billing": [8,[2]],
+		"/(admin)/blueprints": [9,[2]],
+		"/(admin)/branding": [10,[2]],
+		"/(admin)/catalog": [11,[2]],
+		"/(admin)/clients": [12,[2]],
+		"/(admin)/commissions": [13,[2]],
+		"/(admin)/communications": [14,[2]],
+		"/(portal)/customer-onboarding": [40,[3]],
+		"/(admin)/dashboard": [15,[2]],
+		"/(public)/data-processing": [46,[4]],
+		"/(admin)/dispersion": [16,[2]],
+		"/(admin)/domains": [17,[2]],
+		"/(admin)/infrastructure": [18,[2]],
+		"/(admin)/invoices": [19,[2]],
+		"/(admin)/landing-sections": [20,[2]],
+		"/(admin)/leads": [21,[2]],
+		"/(public)/login": [47,[4]],
+		"/(admin)/logs": [22,[2]],
+		"/(admin)/migrations": [23,[2]],
+		"/(public)/onboarding-access": [48,[4]],
+		"/(admin)/onboarding-config": [24,[2]],
+		"/(portal)/partner-portal": [41,[3]],
+		"/(public)/partner-signup": [49,[4]],
+		"/(admin)/partners": [25,[2]],
+		"/(admin)/plans": [26,[2]],
+		"/(public)/plt/[slug]": [50,[4]],
+		"/(portal)/portal": [42,[3]],
+		"/(public)/pricing": [51,[4]],
+		"/(public)/privacy": [52,[4]],
+		"/(admin)/quotations": [27,[2]],
+		"/(admin)/reconciliation": [28,[2]],
+		"/(public)/recover-account": [53,[4]],
+		"/(admin)/reports": [29,[2]],
+		"/(admin)/roles": [30,[2]],
+		"/(admin)/seats": [31,[2]],
+		"/(public)/security": [54,[4]],
+		"/(admin)/settings": [32,[2]],
+		"/(admin)/settlements": [33,[2]],
+		"/(public)/signup": [55,[4]],
+		"/(public)/sla": [56,[4]],
+		"/(admin)/tenants": [34,[2]],
+		"/(public)/terms": [57,[4]],
+		"/(admin)/testimonials": [35,[2]],
+		"/(admin)/translations": [36,[2]],
+		"/(admin)/tunnels": [37,[2]],
+		"/(admin)/workorders": [38,[2]]
+	};
+
+export const hooks = {
+	handleError: client_hooks.handleError || (({ error }) => { console.error(error) }),
+	init: client_hooks.init,
+	reroute: (() => {}),
+	transport: {}
+};
+
+export const decoders = Object.fromEntries(Object.entries(hooks.transport).map(([k, v]) => [k, v.decode]));
+export const encoders = Object.fromEntries(Object.entries(hooks.transport).map(([k, v]) => [k, v.encode]));
+
+export const hash = false;
+
+export const decode = (type, value) => decoders[type](value);
+
+export { default as root } from '../root.js';

@@ -4,14 +4,18 @@ from app.models.database import (
     BillingMode,
     Customer,
     Invoice,
+    InvoiceIssuer,
+    InvoiceStatus,
+    InvoiceType,
     Partner,
     PartnerStatus,
     PartnerPricingOverride,
     Plan,
+    SeatHighWater,
     Subscription,
     SubscriptionStatus,
 )
-from app.services.stripe_billing import generate_consumption_invoice
+from app.services.stripe_billing import generate_consumption_invoice, reconcile_billing_periods
 from app.services.stripe_sync import sync_stripe_customers, upsert_stripe_subscription
 
 
@@ -171,3 +175,205 @@ def test_upsert_stripe_subscription_skips_duplicate_local_customers_for_same_ema
     assert results["skipped"] == 1
     assert results["created"] == 0
     assert all(customer.stripe_customer_id is None for customer in customers)
+
+
+def test_generate_consumption_invoice_uses_hwm_period_count_and_preserves_current_amount(db_session, monkeypatch):
+    partner = Partner(
+        company_name="Techeels Partner",
+        contact_email="partner-hwm@test.com",
+        status=PartnerStatus.active,
+        partner_code="TECHHWM",
+    )
+    plan = Plan(
+        name="pro",
+        display_name="Pro",
+        base_price=150,
+        price_per_user=17.10,
+        included_users=1,
+        is_active=True,
+    )
+    override = PartnerPricingOverride(
+        partner=partner,
+        plan_name="pro",
+        base_price_override=150,
+        price_per_user_override=17.10,
+        included_users_override=1,
+        is_active=True,
+    )
+    customer = Customer(
+        email="admin-hwm@techeels.com",
+        full_name="TecHeels HWM",
+        company_name="TecHeels HWM",
+        subdomain="techeelshwm",
+        user_count=4,
+    )
+    db_session.add_all([partner, plan, override, customer])
+    db_session.commit()
+    customer.partner_id = partner.id
+    db_session.commit()
+
+    subscription = Subscription(
+        customer_id=customer.id,
+        plan_name="pro",
+        status=SubscriptionStatus.active,
+        user_count=4,
+        billing_mode=BillingMode.PARTNER_DIRECT,
+        owner_partner_id=partner.id,
+    )
+    db_session.add(subscription)
+    db_session.commit()
+    db_session.refresh(subscription)
+
+    db_session.add(
+        SeatHighWater(
+            subscription_id=subscription.id,
+            period_date=datetime(2026, 3, 10),
+            hwm_count=1,
+        )
+    )
+    db_session.commit()
+
+    monkeypatch.setattr(
+        "app.services.stripe_billing.push_invoice_to_stripe",
+        lambda db, invoice: {"stripe_invoice_id": "in_test_hwm", "status": "draft"},
+    )
+
+    result = generate_consumption_invoice(
+        db_session,
+        subscription.id,
+        period_start=datetime(2026, 3, 1),
+        period_end=datetime(2026, 4, 1),
+    )
+    db_session.refresh(subscription)
+
+    assert round(result["total"], 2) == 150.00
+    assert result["usage_source"] == "seat_high_water"
+    assert result["resolved_user_count"] == 1
+    assert round(subscription.monthly_amount, 2) == 201.30
+
+
+def test_reconcile_billing_periods_voids_partner_mismatch_and_reissues(db_session, monkeypatch):
+    partner = Partner(
+        company_name="Techeels Partner",
+        contact_email="partner-reconcile@test.com",
+        status=PartnerStatus.active,
+        partner_code="TECHREC",
+    )
+    plan = Plan(
+        name="basic",
+        display_name="Basic",
+        base_price=120,
+        price_per_user=17.50,
+        included_users=1,
+        is_active=True,
+    )
+    override = PartnerPricingOverride(
+        partner=partner,
+        plan_name="basic",
+        base_price_override=120,
+        price_per_user_override=17.50,
+        included_users_override=1,
+        is_active=True,
+    )
+    customer = Customer(
+        email="admin-rec@jofi.com",
+        full_name="Jofi",
+        company_name="Jofi",
+        subdomain="jofi",
+        user_count=1,
+    )
+    db_session.add_all([partner, plan, override, customer])
+    db_session.commit()
+    customer.partner_id = partner.id
+    db_session.commit()
+
+    subscription = Subscription(
+        customer_id=customer.id,
+        plan_name="basic",
+        status=SubscriptionStatus.active,
+        user_count=1,
+        billing_mode=BillingMode.PARTNER_DIRECT,
+        owner_partner_id=partner.id,
+        current_period_start=datetime(2026, 3, 1),
+        current_period_end=datetime(2026, 4, 1),
+    )
+    db_session.add(subscription)
+    db_session.commit()
+    db_session.refresh(subscription)
+
+    wrong_invoice = Invoice(
+        invoice_number="INV-2026-0999",
+        subscription_id=subscription.id,
+        customer_id=customer.id,
+        partner_id=partner.id,
+        invoice_type=InvoiceType.SUBSCRIPTION,
+        billing_mode=BillingMode.PARTNER_DIRECT,
+        issuer=InvoiceIssuer.JETURING,
+        subtotal=18,
+        tax_amount=0,
+        total=18,
+        currency="USD",
+        lines_json=[{"description": "Suscripción mensual — basic", "qty": 1, "unit_price": 18, "subtotal": 18}],
+        status=InvoiceStatus.issued,
+        billing_period_key="2026-03-01__2026-04-01",
+        period_start=datetime(2026, 3, 1),
+        period_end=datetime(2026, 4, 1),
+        issued_at=datetime(2026, 3, 1),
+    )
+    db_session.add(wrong_invoice)
+    db_session.commit()
+
+    monkeypatch.setattr(
+        "app.services.stripe_billing.push_invoice_to_stripe",
+        lambda db, invoice: {"stripe_invoice_id": f"in_test_{invoice.invoice_number}", "status": "draft"},
+    )
+
+    result = reconcile_billing_periods(db_session)
+    db_session.refresh(wrong_invoice)
+    invoices = db_session.query(Invoice).filter(Invoice.subscription_id == subscription.id).order_by(Invoice.id.asc()).all()
+    replacement = invoices[-1]
+
+    assert result["reissued_mismatches"] == 1
+    assert wrong_invoice.status == InvoiceStatus.void
+    assert wrong_invoice.id != replacement.id
+    assert round(replacement.total, 2) == 120.00
+
+
+def test_billing_subscriptions_endpoint_separates_subscription_surface(client, db_session, auth_headers):
+    customer = Customer(
+        email="billing-surface@test.com",
+        full_name="Billing Surface",
+        company_name="Billing Surface Co",
+        subdomain="billingsurface",
+    )
+    plan = Plan(
+        name="basic",
+        display_name="Basic",
+        base_price=120,
+        price_per_user=17.50,
+        included_users=1,
+        is_active=True,
+    )
+    db_session.add_all([customer, plan])
+    db_session.commit()
+
+    subscription = Subscription(
+        customer_id=customer.id,
+        plan_name="basic",
+        status=SubscriptionStatus.active,
+        user_count=1,
+    )
+    db_session.add(subscription)
+    db_session.commit()
+
+    response = client.get("/api/billing/subscriptions", headers=auth_headers)
+    assert response.status_code == 200
+    payload = response.json()
+    assert payload["total"] >= 1
+    assert payload["items"][0]["company_name"] == "Billing Surface Co"
+
+    alias_response = client.get("/api/billing/invoices", headers=auth_headers)
+    assert alias_response.status_code == 200
+    alias_payload = alias_response.json()
+    assert alias_payload["kind"] == "subscriptions"
+    assert alias_payload["items"][0]["company_name"] == "Billing Surface Co"

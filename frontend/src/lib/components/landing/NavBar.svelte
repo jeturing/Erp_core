@@ -2,23 +2,24 @@
   import { t } from 'svelte-i18n';
   import { localeStore } from '../../stores';
   import { ArrowRight, Globe } from 'lucide-svelte';
+  import { goto } from '$app/navigation';
 
   export let partnerBranding: any = null;
 
   const navLinks = [
-    { label: 'Clientes', href: '#/signup' },
-    { labelKey: 'nav.for_accountants', href: '#/accountants' },
-    { labelKey: 'nav.partners', href: '#/partner-signup' },
+    { label: 'Clientes', href: '/signup' },
+    { labelKey: 'nav.for_accountants', href: '/accountants' },
+    { labelKey: 'nav.partners', href: '/partner-signup' },
     { labelKey: 'nav.pricing', href: '#pricing' },
     { labelKey: 'nav.resources', href: '#faq' },
   ];
 
   function goToLogin() {
-    window.location.hash = '#/login';
+    goto('/login');
   }
 
   function handleCTA() {
-    window.location.hash = '#/signup';
+    goto('/signup');
   }
 
   function toggleLanguage() {
@@ -87,7 +88,7 @@
       </button>
 
       <a
-        href="#/accountants"
+        href="/accountants"
         class="text-sm font-inter text-slate hover:text-slate-dark transition-colors px-3 py-1.5"
       >
         {$t('common.join_accountant')}

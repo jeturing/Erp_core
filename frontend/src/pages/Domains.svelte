@@ -149,7 +149,7 @@
   function sourceLabel(source: string): string {
     if (source === 'base') return 'Base';
     if (source === 'custom') return 'Custom';
-    if (source === 'odoo') return 'Odoo';
+    if (source === 'odoo') return 'Sajet';
     return source;
   }
 
@@ -864,12 +864,12 @@
                   <span>Total: <span class="font-semibold">{linked.summary.total}</span></span>
                   <span>Base: <span class="font-semibold">{linked.summary.base}</span></span>
                   <span>Custom: <span class="font-semibold">{linked.summary.custom}</span></span>
-                  <span>Odoo: <span class="font-semibold">{linked.summary.odoo}</span></span>
+                  <span>Sajet: <span class="font-semibold">{linked.summary.odoo}</span></span>
                 </div>
 
                 {#if linked.odoo_error}
                   <div class="text-[10px] text-amber-700 bg-amber-50 border border-amber-200 rounded px-2 py-1 mb-2">
-                    Odoo no disponible: {linked.odoo_error}
+                    Sajet no disponible: {linked.odoo_error}
                   </div>
                 {/if}
 

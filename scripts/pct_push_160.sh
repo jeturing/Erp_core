@@ -73,6 +73,7 @@ fi
 temp_ops_list="$(mktemp)"
 temp_pushed_list="$(mktemp)"
 trap 'rm -f "${temp_ops_list}" "${temp_pushed_list}"' EXIT
+STAGING_ROOT="/root/.pct-stage"
 
 python3 - <<'PY' > "${temp_ops_list}"
 import pathlib
@@ -145,9 +146,13 @@ else
     src="${PROJECT_ROOT}/${rel}"
     dst="${REMOTE_ROOT}/${rel}"
     dst_dir="$(dirname "${dst}")"
+    staging_dst="${STAGING_ROOT}/${rel}"
+    staging_dir="$(dirname "${staging_dst}")"
 
     pct exec "${CT_ID}" -- mkdir -p "${dst_dir}"
-    pct push "${CT_ID}" "${src}" "${dst}"
+    pct exec "${CT_ID}" -- mkdir -p "${staging_dir}"
+    pct push "${CT_ID}" "${src}" "${staging_dst}"
+    pct exec "${CT_ID}" -- install -D -m 0644 "${staging_dst}" "${dst}"
     echo "${rel}" >> "${temp_pushed_list}"
     echo "[p160] [${current}/${total_ops}] PUSH ${rel}"
   done < "${temp_ops_list}"
@@ -174,9 +179,29 @@ if [[ -s "${temp_pushed_list}" ]]; then
   fi
 fi
 
+# Instala helpers de sistema que el runtime de CT160 necesita fuera de REMOTE_ROOT
+helper_script="${PROJECT_ROOT}/scripts/sajet_proxmox_admin.sh"
+helper_sudoers="${PROJECT_ROOT}/scripts/erp-core-proxmox-admin.sudoers"
+if [[ -f "${helper_script}" && -f "${helper_sudoers}" ]]; then
+  echo "[p160] Instalando helper sajet-proxmox-admin en CT ${CT_ID}"
+  helper_b64="$(base64 -w0 "${helper_script}")"
+  pct exec "${CT_ID}" -- bash -lc \
+    "echo '${helper_b64}' | base64 -d > /usr/local/bin/sajet-proxmox-admin \
+      && chmod 0750 /usr/local/bin/sajet-proxmox-admin \
+      && chown root:root /usr/local/bin/sajet-proxmox-admin"
+
+  sudoers_b64="$(base64 -w0 "${helper_sudoers}")"
+  pct exec "${CT_ID}" -- bash -lc \
+    "echo '${sudoers_b64}' | base64 -d > /etc/sudoers.d/erp-core-proxmox-admin \
+      && chmod 0440 /etc/sudoers.d/erp-core-proxmox-admin \
+      && chown root:root /etc/sudoers.d/erp-core-proxmox-admin \
+      && visudo -cf /etc/sudoers.d/erp-core-proxmox-admin >/dev/null"
+fi
+
 pct exec "${CT_ID}" -- chmod +x \
   "${REMOTE_ROOT}/scripts/build_static.sh" \
   "${REMOTE_ROOT}/scripts/deploy_to_server.sh" \
+  "${REMOTE_ROOT}/scripts/jd_sajet.sh" \
   "${REMOTE_ROOT}/scripts/smoke_pct160.sh" \
   "${REMOTE_ROOT}/scripts/pct_push_160.sh" || true
 

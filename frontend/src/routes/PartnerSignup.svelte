@@ -1,5 +1,6 @@
 <script lang="ts">
   import { Loader2 } from 'lucide-svelte';
+  import { goto } from '$app/navigation';
 
   let loading = false;
   let success = false;
@@ -62,11 +63,11 @@
   }
 
   function goToLogin() {
-    window.location.hash = '#/login?next=partner-portal';
+    goto('/login?next=partner-portal');
   }
 
   function goToPartnersSection() {
-    window.location.hash = '#/partners';
+    goto('/partners');
   }
 </script>
 

@@ -1,6 +1,7 @@
 import api from './client';
 import type {
   BillingInvoicesResponse,
+  BillingSubscriptionsResponse,
   BillingMetrics,
   StripeEventsResponse,
   PlansResponse,
@@ -29,6 +30,10 @@ export const billingApi = {
 
   async getInvoices(limit = 20, offset = 0): Promise<BillingInvoicesResponse> {
     return api.get<BillingInvoicesResponse>(`/api/billing/invoices?limit=${limit}&offset=${offset}`);
+  },
+
+  async getSubscriptions(limit = 20, offset = 0): Promise<BillingSubscriptionsResponse> {
+    return api.get<BillingSubscriptionsResponse>(`/api/billing/subscriptions?limit=${limit}&offset=${offset}`);
   },
 
   async getComparison(): Promise<BillingComparison> {

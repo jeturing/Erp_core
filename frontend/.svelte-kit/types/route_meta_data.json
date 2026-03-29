@@ -1,0 +1,230 @@
+{
+	"/(public)": [
+		"src/routes/(public)/+layout.ts",
+		"src/routes/+layout.ts",
+		"src/routes/(public)/+layout.ts",
+		"src/routes/+layout.ts"
+	],
+	"/(portal)": [
+		"src/routes/(portal)/+layout.ts",
+		"src/routes/+layout.ts"
+	],
+	"/(admin)": [
+		"src/routes/(admin)/+layout.ts",
+		"src/routes/+layout.ts"
+	],
+	"/": [
+		"src/routes/+layout.ts"
+	],
+	"/(public)/about": [
+		"src/routes/(public)/+layout.ts",
+		"src/routes/+layout.ts"
+	],
+	"/(portal)/accountant-portal": [
+		"src/routes/(portal)/+layout.ts",
+		"src/routes/+layout.ts"
+	],
+	"/(public)/accountants": [
+		"src/routes/(public)/+layout.ts",
+		"src/routes/+layout.ts"
+	],
+	"/(admin)/admin-users": [
+		"src/routes/(admin)/+layout.ts",
+		"src/routes/+layout.ts"
+	],
+	"/admin": [
+		"src/routes/+layout.ts"
+	],
+	"/(admin)/agreements": [
+		"src/routes/(admin)/+layout.ts",
+		"src/routes/+layout.ts"
+	],
+	"/(admin)/audit": [
+		"src/routes/(admin)/+layout.ts",
+		"src/routes/+layout.ts"
+	],
+	"/(admin)/billing": [
+		"src/routes/(admin)/+layout.ts",
+		"src/routes/+layout.ts"
+	],
+	"/(admin)/blueprints": [
+		"src/routes/(admin)/+layout.ts",
+		"src/routes/+layout.ts"
+	],
+	"/(admin)/branding": [
+		"src/routes/(admin)/+layout.ts",
+		"src/routes/+layout.ts"
+	],
+	"/(admin)/catalog": [
+		"src/routes/(admin)/+layout.ts",
+		"src/routes/+layout.ts"
+	],
+	"/(admin)/clients": [
+		"src/routes/(admin)/+layout.ts",
+		"src/routes/+layout.ts"
+	],
+	"/(admin)/commissions": [
+		"src/routes/(admin)/+layout.ts",
+		"src/routes/+layout.ts"
+	],
+	"/(admin)/communications": [
+		"src/routes/(admin)/+layout.ts",
+		"src/routes/+layout.ts"
+	],
+	"/(portal)/customer-onboarding": [
+		"src/routes/(portal)/+layout.ts",
+		"src/routes/+layout.ts"
+	],
+	"/(admin)/dashboard": [
+		"src/routes/(admin)/+layout.ts",
+		"src/routes/+layout.ts"
+	],
+	"/(public)/data-processing": [
+		"src/routes/(public)/+layout.ts",
+		"src/routes/+layout.ts"
+	],
+	"/(admin)/dispersion": [
+		"src/routes/(admin)/+layout.ts",
+		"src/routes/+layout.ts"
+	],
+	"/(admin)/domains": [
+		"src/routes/(admin)/+layout.ts",
+		"src/routes/+layout.ts"
+	],
+	"/(admin)/infrastructure": [
+		"src/routes/(admin)/+layout.ts",
+		"src/routes/+layout.ts"
+	],
+	"/(admin)/invoices": [
+		"src/routes/(admin)/+layout.ts",
+		"src/routes/+layout.ts"
+	],
+	"/(admin)/landing-sections": [
+		"src/routes/(admin)/+layout.ts",
+		"src/routes/+layout.ts"
+	],
+	"/(admin)/leads": [
+		"src/routes/(admin)/+layout.ts",
+		"src/routes/+layout.ts"
+	],
+	"/(public)/login": [
+		"src/routes/(public)/+layout.ts",
+		"src/routes/+layout.ts"
+	],
+	"/(admin)/logs": [
+		"src/routes/(admin)/+layout.ts",
+		"src/routes/+layout.ts"
+	],
+	"/(admin)/migrations": [
+		"src/routes/(admin)/+layout.ts",
+		"src/routes/+layout.ts"
+	],
+	"/(public)/onboarding-access": [
+		"src/routes/(public)/+layout.ts",
+		"src/routes/+layout.ts"
+	],
+	"/(admin)/onboarding-config": [
+		"src/routes/(admin)/+layout.ts",
+		"src/routes/+layout.ts"
+	],
+	"/(portal)/partner-portal": [
+		"src/routes/(portal)/+layout.ts",
+		"src/routes/+layout.ts"
+	],
+	"/(public)/partner-signup": [
+		"src/routes/(public)/+layout.ts",
+		"src/routes/+layout.ts"
+	],
+	"/(admin)/partners": [
+		"src/routes/(admin)/+layout.ts",
+		"src/routes/+layout.ts"
+	],
+	"/(admin)/plans": [
+		"src/routes/(admin)/+layout.ts",
+		"src/routes/+layout.ts"
+	],
+	"/(public)/plt/[slug]": [
+		"src/routes/(public)/+layout.ts",
+		"src/routes/+layout.ts"
+	],
+	"/(portal)/portal": [
+		"src/routes/(portal)/+layout.ts",
+		"src/routes/+layout.ts"
+	],
+	"/(public)/pricing": [
+		"src/routes/(public)/+layout.ts",
+		"src/routes/+layout.ts"
+	],
+	"/(public)/privacy": [
+		"src/routes/(public)/+layout.ts",
+		"src/routes/+layout.ts"
+	],
+	"/(admin)/quotations": [
+		"src/routes/(admin)/+layout.ts",
+		"src/routes/+layout.ts"
+	],
+	"/(admin)/reconciliation": [
+		"src/routes/(admin)/+layout.ts",
+		"src/routes/+layout.ts"
+	],
+	"/(public)/recover-account": [
+		"src/routes/(public)/+layout.ts",
+		"src/routes/+layout.ts"
+	],
+	"/(admin)/reports": [
+		"src/routes/(admin)/+layout.ts",
+		"src/routes/+layout.ts"
+	],
+	"/(admin)/roles": [
+		"src/routes/(admin)/+layout.ts",
+		"src/routes/+layout.ts"
+	],
+	"/(admin)/seats": [
+		"src/routes/(admin)/+layout.ts",
+		"src/routes/+layout.ts"
+	],
+	"/(public)/security": [
+		"src/routes/(public)/+layout.ts",
+		"src/routes/+layout.ts"
+	],
+	"/(admin)/settings": [
+		"src/routes/(admin)/+layout.ts",
+		"src/routes/+layout.ts"
+	],
+	"/(admin)/settlements": [
+		"src/routes/(admin)/+layout.ts",
+		"src/routes/+layout.ts"
+	],
+	"/(public)/signup": [
+		"src/routes/(public)/+layout.ts",
+		"src/routes/+layout.ts"
+	],
+	"/(public)/sla": [
+		"src/routes/(public)/+layout.ts",
+		"src/routes/+layout.ts"
+	],
+	"/(admin)/tenants": [
+		"src/routes/(admin)/+layout.ts",
+		"src/routes/+layout.ts"
+	],
+	"/(public)/terms": [
+		"src/routes/(public)/+layout.ts",
+		"src/routes/+layout.ts"
+	],
+	"/(admin)/testimonials": [
+		"src/routes/(admin)/+layout.ts",
+		"src/routes/+layout.ts"
+	],
+	"/(admin)/translations": [
+		"src/routes/(admin)/+layout.ts",
+		"src/routes/+layout.ts"
+	],
+	"/(admin)/tunnels": [
+		"src/routes/(admin)/+layout.ts",
+		"src/routes/+layout.ts"
+	],
+	"/(admin)/workorders": [
+		"src/routes/(admin)/+layout.ts",
+		"src/routes/+layout.ts"
+	]
+}

@@ -3,10 +3,10 @@ Main application entry point
 Onboarding System API - Modular architecture with production security
 """
 from contextlib import asynccontextmanager
-from fastapi import FastAPI, Cookie
+from fastapi import FastAPI, Cookie, HTTPException, Request
+from fastapi.responses import HTMLResponse
 from fastapi.staticfiles import StaticFiles
 from starlette.middleware.base import BaseHTTPMiddleware
-from starlette.requests import Request
 from starlette.responses import Response
 import base64
 import hashlib
@@ -279,6 +279,104 @@ async def health_check():
         "status": "healthy",
         "version": "2.0.0",
     }
+
+
+# ── SPA Catch-All (SvelteKit file-based routing) ──
+# A route-based catch-all ({full_path:path}) does NOT work in FastAPI when
+# there is an app.mount() for StaticFiles because Starlette resolves mounts
+# before parameterised path routes.
+# A BaseHTTPMiddleware also fails because Starlette returns 404 at the ASGI
+# level before the response reaches the middleware dispatch.
+# Solution: custom ASGI wrapper that intercepts 404 responses for SPA routes.
+from .services.spa_shell import render_spa_shell as _render_spa  # noqa: E402
+
+_SPA_SKIP_PREFIXES = (
+    "/api/", "/static/", "/sajet-api-docs", "/sajet-api-redoc",
+    "/openapi", "/health",
+)
+
+_SPA_ROUTES = {
+    "/", "/dashboard", "/portal", "/partner-portal", "/customer-onboarding",
+    "/accountant-portal", "/tenants", "/domains", "/infrastructure",
+    "/billing", "/settings", "/logs", "/tunnels", "/roles", "/plans",
+    "/clients", "/partners", "/leads", "/commissions", "/quotations",
+    "/blueprints", "/seats", "/invoices", "/settlements", "/reconciliation",
+    "/dispersion", "/workorders", "/audit", "/branding", "/catalog",
+    "/onboarding-config", "/communications", "/reports", "/admin-users",
+    "/agreements", "/testimonials", "/landing-sections", "/translations",
+    "/migrations", "/accountants", "/partner-signup", "/onboarding-access",
+    "/recover-account", "/about", "/privacy", "/terms", "/data-processing",
+    "/security", "/sla", "/login", "/signup", "/pricing",
+}
+
+
+def _is_spa_path(path: str) -> bool:
+    """Check if a URL path should be handled by the SPA router."""
+    if any(path.startswith(p) for p in _SPA_SKIP_PREFIXES):
+        return False
+    return path in _SPA_ROUTES or path.startswith("/plt/")
+
+
+class _SPAFallbackASGI:
+    """ASGI wrapper that intercepts 404s for SPA paths."""
+
+    def __init__(self, app_inner):
+        self.app = app_inner
+
+    async def __call__(self, scope, receive, send):
+        if scope["type"] != "http" or scope.get("method", "GET") != "GET":
+            await self.app(scope, receive, send)
+            return
+
+        path = scope.get("path", "/")
+        if not _is_spa_path(path):
+            await self.app(scope, receive, send)
+            return
+
+        # Buffer the response to check status code
+        response_started = False
+        status_code = 200
+        initial_message = None
+
+        async def send_wrapper(message):
+            nonlocal response_started, status_code, initial_message
+
+            if message["type"] == "http.response.start":
+                status_code = message.get("status", 200)
+                if status_code == 404:
+                    # Don't send the 404 — we'll replace it
+                    initial_message = message
+                    return
+                response_started = True
+                await send(message)
+
+            elif message["type"] == "http.response.body":
+                if status_code == 404 and not response_started:
+                    # Replace 404 with SPA shell
+                    route_name = path.strip("/").split("/")[0] or "landing"
+                    spa_response = _render_spa(route_name)
+                    body_bytes = spa_response.body
+
+                    await send({
+                        "type": "http.response.start",
+                        "status": 200,
+                        "headers": [
+                            [b"content-type", b"text/html; charset=utf-8"],
+                            [b"content-length", str(len(body_bytes)).encode()],
+                        ],
+                    })
+                    await send({
+                        "type": "http.response.body",
+                        "body": body_bytes,
+                    })
+                    return
+                await send(message)
+
+        await self.app(scope, receive, send_wrapper)
+
+
+# Wrap the entire ASGI app
+app = _SPAFallbackASGI(app)  # type: ignore[assignment]
 
 
 if __name__ == "__main__":

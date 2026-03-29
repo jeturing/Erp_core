@@ -18,20 +18,20 @@
     {
       title: $t('footer.company'),
       links: [
-        { label: $t('footer.about'), href: '#/about' },
+        { label: $t('footer.about'), href: '/about' },
         { label: $t('nav.partners'), href: '#partners' },
-        { label: $t('nav.for_accountants'), href: '#/accountants' },
+        { label: $t('nav.for_accountants'), href: '/accountants' },
         { label: $t('footer.contact'), href: 'https://wa.me/4012001999' },
       ],
     },
     {
       title: $t('footer.legal'),
       links: [
-        { label: $t('footer.privacy'), href: '#/privacy' },
-        { label: $t('footer.terms'), href: '#/terms' },
-        { label: $t('footer.data_processing'), href: '#/data-processing' },
-        { label: $t('footer.security'), href: '#/security' },
-        { label: $t('footer.sla'), href: '#/sla' },
+        { label: $t('footer.privacy'), href: '/privacy' },
+        { label: $t('footer.terms'), href: '/terms' },
+        { label: $t('footer.data_processing'), href: '/data-processing' },
+        { label: $t('footer.security'), href: '/security' },
+        { label: $t('footer.sla'), href: '/sla' },
       ],
     },
   ];
@@ -42,7 +42,7 @@
     <div class="grid grid-cols-2 md:grid-cols-4 gap-10 mb-14">
       <!-- Brand column -->
       <div class="col-span-2 md:col-span-1">
-        <a href="#/" class="inline-block mb-4">
+        <a href="/" class="inline-block mb-4">
           <span class="text-xl font-jakarta font-extrabold text-white">
             Sajet<span class="text-secondary">.</span>us
           </span>

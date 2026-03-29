@@ -238,7 +238,7 @@
               <HardDrive size={12} class="text-purple-400" />
               <span>Storage: <span class="text-text-light font-medium">{plan.max_storage_mb === 0 ? '∞' : plan.max_storage_mb + 'MB'}</span></span>
             </div>
-            <div class="flex items-center gap-1.5 text-gray-400" title="Websites Odoo">
+            <div class="flex items-center gap-1.5 text-gray-400" title="Websites Sajet">
               <LayoutGrid size={12} class="text-green-400" />
               <span>Websites: <span class="text-text-light font-medium">{plan.max_websites}</span></span>
             </div>

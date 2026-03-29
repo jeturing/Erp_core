@@ -584,7 +584,7 @@
       <div class="p-6">
         <h1 class="page-title">404 - Página no encontrada</h1>
         <p class="page-subtitle mt-2">La ruta solicitada no existe dentro de la SPA.</p>
-        <a href="#/dashboard" class="text-terracotta hover:underline mt-4 inline-block text-sm">Volver al Dashboard</a>
+        <a href="/dashboard" class="text-terracotta hover:underline mt-4 inline-block text-sm">Volver al Dashboard</a>
       </div>
     {/if}
   </Layout>

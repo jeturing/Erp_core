@@ -519,7 +519,7 @@
           </div>
           <div>
             <label class="label" for="cat-name">Nombre</label>
-            <input id="cat-name" class="input w-full" bind:value={form.name} required placeholder="Odoo SaaS Basic" />
+            <input id="cat-name" class="input w-full" bind:value={form.name} required placeholder="Sajet SaaS Basic" />
           </div>
         </div>
 

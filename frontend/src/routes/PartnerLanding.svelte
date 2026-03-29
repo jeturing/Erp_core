@@ -46,7 +46,7 @@
       <p class="text-sm font-inter text-slate mb-6">
         The partner link you followed doesn't match any active partner. You can continue to the main site.
       </p>
-      <a href="#/" class="inline-flex items-center gap-2 bg-primary hover:bg-navy text-white font-jakarta font-semibold text-sm px-6 py-3 rounded-btn shadow-soft transition-all">
+      <a href="/" class="inline-flex items-center gap-2 bg-primary hover:bg-navy text-white font-jakarta font-semibold text-sm px-6 py-3 rounded-btn shadow-soft transition-all">
         Go to Sajet.us
       </a>
     </div>

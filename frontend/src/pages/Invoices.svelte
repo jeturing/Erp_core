@@ -115,6 +115,7 @@
   function statusBadge(status: string) {
     const map: Record<string, string> = {
       paid: 'badge-success', issued: 'badge-info', draft: 'badge-neutral',
+      open: 'badge-info', past_due: 'badge-warning', uncollectible: 'badge-error',
       overdue: 'badge-error', void: 'badge-neutral', credited: 'badge-warning',
     };
     return map[status] || 'badge-neutral';
@@ -140,6 +141,19 @@
     return `https://dashboard.stripe.com/invoices/${stripeId}`;
   }
 
+  function invoiceAction(inv: InvoiceItem) {
+    if (inv.payment_url) {
+      return { label: 'Cobrar', href: inv.payment_url };
+    }
+    if (inv.download_url) {
+      return { label: 'PDF', href: inv.download_url };
+    }
+    if (inv.view_url) {
+      return { label: 'Ver', href: inv.view_url };
+    }
+    return null;
+  }
+
   $: totalPages = Math.max(1, Math.ceil(total / PAGE_SIZE));
   $: startItem = currentPage * PAGE_SIZE + 1;
   $: endItem = Math.min((currentPage + 1) * PAGE_SIZE, total);
@@ -150,7 +164,7 @@
 
   $: totalAmount = (invoices || []).reduce((s, i) => s + i.total, 0);
   $: paidCount = (invoices || []).filter(i => i.status === 'paid').length;
-  $: pendingCount = (invoices || []).filter(i => i.status === 'issued' || i.status === 'draft').length;
+  $: pendingCount = (invoices || []).filter(i => ['issued', 'draft', 'open', 'past_due', 'overdue'].includes(i.status)).length;
   $: stripeLinked = (invoices || []).filter(i => i.stripe_invoice_id).length;
 
   async function goToPage(page: number) {
@@ -309,16 +323,16 @@
       <h2 class="section-heading mb-4">Generar Factura</h2>
       <form on:submit|preventDefault={handleGenerate} class="grid grid-cols-1 md:grid-cols-3 gap-4">
         <div>
-          <label class="label">Subscription ID *</label>
-          <input type="number" bind:value={generateForm.subscription_id} required min="1" class="input w-full" />
+          <label class="label" for="invoice-subscription-id">Subscription ID *</label>
+          <input id="invoice-subscription-id" type="number" bind:value={generateForm.subscription_id} required min="1" class="input w-full" />
         </div>
         <div>
-          <label class="label">Período inicio</label>
-          <input type="date" bind:value={generateForm.period_start} class="input w-full" />
+          <label class="label" for="invoice-period-start">Período inicio</label>
+          <input id="invoice-period-start" type="date" bind:value={generateForm.period_start} class="input w-full" />
         </div>
         <div>
-          <label class="label">Período fin</label>
-          <input type="date" bind:value={generateForm.period_end} class="input w-full" />
+          <label class="label" for="invoice-period-end">Período fin</label>
+          <input id="invoice-period-end" type="date" bind:value={generateForm.period_end} class="input w-full" />
         </div>
         <div class="md:col-span-3 flex gap-3">
           <button type="submit" class="btn-accent" disabled={generating}>
@@ -414,6 +428,11 @@
                       <button class="btn-sm btn-accent" title="Marcar pagada" on:click={() => markPaid(inv)}>
                         <CheckCircle size={14} />
                       </button>
+                    {/if}
+                    {#if invoiceAction(inv)}
+                      <a href={invoiceAction(inv)?.href} target="_blank" rel="noopener" class="btn-sm btn-secondary" title={invoiceAction(inv)?.label}>
+                        <CloudDownload size={14} />
+                      </a>
                     {/if}
                     {#if inv.stripe_invoice_id}
                       <a href={stripeUrl(inv.stripe_invoice_id)} target="_blank" rel="noopener"

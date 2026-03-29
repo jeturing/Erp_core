@@ -1,6 +1,7 @@
 <script lang="ts">
   import { t } from 'svelte-i18n';
   import { Check, Sparkles, Zap } from 'lucide-svelte';
+  import { goto } from '$app/navigation';
 
   export let plans: any[] = [];
   export let partnerCode: string = '';
@@ -121,7 +122,7 @@
       billing: annual ? 'annual' : 'monthly',
       ...(partnerCode ? { partner: partnerCode } : {}),
     });
-    window.location.hash = `#/signup?${params.toString()}`;
+    goto(`/signup?${params.toString()}`);
   }
 </script>
 

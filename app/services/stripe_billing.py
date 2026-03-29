@@ -22,7 +22,7 @@ from sqlalchemy.orm import Session
 from ..models.database import (
     Customer, Subscription, SubscriptionStatus, Plan,
     Invoice, InvoiceStatus, InvoiceType, InvoiceIssuer,
-    BillingMode, Partner, SessionLocal, CustomerAddonSubscription,
+    BillingMode, Partner, SessionLocal, CustomerAddonSubscription, SeatHighWater,
 )
 from ..config import get_runtime_setting
 from ..services.pricing import (
@@ -31,6 +31,8 @@ from ..services.pricing import (
 )
 
 logger = logging.getLogger(__name__)
+
+PAYABLE_INVOICE_STATUSES = {"draft", "issued", "open", "overdue", "past_due"}
 
 
 def _configure_stripe() -> str:
@@ -79,6 +81,123 @@ def _resolve_billing_period(
 
     billing_period_key = f"{period_start.date().isoformat()}__{period_end.date().isoformat()}"
     return period_start, period_end, billing_period_key
+
+
+def _normalize_invoice_status(status: Any) -> Optional[str]:
+    if status is None:
+        return None
+    if hasattr(status, "value"):
+        return str(status.value).lower()
+    return str(status).lower()
+
+
+def invoice_is_payable(status: Any) -> bool:
+    return (_normalize_invoice_status(status) or "") in PAYABLE_INVOICE_STATUSES
+
+
+def build_invoice_action_urls(
+    *,
+    status: Any,
+    pdf_url: Optional[str] = None,
+    hosted_url: Optional[str] = None,
+) -> Dict[str, Optional[str]]:
+    normalized_status = _normalize_invoice_status(status)
+    payment_url = hosted_url if invoice_is_payable(normalized_status) else None
+    download_url = pdf_url or None
+    view_url = hosted_url or pdf_url or None
+
+    preferred_action = None
+    if payment_url:
+        preferred_action = "pay"
+    elif download_url:
+        preferred_action = "download"
+    elif view_url:
+        preferred_action = "view"
+
+    return {
+        "pdf_url": pdf_url or None,
+        "hosted_url": hosted_url or None,
+        "download_url": download_url,
+        "payment_url": payment_url,
+        "view_url": view_url,
+        "preferred_action": preferred_action,
+    }
+
+
+def fetch_stripe_invoice_links(stripe_invoice_id: str) -> Dict[str, Optional[str]]:
+    _configure_stripe()
+    invoice = stripe.Invoice.retrieve(stripe_invoice_id)
+    status = _normalize_invoice_status(invoice.get("status"))
+    urls = build_invoice_action_urls(
+        status=status,
+        pdf_url=invoice.get("invoice_pdf"),
+        hosted_url=invoice.get("hosted_invoice_url"),
+    )
+    return {
+        "status": status,
+        **urls,
+    }
+
+
+def _resolve_period_user_count(
+    db: Session,
+    subscription: Subscription,
+    *,
+    customer: Optional[Customer],
+    period_start: datetime,
+    period_end: datetime,
+) -> tuple[int, str]:
+    hwm = (
+        db.query(SeatHighWater)
+        .filter(
+            SeatHighWater.subscription_id == subscription.id,
+            SeatHighWater.period_date >= period_start,
+            SeatHighWater.period_date < period_end,
+        )
+        .order_by(SeatHighWater.hwm_count.desc(), SeatHighWater.period_date.desc())
+        .first()
+    )
+    if hwm and hwm.hwm_count is not None:
+        return max(1, int(hwm.hwm_count)), "seat_high_water"
+
+    live_count = getattr(subscription, "user_count", None) or (customer.user_count if customer else None) or 1
+    return max(1, int(live_count)), "live_user_count"
+
+
+def _invoice_has_metered_addons(invoice: Invoice) -> bool:
+    lines = invoice.lines_json or []
+    for line in lines:
+        if not isinstance(line, dict):
+            continue
+        if line.get("catalog_item_id") or line.get("service_code"):
+            return True
+    return False
+
+
+def _void_mismatched_invoice(
+    db: Session,
+    invoice: Invoice,
+    *,
+    expected_total: float,
+    billing_period_key: Optional[str],
+) -> None:
+    if invoice.stripe_invoice_id:
+        try:
+            _configure_stripe()
+            remote_invoice = stripe.Invoice.retrieve(invoice.stripe_invoice_id)
+            remote_status = _normalize_invoice_status(remote_invoice.get("status"))
+            if remote_status not in {"paid", "void"}:
+                stripe.Invoice.void_invoice(invoice.stripe_invoice_id)
+        except Exception as exc:
+            logger.warning("Could not void Stripe invoice %s: %s", invoice.stripe_invoice_id, exc)
+
+    invoice.status = InvoiceStatus.void
+    note = (
+        f"reconciled_price_mismatch:{billing_period_key or 'unknown'}:"
+        f"expected={round(expected_total, 2)} found={round(invoice.total or 0, 2)}"
+    )
+    if note not in (invoice.notes or ""):
+        invoice.notes = f"{(invoice.notes or '').strip()} {note}".strip()
 
 
 # ═══════════════════════════════════════════════════════════════
@@ -476,9 +595,11 @@ def generate_consumption_invoice(
     for candidate in db.query(Invoice).filter(
         Invoice.subscription_id == sub.id,
     ).order_by(Invoice.id.asc()).all():
+        if candidate.status == InvoiceStatus.void:
+            continue
         reference_dt = candidate.period_start or candidate.issued_at or candidate.created_at
         if candidate.billing_period_key == billing_period_key or (
-            reference_dt and period_start <= reference_dt < period_end and candidate.status != InvoiceStatus.void
+            reference_dt and period_start <= reference_dt < period_end
         ):
             existing_invoice = candidate
             break
@@ -502,12 +623,19 @@ def generate_consumption_invoice(
     lines = []
     total = 0.0
     now = datetime.utcnow()
+    period_user_count, usage_source = _resolve_period_user_count(
+        db,
+        sub,
+        customer=customer,
+        period_start=period_start,
+        period_end=period_end,
+    )
     pricing_snapshot = get_effective_plan_snapshot(
         db,
         sub,
         customer=customer,
         plan=plan,
-        user_count=sub.user_count or customer.user_count or 1,
+        user_count=period_user_count,
     )
 
     if plan:
@@ -606,7 +734,7 @@ def generate_consumption_invoice(
         sub,
         customer=customer,
         plan=plan,
-        user_count=pricing_snapshot["user_count"],
+        user_count=max(1, int(sub.user_count or customer.user_count or pricing_snapshot["user_count"])),
     )
 
     # Push a Stripe
@@ -627,6 +755,8 @@ def generate_consumption_invoice(
         "period_start": period_start.isoformat() if period_start else None,
         "period_end": period_end.isoformat() if period_end else None,
         "pricing_source": pricing_snapshot["pricing_source"],
+        "usage_source": usage_source,
+        "resolved_user_count": pricing_snapshot["user_count"],
         "stripe_result": stripe_result,
     }
 
@@ -641,6 +771,7 @@ def reconcile_billing_periods(db: Session) -> Dict[str, Any]:
         "checked": 0,
         "generated": 0,
         "voided_duplicates": 0,
+        "reissued_mismatches": 0,
         "pending_stripe_sync": 0,
         "details": [],
     }
@@ -654,6 +785,22 @@ def reconcile_billing_periods(db: Session) -> Dict[str, Any]:
     ).all()
 
     for sub in subscriptions:
+        customer = db.query(Customer).filter(Customer.id == sub.customer_id).first()
+        plan = db.query(Plan).filter(Plan.name == sub.plan_name, Plan.is_active == True).first()
+        current_snapshot = get_effective_plan_snapshot(
+            db,
+            sub,
+            customer=customer,
+            plan=plan,
+            user_count=sub.user_count or (customer.user_count if customer else None) or 1,
+        )
+        recalculate_subscription_monthly_amount(
+            db,
+            sub,
+            customer=customer,
+            plan=plan,
+            user_count=current_snapshot["user_count"],
+        )
         period_start, period_end, billing_period_key = _resolve_billing_period(sub)
         results["checked"] += 1
 
@@ -729,6 +876,86 @@ def reconcile_billing_periods(db: Session) -> Dict[str, Any]:
             "billing_period_key": billing_period_key,
             "action": "generated_local_invoice",
         })
+
+    historical_candidates = (
+        db.query(Invoice)
+        .filter(
+            Invoice.subscription_id.isnot(None),
+            Invoice.invoice_type == InvoiceType.SUBSCRIPTION,
+            Invoice.status.in_([InvoiceStatus.draft, InvoiceStatus.issued, InvoiceStatus.overdue]),
+        )
+        .order_by(Invoice.created_at.desc())
+        .all()
+    )
+
+    for invoice in historical_candidates:
+        if _invoice_has_metered_addons(invoice):
+            continue
+
+        subscription = db.query(Subscription).filter(Subscription.id == invoice.subscription_id).first()
+        if not subscription:
+            continue
+
+        customer = db.query(Customer).filter(Customer.id == subscription.customer_id).first()
+        snapshot = get_effective_plan_snapshot(
+            db,
+            subscription,
+            customer=customer,
+            plan=db.query(Plan).filter(Plan.name == subscription.plan_name, Plan.is_active == True).first(),
+        )
+        if not snapshot.get("partner_id"):
+            continue
+
+        invoice_period_start = invoice.period_start
+        invoice_period_end = invoice.period_end
+        if not invoice_period_start or not invoice_period_end:
+            invoice_period_start, invoice_period_end, _ = _resolve_billing_period(subscription)
+        invoice_period_key = invoice.billing_period_key or f"{invoice_period_start.date().isoformat()}__{invoice_period_end.date().isoformat()}"
+
+        period_user_count, usage_source = _resolve_period_user_count(
+            db,
+            subscription,
+            customer=customer,
+            period_start=invoice_period_start,
+            period_end=invoice_period_end,
+        )
+        expected_snapshot = get_effective_plan_snapshot(
+            db,
+            subscription,
+            customer=customer,
+            plan=snapshot["plan"],
+            user_count=period_user_count,
+        )
+        expected_total = round(expected_snapshot["total"], 2)
+        found_total = round(float(invoice.total or 0), 2)
+        if abs(found_total - expected_total) <= 0.01:
+            continue
+
+        _void_mismatched_invoice(
+            db,
+            invoice,
+            expected_total=expected_total,
+            billing_period_key=invoice_period_key,
+        )
+        regenerate = generate_consumption_invoice(
+            db,
+            subscription.id,
+            period_start=invoice_period_start,
+            period_end=invoice_period_end,
+        )
+        results["reissued_mismatches"] += 1
+        results["details"].append(
+            {
+                "subscription_id": subscription.id,
+                "invoice_id": invoice.id,
+                "billing_period_key": invoice_period_key,
+                "action": "void_and_reissue_partner_mismatch",
+                "expected_total": expected_total,
+                "found_total": found_total,
+                "usage_source": usage_source,
+                "replacement_invoice_id": regenerate["invoice_id"],
+            }
+        )
 
     db.commit()
     return results

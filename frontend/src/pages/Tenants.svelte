@@ -692,7 +692,7 @@
                   </button>
                   {#if tenant.deployment?.active_node_id != null && tenant.status === 'active'}
                     <a
-                      href="#/migrations?tenant={tenant.subdomain}"
+                      href="/migrations?tenant={tenant.subdomain}"
                       class="btn-secondary btn-sm text-blue-400 border-blue-500/30 hover:bg-blue-900/20"
                     >
                       MIGRAR

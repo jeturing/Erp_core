@@ -13,13 +13,24 @@ PostgreSQL sigue centralizado en PCT 137 — no se crea BD nueva.
 from __future__ import annotations
 
 import logging
+import os
+import shlex
+import shutil
 import subprocess
 import textwrap
 from typing import Dict, List, Optional, Tuple
 
 from sqlalchemy.orm import Session
 
-from ..config import ODOO_DB_HOST, ODOO_DB_PORT, ODOO_DB_USER, ODOO_DB_PASSWORD
+from ..config import (
+    ODOO_DB_HOST,
+    ODOO_DB_PASSWORD,
+    ODOO_DB_PORT,
+    ODOO_DB_USER,
+    PROXMOX_SSH_HOST,
+    PROXMOX_SSH_KEY,
+    PROXMOX_SSH_USER,
+)
 from ..models.database import (
     AuditEventRecord,
     MigrationState,
@@ -28,15 +39,19 @@ from ..models.database import (
     RuntimeMode,
     TenantDeployment,
 )
+from .nginx_domain_configurator import configure_dedicated_routing, remove_dedicated_routing
 
 logger = logging.getLogger(__name__)
+SSH_BIN = shutil.which("ssh") or "/usr/bin/ssh"
+SUDO_BIN = shutil.which("sudo") or "/usr/bin/sudo"
+PROXMOX_ADMIN_HELPER = os.getenv("PROXMOX_ADMIN_HELPER", "/usr/local/bin/sajet-proxmox-admin")
 
 # ── Constantes de rango de puertos ──────────────────────────────────
 HTTP_PORT_RANGE = (9000, 9499)   # 500 slots por nodo
 CHAT_PORT_RANGE = (9500, 9999)   # 500 slots por nodo
 
 # Paths estándar en los nodos Odoo
-ODOO_BASE_ADDONS_PATH = "/opt/odoo/odoo-bin/../addons,/opt/odoo/extra-addons"
+ODOO_BASE_ADDONS_PATH = "/opt/odoo/addons,/opt/odoo/Extra,/opt/odoo/custom_addons,/opt/odoo/extra-addons"
 TENANT_ADDONS_BASE = "/opt/odoo/tenant-addons"
 TENANT_CONF_DIR = "/etc/odoo"
 ODOO_BIN_PATH = "/opt/odoo/odoo-bin"
@@ -157,7 +172,7 @@ class DedicatedServiceManager:
             limit_memory_soft = 2147483648
             limit_time_cpu = 600
             limit_time_real = 1200
-            data_dir = /var/lib/odoo
+            data_dir = /opt/odoo/.local/share/Odoo-{subdomain}
             logfile = /var/log/odoo/tenant-{subdomain}.log
             log_level = info
             addons_path = {addons_path}
@@ -204,19 +219,41 @@ class DedicatedServiceManager:
     # 3.3 — Overlay de addons per-tenant
     # ══════════════════════════════════════════════════════════════════
 
+    # Directorios fuente de addons en los nodos Odoo
+    EXTRA_ADDONS_DIR = "/opt/odoo/extra-addons"
+
     def create_addons_overlay(
         self, node_ip: str, subdomain: str
     ) -> Tuple[bool, str]:
         """
-        Crea el directorio de overlay de addons para un tenant dedicado.
+        Crea el directorio de overlay de addons para un tenant dedicado
+        con symlinks a los módulos de extra-addons.
+
         Path: /opt/odoo/tenant-addons/{subdomain}/
+        Cada addon en extra-addons/ se enlaza como symlink.
+
+        Esto permite aislar addons por tenant sin duplicar archivos.
+        Aprendido de la provisión manual de cliente1 (2026-03-29).
         """
         overlay_path = f"{TENANT_ADDONS_BASE}/{subdomain}"
-        rc, _, err = self._ssh_cmd(
-            node_ip,
-            f"mkdir -p {overlay_path} && chown odoo:odoo {overlay_path}",
+        # Crear dir + symlinks a cada addon en extra-addons
+        # Solo enlaza directorios (cada addon es un directorio)
+        cmd = (
+            f"mkdir -p {overlay_path} && "
+            f"for addon in {self.EXTRA_ADDONS_DIR}/*/; do "
+            f"  name=$(basename \"$addon\"); "
+            f"  ln -sf \"$addon\" \"{overlay_path}/$name\"; "
+            f"done && "
+            f"chown -h odoo:odoo {overlay_path} {overlay_path}/*"
         )
+        rc, out, err = self._ssh_cmd(node_ip, cmd, timeout=30)
         if rc == 0:
+            # Contar addons enlazados
+            rc2, count, _ = self._ssh_cmd(
+                node_ip, f"ls -1 {overlay_path} | wc -l", timeout=10
+            )
+            addon_count = count.strip() if rc2 == 0 else "?"
+            logger.info(f"  📁 Overlay created: {overlay_path} ({addon_count} addons)")
             return True, overlay_path
         return False, f"Failed to create overlay: {err}"
 
@@ -320,20 +357,36 @@ class DedicatedServiceManager:
             result["steps"]["service"] = {"status": "ok", "name": service_name}
             logger.info(f"  ✅ Service started and validated: {service_name}")
 
-            # 7. Actualizar TenantDeployment
+            # 7. Configurar routing nginx (maps upstream dedicado)
+            nginx_result = configure_dedicated_routing(
+                subdomain=subdomain,
+                http_port=http_port,
+                chat_port=chat_port,
+                node_ip=node_ip,
+            )
+            if not nginx_result.get("success"):
+                raise RuntimeError(
+                    f"Nginx routing failed: {nginx_result.get('message', 'unknown')}"
+                )
+            result["steps"]["nginx_routing"] = {"status": "ok", **nginx_result}
+            logger.info(f"  🌐 Nginx routing configured: {nginx_result.get('message')}")
+
+            # 8. Actualizar TenantDeployment
             deployment.runtime_mode = RuntimeMode.dedicated_service
             deployment.routing_mode = RoutingMode.direct_service
             deployment.http_port = http_port
             deployment.chat_port = chat_port
+            deployment.odoo_port = http_port
             deployment.service_name = service_name
             deployment.addons_overlay_path = overlay_path
             deployment.active_node_id = node.id
             deployment.backend_host = node_ip
+            deployment.migration_state = MigrationState.completed
             db.flush()
             result["steps"]["deployment_updated"] = {"status": "ok"}
             logger.info("  💾 Deployment updated to dedicated_service")
 
-            # 8. Auditoría
+            # 9. Auditoría
             self._audit(db, "dedicated_provisioned", subdomain, {
                 "node_id": node.id,
                 "http_port": http_port,
@@ -398,11 +451,24 @@ class DedicatedServiceManager:
             )
             result["steps"]["overlay_removed"] = {"status": "ok"}
 
-            # 4. Liberar puertos
+            # 4. Remover routing nginx dedicado
+            nginx_result = remove_dedicated_routing(
+                subdomain=subdomain, node_ip=node_ip,
+            )
+            result["steps"]["nginx_routing_removed"] = {
+                "status": "ok" if nginx_result.get("success") else "warning",
+                "message": nginx_result.get("message", ""),
+            }
+            if nginx_result.get("success"):
+                logger.info(f"  🌐 Nginx routing removed for {subdomain}")
+            else:
+                logger.warning(f"  ⚠️ Nginx routing removal issue: {nginx_result.get('message')}")
+
+            # 5. Liberar puertos
             self.release_ports(deployment)
             result["steps"]["ports_released"] = {"status": "ok"}
 
-            # 5. Actualizar deployment
+            # 6. Actualizar deployment
             deployment.runtime_mode = RuntimeMode.shared_pool
             deployment.routing_mode = RoutingMode.node_proxy
             deployment.service_name = None
@@ -432,23 +498,73 @@ class DedicatedServiceManager:
     def _ssh_cmd(
         self, node_ip: str, cmd: str, timeout: int = 30
     ) -> Tuple[int, str, str]:
-        """Ejecuta comando SSH en un nodo."""
-        safe = cmd.replace("'", "'\\''")
-        full = f"ssh -o BatchMode=yes -o ConnectTimeout=5 root@{node_ip} '{safe}'"
+        """
+        Ejecuta comando en un nodo Odoo vía SSH al host Proxmox + pct exec.
+
+        SAJET corre dentro del CT160 y ahí no existe el binario `pct`. El
+        flujo correcto es: CT160 -> SSH host Proxmox -> pct exec <PCT_ID>
+        -> bash -lc "<cmd>". El mapeo IP -> PCT se resuelve dinámicamente
+        desde proxmox_nodes.
+        """
+        from .pct_resolver import resolve_pct_id
+
+        pct_id = resolve_pct_id(node_ip)
+        if pct_id is None:
+            return 1, "", f"No PCT mapping for IP {node_ip} — check proxmox_nodes.vmid"
+
+        exec_cmd = self._build_pct_exec_command(pct_id, cmd)
         try:
-            r = subprocess.run(
-                full, shell=True, capture_output=True, text=True, timeout=timeout
-            )
+            r = subprocess.run(exec_cmd, capture_output=True, text=True, timeout=timeout)
             return r.returncode, r.stdout.strip(), r.stderr.strip()
         except subprocess.TimeoutExpired:
-            return 1, "", f"SSH timeout after {timeout}s"
+            return 1, "", f"SSH->pct exec timeout after {timeout}s"
         except Exception as e:
             return 1, "", str(e)
+
+    def _build_pct_exec_command(self, pct_id: int, cmd: str) -> List[str]:
+        """Construye el comando de ejecución remota adecuado para pct exec."""
+        remote_cmd = f"pct exec {pct_id} -- bash -lc {shlex.quote(cmd)}"
+        if self._should_use_proxmox_helper():
+            return [
+                SUDO_BIN,
+                "-n",
+                PROXMOX_ADMIN_HELPER,
+                "pct-exec",
+                str(pct_id),
+                cmd,
+            ]
+
+        return [
+            SSH_BIN,
+            "-i",
+            PROXMOX_SSH_KEY,
+            "-o",
+            "StrictHostKeyChecking=no",
+            "-o",
+            "IdentitiesOnly=yes",
+            "-o",
+            "ConnectTimeout=10",
+            f"{PROXMOX_SSH_USER}@{PROXMOX_SSH_HOST}",
+            remote_cmd,
+        ]
+
+    def _should_use_proxmox_helper(self) -> bool:
+        """Usa helper privilegiado cuando el proceso no puede leer la llave root."""
+        return (
+            os.geteuid() != 0
+            and os.path.exists(PROXMOX_ADMIN_HELPER)
+            and (
+                not PROXMOX_SSH_KEY
+                or not os.path.exists(PROXMOX_SSH_KEY)
+                or not os.access(PROXMOX_SSH_KEY, os.R_OK)
+            )
+        )
 
     def _deploy_systemd_template(self, node_ip: str, content: str) -> None:
         """
         Despliega el template systemd odoo-tenant@.service en el nodo.
         Idempotente — solo escribe si el contenido cambió.
+        Usa pct exec vía _ssh_cmd.
         """
         import base64
         b64 = base64.b64encode(content.encode()).decode()
@@ -468,8 +584,13 @@ class DedicatedServiceManager:
         b64 = base64.b64encode(content.encode()).decode()
         service_name = f"odoo-tenant@{subdomain}"
 
-        # Crear directorio de logs
-        self._ssh_cmd(node_ip, "mkdir -p /var/log/odoo && chown odoo:odoo /var/log/odoo")
+        # Crear directorios necesarios (logs + data_dir per-tenant)
+        data_dir = f"/opt/odoo/.local/share/Odoo-{subdomain}"
+        self._ssh_cmd(
+            node_ip,
+            f"mkdir -p /var/log/odoo && chown odoo:odoo /var/log/odoo && "
+            f"mkdir -p {data_dir} && chown odoo:odoo {data_dir}",
+        )
 
         # Desplegar conf
         rc, _, err = self._ssh_cmd(

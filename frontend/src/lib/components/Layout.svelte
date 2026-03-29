@@ -10,6 +10,7 @@
     Moon, Sun,
   } from 'lucide-svelte';
   import { auth } from '../stores';
+  import { goto } from '$app/navigation';
   import { darkMode } from '../stores/darkMode';
   import { onMount } from 'svelte';
 
@@ -28,81 +29,81 @@
   }
 
   const navStructure: NavEntry[] = [
-    { id: 'dashboard', label: 'Dashboard', icon: LayoutDashboard, href: '#/dashboard' },
+    { id: 'dashboard', label: 'Dashboard', icon: LayoutDashboard, href: '/dashboard' },
 
     {
       id: 'grp-infra', label: 'Infraestructura', icon: Server,
       children: [
-        { id: 'tenants',        label: 'Tenants',    icon: Users,  href: '#/tenants' },
-        { id: 'domains',        label: 'Dominios',   icon: Globe,  href: '#/domains' },
-        { id: 'infrastructure', label: 'Servidores', icon: Server, href: '#/infrastructure' },
-        { id: 'tunnels',        label: 'Tunnels',    icon: Route,  href: '#/tunnels' },
-        { id: 'migrations',     label: 'Migraciones', icon: ArrowRightLeft, href: '#/migrations' },
+        { id: 'tenants',        label: 'Tenants',    icon: Users,  href: '/tenants' },
+        { id: 'domains',        label: 'Dominios',   icon: Globe,  href: '/domains' },
+        { id: 'infrastructure', label: 'Servidores', icon: Server, href: '/infrastructure' },
+        { id: 'tunnels',        label: 'Tunnels',    icon: Route,  href: '/tunnels' },
+        { id: 'migrations',     label: 'Migraciones', icon: ArrowRightLeft, href: '/migrations' },
       ],
     },
 
     {
       id: 'grp-comercial', label: 'Comercial', icon: Handshake,
       children: [
-        { id: 'partners',   label: 'Partners',    icon: Handshake,       href: '#/partners' },
-        { id: 'leads',      label: 'Leads',        icon: Target,          href: '#/leads' },
-        { id: 'clients',    label: 'Clientes',     icon: UserCheck,       href: '#/clients' },
-        { id: 'quotations', label: 'Cotizaciones', icon: FileSpreadsheet, href: '#/quotations' },
-        { id: 'catalog',    label: 'Catálogo',     icon: ShoppingBag,     href: '#/catalog' },
+        { id: 'partners',   label: 'Partners',    icon: Handshake,       href: '/partners' },
+        { id: 'leads',      label: 'Leads',        icon: Target,          href: '/leads' },
+        { id: 'clients',    label: 'Clientes',     icon: UserCheck,       href: '/clients' },
+        { id: 'quotations', label: 'Cotizaciones', icon: FileSpreadsheet, href: '/quotations' },
+        { id: 'catalog',    label: 'Catálogo',     icon: ShoppingBag,     href: '/catalog' },
       ],
     },
 
     {
       id: 'grp-billing', label: 'Facturación', icon: CreditCard,
       children: [
-        { id: 'billing',        label: 'Billing',       icon: CreditCard,       href: '#/billing' },
-        { id: 'plans',          label: 'Planes',        icon: Package,          href: '#/plans' },
-        { id: 'invoices',       label: 'Facturas',      icon: Receipt,          href: '#/invoices' },
-        { id: 'seats',          label: 'Seats',         icon: UsersRound,       href: '#/seats' },
-        { id: 'settlements',    label: 'Liquidaciones', icon: Scale,            href: '#/settlements' },
-        { id: 'reconciliation', label: 'Conciliación',  icon: GitCompareArrows,  href: '#/reconciliation' },
-        { id: 'dispersion',    label: 'Dispersión',    icon: ArrowRightLeft,    href: '#/dispersion' },
+        { id: 'billing',        label: 'Billing',       icon: CreditCard,       href: '/billing' },
+        { id: 'plans',          label: 'Planes',        icon: Package,          href: '/plans' },
+        { id: 'invoices',       label: 'Facturas',      icon: Receipt,          href: '/invoices' },
+        { id: 'seats',          label: 'Seats',         icon: UsersRound,       href: '/seats' },
+        { id: 'settlements',    label: 'Liquidaciones', icon: Scale,            href: '/settlements' },
+        { id: 'reconciliation', label: 'Conciliación',  icon: GitCompareArrows,  href: '/reconciliation' },
+        { id: 'dispersion',    label: 'Dispersión',    icon: ArrowRightLeft,    href: '/dispersion' },
       ],
     },
 
     {
       id: 'grp-ops', label: 'Operaciones', icon: ClipboardList,
       children: [
-        { id: 'workorders',  label: 'Work Orders', icon: ClipboardList, href: '#/workorders' },
-        { id: 'blueprints',  label: 'Blueprints',  icon: Boxes,         href: '#/blueprints' },
-        { id: 'commissions', label: 'Comisiones',   icon: Percent,       href: '#/commissions' },
-        { id: 'branding',    label: 'Branding',     icon: Palette,       href: '#/branding' },
+        { id: 'workorders',  label: 'Work Orders', icon: ClipboardList, href: '/workorders' },
+        { id: 'blueprints',  label: 'Blueprints',  icon: Boxes,         href: '/blueprints' },
+        { id: 'commissions', label: 'Comisiones',   icon: Percent,       href: '/commissions' },
+        { id: 'branding',    label: 'Branding',     icon: Palette,       href: '/branding' },
       ],
     },
 
     {
       id: 'grp-analytics', label: 'Análisis', icon: BarChart2,
       children: [
-        { id: 'reports',        label: 'Reportes',        icon: BarChart2, href: '#/reports' },
-        { id: 'communications', label: 'Comunicaciones',  icon: Mail,      href: '#/communications' },
+        { id: 'reports',        label: 'Reportes',        icon: BarChart2, href: '/reports' },
+        { id: 'communications', label: 'Comunicaciones',  icon: Mail,      href: '/communications' },
       ],
     },
 
     {
       id: 'grp-landing', label: 'Landing / i18n', icon: Languages,
       children: [
-        { id: 'testimonials',     label: 'Testimonios',      icon: MessageCircle, href: '#/testimonials' },
-        { id: 'landing-sections', label: 'Secciones Landing', icon: FileType,      href: '#/landing-sections' },
-        { id: 'translations',     label: 'Traducciones',      icon: Languages,     href: '#/translations' },
+        { id: 'testimonials',     label: 'Testimonios',      icon: MessageCircle, href: '/testimonials' },
+        { id: 'landing-sections', label: 'Secciones Landing', icon: FileType,      href: '/landing-sections' },
+        { id: 'translations',     label: 'Traducciones',      icon: Languages,     href: '/translations' },
       ],
     },
 
     {
       id: 'grp-admin', label: 'Administración', icon: SettingsIcon,
       children: [
-        { id: 'settings',          label: 'Settings',          icon: SettingsIcon, href: '#/settings' },
-        { id: 'onboarding-config', label: 'Config. Onboarding',icon: Sliders,      href: '#/onboarding-config' },
-        { id: 'roles',             label: 'Roles',              icon: Shield,       href: '#/roles' },
-        { id: 'admin-users',       label: 'Usuarios Admin',     icon: UsersRound,   href: '#/admin-users' },
-        { id: 'agreements',        label: 'Acuerdos',           icon: FileText,     href: '#/agreements' },
-        { id: 'audit',             label: 'Auditoría',          icon: ShieldCheck,  href: '#/audit' },
-        { id: 'logs',              label: 'Logs',               icon: FileText,     href: '#/logs' },
-        { id: 'portal',            label: 'Portal Tenant',      icon: ExternalLink, href: '#/portal' },
+        { id: 'settings',          label: 'Settings',          icon: SettingsIcon, href: '/settings' },
+        { id: 'onboarding-config', label: 'Config. Onboarding',icon: Sliders,      href: '/onboarding-config' },
+        { id: 'roles',             label: 'Roles',              icon: Shield,       href: '/roles' },
+        { id: 'admin-users',       label: 'Usuarios Admin',     icon: UsersRound,   href: '/admin-users' },
+        { id: 'agreements',        label: 'Acuerdos',           icon: FileText,     href: '/agreements' },
+        { id: 'audit',             label: 'Auditoría',          icon: ShieldCheck,  href: '/audit' },
+        { id: 'logs',              label: 'Logs',               icon: FileText,     href: '/logs' },
+        { id: 'portal',            label: 'Portal Tenant',      icon: ExternalLink, href: '/portal' },
       ],
     },
   ];
@@ -154,7 +155,7 @@
 
   function handleLogout() {
     auth.logout();
-    window.location.hash = '#/login';
+    goto('/login');
   }
 </script>
 
@@ -284,7 +285,7 @@
             <Moon size={16} />
           {/if}
         </button>
-        <a href="#/portal" class="btn-accent btn-sm">Portal</a>
+        <a href="/portal" class="btn-accent btn-sm">Portal</a>
       </div>
     </header>
 

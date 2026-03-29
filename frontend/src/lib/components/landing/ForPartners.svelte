@@ -48,7 +48,7 @@
     </div>
 
     <div class="text-center">
-      <a href="#/partner-signup" class="inline-flex items-center gap-2 bg-emerald-500 hover:bg-emerald-600 text-white font-jakarta font-semibold text-sm px-6 py-3 rounded-btn shadow-soft hover:shadow-medium transition-all">
+      <a href="/partner-signup" class="inline-flex items-center gap-2 bg-emerald-500 hover:bg-emerald-600 text-white font-jakarta font-semibold text-sm px-6 py-3 rounded-btn shadow-soft hover:shadow-medium transition-all">
         {$t('partners.cta')}
       </a>
     </div>

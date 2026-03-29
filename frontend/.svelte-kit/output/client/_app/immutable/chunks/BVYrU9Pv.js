@@ -1,0 +1,1 @@
+import{U as y,b as g,aH as u,aI as _,h as t,a2 as o,ag as i,e as l,d,g as p,a1 as m}from"./Cdb7CLZ3.js";function C(n,r){let a=null,E=t;var s;if(t){a=p;for(var e=m(document.head);e!==null&&(e.nodeType!==o||e.data!==n);)e=i(e);if(e===null)l(!1);else{var f=i(e);e.remove(),d(f)}}t||(s=document.head.appendChild(y()));try{g(()=>r(s),u|_)}finally{E&&(l(!0),d(a))}}export{C as h};

@@ -45,7 +45,7 @@
     <!-- CTA buttons -->
     <div class="flex flex-col sm:flex-row items-center justify-center gap-4 mb-5">
       <a
-        href="#/signup"
+        href="/signup"
         class="flex items-center gap-2 text-navy font-inter font-semibold text-[15px] px-8 py-4 rounded-btn transition-all hover:-translate-y-px hover:shadow-elevated w-full sm:w-auto"
         style="background: white"
       >
@@ -53,7 +53,7 @@
         <ArrowRight class="w-4 h-4" />
       </a>
       <a
-        href="#/accountants"
+        href="/accountants"
         class="flex items-center gap-2 border border-white/30 text-white hover:bg-white/10 font-inter font-medium text-[15px] px-8 py-4 rounded-btn transition-all w-full sm:w-auto"
       >
         <Calculator class="w-4 h-4" />
@@ -63,21 +63,21 @@
 
     <div class="flex flex-wrap items-center justify-center gap-3 mb-10">
       <a
-        href="#/signup?mode=tenant"
+        href="/signup?mode=tenant"
         class="inline-flex items-center gap-2 rounded-full border border-white/20 bg-white/10 px-4 py-2 text-sm font-inter text-white/85 transition-all hover:bg-white/15"
       >
         <Building2 class="w-4 h-4" />
         Crear mi empresa
       </a>
       <a
-        href="#/signup?mode=accountant"
+        href="/signup?mode=accountant"
         class="inline-flex items-center gap-2 rounded-full border border-white/20 bg-white/10 px-4 py-2 text-sm font-inter text-white/85 transition-all hover:bg-white/15"
       >
         <Calculator class="w-4 h-4" />
         Soy contador
       </a>
       <a
-        href="#/partner-signup"
+        href="/partner-signup"
         class="inline-flex items-center gap-2 rounded-full border border-white/20 bg-white/10 px-4 py-2 text-sm font-inter text-white/85 transition-all hover:bg-white/15"
       >
         <Handshake class="w-4 h-4" />

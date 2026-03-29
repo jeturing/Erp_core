@@ -1,0 +1,1 @@
+function n(r,t="USD"){return new Intl.NumberFormat("en-US",{style:"currency",currency:t,minimumFractionDigits:0,maximumFractionDigits:0}).format(r||0)}function e(r){return Number.isNaN(r)?"0%":`${Math.max(0,Math.round(r))}%`}function a(r){return r?new Intl.DateTimeFormat("es-ES",{day:"2-digit",month:"short",year:"numeric"}).format(new Date(r)):"-"}export{a,n as b,e as f};

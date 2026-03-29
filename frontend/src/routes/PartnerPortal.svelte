@@ -3,30 +3,33 @@
   import {
     LogOut, LayoutDashboard, Users, Briefcase, DollarSign, CreditCard,
     UserCircle, Plus, TrendingUp, Building2, ExternalLink, RefreshCw,
-    Package,
-    ChevronRight, ArrowUpRight, Loader2
+    Package, FileText, Download,
+    ChevronRight, ArrowUpRight, Loader2,
+    Globe, ChevronDown, ChevronUp, Link2
   } from 'lucide-svelte';
   import { auth, currentUser } from '../lib/stores';
   import { Spinner } from '../lib/components';
+  import { goto } from '$app/navigation';
   import PartnerOnboarding from '../lib/components/PartnerOnboarding.svelte';
   import partnerPortalApi from '../lib/api/partnerPortal';
   import type {
     AddonSubscriptionItem,
     PartnerOnboardingStatus, PartnerDashboard, PartnerLeadsResponse,
-    PartnerLeadItem, PartnerProfile, PartnerClientItem, PartnerCommissionItem, ServiceCatalogItemType,
+    PartnerLeadItem, PartnerProfile, PartnerClientItem, PartnerCommissionItem, PartnerPortalInvoiceItem, ServiceCatalogItemType,
   } from '../lib/types';
   import { formatDate } from '../lib/utils/formatters';
 
   // State
   let loading = true;
   let error = '';
-  let activeTab: 'dashboard' | 'leads' | 'clients' | 'services' | 'commissions' | 'stripe' | 'profile' = 'dashboard';
+  let activeTab: 'dashboard' | 'leads' | 'clients' | 'services' | 'invoices' | 'commissions' | 'stripe' | 'profile' = 'dashboard';
 
   // Data
   let onboardingStatus: PartnerOnboardingStatus | null = null;
   let dashboard: PartnerDashboard | null = null;
   let leads: PartnerLeadsResponse | null = null;
   let clients: { items: PartnerClientItem[]; total: number } | null = null;
+  let invoices: { items: PartnerPortalInvoiceItem[]; total: number; summary: { total_billed: number; total_paid: number; total_pending: number } } | null = null;
   let commissions: { items: PartnerCommissionItem[]; total: number; summary: { total_earned: number; pending: number; paid: number } } | null = null;
   let profile: PartnerProfile | null = null;
   let showOnboarding = false;
@@ -53,6 +56,14 @@
   let clientCredentials: { admin_login: string; admin_password: string; subdomain: string; url: string } | null = null;
   let showClientCredentials = false;
 
+  // Client domains (expandable)
+  let expandedClientId: number | null = null;
+  let clientDomains: Map<number, Array<{
+    domain: string; sources: string[]; is_active: boolean;
+    verification_status: string | null; custom_domain_id: number | null;
+  }>> = new Map();
+  let domainsLoading: number | null = null;
+
   $: showOnboarding = Boolean(onboardingStatus && onboardingStatus.current_step < 4);
 
   function formatCurrency(amount: number): string {
@@ -70,8 +81,30 @@
       case 'active': return 'bg-green-100 text-green-700';
       case 'pending': return 'bg-amber-100 text-amber-700';
       case 'paid': return 'bg-green-100 text-green-700';
+      case 'void': return 'bg-red-100 text-red-700';
+      case 'issued': case 'open': case 'overdue': case 'past_due': return 'bg-amber-100 text-amber-700';
       default: return 'bg-gray-100 text-gray-700';
     }
+  }
+
+  function partnerInvoicePrimaryAction(invoice: PartnerPortalInvoiceItem) {
+    if (invoice.payment_url) {
+      return { label: 'Pagar', href: invoice.payment_url };
+    }
+    if (invoice.download_url) {
+      return { label: 'Descargar PDF', href: invoice.download_url };
+    }
+    if (invoice.view_url) {
+      return { label: 'Ver factura', href: invoice.view_url };
+    }
+    return null;
+  }
+
+  function partnerInvoiceSecondaryDownload(invoice: PartnerPortalInvoiceItem): string | null {
+    if (!invoice.download_url || invoice.download_url === invoice.payment_url) {
+      return null;
+    }
+    return invoice.download_url;
   }
 
   function isEmailPackage(item: Pick<ServiceCatalogItemType, 'service_code' | 'metadata_json'>): boolean {
@@ -116,6 +149,9 @@
         case 'services':
           await ensureClientsLoaded();
           await loadClientServices(selectedServiceClientId);
+          break;
+        case 'invoices':
+          invoices = await partnerPortalApi.getInvoices();
           break;
         case 'commissions':
           commissions = await partnerPortalApi.getCommissions();
@@ -242,7 +278,7 @@
 
   function handleLogout() {
     auth.logout();
-    window.location.hash = '#/login';
+    goto('/login');
   }
 
   function handleOnboardingComplete() {
@@ -254,6 +290,44 @@
     if (!clientCredentials) return;
     const text = `URL: ${clientCredentials.url}\nLogin: ${clientCredentials.admin_login}\nPassword: ${clientCredentials.admin_password}`;
     navigator.clipboard.writeText(text);
+  }
+
+  async function toggleClientDomains(customerId: number) {
+    if (expandedClientId === customerId) {
+      expandedClientId = null;
+      return;
+    }
+    expandedClientId = customerId;
+    if (!clientDomains.has(customerId)) {
+      domainsLoading = customerId;
+      try {
+        const result = await partnerPortalApi.getClientDomains(customerId);
+        clientDomains.set(customerId, result.domains);
+        clientDomains = clientDomains; // trigger reactivity
+      } catch (err) {
+        error = err instanceof Error ? err.message : 'Error cargando dominios';
+      } finally {
+        domainsLoading = null;
+      }
+    }
+  }
+
+  function sourceLabel(source: string): string {
+    switch (source) {
+      case 'base': return 'Sajet';
+      case 'custom': return 'Custom';
+      case 'odoo': return 'Website';
+      default: return source;
+    }
+  }
+
+  function sourceBadge(source: string): string {
+    switch (source) {
+      case 'base': return 'bg-blue-100 text-blue-700';
+      case 'custom': return 'bg-purple-100 text-purple-700';
+      case 'odoo': return 'bg-amber-100 text-amber-700';
+      default: return 'bg-gray-100 text-gray-700';
+    }
   }
 
   onMount(loadData);
@@ -310,6 +384,7 @@
           { key: 'leads', label: 'Leads', icon: Briefcase },
           { key: 'clients', label: 'Clientes', icon: Users },
           { key: 'services', label: 'Servicios', icon: Package },
+          { key: 'invoices', label: 'Facturas', icon: FileText },
           { key: 'commissions', label: 'Comisiones', icon: DollarSign },
           { key: 'stripe', label: 'Stripe', icon: CreditCard },
           { key: 'profile', label: 'Mi Perfil', icon: UserCircle },
@@ -593,12 +668,15 @@
                     <th class="text-left px-4 py-3 text-[10px] font-semibold text-gray-500 uppercase tracking-wider">Plan</th>
                     <th class="text-left px-4 py-3 text-[10px] font-semibold text-gray-500 uppercase tracking-wider">Estado</th>
                     <th class="text-right px-4 py-3 text-[10px] font-semibold text-gray-500 uppercase tracking-wider">Monto/Mes</th>
-                    <th class="text-right px-4 py-3 text-[10px] font-semibold text-gray-500 uppercase tracking-wider">Usuarios</th>
+                    <th class="text-center px-4 py-3 text-[10px] font-semibold text-gray-500 uppercase tracking-wider">Dominios</th>
                   </tr>
                 </thead>
                 <tbody>
                   {#each clients.items as client}
-                    <tr class="border-b border-gray-100 hover:bg-gray-50 transition-colors">
+                    <tr
+                      class="border-b border-gray-100 hover:bg-gray-50 transition-colors cursor-pointer"
+                      on:click={() => toggleClientDomains(client.customer_id)}
+                    >
                       <td class="px-4 py-3">
                         <span class="text-sm font-medium text-[#1a1a1a]">{client.company_name}</span>
                         <br><span class="text-xs text-gray-400">{client.email}</span>
@@ -606,7 +684,8 @@
                       <td class="px-4 py-3">
                         {#if client.subdomain}
                           <a href="https://{client.subdomain}.sajet.us" target="_blank"
-                            class="text-sm text-[#C05A3C] hover:underline flex items-center gap-1">
+                            class="text-sm text-[#C05A3C] hover:underline flex items-center gap-1"
+                            on:click|stopPropagation>
                             {client.subdomain} <ExternalLink class="w-3 h-3" />
                           </a>
                         {:else}
@@ -620,8 +699,80 @@
                         </span>
                       </td>
                       <td class="px-4 py-3 text-right text-sm font-medium">{formatCurrency(client.monthly_amount)}</td>
-                      <td class="px-4 py-3 text-right text-sm text-gray-600">{client.user_count}</td>
+                      <td class="px-4 py-3 text-center">
+                        <button
+                          class="inline-flex items-center gap-1 text-xs font-semibold text-gray-500 hover:text-[#C05A3C] transition-colors"
+                          on:click|stopPropagation={() => toggleClientDomains(client.customer_id)}
+                        >
+                          <Globe class="w-3.5 h-3.5" />
+                          {#if domainsLoading === client.customer_id}
+                            <Loader2 class="w-3 h-3 animate-spin" />
+                          {:else if expandedClientId === client.customer_id}
+                            <ChevronUp class="w-3 h-3" />
+                          {:else}
+                            <ChevronDown class="w-3 h-3" />
+                          {/if}
+                        </button>
+                      </td>
                     </tr>
+
+                    <!-- Expanded: Domains of client -->
+                    {#if expandedClientId === client.customer_id}
+                      <tr>
+                        <td colspan="6" class="px-0 py-0">
+                          <div class="bg-gray-50 border-t border-gray-200 px-6 py-4">
+                            {#if domainsLoading === client.customer_id}
+                              <div class="flex items-center gap-2 text-sm text-gray-500 py-2">
+                                <Loader2 class="w-4 h-4 animate-spin" /> Cargando dominios...
+                              </div>
+                            {:else if clientDomains.has(client.customer_id)}
+                              {@const domains = clientDomains.get(client.customer_id) || []}
+                              <div class="flex items-center gap-2 mb-3">
+                                <Link2 class="w-4 h-4 text-gray-500" />
+                                <span class="text-xs font-semibold text-gray-700 uppercase tracking-wider">
+                                  Dominios vinculados ({domains.length})
+                                </span>
+                              </div>
+                              {#if domains.length === 0}
+                                <p class="text-sm text-gray-500">Este cliente no tiene dominios registrados.</p>
+                              {:else}
+                                <div class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-2">
+                                  {#each domains as d}
+                                    <div class="flex items-center justify-between gap-2 bg-white rounded-lg border border-gray-200 px-3 py-2">
+                                      <div class="flex items-center gap-2 min-w-0">
+                                        <a
+                                          href="https://{d.domain}"
+                                          target="_blank"
+                                          rel="noreferrer"
+                                          class="text-sm text-[#1a1a1a] hover:text-[#C05A3C] hover:underline truncate"
+                                          on:click|stopPropagation
+                                        >
+                                          {d.domain}
+                                        </a>
+                                        {#if d.is_active}
+                                          <span class="flex-shrink-0 w-2 h-2 rounded-full bg-green-500" title="Activo"></span>
+                                        {:else}
+                                          <span class="flex-shrink-0 w-2 h-2 rounded-full bg-gray-300" title="Inactivo"></span>
+                                        {/if}
+                                      </div>
+                                      <div class="flex gap-1 flex-shrink-0">
+                                        {#each d.sources as src}
+                                          <span class="px-1.5 py-0.5 rounded text-[10px] font-semibold {sourceBadge(src)}">
+                                            {sourceLabel(src)}
+                                          </span>
+                                        {/each}
+                                      </div>
+                                    </div>
+                                  {/each}
+                                </div>
+                              {/if}
+                            {:else}
+                              <p class="text-sm text-gray-500">Error al cargar dominios.</p>
+                            {/if}
+                          </div>
+                        </td>
+                      </tr>
+                    {/if}
                   {/each}
                 </tbody>
               </table>
@@ -836,6 +987,117 @@
               <p class="text-sm text-gray-500">Primero crea o selecciona un cliente para gestionar servicios adicionales.</p>
             </div>
           {/if}
+        </div>
+
+      <!-- ═══ INVOICES ═══ -->
+      {:else if activeTab === 'invoices'}
+        <div class="space-y-4">
+          <div class="flex items-center justify-between">
+            <div>
+              <h2 class="text-lg font-bold text-[#1a1a1a]">Facturas de clientes</h2>
+              <p class="text-sm text-gray-500">Facturas reales emitidas para clientes del partner, con acceso directo a pago o PDF según su estado.</p>
+            </div>
+            <button
+              class="inline-flex items-center gap-1.5 rounded-lg border border-gray-200 bg-white px-4 py-2 text-sm font-semibold text-gray-700 hover:border-[#C05A3C] hover:text-[#C05A3C] transition-colors"
+              on:click={() => loadTabData()}
+            >
+              <RefreshCw class="w-4 h-4" /> Actualizar
+            </button>
+          </div>
+
+          {#if invoices?.summary}
+            <div class="grid grid-cols-1 md:grid-cols-3 gap-4">
+              <div class="bg-white rounded-xl border border-gray-200 p-4">
+                <span class="text-[10px] font-semibold text-gray-500 uppercase tracking-wider">Total facturado</span>
+                <p class="text-2xl font-bold text-[#1a1a1a] mt-1">{formatCurrency(invoices.summary.total_billed)}</p>
+              </div>
+              <div class="bg-white rounded-xl border border-gray-200 p-4">
+                <span class="text-[10px] font-semibold text-gray-500 uppercase tracking-wider">Cobrado</span>
+                <p class="text-2xl font-bold text-[#4A7C59] mt-1">{formatCurrency(invoices.summary.total_paid)}</p>
+              </div>
+              <div class="bg-white rounded-xl border border-gray-200 p-4">
+                <span class="text-[10px] font-semibold text-gray-500 uppercase tracking-wider">Pendiente</span>
+                <p class="text-2xl font-bold text-[#C05A3C] mt-1">{formatCurrency(invoices.summary.total_pending)}</p>
+              </div>
+            </div>
+          {/if}
+
+          <div class="bg-white rounded-xl border border-gray-200 overflow-hidden">
+            {#if invoices?.items && invoices.items.length > 0}
+              <div class="overflow-x-auto">
+                <table class="w-full">
+                  <thead>
+                    <tr class="border-b border-gray-200 bg-gray-50">
+                      <th class="text-left px-4 py-3 text-[10px] font-semibold text-gray-500 uppercase tracking-wider">Factura</th>
+                      <th class="text-left px-4 py-3 text-[10px] font-semibold text-gray-500 uppercase tracking-wider">Cliente</th>
+                      <th class="text-left px-4 py-3 text-[10px] font-semibold text-gray-500 uppercase tracking-wider">Estado</th>
+                      <th class="text-right px-4 py-3 text-[10px] font-semibold text-gray-500 uppercase tracking-wider">Monto</th>
+                      <th class="text-left px-4 py-3 text-[10px] font-semibold text-gray-500 uppercase tracking-wider">Fecha</th>
+                      <th class="text-left px-4 py-3 text-[10px] font-semibold text-gray-500 uppercase tracking-wider">Acción</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {#each invoices.items as invoice}
+                      <tr class="border-b border-gray-100 hover:bg-gray-50 transition-colors">
+                        <td class="px-4 py-3">
+                          <div class="flex flex-col">
+                            <span class="text-sm font-semibold text-[#1a1a1a]">{invoice.invoice_number}</span>
+                            {#if invoice.stripe_invoice_id}
+                              <span class="text-[11px] font-mono text-gray-400">{invoice.stripe_invoice_id}</span>
+                            {/if}
+                          </div>
+                        </td>
+                        <td class="px-4 py-3">
+                          <div class="flex flex-col">
+                            <span class="text-sm text-[#1a1a1a]">{invoice.customer_name || '—'}</span>
+                            <span class="text-[11px] text-gray-500">{invoice.customer_email || '—'}</span>
+                          </div>
+                        </td>
+                        <td class="px-4 py-3">
+                          <span class="px-2 py-0.5 rounded-full text-xs font-semibold {statusColor(invoice.status)}">
+                            {invoice.status || '—'}
+                          </span>
+                        </td>
+                        <td class="px-4 py-3 text-right text-sm font-semibold text-[#1a1a1a]">{formatCurrency(invoice.total)}</td>
+                        <td class="px-4 py-3 text-xs text-gray-500">{formatDate(invoice.issued_at || invoice.due_date || invoice.paid_at)}</td>
+                        <td class="px-4 py-3">
+                          {#if partnerInvoicePrimaryAction(invoice)}
+                            <div class="flex items-center gap-2">
+                              <a
+                                href={partnerInvoicePrimaryAction(invoice)?.href}
+                                target="_blank"
+                                rel="noreferrer"
+                                class="inline-flex items-center gap-1.5 rounded-lg border border-gray-200 px-3 py-2 text-sm font-semibold text-gray-700 hover:border-[#C05A3C] hover:text-[#C05A3C] transition-colors"
+                              >
+                                <Download class="w-4 h-4" /> {partnerInvoicePrimaryAction(invoice)?.label}
+                              </a>
+                              {#if partnerInvoiceSecondaryDownload(invoice)}
+                                <a
+                                  href={partnerInvoiceSecondaryDownload(invoice) || undefined}
+                                  target="_blank"
+                                  rel="noreferrer"
+                                  class="inline-flex items-center gap-1.5 rounded-lg border border-gray-200 px-3 py-2 text-sm font-semibold text-gray-700 hover:border-[#C05A3C] hover:text-[#C05A3C] transition-colors"
+                                >
+                                  <FileText class="w-4 h-4" /> PDF
+                                </a>
+                              {/if}
+                            </div>
+                          {:else}
+                            <span class="text-xs text-gray-400">—</span>
+                          {/if}
+                        </td>
+                      </tr>
+                    {/each}
+                  </tbody>
+                </table>
+              </div>
+            {:else}
+              <div class="py-12 text-center">
+                <FileText class="w-8 h-8 text-gray-300 mx-auto mb-2" />
+                <p class="text-sm text-gray-500">No hay facturas registradas para tus clientes.</p>
+              </div>
+            {/if}
+          </div>
         </div>
 
       <!-- ═══ COMMISSIONS ═══ -->

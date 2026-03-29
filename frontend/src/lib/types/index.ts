@@ -261,7 +261,7 @@ export interface BillingMetrics {
   };
 }
 
-export interface BillingInvoice {
+export interface BillingSubscriptionItem {
   id: number;
   customer_id: number;
   company_name: string;
@@ -277,6 +277,8 @@ export interface BillingInvoice {
   created_at?: string | null;
   updated_at?: string | null;
 }
+
+export type BillingInvoice = BillingSubscriptionItem;
 
 // Plans Management
 export interface Plan {
@@ -367,7 +369,16 @@ export interface CustomersResponse {
 }
 
 export interface BillingInvoicesResponse {
-  invoices: BillingInvoice[];
+  kind?: string;
+  items?: BillingSubscriptionItem[];
+  invoices: BillingSubscriptionItem[];
+  total: number;
+  limit: number;
+  offset: number;
+}
+
+export interface BillingSubscriptionsResponse {
+  items: BillingSubscriptionItem[];
   total: number;
   limit: number;
   offset: number;
@@ -653,6 +664,10 @@ export interface TenantPortalBilling {
     date: string;
     pdf_url?: string | null;
     hosted_url?: string | null;
+    download_url?: string | null;
+    payment_url?: string | null;
+    view_url?: string | null;
+    preferred_action?: 'pay' | 'download' | 'view' | null;
   }>;
   payment_method: {
     brand: string;
@@ -1058,6 +1073,34 @@ export interface InvoiceItem {
   due_date: string | null;
   notes: string | null;
   created_at: string | null;
+  pdf_url?: string | null;
+  hosted_url?: string | null;
+  download_url?: string | null;
+  payment_url?: string | null;
+  view_url?: string | null;
+  preferred_action?: 'pay' | 'download' | 'view' | null;
+}
+
+export interface PartnerPortalInvoiceItem {
+  id: number;
+  invoice_number: string;
+  customer_name: string | null;
+  customer_email: string | null;
+  total: number;
+  currency: string;
+  status: string | null;
+  billing_mode: string | null;
+  issuer: string | null;
+  issued_at: string | null;
+  due_date: string | null;
+  paid_at: string | null;
+  stripe_invoice_id: string | null;
+  pdf_url?: string | null;
+  hosted_url?: string | null;
+  download_url?: string | null;
+  payment_url?: string | null;
+  view_url?: string | null;
+  preferred_action?: 'pay' | 'download' | 'view' | null;
 }
 
 export interface InvoicesListResponse {

@@ -6,12 +6,18 @@ import pytest
 
 import dns.resolver
 from fastapi import HTTPException
+from sqlalchemy.exc import IntegrityError
 
 from app.models.database import CustomDomain, DomainVerificationStatus, Plan, Subscription, SubscriptionStatus
 from app.config import ERP_CORE_PUBLIC_IP, ODOO_PRIMARY_IP
 from app.routes.domains import _check_domain_limit
 from app.services.domain_manager import DomainManager
-from app.services.nginx_domain_configurator import _add_to_map, _add_to_route_map_content
+from app.services.nginx_domain_configurator import (
+    _add_to_map,
+    _add_to_route_map_content,
+    _external_domain_aliases,
+)
+from app.services.routing_reconciler import RoutingReconciler, _ExternalRoute, _ReconcileState
 
 
 class TestDomainVerification:
@@ -175,6 +181,35 @@ class TestDomainCreation:
         assert result_one["domain"]["sajet_subdomain"] == sample_customer.subdomain
         assert result_two["domain"]["sajet_subdomain"] == sample_customer.subdomain
 
+    def test_create_domain_returns_clean_error_when_obsolete_unique_index_blocks_same_tenant(
+        self,
+        db_session,
+        sample_customer,
+        monkeypatch,
+    ):
+        manager = DomainManager(db_session)
+
+        def fake_commit():
+            raise IntegrityError(
+                "INSERT INTO custom_domains ...",
+                {},
+                Exception(
+                    'duplicate key value violates unique constraint '
+                    '"ix_custom_domains_sajet_subdomain"'
+                ),
+            )
+
+        monkeypatch.setattr(db_session, "commit", fake_commit)
+
+        result = manager.create_domain(
+            external_domain="techeels.io",
+            customer_id=sample_customer.id,
+            created_by="pytest",
+        )
+
+        assert result["success"] is False
+        assert "restriccion obsoleta" in result["error"]
+
     def test_create_domain_defaults_target_node_ip_to_primary_odoo_ip(
         self,
         db_session,
@@ -304,3 +339,32 @@ www.boletly.com localhost:8080;
         assert "boletly.com 10.10.10.100:8080;" in updated
         assert "\nboletly.com localhost:8080;\n" not in f"\n{updated}"
         assert "www.boletly.com localhost:8080;" in updated
+
+    def test_external_domain_aliases_do_not_duplicate_www_prefix(self):
+        assert _external_domain_aliases("impulse-max.com") == [
+            "impulse-max.com",
+            "www.impulse-max.com",
+        ]
+        assert _external_domain_aliases("www.impulse-max.com") == [
+            "www.impulse-max.com",
+            "impulse-max.com",
+        ]
+
+    def test_routing_reconciler_render_http_map_handles_stored_www_domain(self):
+        state = _ReconcileState(
+            external_routes=[
+                _ExternalRoute(
+                    external_domain="www.impulse-max.com",
+                    tenant_db="techeels",
+                    sajet_subdomain="techeels",
+                    backend_host="10.10.10.100",
+                    nginx_port=8080,
+                )
+            ]
+        )
+
+        rendered = RoutingReconciler()._render_http_map(state)
+
+        assert "www.impulse-max.com 10.10.10.100:8080;" in rendered
+        assert "impulse-max.com 10.10.10.100:8080;" in rendered
+        assert "www.www.impulse-max.com" not in rendered

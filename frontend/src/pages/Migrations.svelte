@@ -9,6 +9,7 @@
     MigrationState, TenantDeploymentSummary,
   } from '../lib/types';
   import { toasts } from '../lib/stores/toast';
+  import { page } from '$app/stores';
   import { formatDate } from '../lib/utils/formatters';
   import {
     RefreshCw, ArrowRightLeft, Server, AlertTriangle,
@@ -276,10 +277,9 @@
 
   // Check initial query param (from Tenants.svelte "Migrar" button)
   function checkInitialTenant() {
-    const hash = window.location.hash;
-    const match = hash.match(/[?&]tenant=([^&]+)/);
-    if (match) {
-      selectedSubdomain = decodeURIComponent(match[1]);
+    const tenant = $page.url.searchParams.get('tenant');
+    if (tenant) {
+      selectedSubdomain = decodeURIComponent(tenant);
     }
   }
 
@@ -419,9 +419,9 @@
             </select>
             <p class="text-xs text-slate-500 mt-1">
               {#if targetRuntimeMode === 'dedicated_service'}
-                El tenant tendrá puertos y proceso Odoo propios.
+                El tenant tendrá puertos y proceso Sajet propios.
               {:else}
-                El tenant comparte el proceso Odoo del nodo.
+                El tenant comparte el proceso Sajet del nodo.
               {/if}
             </p>
           </div>
@@ -574,7 +574,7 @@
           <!-- Botón para provisionar servicio dedicado -->
           <div class="space-y-2">
             <p class="text-sm text-slate-400">
-              El tenant <span class="text-white font-mono">{selectedSubdomain}</span> usa actualmente el proceso Odoo compartido del nodo.
+              El tenant <span class="text-white font-mono">{selectedSubdomain}</span> usa actualmente el proceso Sajet compartido del nodo.
               Puede promocionarlo a un servicio dedicado con puertos y proceso propios sin migrar de nodo.
             </p>
             <button

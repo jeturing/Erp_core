@@ -329,7 +329,7 @@ async def provision_dedicated_service(
     access_token: str = Cookie(None),
 ):
     """
-    Provisiona un servicio Odoo dedicado para un tenant existente.
+    Provisiona un servicio Sajet dedicado para un tenant existente.
 
     - Reserva puertos HTTP/chat en el nodo actual
     - Crea overlay de addons

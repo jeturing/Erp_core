@@ -55,7 +55,11 @@
 		/>
 	{:else}
 		<div class="inline-text" on:click={startEdit} role="button" tabindex="0">
-			{value || <span class="placeholder">{placeholder}</span>}
+			{#if value}
+				{value}
+			{:else}
+				<span class="placeholder">{placeholder}</span>
+			{/if}
 		</div>
 	{/if}
 </div>

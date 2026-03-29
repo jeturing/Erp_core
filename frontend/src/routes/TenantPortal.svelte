@@ -10,8 +10,9 @@
   import { Spinner } from '../lib/components';
   import portalApi from '../lib/api/portal';
   import type { AddonSubscriptionItem, ServiceCatalogItemType, TenantPortalInfo, TenantPortalBilling } from '../lib/types';
-  import type { PortalDomain, PortalUsersResponse } from '../lib/api/portal';
+  import type { PortalDomain, PortalUserAccount, PortalUsersResponse } from '../lib/api/portal';
   import { formatDate } from '../lib/utils/formatters';
+  import { goto } from '$app/navigation';
 
   // ── Estado global ──
   let loading = true;
@@ -222,7 +223,7 @@
 
   function handleLogout() {
     auth.logout();
-    window.location.hash = '#/login';
+    goto('/login');
   }
 
   function statusBadgeClass(status: string): string {
@@ -234,8 +235,38 @@
 
   function invoiceStatusClass(status: string): string {
     if (status === 'paid') return 'badge-success';
-    if (status === 'open') return 'badge-warning';
+    if (status === 'open' || status === 'issued' || status === 'past_due' || status === 'overdue') return 'badge-warning';
     if (status === 'void' || status === 'uncollectible') return 'badge-error';
+    return 'badge-neutral';
+  }
+
+  function invoicePrimaryAction(invoice: TenantPortalBilling['invoices'][number]) {
+    if (invoice.payment_url) {
+      return { label: 'PAGAR FACTURA', href: invoice.payment_url };
+    }
+    if (invoice.download_url) {
+      return { label: 'DESCARGAR PDF', href: invoice.download_url };
+    }
+    if (invoice.view_url) {
+      return { label: 'VER FACTURA', href: invoice.view_url };
+    }
+    return null;
+  }
+
+  function invoiceSecondaryDownload(invoice: TenantPortalBilling['invoices'][number]): string | null {
+    if (!invoice.download_url || invoice.download_url === invoice.payment_url) {
+      return null;
+    }
+    return invoice.download_url;
+  }
+
+  function accountStateBadge(account: PortalUserAccount): string {
+    return account.active ? 'badge-success' : 'badge-neutral';
+  }
+
+  function accountMetaBadge(base: 'billable' | 'internal' | 'excluded'): string {
+    if (base === 'billable') return 'badge-info';
+    if (base === 'internal') return 'badge-warning';
     return 'badge-neutral';
   }
 
@@ -259,7 +290,7 @@
       USER_DEACTIVATED: 'Usuario desactivado',
       USER_REACTIVATED: 'Usuario reactivado',
       FIRST_LOGIN: 'Primer login',
-      HWM_SNAPSHOT: 'Snapshot HWM',
+      HWM_SNAPSHOT: 'Snapshot de licencias',
     };
     return map[type] || type;
   }
@@ -401,7 +432,7 @@
               class="btn btn-primary btn-sm flex items-center justify-center gap-2"
             >
               <ExternalLink class="w-3.5 h-3.5" />
-              ABRIR MI ODOO
+              ABRIR MI SAJET
             </a>
           {/if}
           <div class="mt-auto text-xs text-gray-500">
@@ -429,11 +460,19 @@
                     <td><span class="badge {invoiceStatusClass(invoice.status)}">{invoice.status}</span></td>
                     <td><span class="text-xs text-text-secondary">{formatDate(invoice.date)}</span></td>
                     <td>
-                      {#if invoice.pdf_url || invoice.hosted_url}
-                        <a href={invoice.pdf_url || invoice.hosted_url} target="_blank" rel="noreferrer"
-                          class="btn btn-secondary btn-sm inline-flex items-center gap-1">
-                          <Download class="w-3 h-3" /> DESCARGAR
-                        </a>
+                      {#if invoicePrimaryAction(invoice)}
+                        <div class="flex items-center gap-2">
+                          <a href={invoicePrimaryAction(invoice)?.href} target="_blank" rel="noreferrer"
+                            class="btn btn-secondary btn-sm inline-flex items-center gap-1">
+                            <Download class="w-3 h-3" /> {invoicePrimaryAction(invoice)?.label}
+                          </a>
+                          {#if invoiceSecondaryDownload(invoice)}
+                            <a href={invoiceSecondaryDownload(invoice) || undefined} target="_blank" rel="noreferrer"
+                              class="btn btn-ghost btn-sm inline-flex items-center gap-1 border border-border-light">
+                              <FileText class="w-3 h-3" /> PDF
+                            </a>
+                          {/if}
+                        </div>
                       {:else}
                         <span class="text-xs text-gray-500">—</span>
                       {/if}
@@ -469,7 +508,7 @@
         <div class="flex items-center justify-between mb-5">
           <div>
             <span class="section-heading block">MIS DOMINIOS PERSONALIZADOS</span>
-            <p class="text-xs text-gray-500 mt-1">Asocia tu propio dominio a tu instancia Odoo</p>
+            <p class="text-xs text-gray-500 mt-1">Asocia tu propio dominio a tu instancia Sajet</p>
           </div>
           <button
             class="btn btn-primary btn-sm flex items-center gap-1.5"
@@ -544,20 +583,28 @@
     <!-- ===== USUARIOS ===== -->
     {:else if activeTab === 'users'}
       <div class="card">
-        <span class="section-heading block mb-5">USUARIOS EN MI INSTANCIA</span>
+        <span class="section-heading block mb-5">USUARIOS DE MI INSTANCIA</span>
 
         {#if usersLoading}
           <div class="py-10 flex justify-center"><Spinner /></div>
         {:else if usersError}
           <div class="rounded border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-700">{usersError}</div>
         {:else if usersData}
-          <div class="grid grid-cols-2 gap-4 mb-6">
+          <div class="grid grid-cols-1 md:grid-cols-3 gap-4 mb-6">
             <div class="rounded border border-border-light bg-bg-page p-4 text-center">
-              <p class="text-3xl font-bold text-text-primary">{usersData.current_user_count}</p>
+              <p class="text-3xl font-bold text-text-primary">{usersData.active_accounts}</p>
               <p class="text-xs text-gray-500 mt-1 uppercase tracking-widest">Usuarios activos</p>
             </div>
             <div class="rounded border border-border-light bg-bg-page p-4 text-center">
-              <p class="text-3xl font-bold text-[#C05A3C]">{usersData.plan_user_limit}</p>
+              <p class="text-3xl font-bold text-[#C05A3C]">{usersData.billable_active_accounts}</p>
+              <p class="text-xs text-gray-500 mt-1 uppercase tracking-widest">Usuarios facturables</p>
+            </div>
+            <div class="rounded border border-border-light bg-bg-page p-4 text-center">
+              {#if usersData.plan_user_limit > 0}
+                <p class="text-3xl font-bold text-[#C05A3C]">{usersData.plan_user_limit}</p>
+              {:else}
+                <p class="text-2xl font-bold text-[#C05A3C]">Ilimitado</p>
+              {/if}
               <p class="text-xs text-gray-500 mt-1 uppercase tracking-widest">Límite del plan</p>
             </div>
           </div>
@@ -566,7 +613,7 @@
             {@const pct = Math.min(100, Math.round((usersData.current_user_count / usersData.plan_user_limit) * 100))}
             <div class="mb-6">
               <div class="flex justify-between text-xs text-gray-500 mb-1">
-                <span>Uso de licencias</span><span>{pct}%</span>
+                <span>Uso de licencias facturables</span><span>{pct}%</span>
               </div>
               <div class="w-full bg-gray-200 rounded-full h-2">
                 <div
@@ -577,9 +624,67 @@
             </div>
           {/if}
 
-          {#if usersData.seat_events.length > 0}
-            <div class="border-t border-border-light pt-4">
-              <p class="text-xs font-semibold text-gray-500 uppercase tracking-widest mb-3">Historial de actividad</p>
+          <div class="border-t border-border-light pt-4">
+            <div class="flex items-center justify-between mb-3 gap-3">
+              <p class="text-xs font-semibold text-gray-500 uppercase tracking-widest">Usuarios de tu instancia</p>
+              <span class="text-[11px] text-gray-500">{usersData.accounts.length} registros</span>
+            </div>
+
+            {#if usersData.accounts.length > 0}
+              <div class="overflow-x-auto rounded border border-border-light">
+                <table class="table w-full bg-bg-page">
+                  <thead>
+                    <tr>
+                      <th>Usuario</th>
+                      <th>Correo</th>
+                      <th>Estado</th>
+                      <th>Perfil</th>
+                      <th>Actualizado</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {#each usersData.accounts as account}
+                      <tr>
+                        <td>
+                          <div class="flex flex-col">
+                            <span class="font-medium text-text-primary">{account.name || account.login || 'Sin nombre'}</span>
+                            <span class="text-[11px] text-gray-500 font-mono">{account.login || '—'}</span>
+                          </div>
+                        </td>
+                        <td class="text-sm text-text-secondary">{account.email || '—'}</td>
+                        <td>
+                          <span class="badge {accountStateBadge(account)}">{account.active ? 'Activo' : 'Inactivo'}</span>
+                        </td>
+                        <td>
+                          <div class="flex flex-wrap gap-1">
+                            {#if account.is_billable}
+                              <span class="badge {accountMetaBadge('billable')}">Facturable</span>
+                            {/if}
+                            {#if account.is_admin}
+                              <span class="badge {accountMetaBadge('internal')}">Interno</span>
+                            {/if}
+                            {#if account.is_excluded}
+                              <span class="badge {accountMetaBadge('excluded')}">Excluido</span>
+                            {/if}
+                          </div>
+                        </td>
+                        <td class="text-xs text-gray-500">{formatDate(account.write_date || account.create_date)}</td>
+                      </tr>
+                    {/each}
+                  </tbody>
+                </table>
+              </div>
+            {:else}
+              <div class="py-8 flex flex-col items-center gap-2 text-center border border-border-light rounded bg-bg-page">
+                <Users class="w-8 h-8 text-border-light" />
+                <p class="text-sm text-gray-500">No pudimos obtener la lista viva de usuarios de tu instancia.</p>
+              </div>
+            {/if}
+          </div>
+
+          <div class="border-t border-border-light pt-4 mt-6">
+            <p class="text-xs font-semibold text-gray-500 uppercase tracking-widest mb-3">Historial de licencias</p>
+            {#if usersData.seat_events.length > 0}
               <div class="space-y-2 max-h-80 overflow-y-auto">
                 {#each usersData.seat_events as event}
                   <div class="flex items-center justify-between p-3 rounded border border-border-light bg-bg-page text-sm">
@@ -591,8 +696,8 @@
                       ></div>
                       <div>
                         <span class="font-medium text-text-primary">{seatEventLabel(event.event_type)}</span>
-                        {#if event.odoo_login}
-                          <span class="text-gray-500 ml-2 font-mono text-xs">{event.odoo_login}</span>
+                        {#if event.login}
+                          <span class="text-gray-500 ml-2 font-mono text-xs">{event.login}</span>
                         {/if}
                       </div>
                     </div>
@@ -603,13 +708,13 @@
                   </div>
                 {/each}
               </div>
-            </div>
-          {:else}
-            <div class="py-8 flex flex-col items-center gap-2 text-center border-t border-border-light mt-4 pt-8">
-              <Users class="w-8 h-8 text-border-light" />
-              <p class="text-sm text-gray-500">No hay eventos de usuarios registrados aún</p>
-            </div>
-          {/if}
+            {:else}
+              <div class="py-8 flex flex-col items-center gap-2 text-center border border-border-light rounded bg-bg-page">
+                <Users class="w-8 h-8 text-border-light" />
+                <p class="text-sm text-gray-500">Aún no hay historial de licencias registrado.</p>
+              </div>
+            {/if}
+          </div>
         {/if}
       </div>
 
@@ -879,7 +984,7 @@
       </div>
 
       <p class="text-xs text-gray-500 mb-4">
-        Introduce el dominio que quieres asociar a tu instancia Odoo.
+        Introduce el dominio que quieres asociar a tu instancia Sajet.
         Después deberás crear un registro A hacia la IP pública de Sajet.
       </p>
 

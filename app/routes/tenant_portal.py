@@ -8,13 +8,15 @@ from typing import Optional
 from sqlalchemy.orm import Session
 from ..models.database import (
     Customer, Subscription, SessionLocal, SubscriptionStatus,
-    CustomDomain, SeatEvent, Invoice, InvoiceStatus,
+    CustomDomain, SeatEvent, Invoice, InvoiceStatus, Plan,
 )
 from .roles import verify_token_with_role
 from ..services.spa_shell import render_spa_shell
 from ..services.stripe_billing import (
     push_invoice_to_stripe,
     create_checkout_for_invoice,
+    build_invoice_action_urls,
+    fetch_stripe_invoice_links,
 )
 from ..config import get_runtime_setting
 from ..services.tunnel_lifecycle import get_customer_tunnel_info
@@ -29,9 +31,23 @@ from ..services.addon_billing_service import (
     list_customer_addon_subscriptions,
     purchase_customer_addon,
 )
+from ..services.tenant_accounts import fetch_tenant_accounts_snapshot
 
 router = APIRouter(prefix="/tenant", tags=["Tenant Portal"])
 logger = logging.getLogger(__name__)
+
+
+def _serialize_seat_event(event: SeatEvent) -> dict:
+    return {
+        "id": event.id,
+        "event_type": event.event_type.name if hasattr(event.event_type, "name") else str(event.event_type),
+        "login": event.odoo_login,
+        "user_id": event.odoo_user_id,
+        "user_count_after": event.user_count_after,
+        "is_billable": event.is_billable,
+        "source": event.source,
+        "created_at": event.created_at.isoformat() if event.created_at else None,
+    }
 
 
 def _configure_stripe() -> str:
@@ -179,14 +195,20 @@ async def get_tenant_billing(request: Request, access_token: str = Cookie(None))
         
         invoice_list = []
         for inv in invoices.data:
+            urls = build_invoice_action_urls(
+                status=inv.status,
+                pdf_url=inv.invoice_pdf,
+                hosted_url=inv.hosted_invoice_url,
+            )
             invoice_list.append({
                 "id": inv.id,
-                "amount": inv.amount_paid / 100,  # Convert from cents
+                "amount": (inv.total or inv.amount_due or inv.amount_paid or 0) / 100,
                 "currency": inv.currency,
                 "status": inv.status,
                 "date": datetime.fromtimestamp(inv.created).isoformat(),
                 "pdf_url": inv.invoice_pdf,
-                "hosted_url": inv.hosted_invoice_url
+                "hosted_url": inv.hosted_invoice_url,
+                **urls,
             })
         
         payment_method = None
@@ -360,7 +382,7 @@ async def change_password(
 
 @router.get("/api/my-domains")
 async def get_my_domains(request: Request, access_token: str = Cookie(None)):
-    """Lista los dominios personalizados del tenant."""
+    """Lista los dominios del tenant: dominio base + custom domains."""
     token_data = get_current_tenant(request, access_token)
     tenant_id = token_data.get("tenant_id")
 
@@ -369,21 +391,43 @@ async def get_my_domains(request: Request, access_token: str = Cookie(None)):
 
     db = SessionLocal()
     try:
+        customer = db.query(Customer).filter(Customer.id == tenant_id).first()
+        if not customer:
+            raise HTTPException(status_code=404, detail="Tenant no encontrado")
+
+        result = []
+
+        # Dominio base (.sajet.us) — siempre presente
+        base_domain = f"{customer.subdomain}.sajet.us"
+        result.append({
+            "id": None,
+            "external_domain": base_domain,
+            "verification_status": "verified",
+            "is_active": True,
+            "sajet_subdomain": customer.subdomain,
+            "sajet_full_domain": base_domain,
+            "source": "base",
+            "created_at": customer.created_at.isoformat() if hasattr(customer, "created_at") and customer.created_at else None,
+        })
+
+        # Custom domains
         domains = db.query(CustomDomain).filter_by(customer_id=tenant_id).all()
-        return {
-            "domains": [
-                {
-                    "id": d.id,
-                    "external_domain": d.external_domain,
-                    "verification_status": d.verification_status,
-                    "is_active": d.is_active,
-                    "sajet_subdomain": d.sajet_subdomain,
-                    "sajet_full_domain": d.sajet_full_domain,
-                    "created_at": d.created_at.isoformat() if hasattr(d, "created_at") and d.created_at else None,
-                }
-                for d in domains
-            ]
-        }
+        for d in domains:
+            # Omitir el dominio base si fue registrado como custom (duplicado)
+            if d.external_domain == base_domain:
+                continue
+            result.append({
+                "id": d.id,
+                "external_domain": d.external_domain,
+                "verification_status": d.verification_status.value if d.verification_status else None,
+                "is_active": d.is_active,
+                "sajet_subdomain": d.sajet_subdomain,
+                "sajet_full_domain": d.sajet_full_domain,
+                "source": "custom",
+                "created_at": d.created_at.isoformat() if hasattr(d, "created_at") and d.created_at else None,
+            })
+
+        return {"domains": result}
     finally:
         db.close()
 
@@ -432,7 +476,7 @@ async def request_domain(
 
 @router.get("/api/users")
 async def get_tenant_users(request: Request, access_token: str = Cookie(None)):
-    """Retorna historial de usuarios (seat events) del tenant."""
+    """Retorna usuarios vivos de la instancia y su historial de licencias."""
     token_data = get_current_tenant(request, access_token)
     tenant_id = token_data.get("tenant_id")
 
@@ -445,11 +489,35 @@ async def get_tenant_users(request: Request, access_token: str = Cookie(None)):
         if not customer:
             raise HTTPException(status_code=404, detail="Tenant no encontrado")
 
-        # Obtener la suscripción activa
-        subscription = db.query(Subscription).filter_by(customer_id=tenant_id).first()
+        subscription = (
+            db.query(Subscription)
+            .filter(
+                Subscription.customer_id == tenant_id,
+                Subscription.status.in_([
+                    SubscriptionStatus.active,
+                    SubscriptionStatus.pending,
+                    SubscriptionStatus.past_due,
+                ]),
+            )
+            .order_by(Subscription.created_at.desc())
+            .first()
+        )
 
         seat_events = []
-        current_user_count = customer.user_count or 0
+        accounts_snapshot = {
+            "accounts": [],
+            "active_accounts": 0,
+            "billable_active_accounts": customer.user_count or 0,
+        }
+        if customer.subdomain:
+            try:
+                accounts_snapshot = fetch_tenant_accounts_snapshot(
+                    customer.subdomain,
+                    include_inactive=True,
+                    customer=customer,
+                )
+            except Exception as exc:
+                logger.warning("No se pudo cargar snapshot vivo de cuentas para %s: %s", customer.subdomain, exc)
 
         if subscription:
             events = (
@@ -459,25 +527,19 @@ async def get_tenant_users(request: Request, access_token: str = Cookie(None)):
                 .limit(50)
                 .all()
             )
-            seat_events = [
-                {
-                    "id": e.id,
-                    "event_type": e.event_type.value if hasattr(e.event_type, "value") else str(e.event_type),
-                    "odoo_login": e.odoo_login,
-                    "odoo_user_id": e.odoo_user_id,
-                    "user_count_after": e.user_count_after,
-                    "is_billable": e.is_billable,
-                    "source": e.source,
-                    "created_at": e.created_at.isoformat() if e.created_at else None,
-                }
-                for e in events
-            ]
-            if events:
-                current_user_count = events[0].user_count_after
+            seat_events = [_serialize_seat_event(event) for event in events]
 
+        plan = None
+        if subscription and subscription.plan_name:
+            plan = db.query(Plan).filter(Plan.name == subscription.plan_name).first()
+
+        plan_user_limit = 0
         return {
-            "current_user_count": current_user_count,
-            "plan_user_limit": subscription.user_count if subscription else 1,
+            "accounts": accounts_snapshot["accounts"],
+            "active_accounts": accounts_snapshot.get("active_accounts", 0),
+            "billable_active_accounts": accounts_snapshot.get("billable_active_accounts", customer.user_count or 0),
+            "current_user_count": accounts_snapshot.get("billable_active_accounts", customer.user_count or 0),
+            "plan_user_limit": plan.max_users if plan and plan.max_users is not None else plan_user_limit,
             "seat_events": seat_events,
         }
     finally:
@@ -592,16 +654,19 @@ async def get_tenant_invoices(request: Request, access_token: str = Cookie(None)
                 "stripe_invoice_id": inv.stripe_invoice_id,
                 "payment_url": None,
                 "pdf_url": None,
+                "hosted_url": None,
+                "download_url": None,
+                "view_url": None,
+                "preferred_action": None,
             }
 
-            # Si tiene stripe_invoice_id, obtener URLs actualizadas
-            if inv.stripe_invoice_id and inv.status != InvoiceStatus.paid:
+            if inv.stripe_invoice_id:
                 try:
-                    s_inv = stripe.Invoice.retrieve(inv.stripe_invoice_id)
-                    item["payment_url"] = s_inv.get("hosted_invoice_url")
-                    item["pdf_url"] = s_inv.get("invoice_pdf")
+                    item.update(fetch_stripe_invoice_links(inv.stripe_invoice_id))
                 except Exception:
-                    pass
+                    item.update(build_invoice_action_urls(status=inv.status))
+            else:
+                item.update(build_invoice_action_urls(status=inv.status))
 
             result.append(item)
 

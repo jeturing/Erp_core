@@ -36,6 +36,58 @@ def _verify_admin(token: str):
         raise
 
 
+def _subscription_rows(db, *, limit: int, offset: int, status: Optional[str] = None) -> Dict[str, Any]:
+    query = db.query(Subscription).join(Customer)
+
+    if status == "paid":
+        query = query.filter(Subscription.status == SubscriptionStatus.active)
+    elif status == "pending":
+        query = query.filter(Subscription.status == SubscriptionStatus.pending)
+    elif status == "failed":
+        query = query.filter(Subscription.status == SubscriptionStatus.past_due)
+
+    total = query.count()
+    subscriptions = query.order_by(Subscription.created_at.desc()).offset(offset).limit(limit).all()
+
+    items = []
+    for sub in subscriptions:
+        customer = sub.customer
+        plan = sub.plan_name or "basic"
+        price = _get_plan_price_for_sub(db, sub)
+        user_count = sub.user_count or 1
+
+        payment_status = (
+            "paid" if sub.status == SubscriptionStatus.active
+            else "pending" if sub.status == SubscriptionStatus.pending
+            else "failed" if sub.status == SubscriptionStatus.past_due
+            else "cancelled"
+        )
+
+        items.append({
+            "id": sub.id,
+            "customer_id": customer.id,
+            "company_name": customer.company_name,
+            "email": customer.email,
+            "subdomain": customer.subdomain,
+            "plan": plan,
+            "amount": round(price, 2),
+            "user_count": user_count,
+            "is_admin_account": customer.is_admin_account or False,
+            "currency": "USD",
+            "status": payment_status,
+            "stripe_subscription_id": sub.stripe_subscription_id,
+            "created_at": sub.created_at.isoformat() if sub.created_at else None,
+            "updated_at": sub.updated_at.isoformat() if sub.updated_at else None,
+        })
+
+    return {
+        "items": items,
+        "total": total,
+        "limit": limit,
+        "offset": offset,
+    }
+
+
 @router.get("/metrics")
 async def get_billing_metrics(
     request: Request, 
@@ -225,6 +277,27 @@ async def get_billing_comparison(
         db.close()
 
 
+@router.get("/subscriptions")
+async def get_subscriptions(
+    request: Request,
+    access_token: str = Cookie(None),
+    limit: int = 20,
+    offset: int = 0,
+    status: Optional[str] = None,
+) -> Dict[str, Any]:
+    """Lista suscripciones del canal para la vista de billing."""
+    _require_admin_base(request, access_token)
+
+    db = SessionLocal()
+    try:
+        return _subscription_rows(db, limit=limit, offset=offset, status=status)
+    except Exception as e:
+        logger.error(f"Error obteniendo suscripciones de billing: {e}")
+        return {"items": [], "total": 0, "limit": limit, "offset": offset}
+    finally:
+        db.close()
+
+
 @router.get("/invoices")
 async def get_invoices(
     request: Request,
@@ -245,56 +318,18 @@ async def get_invoices(
     
     db = SessionLocal()
     try:
-        query = db.query(Subscription).join(Customer)
-        
-        if status == "paid":
-            query = query.filter(Subscription.status == SubscriptionStatus.active)
-        elif status == "pending":
-            query = query.filter(Subscription.status == SubscriptionStatus.pending)
-        elif status == "failed":
-            query = query.filter(Subscription.status == SubscriptionStatus.past_due)
-        
-        total = query.count()
-        subscriptions = query.order_by(Subscription.created_at.desc()).offset(offset).limit(limit).all()
-        
-        invoices = []
-        for sub in subscriptions:
-            customer = sub.customer
-            plan = sub.plan_name or "basic"
-            price = _get_plan_price_for_sub(db, sub)
-            user_count = sub.user_count or 1
-            
-            # Determinar estado de pago
-            payment_status = "paid" if sub.status == SubscriptionStatus.active else \
-                           "pending" if sub.status == SubscriptionStatus.pending else \
-                           "failed" if sub.status == SubscriptionStatus.past_due else "cancelled"
-            
-            invoices.append({
-                "id": sub.id,
-                "customer_id": customer.id,
-                "company_name": customer.company_name,
-                "email": customer.email,
-                "subdomain": customer.subdomain,
-                "plan": plan,
-                "amount": round(price, 2),
-                "user_count": user_count,
-                "is_admin_account": customer.is_admin_account or False,
-                "currency": "USD",
-                "status": payment_status,
-                "stripe_subscription_id": sub.stripe_subscription_id,
-                "created_at": sub.created_at.isoformat() if sub.created_at else None,
-                "updated_at": sub.updated_at.isoformat() if sub.updated_at else None
-            })
-        
+        data = _subscription_rows(db, limit=limit, offset=offset, status=status)
         return {
-            "invoices": invoices,
-            "total": total,
-            "limit": limit,
-            "offset": offset
+            "kind": "subscriptions",
+            "items": data["items"],
+            "invoices": data["items"],
+            "total": data["total"],
+            "limit": data["limit"],
+            "offset": data["offset"],
         }
     except Exception as e:
-        logger.error(f"Error obteniendo facturas: {e}")
-        return {"invoices": [], "total": 0, "limit": limit, "offset": offset}
+        logger.error(f"Error obteniendo alias /billing/invoices: {e}")
+        return {"kind": "subscriptions", "items": [], "invoices": [], "total": 0, "limit": limit, "offset": offset}
     finally:
         db.close()
 

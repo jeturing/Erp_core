@@ -18,6 +18,17 @@
 
 	$: if (html) updatePreview();
 
+	$: srcdocContent = `<!DOCTYPE html><html><head><meta charset='UTF-8'><style>
+		body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif; margin: 0; padding: 20px; background: #f3f4f6; }
+		.email { background: white; border-radius: 8px; overflow: hidden; box-shadow: 0 4px 12px rgba(0,0,0,0.1); max-width: 600px; margin: 0 auto; }
+		.email-body { padding: 20px; }
+		img { max-width: 100%; height: auto; }
+		a { color: #667eea; text-decoration: none; }
+		a:hover { text-decoration: underline; }
+		table { width: 100%; border-collapse: collapse; }
+		.footer { background: #f9fafb; padding: 15px; text-align: center; font-size: 12px; color: #6b7280; border-top: 1px solid #e5e7eb; }
+	</style></head><body><div class='email'><div class='email-body'>${previewHtml}</div></div></body></html>`;
+
 	const insertTestData = () => {
 		let testData = {};
 		for (const [key, type] of Object.entries(variables)) {
@@ -66,16 +77,7 @@
 		<iframe
 			title="Email Preview"
 			sandbox="allow-same-origin"
-			srcdoc="<!DOCTYPE html><html><head><meta charset='UTF-8'><style>
-				body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif; margin: 0; padding: 20px; background: #f3f4f6; }
-				.email { background: white; border-radius: 8px; overflow: hidden; box-shadow: 0 4px 12px rgba(0,0,0,0.1); max-width: 600px; margin: 0 auto; }
-				.email-body { padding: 20px; }
-				img { max-width: 100%; height: auto; }
-				a { color: #667eea; text-decoration: none; }
-				a:hover { text-decoration: underline; }
-				table { width: 100%; border-collapse: collapse; }
-				.footer { background: #f9fafb; padding: 15px; text-align: center; font-size: 12px; color: #6b7280; border-top: 1px solid #e5e7eb; }
-			</style></head><body><div class='email'><div class='email-body'>{previewHtml}</div></div></body></html>"
+			srcdoc={srcdocContent}
 		/>
 	</div>
 

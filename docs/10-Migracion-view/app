@@ -1,0 +1,52 @@
+#Quedaron creadas y verificadas estas credenciales en sajet.us:
+
+#Cliente Techeels: cliente@sajet.us / 1234Abdd
+#Partner Techeels: socio@sajet.us / 1234Abcd1234
+#admin: soc@jeturing.com / 1234Abcd1234
+
+
+
+alidación hecha:
+
+bash -n /opt/Erp_core/scripts/jd_migrate_tenant.sh
+bash -n /usr/local/bin/JD
+JD --help
+JD -M105 techeels --status
+JD -M161 techeels --status
+Los dos --status resolvieron bien el mapeo real:
+
+M105 -> node_id 2 (atenea-odoo)
+M161 -> node_id 5 (srv-Server-19)
+Uso práctico:
+
+JD -M105 cliente1
+
+JD -M161 techeels
+
+JD -M105 techeels --status
+
+JD -M161 techeels --no-wait
+
+task_id: sajet-jd-migrate-tenant-wrapper-20260329
+
+priority: P0
+
+agent: Codex
+
+repo: /opt/Erp_core, /opt/memory, /usr/local/bin/JD
+
+paths: JD, jd_migrate_tenant.sh, dedicated-service-provisioning.md, 2026-03-29-sajet-jd-migrate-tenant-wrapper.md
+
+artifacts: wrapper JD extendido, script host-side de migración dedicada, patrón y memoria actualizados, validación con --status
+
+result: done
+
+risks: ejecutar JD -M105/-M161 sin --status sí dispara una migración real en producción; depende de APP_URL, ADMIN_USERNAME y ADMIN_PASSWORD de .env.production
+
+memory_actions: actualizado el patrón dedicated-service-provisioning y agregado cambio reutilizable de wrapper host
+
+pattern_id: dedicated-service-provisioning
+
+next_step: si quieres, ejecuto una migración real con JD -M105 <tenant> o JD -M161 <tenant> y te acompaño con el seguimiento del job hasta completed
+
+

@@ -14,7 +14,7 @@
     </p>
     <div class="flex flex-col sm:flex-row items-center justify-center gap-4">
       <a
-        href="#/signup"
+        href="/signup"
         class="inline-flex items-center gap-2 bg-white text-primary font-jakarta font-semibold text-sm px-8 py-3.5 rounded-btn shadow-medium hover:shadow-elevated hover:bg-cloud transition-all"
       >
         {$t('final_cta.cta_primary')}

@@ -22,7 +22,8 @@
       eyebrow: 'Empresa',
       title: 'Sobre SAJET',
       intro:
-        'SAJET es la plataforma ERP SaaS multi-tenant de Jeturing para operación empresarial, contable y comercial sobre infraestructura propia y backend FastAPI + Odoo.',
+        'SAJET es la plataforma ERP SaaS multi-tenant de Jeturing para operación empresarial, contable y comercial sobre infraestructura propia.',
+
       sections: [
         {
           title: 'Qué resuelve',
@@ -212,7 +213,7 @@
 
         <div class="mt-5 flex flex-col sm:flex-row gap-3">
           <a
-            href="#/signup"
+            href="/signup"
             class="inline-flex items-center justify-center gap-2 bg-primary hover:bg-navy text-white font-jakarta font-semibold text-sm px-6 py-3 rounded-btn transition-all"
           >
             Crear cuenta

@@ -29,6 +29,8 @@ from ..services.stripe_connect import (
 from ..services.stripe_billing import (
     push_invoice_to_stripe,
     create_checkout_for_invoice,
+    build_invoice_action_urls,
+    fetch_stripe_invoice_links,
 )
 from ..services.addon_billing_service import (
     list_available_addon_services,
@@ -818,6 +820,105 @@ async def create_partner_client(
         db.close()
 
 
+@router.get("/clients/{customer_id}/domains")
+async def list_partner_client_domains(
+    customer_id: int,
+    request: Request,
+    access_token: Optional[str] = Cookie(None),
+):
+    """
+    Dominios vinculados de un cliente del partner — vista consolidada.
+    Combina: dominio base (.sajet.us) + custom_domains + websites Odoo.
+    """
+    auth = _require_partner(request, access_token)
+    db = SessionLocal()
+    try:
+        partner = _get_partner(db, auth)
+        customer = db.query(Customer).filter(
+            Customer.id == customer_id,
+            Customer.partner_id == partner.id,
+        ).first()
+        if not customer:
+            raise HTTPException(status_code=404, detail="Cliente no encontrado")
+
+        from ..models.database import CustomDomain, TenantDeployment
+
+        tenant_db = customer.subdomain
+        deployment = (
+            db.query(TenantDeployment)
+            .filter(TenantDeployment.customer_id == customer_id)
+            .order_by(TenantDeployment.id.desc())
+            .first()
+        )
+        if deployment and deployment.database_name:
+            tenant_db = deployment.database_name
+
+        domain_map: Dict[str, Dict[str, Any]] = {}
+
+        def _add(name: str, source: str, **kwargs: Any):
+            host = name.strip().lower().rstrip("/").split("//")[-1].split("/")[0]
+            if not host:
+                return
+            item = domain_map.setdefault(host, {
+                "domain": host, "sources": [], "is_active": False,
+                "verification_status": None, "custom_domain_id": None,
+            })
+            if source not in item["sources"]:
+                item["sources"].append(source)
+            if kwargs.get("is_active"):
+                item["is_active"] = True
+            if kwargs.get("verification_status") and not item["verification_status"]:
+                item["verification_status"] = kwargs["verification_status"]
+            if kwargs.get("custom_domain_id") and not item["custom_domain_id"]:
+                item["custom_domain_id"] = kwargs["custom_domain_id"]
+
+        # 1) Dominio base
+        base = f"{customer.subdomain}.sajet.us"
+        _add(base, "base", is_active=True, verification_status="verified")
+
+        # 2) Custom domains de la BDA
+        cds = db.query(CustomDomain).filter(CustomDomain.customer_id == customer_id).all()
+        for d in cds:
+            _add(
+                d.external_domain, "custom",
+                is_active=bool(d.is_active),
+                verification_status=d.verification_status.value if d.verification_status else None,
+                custom_domain_id=d.id,
+            )
+
+        # 3) Websites Odoo (best-effort)
+        odoo_error = None
+        try:
+            from ..services.odoo_website_configurator import OdooWebsiteConfigurator
+            res = OdooWebsiteConfigurator().list_websites(tenant_db)
+            if res.get("success"):
+                for w in res.get("websites", []):
+                    if w.get("domain"):
+                        _add(w["domain"], "odoo")
+        except Exception as e:
+            odoo_error = str(e)
+
+        domains = sorted(domain_map.values(), key=lambda x: x["domain"])
+        for d in domains:
+            d["sources"] = sorted(d["sources"])
+
+        return {
+            "customer_id": customer.id,
+            "company_name": customer.company_name,
+            "subdomain": customer.subdomain,
+            "domains": domains,
+            "summary": {
+                "total": len(domains),
+                "base": sum(1 for d in domains if "base" in d["sources"]),
+                "custom": sum(1 for d in domains if "custom" in d["sources"]),
+                "odoo": sum(1 for d in domains if "odoo" in d["sources"]),
+            },
+            "odoo_error": odoo_error,
+        }
+    finally:
+        db.close()
+
+
 @router.get("/clients/{customer_id}/services/catalog")
 async def list_partner_client_service_catalog(
     customer_id: int,
@@ -1198,16 +1299,20 @@ async def list_partner_invoices(
                 "paid_at": inv.paid_at.isoformat() if inv.paid_at else None,
                 "stripe_invoice_id": inv.stripe_invoice_id,
                 "payment_url": None,
+                "pdf_url": None,
+                "hosted_url": None,
+                "download_url": None,
+                "view_url": None,
+                "preferred_action": None,
             }
 
-            # Si tiene stripe_invoice_id y no está pagada, obtener payment URL
-            if inv.stripe_invoice_id and inv.status != InvoiceStatus.paid:
+            if inv.stripe_invoice_id:
                 try:
-                    import stripe as _stripe
-                    s_inv = _stripe.Invoice.retrieve(inv.stripe_invoice_id)
-                    item["payment_url"] = s_inv.get("hosted_invoice_url")
+                    item.update(fetch_stripe_invoice_links(inv.stripe_invoice_id))
                 except Exception:
-                    pass
+                    item.update(build_invoice_action_urls(status=inv.status))
+            else:
+                item.update(build_invoice_action_urls(status=inv.status))
 
             items.append(item)
 
@@ -1217,7 +1322,11 @@ async def list_partner_invoices(
             "summary": {
                 "total_billed": sum(i["total"] or 0 for i in items),
                 "total_paid": sum(i["total"] or 0 for i in items if i["status"] == "paid"),
-                "total_pending": sum(i["total"] or 0 for i in items if i["status"] in ("issued", "draft")),
+                "total_pending": sum(
+                    i["total"] or 0
+                    for i in items
+                    if i["status"] in ("issued", "draft", "open", "overdue", "past_due")
+                ),
             },
         }
     finally:

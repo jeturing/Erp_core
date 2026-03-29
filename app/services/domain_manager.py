@@ -17,6 +17,7 @@ import httpx
 from typing import Optional, List, Dict, Any
 from datetime import datetime
 from sqlalchemy.orm import Session
+from sqlalchemy.exc import IntegrityError
 
 from ..config import get_runtime_setting
 from ..models.database import CustomDomain, Customer, TenantDeployment, DomainVerificationStatus
@@ -66,6 +67,23 @@ def _cf_tunnel_name() -> str:
 
 def _public_ip() -> str:
     return get_runtime_setting("ERP_CORE_PUBLIC_IP", "208.115.125.29")
+
+
+def _domain_integrity_error_message(error: IntegrityError) -> str:
+    """Convierte errores de unicidad en mensajes funcionales para la API."""
+    detail = str(getattr(error, "orig", error))
+
+    if "ix_custom_domains_sajet_subdomain" in detail or "custom_domains_sajet_subdomain_key" in detail:
+        return (
+            "La base de datos todavia tiene una restriccion obsoleta que impide "
+            "multiples dominios por tenant. Aplique la migracion de custom_domains "
+            "y vuelva a sincronizar."
+        )
+
+    if "external_domain" in detail or "custom_domains_external_domain" in detail:
+        return "El dominio ya esta registrado"
+
+    return "No se pudo registrar el dominio por un conflicto de integridad en la base de datos"
 
 
 class DomainManager:
@@ -197,7 +215,18 @@ class DomainManager:
         )
         
         self.db.add(domain)
-        self.db.commit()
+        try:
+            self.db.commit()
+        except IntegrityError as exc:
+            self.db.rollback()
+            logger.warning(
+                "Domain create integrity conflict customer_id=%s external_domain=%s sajet_subdomain=%s detail=%s",
+                customer_id,
+                external_domain,
+                sajet_subdomain,
+                exc,
+            )
+            return {"success": False, "error": _domain_integrity_error_message(exc)}
         self.db.refresh(domain)
         
         instructions = self._build_external_dns_instructions(external_domain)

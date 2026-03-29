@@ -99,7 +99,7 @@
 						on:click={() => insertVariable(varName)}
 						title={`Insertar {{${varName}}}`}
 					>
-						{{{varName}}}
+						{'{{' + varName + '}}'}
 					</button>
 				{/each}
 				{#if variableList.length === 0}
@@ -134,7 +134,7 @@
 			<ul>
 				{#each Object.entries(variables) as [key, type]}
 					<li>
-						<code>{{{{key}}}}</code>
+						<code>{'{{' + key + '}}'}</code>
 						<span class="var-type">({type})</span>
 					</li>
 				{/each}

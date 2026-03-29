@@ -173,7 +173,7 @@
       <div class="card p-0">
         <div class="px-6 py-4 border-b border-border-light flex items-center justify-between">
           <span class="section-heading">Partners & Pipeline</span>
-          <a href="#/partners" class="text-[11px] uppercase tracking-widest text-gray-500 hover:text-terracotta font-sans">Ver →</a>
+          <a href="/partners" class="text-[11px] uppercase tracking-widest text-gray-500 hover:text-terracotta font-sans">Ver →</a>
         </div>
         <div class="divide-y divide-border-light">
           <div class="grid grid-cols-2 gap-4 px-6 py-4">
@@ -215,7 +215,7 @@
       <div class="card p-0">
         <div class="px-6 py-4 border-b border-border-light flex items-center justify-between">
           <span class="section-heading">Financiero</span>
-          <a href="#/commissions" class="text-[11px] uppercase tracking-widest text-gray-500 hover:text-terracotta font-sans">Ver →</a>
+          <a href="/commissions" class="text-[11px] uppercase tracking-widest text-gray-500 hover:text-terracotta font-sans">Ver →</a>
         </div>
         <div class="divide-y divide-border-light">
           <div class="grid grid-cols-2 gap-4 px-6 py-4">
@@ -258,7 +258,7 @@
       <div class="card p-0">
         <div class="px-6 py-4 border-b border-border-light flex items-center justify-between">
           <span class="section-heading flex items-center gap-2"><Server size={16} /> Infraestructura</span>
-          <a href="#/infrastructure" class="text-[11px] uppercase tracking-widest text-gray-500 hover:text-terracotta font-sans">Ver →</a>
+          <a href="/infrastructure" class="text-[11px] uppercase tracking-widest text-gray-500 hover:text-terracotta font-sans">Ver →</a>
         </div>
         <div class="p-6 space-y-4">
           <div class="grid grid-cols-2 gap-4 text-center">
@@ -308,7 +308,7 @@
       <div class="card p-0">
         <div class="px-6 py-4 border-b border-border-light flex items-center justify-between">
           <span class="section-heading flex items-center gap-2"><ClipboardList size={16} /> Operaciones</span>
-          <a href="#/workorders" class="text-[11px] uppercase tracking-widest text-gray-500 hover:text-terracotta font-sans">Ver →</a>
+          <a href="/workorders" class="text-[11px] uppercase tracking-widest text-gray-500 hover:text-terracotta font-sans">Ver →</a>
         </div>
         <div class="divide-y divide-border-light">
           <div class="grid grid-cols-4 gap-2 px-6 py-4 text-center">
@@ -356,7 +356,7 @@
       <div class="card p-0">
         <div class="px-6 py-4 border-b border-border-light flex items-center justify-between">
           <span class="section-heading flex items-center gap-2"><Activity size={16} /> Estado del Sistema</span>
-          <a href="#/logs" class="text-[11px] uppercase tracking-widest text-gray-500 hover:text-terracotta font-sans">Logs →</a>
+          <a href="/logs" class="text-[11px] uppercase tracking-widest text-gray-500 hover:text-terracotta font-sans">Logs →</a>
         </div>
         <div class="divide-y divide-border-light">
           {#each (report.system_health || []) as item}
@@ -392,7 +392,7 @@
     <div class="card p-0">
       <div class="flex items-center justify-between px-6 py-4 border-b border-border-light">
         <span class="section-heading">Actividad Reciente — Últimos Clientes</span>
-        <a href="#/tenants" class="text-[11px] uppercase tracking-widest text-gray-500 hover:text-terracotta font-sans">
+        <a href="/tenants" class="text-[11px] uppercase tracking-widest text-gray-500 hover:text-terracotta font-sans">
           Ver todos →
         </a>
       </div>
@@ -443,14 +443,14 @@
     ═══════════════════════════════════════ -->
     <div class="grid grid-cols-3 sm:grid-cols-4 lg:grid-cols-8 gap-2">
       {#each [
-        { href: '#/tenants',         label: 'Tenants' },
-        { href: '#/billing',         label: 'Billing' },
-        { href: '#/partners',        label: 'Partners' },
-        { href: '#/leads',           label: 'Leads' },
-        { href: '#/invoices',        label: 'Facturas' },
-        { href: '#/settlements',     label: 'Settlements' },
-        { href: '#/blueprints',      label: 'Blueprints' },
-        { href: '#/audit',           label: 'Auditoría' },
+        { href: '/tenants',         label: 'Tenants' },
+        { href: '/billing',         label: 'Billing' },
+        { href: '/partners',        label: 'Partners' },
+        { href: '/leads',           label: 'Leads' },
+        { href: '/invoices',        label: 'Facturas' },
+        { href: '/settlements',     label: 'Settlements' },
+        { href: '/blueprints',      label: 'Blueprints' },
+        { href: '/audit',           label: 'Auditoría' },
       ] as link}
         <a href={link.href} class="card p-3 text-center hover:border-terracotta transition-colors">
           <span class="text-[10px] font-semibold uppercase tracking-widest text-text-secondary font-sans">{link.label}</span>

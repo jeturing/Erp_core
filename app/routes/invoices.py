@@ -27,6 +27,8 @@ from ..services.stripe_billing import (
     generate_consumption_invoice,
     sync_subscription_quantity,
     change_subscription_plan,
+    build_invoice_action_urls,
+    fetch_stripe_invoice_links,
 )
 from .roles import _require_admin as _require_admin_base
 
@@ -215,7 +217,7 @@ def list_invoices(
     items = []
     for inv in invoices:
         customer = db.query(Customer).filter(Customer.id == inv.customer_id).first() if inv.customer_id else None
-        items.append({
+        item = {
             "id": inv.id,
             "invoice_number": inv.invoice_number,
             "subscription_id": inv.subscription_id,
@@ -242,7 +244,21 @@ def list_invoices(
             "paid_at": inv.paid_at.isoformat() if inv.paid_at else None,
             "created_at": inv.created_at.isoformat() if inv.created_at else None,
             "notes": inv.notes,
-        })
+            "pdf_url": None,
+            "hosted_url": None,
+            "download_url": None,
+            "payment_url": None,
+            "view_url": None,
+            "preferred_action": None,
+        }
+        if inv.stripe_invoice_id:
+            try:
+                item.update(fetch_stripe_invoice_links(inv.stripe_invoice_id))
+            except Exception:
+                item.update(build_invoice_action_urls(status=inv.status))
+        else:
+            item.update(build_invoice_action_urls(status=inv.status))
+        items.append(item)
 
     return {
         "total": total,
@@ -262,7 +278,7 @@ def get_invoice(
     inv = db.query(Invoice).filter(Invoice.id == invoice_id).first()
     if not inv:
         raise HTTPException(404, "Invoice not found")
-    return {
+    item = {
         "id": inv.id,
         "invoice_number": inv.invoice_number,
         "subscription_id": inv.subscription_id,
@@ -286,7 +302,21 @@ def get_invoice(
         "paid_at": inv.paid_at.isoformat() if inv.paid_at else None,
         "due_date": inv.due_date.isoformat() if inv.due_date else None,
         "notes": inv.notes,
+        "pdf_url": None,
+        "hosted_url": None,
+        "download_url": None,
+        "payment_url": None,
+        "view_url": None,
+        "preferred_action": None,
     }
+    if inv.stripe_invoice_id:
+        try:
+            item.update(fetch_stripe_invoice_links(inv.stripe_invoice_id))
+        except Exception:
+            item.update(build_invoice_action_urls(status=inv.status))
+    else:
+        item.update(build_invoice_action_urls(status=inv.status))
+    return item
 
 
 @router.post("/{invoice_id}/mark-paid")
