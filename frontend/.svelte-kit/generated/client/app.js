@@ -62,7 +62,8 @@ export const nodes = [
 	() => import('./nodes/55'),
 	() => import('./nodes/56'),
 	() => import('./nodes/57'),
-	() => import('./nodes/58')
+	() => import('./nodes/58'),
+	() => import('./nodes/59')
 ];
 
 export const server_loads = [];
@@ -73,7 +74,7 @@ export const dictionary = {
 		"/(portal)/accountant-portal": [39,[3]],
 		"/(public)/accountants": [45,[4]],
 		"/(admin)/admin-users": [5,[2]],
-		"/admin": [58],
+		"/admin": [59],
 		"/(admin)/agreements": [6,[2]],
 		"/(admin)/audit": [7,[2]],
 		"/(admin)/billing": [8,[2]],
@@ -112,12 +113,13 @@ export const dictionary = {
 		"/(admin)/roles": [30,[2]],
 		"/(admin)/seats": [31,[2]],
 		"/(public)/security": [54,[4]],
+		"/(public)/servicios": [55,[4]],
 		"/(admin)/settings": [32,[2]],
 		"/(admin)/settlements": [33,[2]],
-		"/(public)/signup": [55,[4]],
-		"/(public)/sla": [56,[4]],
+		"/(public)/signup": [56,[4]],
+		"/(public)/sla": [57,[4]],
 		"/(admin)/tenants": [34,[2]],
-		"/(public)/terms": [57,[4]],
+		"/(public)/terms": [58,[4]],
 		"/(admin)/testimonials": [35,[2]],
 		"/(admin)/translations": [36,[2]],
 		"/(admin)/tunnels": [37,[2]],

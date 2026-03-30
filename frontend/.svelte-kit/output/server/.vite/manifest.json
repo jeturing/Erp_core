@@ -1500,6 +1500,19 @@
       "_PublicInfoPage.js"
     ]
   },
+  "src/routes/(public)/servicios/+page.svelte": {
+    "file": "entries/pages/(public)/servicios/_page.svelte.js",
+    "name": "entries/pages/(public)/servicios/_page.svelte",
+    "src": "src/routes/(public)/servicios/+page.svelte",
+    "isEntry": true,
+    "imports": [
+      "_index2.js",
+      "_client.js"
+    ],
+    "css": [
+      "_app/immutable/assets/_page.juttZ6ro.css"
+    ]
+  },
   "src/routes/(public)/signup/+page.svelte": {
     "file": "entries/pages/(public)/signup/_page.svelte.js",
     "name": "entries/pages/(public)/signup/_page.svelte",
@@ -1556,7 +1569,7 @@
       "_darkMode.js"
     ],
     "css": [
-      "_app/immutable/assets/_layout.BVUZEaiR.css"
+      "_app/immutable/assets/_layout.DW-mn716.css"
     ]
   },
   "src/routes/+layout.ts": {

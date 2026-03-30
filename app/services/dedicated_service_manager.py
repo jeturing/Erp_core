@@ -56,6 +56,7 @@ TENANT_ADDONS_BASE = "/opt/odoo/tenant-addons"
 TENANT_CONF_DIR = "/etc/odoo"
 ODOO_BIN_PATH = "/opt/odoo/odoo-bin"
 ODOO_VENV_PYTHON = "/opt/odoo/venv/bin/python3"
+SHARED_DATA_DIR = "/var/lib/odoo"  # data_dir del servicio shared (fuente de filestore)
 
 
 class DedicatedServiceManager:
@@ -349,6 +350,19 @@ class DedicatedServiceManager:
             result["steps"]["conf"] = {"status": "ok", "path": conf_path}
             logger.info(f"  📝 Tenant conf deployed: {conf_path}")
 
+            # 5b. Sincronizar filestore del shared al data_dir dedicado
+            sync_ok, sync_msg = await asyncio.to_thread(
+                self._sync_filestore, node_ip, subdomain, db_name
+            )
+            result["steps"]["filestore_sync"] = {
+                "status": "ok" if sync_ok else "warning",
+                "message": sync_msg,
+            }
+            if sync_ok:
+                logger.info(f"  📂 Filestore synced: {sync_msg}")
+            else:
+                logger.warning(f"  ⚠️ Filestore sync issue (non-fatal): {sync_msg}")
+
             # 6. Arrancar servicio y validar
             service_name = f"odoo-tenant@{subdomain}"
             await asyncio.to_thread(
@@ -640,6 +654,52 @@ class DedicatedServiceManager:
             f"Service {service_name} started but Odoo not responding on port "
             f"{http_port} after 60s. Last log:\n{log_tail[:500]}"
         )
+
+    def _sync_filestore(
+        self, node_ip: str, subdomain: str, db_name: str
+    ) -> Tuple[bool, str]:
+        """
+        Sincroniza el filestore del data_dir shared al data_dir dedicado.
+
+        Al provisionar un servicio dedicado, el nuevo data_dir está vacío.
+        Los assets compilados (CSS/JS bundles) e imágenes del tenant viven
+        en el filestore del data_dir shared original. Sin esta copia, Odoo
+        no puede servir los assets y el frontend muestra errores como:
+          AssetsLoadingError: The loading of *.min.css failed
+
+        Usa rsync para copiar solo lo que falta (idempotente).
+        — Confirmado 2026-03-29 [error real en agroliferd.com tras migración a dedicado]
+        """
+        src = f"{SHARED_DATA_DIR}/filestore/{db_name}"
+        dst_data_dir = f"/opt/odoo/.local/share/Odoo-{subdomain}"
+        dst = f"{dst_data_dir}/filestore/{db_name}"
+
+        # Verificar que el filestore fuente existe
+        rc, out, _ = self._ssh_cmd(
+            node_ip,
+            f"test -d {src} && echo exists || echo missing",
+            timeout=10,
+        )
+        if "missing" in out or rc != 0:
+            return False, f"Shared filestore not found: {src}"
+
+        # Crear directorio destino y sincronizar
+        rc, out, err = self._ssh_cmd(
+            node_ip,
+            f"mkdir -p {dst} && "
+            f"rsync -a {src}/ {dst}/ && "
+            f"chown -R odoo:odoo {dst_data_dir} && "
+            f"echo synced_files=$(find {dst} -type f | wc -l)",
+            timeout=120,
+        )
+        if rc != 0:
+            return False, f"rsync failed: {err}"
+
+        file_count = "unknown"
+        if "synced_files=" in out:
+            file_count = out.split("synced_files=")[-1].strip()
+
+        return True, f"{file_count} files synced to {dst}"
 
     def _stop_service(self, node_ip: str, service_name: str) -> None:
         """Detiene y deshabilita un servicio systemd."""

@@ -677,6 +677,8 @@ async def get_public_catalog():
                 "price_monthly": item.price_monthly,
                 "price_max": item.price_max,
                 "is_addon": item.is_addon,
+                "service_code": item.service_code,
+                "metadata_json": item.metadata_json or {},
             })
 
         response = JSONResponse(content={"categories": categories, "total": len(items)})

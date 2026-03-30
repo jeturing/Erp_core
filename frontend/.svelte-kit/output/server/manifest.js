@@ -10,7 +10,7 @@ return {
 	assets: new Set(["favicon.png","favicon.svg","icons/apple-touch-icon.png","icons/icon-192.png","icons/icon-512.png","icons/icon-base.svg","vite.svg"]),
 	mimeTypes: {".png":"image/png",".svg":"image/svg+xml"},
 	_: {
-		client: {start:"_app/immutable/entry/start.c7AI7rVl.js",app:"_app/immutable/entry/app.BcmKU0Lw.js",imports:["_app/immutable/entry/start.c7AI7rVl.js","_app/immutable/chunks/B2olbpx7.js","_app/immutable/chunks/Cdb7CLZ3.js","_app/immutable/chunks/oeZQXk1L.js","_app/immutable/chunks/BUApaBEI.js","_app/immutable/chunks/BsyhDQkw.js","_app/immutable/entry/app.BcmKU0Lw.js","_app/immutable/chunks/PPVm8Dsz.js","_app/immutable/chunks/CXc-U5-s.js","_app/immutable/chunks/BmTRDpZN.js","_app/immutable/chunks/oeZQXk1L.js","_app/immutable/chunks/Cdb7CLZ3.js","_app/immutable/chunks/Cpj98o6Y.js","_app/immutable/chunks/BukGMgQs.js","_app/immutable/chunks/BVnmgpgR.js","_app/immutable/chunks/CMr6kB8e.js","_app/immutable/chunks/B26qZVl3.js","_app/immutable/chunks/BsyhDQkw.js","_app/immutable/chunks/B_gXe2LV.js","_app/immutable/chunks/B7sJSLtT.js","_app/immutable/chunks/BZ-0sN06.js","_app/immutable/chunks/BvAcj2BQ.js","_app/immutable/chunks/HQkmSzia.js","_app/immutable/chunks/1U3-xvSt.js"],stylesheets:[],fonts:[],uses_env_dynamic_public:false},
+		client: {start:"_app/immutable/entry/start.EAggyAhy.js",app:"_app/immutable/entry/app.BS5Yusfi.js",imports:["_app/immutable/entry/start.EAggyAhy.js","_app/immutable/chunks/D_wWWgG0.js","_app/immutable/chunks/Cdb7CLZ3.js","_app/immutable/chunks/oeZQXk1L.js","_app/immutable/chunks/BUApaBEI.js","_app/immutable/chunks/BsyhDQkw.js","_app/immutable/entry/app.BS5Yusfi.js","_app/immutable/chunks/PPVm8Dsz.js","_app/immutable/chunks/CXc-U5-s.js","_app/immutable/chunks/BmTRDpZN.js","_app/immutable/chunks/oeZQXk1L.js","_app/immutable/chunks/Cdb7CLZ3.js","_app/immutable/chunks/Cpj98o6Y.js","_app/immutable/chunks/BukGMgQs.js","_app/immutable/chunks/BVnmgpgR.js","_app/immutable/chunks/CMr6kB8e.js","_app/immutable/chunks/B26qZVl3.js","_app/immutable/chunks/BsyhDQkw.js","_app/immutable/chunks/B_gXe2LV.js","_app/immutable/chunks/B7sJSLtT.js","_app/immutable/chunks/BZ-0sN06.js","_app/immutable/chunks/BvAcj2BQ.js","_app/immutable/chunks/HQkmSzia.js","_app/immutable/chunks/1U3-xvSt.js"],stylesheets:[],fonts:[],uses_env_dynamic_public:false},
 		nodes: [
 			__memo(() => import('./nodes/0.js')),
 			__memo(() => import('./nodes/1.js')),
@@ -70,7 +70,8 @@ return {
 			__memo(() => import('./nodes/55.js')),
 			__memo(() => import('./nodes/56.js')),
 			__memo(() => import('./nodes/57.js')),
-			__memo(() => import('./nodes/58.js'))
+			__memo(() => import('./nodes/58.js')),
+			__memo(() => import('./nodes/59.js'))
 		],
 		remotes: {
 			
@@ -115,7 +116,7 @@ return {
 				id: "/admin",
 				pattern: /^\/admin\/?$/,
 				params: [],
-				page: { layouts: [0,], errors: [1,], leaf: 58 },
+				page: { layouts: [0,], errors: [1,], leaf: 59 },
 				endpoint: null
 			},
 			{
@@ -385,6 +386,13 @@ return {
 				endpoint: null
 			},
 			{
+				id: "/(public)/servicios",
+				pattern: /^\/servicios\/?$/,
+				params: [],
+				page: { layouts: [0,4,], errors: [1,,], leaf: 55 },
+				endpoint: null
+			},
+			{
 				id: "/(admin)/settings",
 				pattern: /^\/settings\/?$/,
 				params: [],
@@ -402,14 +410,14 @@ return {
 				id: "/(public)/signup",
 				pattern: /^\/signup\/?$/,
 				params: [],
-				page: { layouts: [0,4,], errors: [1,,], leaf: 55 },
+				page: { layouts: [0,4,], errors: [1,,], leaf: 56 },
 				endpoint: null
 			},
 			{
 				id: "/(public)/sla",
 				pattern: /^\/sla\/?$/,
 				params: [],
-				page: { layouts: [0,4,], errors: [1,,], leaf: 56 },
+				page: { layouts: [0,4,], errors: [1,,], leaf: 57 },
 				endpoint: null
 			},
 			{
@@ -423,7 +431,7 @@ return {
 				id: "/(public)/terms",
 				pattern: /^\/terms\/?$/,
 				params: [],
-				page: { layouts: [0,4,], errors: [1,,], leaf: 57 },
+				page: { layouts: [0,4,], errors: [1,,], leaf: 58 },
 				endpoint: null
 			},
 			{

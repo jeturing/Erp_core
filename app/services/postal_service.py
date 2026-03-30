@@ -74,6 +74,116 @@ def _extract_tenant(from_addr: str, to_addr: str) -> Optional[str]:
 # Webhook handler  (llamado desde la ruta API)
 # ──────────────────────────────────────────────
 
+EMAIL_PACKAGE_SERVICE_CODE = "postal_email_package"
+
+
+def _get_tenant_email_quota(db, tenant_subdomain: str) -> Optional[int]:
+    """
+    Retorna la cuota mensual del tenant si tiene un paquete de email activo,
+    o None si no tiene suscripción activa.
+    """
+    from ..models.database import CustomerAddonSubscription, Customer, ServiceCatalogItem
+    # Buscar customer por subdomain
+    customer = db.query(Customer).filter(
+        Customer.subdomain == tenant_subdomain
+    ).first()
+    if not customer:
+        return None
+
+    # Buscar suscripción activa al paquete de email
+    sub = (
+        db.query(CustomerAddonSubscription)
+        .filter(
+            CustomerAddonSubscription.customer_id == customer.id,
+            CustomerAddonSubscription.service_code == EMAIL_PACKAGE_SERVICE_CODE,
+            CustomerAddonSubscription.status == "active",
+        )
+        .order_by(CustomerAddonSubscription.id.desc())
+        .first()
+    )
+    if not sub:
+        return None
+
+    # La cuota está en el catalog_item.metadata_json
+    if sub.catalog_item_id:
+        cat_item = db.query(ServiceCatalogItem).filter(
+            ServiceCatalogItem.id == sub.catalog_item_id
+        ).first()
+        if cat_item and cat_item.metadata_json:
+            return cat_item.metadata_json.get("email_quota_monthly")
+
+    # Fallback: buscarlo en la metadata de la propia suscripción
+    if sub.metadata_json:
+        return sub.metadata_json.get("email_quota_monthly")
+
+    return None
+
+
+async def _suspend_postal_server(server_token: str) -> bool:
+    """
+    Suspende el servidor de mail en Postal vía API REST.
+    Esto detiene la aceptación de nuevos mensajes del tenant.
+    """
+    if not POSTAL_API_KEY:
+        logger.warning("POSTAL_API_KEY no configurada — suspensión omitida")
+        return False
+    try:
+        async with httpx.AsyncClient(timeout=10, verify=False) as client:
+            resp = await client.put(
+                f"{POSTAL_BASE_URL}/api/v1/servers/{server_token}",
+                headers={"X-Server-API-Key": POSTAL_API_KEY, "Content-Type": "application/json"},
+                json={"mode": "suspended"},
+            )
+            if resp.status_code in (200, 201):
+                logger.warning(f"📴 Postal server {server_token} suspendido por cuota excedida")
+                return True
+            else:
+                logger.error(f"Error suspendiendo servidor Postal {server_token}: {resp.status_code} {resp.text[:200]}")
+                return False
+    except Exception as e:
+        logger.error(f"Error en _suspend_postal_server: {e}")
+        return False
+
+
+def _check_and_enforce_quota(db, tenant_subdomain: str, current_sent: int) -> None:
+    """
+    Verifica si el tenant superó su cuota mensual de correos.
+    Si se superó, lanza la suspensión del servidor Postal en background
+    y registra el evento en el log.
+    Esta función es síncrona — la suspensión asíncrona se delega a un hilo.
+    """
+    try:
+        quota = _get_tenant_email_quota(db, tenant_subdomain)
+        if quota is None:
+            return  # Sin suscripción activa — no hay cuota que enforcer
+
+        if current_sent >= quota:
+            logger.warning(
+                f"⚠️  Tenant {tenant_subdomain} superó cuota: "
+                f"{current_sent}/{quota} correos este mes"
+            )
+            # Lanzar suspensión async sin bloquear el webhook (best-effort)
+            import asyncio
+            try:
+                loop = asyncio.get_event_loop()
+                if loop.is_running():
+                    # Contexto async (FastAPI) — crear tarea
+                    asyncio.ensure_future(
+                        _suspend_postal_server(POSTAL_SERVER_TOKEN)
+                    )
+                else:
+                    loop.run_until_complete(
+                        _suspend_postal_server(POSTAL_SERVER_TOKEN)
+                    )
+            except RuntimeError:
+                # No hay loop disponible — loguear y continuar
+                logger.error(
+                    f"No se pudo suspender el servidor Postal para {tenant_subdomain}: "
+                    "no hay event loop disponible"
+                )
+    except Exception as e:
+        logger.error(f"Error en _check_and_enforce_quota para {tenant_subdomain}: {e}")
+
 def handle_postal_webhook(payload: Dict[str, Any]) -> Dict[str, Any]:
     """
     Procesa un webhook de Postal (evento de mensaje: delivered, bounced, failed).
@@ -133,6 +243,13 @@ def handle_postal_webhook(payload: Dict[str, Any]) -> Dict[str, Any]:
             db.commit()
             logger.info(f"📧 Postal webhook: tenant={tenant} event={event} "
                         f"sent={rec.emails_sent} cost=${rec.total_cost_usd:.4f}")
+
+            # ── Quota enforcement ──────────────────────────────────────
+            # Si el tenant tiene un paquete de email activo, verificar si superó la cuota.
+            # En caso de superarla, suspender el servidor de mail en Postal via API.
+            if tenant != "__unknown__":
+                _check_and_enforce_quota(db, tenant, rec.emails_sent)
+
         except Exception as e:
             db.rollback()
             logger.error(f"Error procesando webhook Postal: {e}")

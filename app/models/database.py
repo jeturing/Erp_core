@@ -172,6 +172,7 @@ class ServiceCategory(enum.Enum):
     soc = "soc"
     cloud_devops = "cloud_devops"
     payments_pos = "payments_pos"
+    email_service = "email_service"
 
 
 class SupportLevel(enum.Enum):

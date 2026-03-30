@@ -1,5 +1,6 @@
 <script lang="ts">
-  import { auth } from '../lib/stores';
+  import { auth, currentUser } from '../lib/stores';
+  import { get } from 'svelte/store';
   import { goto } from '$app/navigation';
   import { page } from '$app/stores';
 
@@ -30,6 +31,20 @@
     } catch {
       return 'dashboard';
     }
+  }
+
+  function getPostLoginRouteByRole(): string {
+    // Si hay un ?next= explícito, respetarlo
+    try {
+      const next = ($page.url.searchParams.get('next') || '').trim();
+      if (next) return `/${getPostLoginRoute()}`;
+    } catch { /* noop */ }
+
+    // Redirigir según el rol del usuario recién autenticado
+    const user = get(currentUser);
+    if (user?.role === 'partner') return '/partner-portal';
+    if (user?.role === 'tenant') return '/portal';
+    return '/dashboard';
   }
 
   async function handleLogin(e: Event) {
@@ -63,7 +78,7 @@
     }
 
     if (result.success) {
-      goto(`/${getPostLoginRoute()}`);
+      goto(getPostLoginRouteByRole());
     }
 
     loading = false;
@@ -92,7 +107,7 @@
     }
 
     if (result.success) {
-      goto(`/${getPostLoginRoute()}`);
+      goto(getPostLoginRouteByRole());
     }
 
     loading = false;
@@ -117,7 +132,7 @@
     }
 
     if (result.success) {
-      goto(`/${getPostLoginRoute()}`);
+      goto(getPostLoginRouteByRole());
     }
 
     loading = false;

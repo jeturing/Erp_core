@@ -187,6 +187,10 @@
 		"src/routes/(public)/+layout.ts",
 		"src/routes/+layout.ts"
 	],
+	"/(public)/servicios": [
+		"src/routes/(public)/+layout.ts",
+		"src/routes/+layout.ts"
+	],
 	"/(admin)/settings": [
 		"src/routes/(admin)/+layout.ts",
 		"src/routes/+layout.ts"
