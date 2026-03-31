@@ -28,6 +28,7 @@ from .routes import customer_onboarding
 from .routes import onboarding_config
 from .routes import communications
 from .routes import admin_users
+from .routes import users_neural
 from .routes import agreements
 from .routes import stripe_sync
 from .routes import public_landing
@@ -44,11 +45,32 @@ from .routes import api_keys             # 🔑 API Key Management (rate limit, 
 from .routes import odoo_webhooks        # 🔄 Webhooks Odoo → Portal (sync bidireccional)
 from .routes import postal_webhooks      # 📧 Postal Mail webhooks + uso de correo
 from .routes import migration            # 🚚 Migración live de tenants entre nodos (Fase 2)
+from .routes import session_monitoring   # 🛡️ DSAM — Dynamic Session & Anti-Theft Monitor
 from .routes.roles import _require_admin as _require_admin_base
 
 # Import security middleware
 from .security.middleware import SecurityMiddleware, WAFMiddleware
 from .security.cors_dynamic import DynamicCORSMiddleware, refresh_cors_cache
+
+import sentry_sdk
+from sentry_sdk.integrations.fastapi import FastApiIntegration
+from sentry_sdk.integrations.sqlalchemy import SqlalchemyIntegration
+
+# Initialize Sentry if DSN is provided
+_sentry_dsn = os.getenv("SENTRY_DSN")
+if _sentry_dsn:
+    sentry_sdk.init(
+        dsn=_sentry_dsn,
+        environment=os.getenv("SENTRY_ENVIRONMENT", "production-sajet"),
+        traces_sample_rate=float(os.getenv("SENTRY_SAMPLE_RATE", "0.2")),
+        server_name=os.getenv("SENTRY_SERVER_NAME", "sajet-pct160"),
+        integrations=[
+            FastApiIntegration(),
+            SqlalchemyIntegration(),
+        ],
+        # GlitchTip specific: sessions are not supported
+        auto_session_tracking=False,
+    )
 
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
@@ -216,6 +238,7 @@ app.include_router(customer_onboarding.router)  # Customer onboarding + RD e-CF 
 app.include_router(onboarding_config.router)    # Admin-configurable onboarding config
 app.include_router(communications.router)        # Historial de emails transaccionales
 app.include_router(admin_users.router)           # CRUD usuarios administrativos
+app.include_router(users_neural.router)           # 🧠 Centro Neural de Gestión de Usuarios
 app.include_router(agreements.router)            # NDA/TOS templates + signing flow
 app.include_router(stripe_sync.router)           # Stripe webhook sync
 app.include_router(public_landing.router)        # Landing page pública
@@ -232,6 +255,7 @@ app.include_router(api_keys.router)              # 🔑 API Key Management (rate
 app.include_router(odoo_webhooks.router)         # 🔄 Webhooks Odoo → Portal (sync bidireccional)
 app.include_router(postal_webhooks.router)       # 📧 Postal Mail webhooks + uso de correo
 app.include_router(migration.router)             # 🚚 Migración live de tenants entre nodos (Fase 2)
+app.include_router(session_monitoring.router)    # 🛡️ DSAM — Dynamic Session & Anti-Theft Monitor
 app.include_router(stripe_sync.router)           # Stripe → BD sync (source of truth)
 app.include_router(public_landing.router)        # Endpoints públicos para landing page (sin auth)
 app.include_router(accountant_portal.router)     # Portal para contadores/CPA multi-empresa
@@ -276,8 +300,9 @@ async def env_info(request: Request, access_token: str = Cookie(None)):
 async def health_check():
     """Public health check endpoint with no infrastructure disclosure."""
     return {
-        "status": "healthy",
+        "sentry_test": 1/0 if os.getenv("SENTRY_DSN") else "no-dsn", "status": "healthy",
         "version": "2.0.0",
+        "sentry_test": 1/0 if os.getenv("SENTRY_DSN") else "no-dsn",
     }
 
 
@@ -307,6 +332,7 @@ _SPA_ROUTES = {
     "/migrations", "/accountants", "/partner-signup", "/onboarding-access",
     "/recover-account", "/about", "/privacy", "/terms", "/data-processing",
     "/security", "/sla", "/login", "/signup", "/pricing",
+    "/session-monitoring",
 }
 
 

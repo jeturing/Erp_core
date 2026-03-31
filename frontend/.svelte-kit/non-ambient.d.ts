@@ -29,7 +29,7 @@ declare module "$app/types" {
 	type MatcherParam<M> = M extends (param : string) => param is (infer U extends string) ? U : string;
 
 	export interface AppTypes {
-		RouteId(): "/(public)" | "/(portal)" | "/(admin)" | "/" | "/(public)/about" | "/(portal)/accountant-portal" | "/(public)/accountants" | "/(admin)/admin-users" | "/admin" | "/admin/components" | "/(admin)/agreements" | "/(admin)/audit" | "/(admin)/billing" | "/(admin)/blueprints" | "/(admin)/branding" | "/(admin)/catalog" | "/(admin)/clients" | "/(admin)/commissions" | "/(admin)/communications" | "/(portal)/customer-onboarding" | "/(admin)/dashboard" | "/(public)/data-processing" | "/(admin)/dispersion" | "/(admin)/domains" | "/(admin)/infrastructure" | "/(admin)/invoices" | "/(admin)/landing-sections" | "/(admin)/leads" | "/(public)/login" | "/(admin)/logs" | "/(admin)/migrations" | "/(public)/onboarding-access" | "/(admin)/onboarding-config" | "/(portal)/partner-portal" | "/(public)/partner-signup" | "/(admin)/partners" | "/(admin)/plans" | "/(public)/plt" | "/(public)/plt/[slug]" | "/(portal)/portal" | "/(public)/pricing" | "/(public)/privacy" | "/(admin)/quotations" | "/(admin)/reconciliation" | "/(public)/recover-account" | "/(admin)/reports" | "/(admin)/roles" | "/(admin)/seats" | "/(public)/security" | "/(public)/servicios" | "/(admin)/settings" | "/(admin)/settlements" | "/(public)/signup" | "/(public)/sla" | "/(admin)/tenants" | "/(public)/terms" | "/(admin)/testimonials" | "/(admin)/translations" | "/(admin)/tunnels" | "/(admin)/workorders";
+		RouteId(): "/(public)" | "/(portal)" | "/(admin)" | "/" | "/(public)/about" | "/(portal)/accountant-portal" | "/(public)/accountants" | "/(admin)/admin-users" | "/admin" | "/admin/components" | "/(admin)/agreements" | "/(admin)/audit" | "/(admin)/billing" | "/(admin)/blueprints" | "/(admin)/branding" | "/(admin)/catalog" | "/(admin)/clients" | "/(admin)/commissions" | "/(admin)/communications" | "/(portal)/customer-onboarding" | "/(admin)/dashboard" | "/(public)/data-processing" | "/(admin)/dispersion" | "/(admin)/domains" | "/(admin)/infrastructure" | "/(admin)/invoices" | "/(admin)/landing-sections" | "/(admin)/leads" | "/(public)/login" | "/(admin)/logs" | "/(admin)/migrations" | "/(admin)/neural-users" | "/(public)/onboarding-access" | "/(admin)/onboarding-config" | "/(portal)/partner-portal" | "/(public)/partner-signup" | "/(admin)/partners" | "/(admin)/plans" | "/(public)/plt" | "/(public)/plt/[slug]" | "/(portal)/portal" | "/(public)/pricing" | "/(public)/privacy" | "/(admin)/quotations" | "/(admin)/reconciliation" | "/(public)/recover-account" | "/(admin)/reports" | "/(admin)/roles" | "/(admin)/seats" | "/(public)/security" | "/(public)/servicios" | "/(admin)/session-monitoring" | "/(admin)/settings" | "/(admin)/settlements" | "/(public)/signup" | "/(public)/sla" | "/(admin)/tenants" | "/(public)/terms" | "/(admin)/testimonials" | "/(admin)/translations" | "/(admin)/tunnels" | "/(admin)/workorders";
 		RouteParams(): {
 			"/(public)/plt/[slug]": { slug: string }
 		};
@@ -65,6 +65,7 @@ declare module "$app/types" {
 			"/(public)/login": Record<string, never>;
 			"/(admin)/logs": Record<string, never>;
 			"/(admin)/migrations": Record<string, never>;
+			"/(admin)/neural-users": Record<string, never>;
 			"/(public)/onboarding-access": Record<string, never>;
 			"/(admin)/onboarding-config": Record<string, never>;
 			"/(portal)/partner-portal": Record<string, never>;
@@ -84,6 +85,7 @@ declare module "$app/types" {
 			"/(admin)/seats": Record<string, never>;
 			"/(public)/security": Record<string, never>;
 			"/(public)/servicios": Record<string, never>;
+			"/(admin)/session-monitoring": Record<string, never>;
 			"/(admin)/settings": Record<string, never>;
 			"/(admin)/settlements": Record<string, never>;
 			"/(public)/signup": Record<string, never>;
@@ -95,7 +97,7 @@ declare module "$app/types" {
 			"/(admin)/tunnels": Record<string, never>;
 			"/(admin)/workorders": Record<string, never>
 		};
-		Pathname(): "/" | "/about" | "/accountant-portal" | "/accountants" | "/admin-users" | "/admin" | "/agreements" | "/audit" | "/billing" | "/blueprints" | "/branding" | "/catalog" | "/clients" | "/commissions" | "/communications" | "/customer-onboarding" | "/dashboard" | "/data-processing" | "/dispersion" | "/domains" | "/infrastructure" | "/invoices" | "/landing-sections" | "/leads" | "/login" | "/logs" | "/migrations" | "/onboarding-access" | "/onboarding-config" | "/partner-portal" | "/partner-signup" | "/partners" | "/plans" | `/plt/${string}` & {} | "/portal" | "/pricing" | "/privacy" | "/quotations" | "/reconciliation" | "/recover-account" | "/reports" | "/roles" | "/seats" | "/security" | "/servicios" | "/settings" | "/settlements" | "/signup" | "/sla" | "/tenants" | "/terms" | "/testimonials" | "/translations" | "/tunnels" | "/workorders";
+		Pathname(): "/" | "/about" | "/accountant-portal" | "/accountants" | "/admin-users" | "/admin" | "/agreements" | "/audit" | "/billing" | "/blueprints" | "/branding" | "/catalog" | "/clients" | "/commissions" | "/communications" | "/customer-onboarding" | "/dashboard" | "/data-processing" | "/dispersion" | "/domains" | "/infrastructure" | "/invoices" | "/landing-sections" | "/leads" | "/login" | "/logs" | "/migrations" | "/neural-users" | "/onboarding-access" | "/onboarding-config" | "/partner-portal" | "/partner-signup" | "/partners" | "/plans" | `/plt/${string}` & {} | "/portal" | "/pricing" | "/privacy" | "/quotations" | "/reconciliation" | "/recover-account" | "/reports" | "/roles" | "/seats" | "/security" | "/servicios" | "/session-monitoring" | "/settings" | "/settlements" | "/signup" | "/sla" | "/tenants" | "/terms" | "/testimonials" | "/translations" | "/tunnels" | "/workorders";
 		ResolvedPathname(): `${"" | `/${string}`}${ReturnType<AppTypes['Pathname']>}`;
 		Asset(): "/favicon.png" | "/favicon.svg" | "/icons/apple-touch-icon.png" | "/icons/icon-192.png" | "/icons/icon-512.png" | "/icons/icon-base.svg" | "/vite.svg" | string & {};
 	}

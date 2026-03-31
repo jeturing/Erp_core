@@ -131,6 +131,27 @@ CT105_NGINX_PORT = int(os.getenv("CT105_NGINX_PORT", "8080"))
 
 
 # ═══════════════════════════════════════════════════════
+# Redis (PCT 149 — Session Store)
+# ═══════════════════════════════════════════════════════
+REDIS_HOST = os.getenv("REDIS_HOST", "10.10.10.7")
+REDIS_PORT = int(os.getenv("REDIS_PORT", "6379"))
+REDIS_PASSWORD = os.getenv("REDIS_PASSWORD", "JtrRedis2026!")
+REDIS_DB = int(os.getenv("REDIS_DB", "0"))
+REDIS_URL = os.getenv(
+    "REDIS_URL",
+    f"redis://:{REDIS_PASSWORD}@{REDIS_HOST}:{REDIS_PORT}/{REDIS_DB}"
+)
+
+# ═══════════════════════════════════════════════════════
+# DSAM — Dynamic Session & Anti-Theft Monitor
+# ═══════════════════════════════════════════════════════
+GEOIP_DB_PATH = os.getenv("GEOIP_DB_PATH", str(_project_root / "data" / "GeoLite2-City.mmdb"))
+DSAM_POLL_INTERVAL_SECONDS = int(os.getenv("DSAM_POLL_INTERVAL_SECONDS", "60"))
+DSAM_IMPOSSIBLE_TRAVEL_MIN_HOURS = float(os.getenv("DSAM_IMPOSSIBLE_TRAVEL_MIN_HOURS", "3"))
+DSAM_IMPOSSIBLE_TRAVEL_MIN_KM = float(os.getenv("DSAM_IMPOSSIBLE_TRAVEL_MIN_KM", "500"))
+
+
+# ═══════════════════════════════════════════════════════
 # Cloudflare
 # ═══════════════════════════════════════════════════════
 CLOUDFLARE_API_TOKEN = os.getenv("CLOUDFLARE_API_TOKEN", "")

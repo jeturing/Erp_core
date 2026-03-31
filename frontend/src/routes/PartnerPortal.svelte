@@ -3,7 +3,7 @@
   import {
     LogOut, LayoutDashboard, Users, Briefcase, DollarSign, CreditCard,
     UserCircle, Plus, TrendingUp, Building2, ExternalLink, RefreshCw,
-    Package, FileText, Download,
+    Package, FileText, Download, Palette,
     ChevronRight, ArrowUpRight, Loader2,
     Globe, ChevronDown, ChevronUp, Link2
   } from 'lucide-svelte';
@@ -22,7 +22,7 @@
   // State
   let loading = true;
   let error = '';
-  let activeTab: 'dashboard' | 'leads' | 'clients' | 'services' | 'invoices' | 'commissions' | 'stripe' | 'profile' = 'dashboard';
+  let activeTab: 'dashboard' | 'leads' | 'clients' | 'services' | 'invoices' | 'commissions' | 'stripe' | 'branding' | 'profile' = 'dashboard';
 
   // Data
   let onboardingStatus: PartnerOnboardingStatus | null = null;
@@ -63,6 +63,25 @@
     verification_status: string | null; custom_domain_id: number | null;
   }>> = new Map();
   let domainsLoading: number | null = null;
+
+  // Branding state
+  let brandingData: {
+    is_configured: boolean; white_label_enabled: boolean; profile_id?: number;
+    brand_name: string; logo_url: string | null; favicon_url: string | null;
+    primary_color: string; secondary_color: string;
+    support_email: string | null; support_url: string | null;
+    portal_url: string | null; terms_url: string | null; privacy_url: string | null;
+    custom_css: string | null; is_active: boolean; updated_at?: string | null;
+  } | null = null;
+  let brandingForm = {
+    brand_name: '', logo_url: '', favicon_url: '',
+    primary_color: '#4F46E5', secondary_color: '#7C3AED',
+    support_email: '', support_url: '', portal_url: '',
+    terms_url: '', privacy_url: '', custom_css: '',
+  };
+  let savingBranding = false;
+  let brandingMessage = '';
+  let brandingMessageType: 'success' | 'error' = 'success';
 
   $: showOnboarding = Boolean(onboardingStatus && onboardingStatus.current_step < 4);
 
@@ -159,6 +178,24 @@
         case 'profile':
           profile = await partnerPortalApi.getProfile();
           break;
+        case 'branding':
+          brandingData = await partnerPortalApi.getBranding();
+          if (brandingData) {
+            brandingForm = {
+              brand_name: brandingData.brand_name || '',
+              logo_url: brandingData.logo_url || '',
+              favicon_url: brandingData.favicon_url || '',
+              primary_color: brandingData.primary_color || '#4F46E5',
+              secondary_color: brandingData.secondary_color || '#7C3AED',
+              support_email: brandingData.support_email || '',
+              support_url: brandingData.support_url || '',
+              portal_url: brandingData.portal_url || '',
+              terms_url: brandingData.terms_url || '',
+              privacy_url: brandingData.privacy_url || '',
+              custom_css: brandingData.custom_css || '',
+            };
+          }
+          break;
       }
     } catch (err) {
       error = err instanceof Error ? err.message : 'Error';
@@ -200,7 +237,29 @@
   async function switchTab(tab: typeof activeTab) {
     activeTab = tab;
     error = '';
+    brandingMessage = '';
     await loadTabData();
+  }
+
+  async function saveBrandingProfile() {
+    savingBranding = true;
+    brandingMessage = '';
+    try {
+      const payload: Record<string, string> = {};
+      for (const [key, value] of Object.entries(brandingForm)) {
+        if (value) payload[key] = value;
+      }
+      const result = await partnerPortalApi.updateBranding(payload);
+      brandingMessage = result.message || 'Perfil de marca guardado exitosamente';
+      brandingMessageType = 'success';
+      // Refresh data
+      brandingData = await partnerPortalApi.getBranding();
+    } catch (err) {
+      brandingMessage = err instanceof Error ? err.message : 'Error al guardar';
+      brandingMessageType = 'error';
+    } finally {
+      savingBranding = false;
+    }
   }
 
   async function createLead() {
@@ -387,6 +446,7 @@
           { key: 'invoices', label: 'Facturas', icon: FileText },
           { key: 'commissions', label: 'Comisiones', icon: DollarSign },
           { key: 'stripe', label: 'Stripe', icon: CreditCard },
+          { key: 'branding', label: 'Mi Marca', icon: Palette },
           { key: 'profile', label: 'Mi Perfil', icon: UserCircle },
         ] as tab}
           <button
@@ -1192,6 +1252,150 @@
                 Conectar con Stripe
               </button>
             </div>
+          {/if}
+        </div>
+
+      <!-- ═══ BRANDING (Mi Marca) ═══ -->
+      {:else if activeTab === 'branding'}
+        <div class="space-y-6">
+          <div class="flex items-center justify-between">
+            <div>
+              <h2 class="text-lg font-bold text-[#1a1a1a]">Mi Marca</h2>
+              <p class="text-sm text-gray-500">Personaliza la apariencia de tu marca para tus clientes</p>
+            </div>
+            {#if brandingData?.white_label_enabled}
+              <span class="px-3 py-1 rounded-full text-xs font-semibold bg-green-100 text-green-700">White-Label Activo</span>
+            {:else}
+              <span class="px-3 py-1 rounded-full text-xs font-semibold bg-gray-100 text-gray-500">White-Label Inactivo</span>
+            {/if}
+          </div>
+
+          {#if !brandingData?.white_label_enabled}
+            <div class="bg-amber-50 border border-amber-200 rounded-xl p-6 text-center">
+              <Palette class="w-12 h-12 text-amber-500 mx-auto mb-3" />
+              <h3 class="text-base font-bold text-[#1a1a1a] mb-2">Marca Blanca no habilitada</h3>
+              <p class="text-sm text-gray-600 max-w-md mx-auto">
+                Para personalizar la apariencia de tu marca en los portales de tus clientes,
+                contacta a soporte para activar la función de Marca Blanca en tu cuenta.
+              </p>
+              <a href="mailto:help@jeturing.com" class="mt-4 inline-block text-sm text-[#C05A3C] font-semibold hover:underline">
+                Contactar Soporte
+              </a>
+            </div>
+          {:else}
+            {#if brandingMessage}
+              <div class="rounded border px-4 py-3 text-sm {brandingMessageType === 'success'
+                ? 'border-green-200 bg-green-50 text-green-700'
+                : 'border-red-200 bg-red-50 text-red-700'}">
+                {brandingMessage}
+              </div>
+            {/if}
+
+            <!-- Preview Card -->
+            <div class="bg-white rounded-xl border border-gray-200 overflow-hidden">
+              <div class="h-2" style="background: linear-gradient(90deg, {brandingForm.primary_color}, {brandingForm.secondary_color})"></div>
+              <div class="p-6">
+                <div class="flex items-center gap-4 mb-4">
+                  {#if brandingForm.logo_url}
+                    <img src={brandingForm.logo_url} alt={brandingForm.brand_name} class="h-10 max-w-[160px] object-contain" />
+                  {:else}
+                    <div class="w-10 h-10 rounded flex items-center justify-center text-white font-bold text-lg"
+                         style="background-color: {brandingForm.primary_color}">
+                      {brandingForm.brand_name.charAt(0).toUpperCase() || 'M'}
+                    </div>
+                  {/if}
+                  <div>
+                    <h3 class="font-bold text-[#1a1a1a]">{brandingForm.brand_name || 'Tu Marca'}</h3>
+                    <span class="text-[10px] text-gray-400">Vista previa</span>
+                  </div>
+                </div>
+                <div class="flex gap-3 text-xs text-gray-500">
+                  {#if brandingForm.support_email}
+                    <span>✉ {brandingForm.support_email}</span>
+                  {/if}
+                  {#if brandingForm.support_url}
+                    <span>🔗 {brandingForm.support_url}</span>
+                  {/if}
+                </div>
+              </div>
+            </div>
+
+            <!-- Form -->
+            <form on:submit|preventDefault={saveBrandingProfile} class="bg-white rounded-xl border border-gray-200 p-6">
+              <h3 class="text-sm font-bold text-[#1a1a1a] uppercase tracking-wider mb-4">Configuración de Marca</h3>
+              <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
+                <div>
+                  <label for="wl-brand-name" class="text-[10px] font-semibold text-gray-500 uppercase tracking-wider block mb-1">Nombre de Marca *</label>
+                  <input id="wl-brand-name" type="text" bind:value={brandingForm.brand_name} required
+                    class="w-full px-3 py-2 border border-gray-200 rounded-lg text-sm focus:outline-none focus:border-[#C05A3C] focus:ring-1 focus:ring-[#C05A3C]" placeholder="Mi Empresa" />
+                </div>
+                <div>
+                  <label for="wl-support-email" class="text-[10px] font-semibold text-gray-500 uppercase tracking-wider block mb-1">Email de Soporte</label>
+                  <input id="wl-support-email" type="email" bind:value={brandingForm.support_email}
+                    class="w-full px-3 py-2 border border-gray-200 rounded-lg text-sm focus:outline-none focus:border-[#C05A3C] focus:ring-1 focus:ring-[#C05A3C]" placeholder="soporte@miempresa.com" />
+                </div>
+                <div>
+                  <label for="wl-logo-url" class="text-[10px] font-semibold text-gray-500 uppercase tracking-wider block mb-1">URL del Logo</label>
+                  <input id="wl-logo-url" type="url" bind:value={brandingForm.logo_url}
+                    class="w-full px-3 py-2 border border-gray-200 rounded-lg text-sm focus:outline-none focus:border-[#C05A3C] focus:ring-1 focus:ring-[#C05A3C]" placeholder="https://miempresa.com/logo.png" />
+                </div>
+                <div>
+                  <label for="wl-favicon-url" class="text-[10px] font-semibold text-gray-500 uppercase tracking-wider block mb-1">URL del Favicon</label>
+                  <input id="wl-favicon-url" type="url" bind:value={brandingForm.favicon_url}
+                    class="w-full px-3 py-2 border border-gray-200 rounded-lg text-sm focus:outline-none focus:border-[#C05A3C] focus:ring-1 focus:ring-[#C05A3C]" placeholder="https://miempresa.com/favicon.ico" />
+                </div>
+                <div>
+                  <label for="wl-primary-color" class="text-[10px] font-semibold text-gray-500 uppercase tracking-wider block mb-1">Color Primario</label>
+                  <div class="flex gap-2 items-center">
+                    <input type="color" bind:value={brandingForm.primary_color} class="w-10 h-10 cursor-pointer border border-gray-200 rounded" />
+                    <input id="wl-primary-color" type="text" bind:value={brandingForm.primary_color} class="flex-1 px-3 py-2 border border-gray-200 rounded-lg text-sm font-mono" />
+                  </div>
+                </div>
+                <div>
+                  <label for="wl-secondary-color" class="text-[10px] font-semibold text-gray-500 uppercase tracking-wider block mb-1">Color Secundario</label>
+                  <div class="flex gap-2 items-center">
+                    <input type="color" bind:value={brandingForm.secondary_color} class="w-10 h-10 cursor-pointer border border-gray-200 rounded" />
+                    <input id="wl-secondary-color" type="text" bind:value={brandingForm.secondary_color} class="flex-1 px-3 py-2 border border-gray-200 rounded-lg text-sm font-mono" />
+                  </div>
+                </div>
+                <div>
+                  <label for="wl-support-url" class="text-[10px] font-semibold text-gray-500 uppercase tracking-wider block mb-1">URL de Soporte</label>
+                  <input id="wl-support-url" type="url" bind:value={brandingForm.support_url}
+                    class="w-full px-3 py-2 border border-gray-200 rounded-lg text-sm focus:outline-none focus:border-[#C05A3C] focus:ring-1 focus:ring-[#C05A3C]" placeholder="https://soporte.miempresa.com" />
+                </div>
+                <div>
+                  <label for="wl-portal-url" class="text-[10px] font-semibold text-gray-500 uppercase tracking-wider block mb-1">URL del Portal</label>
+                  <input id="wl-portal-url" type="url" bind:value={brandingForm.portal_url}
+                    class="w-full px-3 py-2 border border-gray-200 rounded-lg text-sm focus:outline-none focus:border-[#C05A3C] focus:ring-1 focus:ring-[#C05A3C]" placeholder="https://erp.miempresa.com" />
+                </div>
+                <div>
+                  <label for="wl-terms-url" class="text-[10px] font-semibold text-gray-500 uppercase tracking-wider block mb-1">URL Términos de Servicio</label>
+                  <input id="wl-terms-url" type="url" bind:value={brandingForm.terms_url}
+                    class="w-full px-3 py-2 border border-gray-200 rounded-lg text-sm focus:outline-none focus:border-[#C05A3C] focus:ring-1 focus:ring-[#C05A3C]" placeholder="https://miempresa.com/terminos" />
+                </div>
+                <div>
+                  <label for="wl-privacy-url" class="text-[10px] font-semibold text-gray-500 uppercase tracking-wider block mb-1">URL Política de Privacidad</label>
+                  <input id="wl-privacy-url" type="url" bind:value={brandingForm.privacy_url}
+                    class="w-full px-3 py-2 border border-gray-200 rounded-lg text-sm focus:outline-none focus:border-[#C05A3C] focus:ring-1 focus:ring-[#C05A3C]" placeholder="https://miempresa.com/privacidad" />
+                </div>
+                <div class="md:col-span-2">
+                  <label for="wl-custom-css" class="text-[10px] font-semibold text-gray-500 uppercase tracking-wider block mb-1">CSS Personalizado</label>
+                  <textarea id="wl-custom-css" bind:value={brandingForm.custom_css} rows="4"
+                    class="w-full px-3 py-2 border border-gray-200 rounded-lg text-sm font-mono focus:outline-none focus:border-[#C05A3C] focus:ring-1 focus:ring-[#C05A3C]"
+                    placeholder={":root { --brand-primary: #C05A3C; }"}></textarea>
+                  <p class="text-[10px] text-gray-400 mt-1">CSS que se inyectará en el portal Odoo de tus clientes</p>
+                </div>
+              </div>
+              <div class="flex gap-3 mt-6 pt-4 border-t border-gray-100">
+                <button type="submit" class="bg-[#1a1a1a] text-white text-sm font-semibold px-6 py-2.5 rounded-lg hover:bg-[#333] transition-colors" disabled={savingBranding}>
+                  {savingBranding ? 'Guardando...' : brandingData?.is_configured ? 'Guardar Cambios' : 'Crear Perfil de Marca'}
+                </button>
+              </div>
+            </form>
+
+            {#if brandingData?.updated_at}
+              <p class="text-[10px] text-gray-400 text-right">Última actualización: {formatDate(brandingData.updated_at)}</p>
+            {/if}
           {/if}
         </div>
 

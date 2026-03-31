@@ -28,8 +28,10 @@ import { C as Chart_no_axes_column } from "./chart-no-axes-column.js";
 import { M as Mail } from "./mail.js";
 import { M as Message_circle } from "./message-circle.js";
 import { L as Languages } from "./languages.js";
-import { S as Settings } from "./settings.js";
+import { A as Activity } from "./activity.js";
 import { S as Shield } from "./shield.js";
+import { S as Settings } from "./settings.js";
+import { Z as Zap } from "./zap.js";
 import { F as File_text } from "./file-text.js";
 import { S as Shield_check } from "./shield-check.js";
 import { E as External_link } from "./external-link.js";
@@ -567,6 +569,19 @@ function Layout($$renderer, $$props) {
         ]
       },
       {
+        id: "grp-security",
+        label: "Seguridad",
+        icon: Shield,
+        children: [
+          {
+            id: "session-monitoring",
+            label: "DSAM Monitor",
+            icon: Activity,
+            href: "/session-monitoring"
+          }
+        ]
+      },
+      {
         id: "grp-admin",
         label: "Administración",
         icon: Settings,
@@ -582,6 +597,12 @@ function Layout($$renderer, $$props) {
             label: "Config. Onboarding",
             icon: Sliders_vertical,
             href: "/onboarding-config"
+          },
+          {
+            id: "neural-users",
+            label: "Neural Users ✨",
+            icon: Zap,
+            href: "/neural-users"
           },
           { id: "roles", label: "Roles", icon: Shield, href: "/roles" },
           {

@@ -677,6 +677,8 @@ class Partner(Base):
     # ── Branding del partner (White-label) ──
     # Cuando un tenant es provisionado por este partner, los emails
     # se envían con el branding del partner en lugar del de SAJET.
+    white_label_enabled = Column(Boolean, default=False, nullable=False, server_default="false")  # Habilita marca blanca (requiere plan con WL)
+    brand_profile_id = Column(Integer, ForeignKey("partner_branding_profiles.id", ondelete="SET NULL"), nullable=True)  # Perfil de branding activo
     brand_name = Column(String(200), nullable=True)         # Nombre del partner en emails (ej: "TecHeels")
     brand_color_primary = Column(String(10), nullable=True) # Hex primary (ej: "#3498db")
     brand_color_accent = Column(String(10), nullable=True)  # Hex accent (ej: "#2ecc71")
@@ -1564,12 +1566,16 @@ class PartnerBrandingProfile(Base):
     secondary_color = Column(String(7), default="#7C3AED")
     support_email = Column(String(200), nullable=True)
     support_url = Column(String(500), nullable=True)
+    portal_url = Column(String(500), nullable=True)        # URL del portal del partner (ej: erp.miempresa.com)
+    custom_domain = Column(String(255), nullable=True, unique=True)  # Dominio custom para branding resolution
+    terms_url = Column(String(500), nullable=True)         # URL a términos de servicio del partner
+    privacy_url = Column(String(500), nullable=True)       # URL a política de privacidad del partner
     custom_css = Column(Text, nullable=True)               # CSS adicional
     is_active = Column(Boolean, default=True)
     created_at = Column(DateTime, default=datetime.utcnow)
     updated_at = Column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
 
-    partner = relationship("Partner", backref="branding_profile")
+    partner = relationship("Partner", backref="branding_profile", foreign_keys="[PartnerBrandingProfile.partner_id]")
 
 
 # ═══════════════════════════════════════════════════════
@@ -2135,3 +2141,221 @@ class ApiKeyRotationRequest(Base):
         Index("idx_rotation_req_key_status", "key_id", "status"),
         Index("idx_rotation_req_tenant",     "tenant_id", "status"),
     )
+
+
+# ═══════════════════════════════════════════════════════
+# DSAM — Dynamic Session & Anti-Theft Monitor
+# ═══════════════════════════════════════════════════════
+
+class SessionRuleType(enum.Enum):
+    """Tipo de regla de seguridad de sesión."""
+    SINGLE_SESSION = "single_session"              # Solo 1 sesión por usuario
+    MAX_SESSIONS = "max_sessions"                  # Máximo N sesiones
+    GEO_RESTRICTION = "geo_restriction"            # Solo ciertos países
+    IMPOSSIBLE_TRAVEL = "impossible_travel"         # Distancia imposible en tiempo
+    IP_WHITELIST = "ip_whitelist"                   # Solo IPs permitidas
+    TIME_RESTRICTION = "time_restriction"           # Solo en horario laboral
+
+
+class SessionActionType(enum.Enum):
+    """Acciones de seguridad sobre cuentas."""
+    SESSION_TERMINATED = "session_terminated"
+    ACCOUNT_LOCKED = "account_locked"
+    ACCOUNT_UNLOCKED = "account_unlocked"
+    SECURITY_ALERT = "security_alert"
+    IMPOSSIBLE_TRAVEL_DETECTED = "impossible_travel_detected"
+    CONCURRENT_SESSION_BLOCKED = "concurrent_session_blocked"
+    RULE_VIOLATION = "rule_violation"
+
+
+class SessionAlertSeverity(enum.Enum):
+    """Severidad de la alerta."""
+    LOW = "low"
+    MEDIUM = "medium"
+    HIGH = "high"
+    CRITICAL = "critical"
+
+
+class ActiveSession(Base):
+    """
+    Snapshot de sesión activa capturada desde Redis.
+    Se actualiza periódicamente vía cron (cada 60s).
+    Permite visualizar sesiones en dashboard sin leer Redis en cada request.
+    """
+    __tablename__ = "active_sessions"
+
+    id = Column(Integer, primary_key=True, index=True)
+    redis_session_key = Column(String(255), unique=True, nullable=False)
+
+    # Datos del usuario/tenant
+    tenant_db = Column(String(100), nullable=False, index=True)
+    odoo_uid = Column(Integer, nullable=True)
+    odoo_login = Column(String(150), nullable=True, index=True)
+    user_display_name = Column(String(255), nullable=True)
+
+    # Datos de conexión
+    ip_address = Column(String(45), nullable=False)
+    user_agent = Column(Text, nullable=True)
+
+    # Geolocalización (GeoIP2)
+    geo_country = Column(String(100), nullable=True)
+    geo_country_code = Column(String(3), nullable=True, index=True)
+    geo_region = Column(String(100), nullable=True)
+    geo_city = Column(String(100), nullable=True)
+    geo_lat = Column(Float, nullable=True)
+    geo_lon = Column(Float, nullable=True)
+
+    # Timestamps
+    session_start = Column(DateTime, nullable=True)
+    last_activity = Column(DateTime, nullable=True)
+    first_seen_at = Column(DateTime, default=datetime.utcnow)
+    last_polled_at = Column(DateTime, default=datetime.utcnow)
+
+    # Estado
+    is_active = Column(Boolean, default=True)
+
+    __table_args__ = (
+        Index("ix_active_sessions_tenant_user", "tenant_db", "odoo_login"),
+        Index("ix_active_sessions_country", "geo_country_code"),
+        Index("ix_active_sessions_active", "is_active", "tenant_db"),
+    )
+
+
+class SessionSecurityRule(Base):
+    """
+    Regla de seguridad configurable por tenant o global.
+    Permite aplicar restricciones dinámicas por tenant.
+    """
+    __tablename__ = "session_security_rules"
+
+    id = Column(Integer, primary_key=True, index=True)
+    rule_type = Column(Enum(SessionRuleType), nullable=False)
+    tenant_db = Column(String(100), nullable=True, index=True)   # null = global (aplica a todos)
+    is_enabled = Column(Boolean, default=True)
+
+    # Configuración específica por tipo de regla (JSON flexible)
+    config = Column(JSON, nullable=False, default=dict)
+    # Ejemplos de config por rule_type:
+    # SINGLE_SESSION:    {"allow_override_users": ["admin@sajet.us"]}
+    # MAX_SESSIONS:      {"max": 3}
+    # GEO_RESTRICTION:   {"allowed_countries": ["DO", "US", "ES"]}
+    # IMPOSSIBLE_TRAVEL: {"min_hours": 3, "min_distance_km": 500}
+    # IP_WHITELIST:      {"allowed_ips": ["10.10.10.0/24", "192.168.1.0/24"]}
+    # TIME_RESTRICTION:  {"tz": "America/Santo_Domingo", "start": "07:00", "end": "22:00"}
+
+    # Excepciones: usuarios o tenants que pueden ignorar la regla
+    exempt_users = Column(JSON, default=list)   # ["admin@sajet.us", "root@tenant.com"]
+    exempt_tenants = Column(JSON, default=list) # ["cliente1", "jeturing"]
+
+    description = Column(Text, nullable=True)
+    created_at = Column(DateTime, default=datetime.utcnow)
+    updated_at = Column(DateTime, onupdate=datetime.utcnow)
+
+    __table_args__ = (
+        Index("ix_sec_rules_type_tenant", "rule_type", "tenant_db"),
+    )
+
+
+class SessionGeoEvent(Base):
+    """
+    Historial de accesos geográficos por usuario.
+    Alimenta el mapa de calor y la detección de viaje imposible.
+    """
+    __tablename__ = "session_geo_events"
+
+    id = Column(Integer, primary_key=True, index=True)
+    tenant_db = Column(String(100), nullable=False, index=True)
+    odoo_login = Column(String(150), nullable=False, index=True)
+    ip_address = Column(String(45), nullable=False)
+
+    # Geolocalización
+    geo_country = Column(String(100), nullable=True)
+    geo_country_code = Column(String(3), nullable=True)
+    geo_region = Column(String(100), nullable=True)
+    geo_city = Column(String(100), nullable=True)
+    geo_lat = Column(Float, nullable=True)
+    geo_lon = Column(Float, nullable=True)
+
+    # User Agent parsed
+    device_type = Column(String(20), nullable=True)   # desktop, mobile, tablet
+    browser = Column(String(50), nullable=True)
+    os_name = Column(String(50), nullable=True)
+
+    event_at = Column(DateTime, default=datetime.utcnow, index=True)
+
+    __table_args__ = (
+        Index("ix_geo_events_user_time", "tenant_db", "odoo_login", "event_at"),
+        Index("ix_geo_events_country", "geo_country_code", "event_at"),
+    )
+
+
+class AccountSecurityAction(Base):
+    """
+    Log de acciones de seguridad tomadas (bloqueos, terminaciones, alertas).
+    Playbook estilo Steam Guard para soporte técnico.
+    """
+    __tablename__ = "account_security_actions"
+
+    id = Column(Integer, primary_key=True, index=True)
+    action_type = Column(Enum(SessionActionType), nullable=False)
+    severity = Column(Enum(SessionAlertSeverity), default=SessionAlertSeverity.MEDIUM)
+
+    # Target
+    tenant_db = Column(String(100), nullable=False, index=True)
+    odoo_login = Column(String(150), nullable=True)
+    odoo_uid = Column(Integer, nullable=True)
+    ip_address = Column(String(45), nullable=True)
+
+    # Detalles del evento
+    details = Column(JSON, default=dict)
+    # Ejemplo: {"reason": "Concurrent login from US while active in DO",
+    #           "session_terminated": "session:cliente1:abc123",
+    #           "previous_location": {"country": "DO", "city": "Santo Domingo"},
+    #           "new_location": {"country": "US", "city": "Miami"}}
+
+    # Quién tomó la acción (null = sistema automático)
+    actor_id = Column(Integer, nullable=True)            # admin_users.id
+    actor_username = Column(String(150), nullable=True)  # email del admin/support
+
+    # Resolución
+    resolved = Column(Boolean, default=False)
+    resolved_at = Column(DateTime, nullable=True)
+    resolved_by = Column(String(150), nullable=True)
+    resolution_note = Column(Text, nullable=True)
+
+    created_at = Column(DateTime, default=datetime.utcnow, index=True)
+
+    __table_args__ = (
+        Index("ix_sec_actions_tenant_time", "tenant_db", "created_at"),
+        Index("ix_sec_actions_type_sev", "action_type", "severity"),
+        Index("ix_sec_actions_unresolved", "resolved", "severity"),
+    )
+
+
+class TenantSessionConfig(Base):
+    """
+    Configuración de sesión por tenant.
+    Permite habilitar/deshabilitar funcionalidades DSAM por tenant.
+    """
+    __tablename__ = "tenant_session_configs"
+
+    id = Column(Integer, primary_key=True, index=True)
+    tenant_db = Column(String(100), unique=True, nullable=False, index=True)
+
+    # Permisos del tenant
+    allow_multiple_sessions = Column(Boolean, default=False)
+    max_concurrent_sessions = Column(Integer, default=1)
+    enforce_geo_restrictions = Column(Boolean, default=False)
+    enforce_impossible_travel = Column(Boolean, default=True)
+
+    # Configuración
+    allowed_countries = Column(JSON, default=list)    # ["DO", "US"] o [] = sin restricción
+    session_timeout_minutes = Column(Integer, default=480)  # 8 horas default
+    notify_on_new_device = Column(Boolean, default=True)
+
+    # Seat audit
+    seat_audit_enabled = Column(Boolean, default=True)
+    last_seat_audit_at = Column(DateTime, nullable=True)
+
+    created_at = Column(DateTime, default=datetime.utcnow)
+    updated_at = Column(DateTime, onupdate=datetime.utcnow)

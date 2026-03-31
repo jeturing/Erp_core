@@ -60,6 +60,8 @@ declare module '$env/static/private' {
 	export const SSL_CERT_FILE: string;
 	export const npm_config_userconfig: string;
 	export const npm_config_local_prefix: string;
+	export const PYDEVD_DISABLE_FILE_VALIDATION: string;
+	export const BUNDLED_DEBUGPY_PATH: string;
 	export const VSCODE_PYTHON_AUTOACTIVATE_GUARD: string;
 	export const DBUS_SESSION_BUS_ADDRESS: string;
 	export const COLORTERM: string;
@@ -79,6 +81,7 @@ declare module '$env/static/private' {
 	export const npm_package_name: string;
 	export const XDG_RUNTIME_DIR: string;
 	export const SSL_CERT_DIR: string;
+	export const VSCODE_DEBUGPY_ADAPTER_ENDPOINTS: string;
 	export const LANG: string;
 	export const PYTHONSTARTUP: string;
 	export const VSCODE_GIT_IPC_HANDLE: string;
@@ -207,6 +210,8 @@ declare module '$env/dynamic/private' {
 		SSL_CERT_FILE: string;
 		npm_config_userconfig: string;
 		npm_config_local_prefix: string;
+		PYDEVD_DISABLE_FILE_VALIDATION: string;
+		BUNDLED_DEBUGPY_PATH: string;
 		VSCODE_PYTHON_AUTOACTIVATE_GUARD: string;
 		DBUS_SESSION_BUS_ADDRESS: string;
 		COLORTERM: string;
@@ -226,6 +231,7 @@ declare module '$env/dynamic/private' {
 		npm_package_name: string;
 		XDG_RUNTIME_DIR: string;
 		SSL_CERT_DIR: string;
+		VSCODE_DEBUGPY_ADAPTER_ENDPOINTS: string;
 		LANG: string;
 		PYTHONSTARTUP: string;
 		VSCODE_GIT_IPC_HANDLE: string;

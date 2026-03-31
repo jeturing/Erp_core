@@ -13,4 +13,8 @@ Routers disponibles:
 - tunnels: Cloudflare Tunnel management
 - provisioning: Auto-provisioning de tenants Odoo
 - settings: Configuración administrable desde /admin
+- users_neural: Centro neurálgico de gestión de usuarios (Admins, Tenants, Partners)
 """
+
+from . import auth, secure_auth, roles, dashboard, tenants, onboarding, tenant_portal, nodes, tunnels, provisioning, settings, users_neural
+

@@ -119,6 +119,10 @@
 		"src/routes/(admin)/+layout.ts",
 		"src/routes/+layout.ts"
 	],
+	"/(admin)/neural-users": [
+		"src/routes/(admin)/+layout.ts",
+		"src/routes/+layout.ts"
+	],
 	"/(public)/onboarding-access": [
 		"src/routes/(public)/+layout.ts",
 		"src/routes/+layout.ts"
@@ -189,6 +193,10 @@
 	],
 	"/(public)/servicios": [
 		"src/routes/(public)/+layout.ts",
+		"src/routes/+layout.ts"
+	],
+	"/(admin)/session-monitoring": [
+		"src/routes/(admin)/+layout.ts",
 		"src/routes/+layout.ts"
 	],
 	"/(admin)/settings": [

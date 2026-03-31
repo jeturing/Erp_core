@@ -1,4 +1,4 @@
-import { p as bind_props, f as derived, s as store_get, u as unsubscribe_stores } from "../../../../../chunks/index2.js";
+import { o as bind_props, f as derived, s as store_get, u as unsubscribe_stores } from "../../../../../chunks/index2.js";
 import { a8 as fallback } from "../../../../../chunks/utils2.js";
 import "../../../../../chunks/darkMode.js";
 import "../../../../../chunks/toast.js";

@@ -1,4 +1,4 @@
-import { d as escape_html, p as bind_props, k as attr_class, b as stringify } from "../../../chunks/index2.js";
+import { d as escape_html, o as bind_props, k as attr_class, b as stringify } from "../../../chunks/index2.js";
 import { a8 as fallback } from "../../../chunks/utils2.js";
 import "clsx";
 function AdminHeader($$renderer, $$props) {

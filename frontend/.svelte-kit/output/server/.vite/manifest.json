@@ -103,8 +103,10 @@
       "_mail.js",
       "_message-circle.js",
       "_languages.js",
-      "_settings.js",
+      "_activity.js",
       "_shield.js",
+      "_settings.js",
+      "_zap.js",
       "_file-text.js",
       "_shield-check.js",
       "_external-link.js",
@@ -380,6 +382,14 @@
     "imports": [
       "_root.js",
       "_environment.js"
+    ]
+  },
+  "_key.js": {
+    "file": "chunks/key.js",
+    "name": "key",
+    "imports": [
+      "_index2.js",
+      "_Icon.js"
     ]
   },
   "_languages.js": {
@@ -1036,6 +1046,29 @@
       "_Icon.js"
     ]
   },
+  "src/routes/(admin)/neural-users/+page.svelte": {
+    "file": "entries/pages/(admin)/neural-users/_page.svelte.js",
+    "name": "entries/pages/(admin)/neural-users/_page.svelte",
+    "src": "src/routes/(admin)/neural-users/+page.svelte",
+    "isEntry": true,
+    "imports": [
+      "_index2.js",
+      "_client.js",
+      "_toast.js",
+      "_formatters.js",
+      "_zap.js",
+      "_search.js",
+      "_Icon.js",
+      "_users.js",
+      "_shield.js",
+      "_shield-check.js",
+      "_key.js",
+      "_external-link.js"
+    ],
+    "css": [
+      "_app/immutable/assets/_page.n3gLubMk.css"
+    ]
+  },
   "src/routes/(admin)/onboarding-config/+page.svelte": {
     "file": "entries/pages/(admin)/onboarding-config/_page.svelte.js",
     "name": "entries/pages/(admin)/onboarding-config/_page.svelte",
@@ -1149,6 +1182,30 @@
       "_zap.js"
     ]
   },
+  "src/routes/(admin)/session-monitoring/+page.svelte": {
+    "file": "entries/pages/(admin)/session-monitoring/_page.svelte.js",
+    "name": "entries/pages/(admin)/session-monitoring/_page.svelte",
+    "src": "src/routes/(admin)/session-monitoring/+page.svelte",
+    "isEntry": true,
+    "imports": [
+      "_index2.js",
+      "_index-server.js",
+      "_client.js",
+      "_toast.js",
+      "_shield.js",
+      "_refresh-cw.js",
+      "_play.js",
+      "_activity.js",
+      "_zap.js",
+      "_users.js",
+      "_globe.js",
+      "_triangle-alert.js",
+      "_search.js"
+    ],
+    "css": [
+      "_app/immutable/assets/_page.COi2RyQz.css"
+    ]
+  },
   "src/routes/(admin)/settings/+page.svelte": {
     "file": "entries/pages/(admin)/settings/_page.svelte.js",
     "name": "entries/pages/(admin)/settings/_page.svelte",
@@ -1159,9 +1216,10 @@
       "_client.js",
       "_toast.js",
       "_refresh-cw.js",
-      "_Icon.js",
+      "_key.js",
       "_credit-card.js",
       "_server.js",
+      "_Icon.js",
       "_globe.js"
     ]
   },
@@ -1569,7 +1627,7 @@
       "_darkMode.js"
     ],
     "css": [
-      "_app/immutable/assets/_layout.DW-mn716.css"
+      "_app/immutable/assets/_layout.BVDdYunv.css"
     ]
   },
   "src/routes/+layout.ts": {

@@ -5,6 +5,8 @@ Branding Routes — Épica 10: Partner White-Label Branding Profiles
 - GET  /api/branding/profiles/{id}  → Detalle
 - PUT  /api/branding/profiles/{id}  → Actualizar
 - GET  /api/branding/resolve/{domain} → Resolver branding por dominio
+- GET  /api/branding/tenant/{subdomain} → Resolver branding por subdomain del tenant
+- POST /api/branding/admin/enable-whitelabel → Admin habilita WL para partner
 """
 from fastapi import APIRouter, HTTPException, Depends
 from pydantic import BaseModel
@@ -231,6 +233,9 @@ def resolve_branding_by_subdomain(subdomain: str, db: Session = Depends(get_db))
             "secondary_color": profile.secondary_color or JETURING_DEFAULTS["secondary_color"],
             "support_email": profile.support_email or JETURING_DEFAULTS["support_email"],
             "support_url": profile.support_url or JETURING_DEFAULTS["support_url"],
+            "portal_url": profile.portal_url,
+            "terms_url": profile.terms_url,
+            "privacy_url": profile.privacy_url,
             "custom_css": profile.custom_css,
             "is_partner_branded": True,
         }
@@ -276,4 +281,38 @@ def resolve_branding_by_domain(domain: str, db: Session = Depends(get_db)):
         "privacy_url": profile.privacy_url,
         "is_white_label": True,
         "partner_id": profile.partner_id,
+    }
+
+
+# ═══════════════════════════════════════════════
+# ADMIN — Habilitar/deshabilitar White-Label
+# ═══════════════════════════════════════════════
+
+class EnableWhiteLabelRequest(BaseModel):
+    partner_id: int
+    enabled: bool = True
+
+
+@router.post("/admin/enable-whitelabel")
+def admin_enable_whitelabel(
+    payload: EnableWhiteLabelRequest,
+    db: Session = Depends(get_db),
+):
+    """
+    Admin habilita o deshabilita la marca blanca para un partner.
+    Esto es un gating: el partner no puede usar /branding PUT sin este flag.
+    """
+    partner = db.query(Partner).filter(Partner.id == payload.partner_id).first()
+    if not partner:
+        raise HTTPException(404, "Partner not found")
+
+    partner.white_label_enabled = payload.enabled
+    db.commit()
+
+    return {
+        "success": True,
+        "partner_id": partner.id,
+        "company_name": partner.company_name,
+        "white_label_enabled": partner.white_label_enabled,
+        "message": f"Marca Blanca {'habilitada' if payload.enabled else 'deshabilitada'} para {partner.company_name}",
     }

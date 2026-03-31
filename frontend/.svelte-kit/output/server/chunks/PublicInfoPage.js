@@ -1,4 +1,4 @@
-import { w as head, d as escape_html, e as ensure_array_like, c as attr, p as bind_props } from "./index2.js";
+import { w as head, d as escape_html, e as ensure_array_like, c as attr, o as bind_props } from "./index2.js";
 import { N as NavBar, F as Footer } from "./Footer.js";
 import { S as Shield_check } from "./shield-check.js";
 import { C as Circle_check } from "./circle-check.js";

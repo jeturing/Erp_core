@@ -191,6 +191,50 @@ export const partnerPortalApi = {
     return api.get(`${BASE}/pricing`);
   },
 
+  // ── Branding (Mi Marca) ──
+  async getBranding(): Promise<{
+    is_configured: boolean;
+    white_label_enabled: boolean;
+    profile_id?: number;
+    brand_name: string;
+    logo_url: string | null;
+    favicon_url: string | null;
+    primary_color: string;
+    secondary_color: string;
+    support_email: string | null;
+    support_url: string | null;
+    portal_url: string | null;
+    terms_url: string | null;
+    privacy_url: string | null;
+    custom_css: string | null;
+    is_active: boolean;
+    updated_at?: string | null;
+  }> {
+    return api.get(`${BASE}/branding`);
+  },
+
+  async updateBranding(data: {
+    brand_name?: string;
+    logo_url?: string;
+    favicon_url?: string;
+    primary_color?: string;
+    secondary_color?: string;
+    support_email?: string;
+    support_url?: string;
+    portal_url?: string;
+    terms_url?: string;
+    privacy_url?: string;
+    custom_css?: string;
+  }): Promise<{
+    success: boolean;
+    message: string;
+    profile_id: number;
+    is_active: boolean;
+    updated_fields: string[];
+  }> {
+    return api.put(`${BASE}/branding`, data);
+  },
+
   // ── Admin endpoints ──
   async invitePartner(partner_id: number, temp_password: string, portal_email?: string): Promise<Record<string, unknown>> {
     return api.post(`${BASE}/admin/invite`, { partner_id, temp_password, portal_email });

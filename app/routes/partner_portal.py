@@ -16,7 +16,7 @@ from ..models.database import (
     Partner, Lead, Commission, Customer, Subscription, Quotation,
     PartnerPricingOverride, Plan, PartnerBrandingProfile,
     SessionLocal, PartnerStatus, LeadStatus, QuotationStatus,
-    BillingScenario, CommissionStatus,
+    BillingScenario, CommissionStatus, SubscriptionStatus,
     Invoice, InvoiceStatus,
 )
 from ..services.stripe_connect import (
@@ -1205,6 +1205,196 @@ async def change_partner_password(
         return {"message": "Contraseña actualizada exitosamente"}
     finally:
         db.close()
+
+
+# ═══════════════════════════════════════════════
+# BRANDING — Mi Marca (White-Label Self-Service)
+# ═══════════════════════════════════════════════
+
+class UpdatePartnerBranding(BaseModel):
+    brand_name: Optional[str] = None
+    logo_url: Optional[str] = None
+    favicon_url: Optional[str] = None
+    primary_color: Optional[str] = None
+    secondary_color: Optional[str] = None
+    support_email: Optional[str] = None
+    support_url: Optional[str] = None
+    portal_url: Optional[str] = None
+    terms_url: Optional[str] = None
+    privacy_url: Optional[str] = None
+    custom_css: Optional[str] = None
+
+
+@router.get("/branding")
+async def get_partner_branding(
+    request: Request,
+    access_token: Optional[str] = Cookie(None),
+):
+    """
+    Retorna el perfil de branding del partner autenticado.
+    Si no tiene perfil, retorna defaults vacíos con is_configured=False.
+    """
+    auth = _require_partner(request, access_token)
+    db = SessionLocal()
+    try:
+        partner = _get_partner(db, auth)
+
+        profile = db.query(PartnerBrandingProfile).filter(
+            PartnerBrandingProfile.partner_id == partner.id,
+        ).first()
+
+        if not profile:
+            return {
+                "is_configured": False,
+                "white_label_enabled": partner.white_label_enabled,
+                "brand_name": partner.brand_name or partner.company_name,
+                "logo_url": partner.logo_url,
+                "favicon_url": None,
+                "primary_color": partner.brand_color_primary or "#4F46E5",
+                "secondary_color": partner.brand_color_accent or "#7C3AED",
+                "support_email": partner.smtp_from_email or partner.contact_email,
+                "support_url": None,
+                "portal_url": None,
+                "terms_url": None,
+                "privacy_url": None,
+                "custom_css": None,
+                "is_active": False,
+            }
+
+        return {
+            "is_configured": True,
+            "white_label_enabled": partner.white_label_enabled,
+            "profile_id": profile.id,
+            "brand_name": profile.brand_name,
+            "logo_url": profile.logo_url,
+            "favicon_url": profile.favicon_url,
+            "primary_color": profile.primary_color,
+            "secondary_color": profile.secondary_color,
+            "support_email": profile.support_email,
+            "support_url": profile.support_url,
+            "portal_url": profile.portal_url,
+            "terms_url": profile.terms_url,
+            "privacy_url": profile.privacy_url,
+            "custom_css": profile.custom_css,
+            "is_active": profile.is_active,
+            "updated_at": profile.updated_at.isoformat() if profile.updated_at else None,
+        }
+    finally:
+        db.close()
+
+
+@router.put("/branding")
+async def update_partner_branding(
+    payload: UpdatePartnerBranding,
+    request: Request,
+    access_token: Optional[str] = Cookie(None),
+):
+    """
+    Crea o actualiza el perfil de branding del partner.
+    Al guardar, dispara webhook de invalidación de caché en los tenants Odoo del partner.
+    """
+    auth = _require_partner(request, access_token)
+    db = SessionLocal()
+    try:
+        partner = _get_partner(db, auth)
+
+        if not partner.white_label_enabled:
+            raise HTTPException(
+                status_code=403,
+                detail="La función de Marca Blanca no está habilitada para tu cuenta. Contacta a soporte para activarla.",
+            )
+
+        profile = db.query(PartnerBrandingProfile).filter(
+            PartnerBrandingProfile.partner_id == partner.id,
+        ).first()
+
+        update_data = payload.dict(exclude_unset=True)
+
+        if not profile:
+            # Crear perfil nuevo
+            profile = PartnerBrandingProfile(
+                partner_id=partner.id,
+                brand_name=update_data.get("brand_name", partner.company_name),
+                is_active=True,
+            )
+            for key, value in update_data.items():
+                setattr(profile, key, value)
+            db.add(profile)
+            db.flush()
+            partner.brand_profile_id = profile.id
+        else:
+            # Actualizar perfil existente
+            for key, value in update_data.items():
+                setattr(profile, key, value)
+
+        # Sincronizar campos básicos al Partner también (para emails)
+        if "brand_name" in update_data:
+            partner.brand_name = update_data["brand_name"]
+        if "logo_url" in update_data:
+            partner.logo_url = update_data["logo_url"]
+        if "primary_color" in update_data:
+            partner.brand_color_primary = update_data["primary_color"]
+        if "secondary_color" in update_data:
+            partner.brand_color_accent = update_data["secondary_color"]
+        if "support_email" in update_data:
+            partner.smtp_from_email = update_data["support_email"]
+
+        db.commit()
+        db.refresh(profile)
+
+        # Disparar invalidación de caché en Odoo (async, best-effort)
+        _trigger_branding_cache_invalidation(db, partner.id)
+
+        return {
+            "success": True,
+            "message": "Perfil de marca actualizado exitosamente",
+            "profile_id": profile.id,
+            "is_active": profile.is_active,
+            "updated_fields": list(update_data.keys()),
+        }
+    except HTTPException:
+        raise
+    except Exception as e:
+        db.rollback()
+        logger.error(f"Error updating partner branding: {e}")
+        raise HTTPException(status_code=500, detail=str(e))
+    finally:
+        db.close()
+
+
+def _trigger_branding_cache_invalidation(db, partner_id: int):
+    """
+    Envía webhook a cada tenant del partner para invalidar la caché de branding.
+    Best-effort: no bloquea la operación principal si falla.
+    """
+    import requests as req
+
+    try:
+        # Buscar todos los tenants de este partner
+        customers = db.query(Customer).filter(Customer.partner_id == partner_id).all()
+        subdomains = [c.subdomain for c in customers if c.subdomain]
+
+        if not subdomains:
+            logger.debug(f"[branding] No tenants for partner {partner_id}, skipping invalidation")
+            return
+
+        from ..models.database import get_config
+        odoo_master_pwd = get_config("ODOO_MASTER_PASSWORD", "admin")
+
+        for subdomain in subdomains:
+            try:
+                # Llamar al controlador de invalidación en cada tenant Odoo
+                url = f"https://{subdomain}.sajet.us/jeturing_branding/invalidate_cache"
+                req.post(
+                    url,
+                    json={"subdomain": subdomain, "master_pwd": odoo_master_pwd},
+                    timeout=5,
+                )
+                logger.info(f"[branding] Cache invalidated for tenant '{subdomain}'")
+            except Exception as e:
+                logger.warning(f"[branding] Failed to invalidate cache for '{subdomain}': {e}")
+    except Exception as e:
+        logger.error(f"[branding] Error in cache invalidation: {e}")
 
 
 # ═══════════════════════════════════════════════

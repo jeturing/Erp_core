@@ -1,4 +1,4 @@
-import { k as attr_class, l as clsx, p as bind_props, b as stringify } from "./index2.js";
+import { k as attr_class, l as clsx, o as bind_props, b as stringify } from "./index2.js";
 import { a8 as fallback } from "./utils2.js";
 function Spinner($$renderer, $$props) {
   let size = fallback($$props["size"], "md");

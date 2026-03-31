@@ -26,3 +26,5 @@ export { dispersionApi } from './dispersion';
 export type { DispersionStatus, PayoutRequest, CreatePayoutBody } from './dispersion';
 export { plansApi } from './plans';
 export type { Plan } from './plans';
+export { dsamApi } from './dsam';
+export type { SessionEntry, DashboardStats, SecurityRule, SecurityAction, TenantSessionConfig, GeoPoint, LiveSession } from './dsam';

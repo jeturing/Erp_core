@@ -7,7 +7,7 @@
     Scale, GitCompareArrows, ClipboardList, ShieldCheck, Palette,
     ShoppingBag, ChevronDown, Sliders, Mail, BarChart2,
     Languages, MessageCircle, FileType, ArrowRightLeft,
-    Moon, Sun,
+    Moon, Sun, Activity, Zap
   } from 'lucide-svelte';
   import { auth } from '../stores';
   import { goto } from '$app/navigation';
@@ -94,10 +94,18 @@
     },
 
     {
+      id: 'grp-security', label: 'Seguridad', icon: Shield,
+      children: [
+        { id: 'session-monitoring', label: 'DSAM Monitor', icon: Activity, href: '/session-monitoring' },
+      ],
+    },
+
+    {
       id: 'grp-admin', label: 'Administración', icon: SettingsIcon,
       children: [
         { id: 'settings',          label: 'Settings',          icon: SettingsIcon, href: '/settings' },
         { id: 'onboarding-config', label: 'Config. Onboarding',icon: Sliders,      href: '/onboarding-config' },
+        { id: 'neural-users',      label: 'Neural Users ✨',    icon: Zap,          href: '/neural-users' },
         { id: 'roles',             label: 'Roles',              icon: Shield,       href: '/roles' },
         { id: 'admin-users',       label: 'Usuarios Admin',     icon: UsersRound,   href: '/admin-users' },
         { id: 'agreements',        label: 'Acuerdos',           icon: FileText,     href: '/agreements' },

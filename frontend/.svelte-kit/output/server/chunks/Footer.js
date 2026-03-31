@@ -1,4 +1,4 @@
-import { h as sanitize_props, i as spread_props, j as slot, k as attr_class, a as attr_style, c as attr, d as escape_html, e as ensure_array_like, s as store_get, u as unsubscribe_stores, p as bind_props, b as stringify, t as attributes } from "./index2.js";
+import { h as sanitize_props, i as spread_props, j as slot, k as attr_class, a as attr_style, c as attr, d as escape_html, e as ensure_array_like, s as store_get, u as unsubscribe_stores, o as bind_props, b as stringify, t as attributes } from "./index2.js";
 import { $ as $format, l as localeStore } from "./darkMode.js";
 import "./toast.js";
 import { a8 as fallback } from "./utils2.js";
