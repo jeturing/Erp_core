@@ -46,6 +46,7 @@ from .routes import odoo_webhooks        # 🔄 Webhooks Odoo → Portal (sync b
 from .routes import postal_webhooks      # 📧 Postal Mail webhooks + uso de correo
 from .routes import migration            # 🚚 Migración live de tenants entre nodos (Fase 2)
 from .routes import session_monitoring   # 🛡️ DSAM — Dynamic Session & Anti-Theft Monitor
+from .routes import developer_portal     # 🔧 Developer Portal — Apps & Agreement Flows
 from .routes.roles import _require_admin as _require_admin_base
 
 # Import security middleware
@@ -256,13 +257,7 @@ app.include_router(odoo_webhooks.router)         # 🔄 Webhooks Odoo → Portal
 app.include_router(postal_webhooks.router)       # 📧 Postal Mail webhooks + uso de correo
 app.include_router(migration.router)             # 🚚 Migración live de tenants entre nodos (Fase 2)
 app.include_router(session_monitoring.router)    # 🛡️ DSAM — Dynamic Session & Anti-Theft Monitor
-app.include_router(stripe_sync.router)           # Stripe → BD sync (source of truth)
-app.include_router(public_landing.router)        # Endpoints públicos para landing page (sin auth)
-app.include_router(accountant_portal.router)     # Portal para contadores/CPA multi-empresa
-app.include_router(admin_landing.router)         # Admin CRUD para i18n content (testimonios, landing, traducciones)
-app.include_router(payments.router)              # Pagos, dispersión a proveedores, Mercury, tesorería
-app.include_router(mercury_webhooks.router)      # Webhooks Mercury para conciliación
-app.include_router(dispersion.router)            # Dispersión Mercury (feature flag + 4-ojos)
+app.include_router(developer_portal.router)      # 🔧 Developer Portal — Apps & Agreement Flows
 
 
 # ── CORS Cache Refresh endpoint ──
@@ -330,6 +325,7 @@ _SPA_ROUTES = {
     "/onboarding-config", "/communications", "/reports", "/admin-users",
     "/agreements", "/testimonials", "/landing-sections", "/translations",
     "/migrations", "/accountants", "/partner-signup", "/onboarding-access",
+    "/developer-portal", "/api-keys", "/stripe-connect", "/quotas",
     "/recover-account", "/about", "/privacy", "/terms", "/data-processing",
     "/security", "/sla", "/login", "/signup", "/pricing",
     "/session-monitoring",

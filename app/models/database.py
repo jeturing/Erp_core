@@ -330,12 +330,15 @@ class AgreementType(enum.Enum):
     service_agreement = "service_agreement"
     terms_of_service = "terms_of_service"
     privacy_policy = "privacy_policy"
+    developer_agreement = "developer_agreement"
+    marketplace_nda = "marketplace_nda"
 
 
 class AgreementTarget(enum.Enum):
     partner = "partner"
     customer = "customer"
     both = "both"
+    developer = "developer"
 
 
 class AgreementTemplate(Base):
@@ -390,6 +393,92 @@ class SignedAgreement(Base):
     template = relationship("AgreementTemplate", back_populates="signed_agreements")
     partner = relationship("Partner", foreign_keys=[partner_id])
     customer = relationship("Customer", foreign_keys=[customer_id])
+
+
+# ═══════════════════════════════════════════════════════
+# Developer Portal — Apps & Agreement Workflows
+# ═══════════════════════════════════════════════════════
+
+class DeveloperAppStatus(enum.Enum):
+    created = "created"
+    org_linked = "org_linked"
+    agreements_pending = "agreements_pending"
+    sandbox_granted = "sandbox_granted"
+    verification_requested = "verification_requested"
+    verified = "verified"
+    rejected = "rejected"
+
+
+class AgreementFlowStatus(enum.Enum):
+    generated = "generated"
+    pending = "pending"
+    viewed = "viewed"
+    in_review = "in_review"
+    signed = "signed"
+    rejected = "rejected"
+
+
+class DeveloperApp(Base):
+    """
+    Apps del Developer Portal — modelo estilo Uber Developer Dashboard.
+    Cada app tiene un flujo de acuerdos multi-etapa antes de recibir acceso.
+    """
+    __tablename__ = "developer_apps"
+
+    id = Column(Integer, primary_key=True, index=True)
+    name = Column(String(200), nullable=False)
+    description = Column(Text, nullable=True)
+    api_suite = Column(String(100), nullable=False, default="eats_marketplace")
+    app_mode = Column(String(20), nullable=False, default="test")  # test | production
+    status = Column(String(50), nullable=False, default="created")
+    partner_id = Column(Integer, ForeignKey("partners.id", ondelete="CASCADE"), nullable=True)
+    customer_id = Column(Integer, ForeignKey("customers.id", ondelete="CASCADE"), nullable=True)
+    created_by = Column(String(150), nullable=True)
+    organization_name = Column(String(200), nullable=True)
+    organization_linked = Column(Boolean, default=False)
+    sandbox_access = Column(Boolean, default=False)
+    webhook_url = Column(String(500), nullable=True)
+    access_token = Column(String(500), nullable=True)
+    client_id = Column(String(200), nullable=True)
+    client_secret = Column(String(500), nullable=True)
+    metadata_json = Column(Text, nullable=True)
+    created_at = Column(DateTime, default=datetime.utcnow)
+    updated_at = Column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
+
+    # Relationships
+    agreement_flows = relationship("DeveloperAgreementFlow", back_populates="app", cascade="all, delete-orphan")
+    partner = relationship("Partner", foreign_keys=[partner_id])
+    customer = relationship("Customer", foreign_keys=[customer_id])
+
+
+class DeveloperAgreementFlow(Base):
+    """
+    Flujo multi-etapa de acuerdos para apps del developer portal.
+    Estados: generated → pending → viewed → in_review → signed | rejected
+    """
+    __tablename__ = "developer_agreement_flows"
+
+    id = Column(Integer, primary_key=True, index=True)
+    app_id = Column(Integer, ForeignKey("developer_apps.id", ondelete="CASCADE"), nullable=False)
+    template_id = Column(Integer, ForeignKey("agreement_templates.id", ondelete="RESTRICT"), nullable=False)
+    signed_agreement_id = Column(Integer, ForeignKey("signed_agreements.id", ondelete="SET NULL"), nullable=True)
+    status = Column(String(30), nullable=False, default="generated")
+    generated_at = Column(DateTime, default=datetime.utcnow)
+    viewed_at = Column(DateTime, nullable=True)
+    submitted_at = Column(DateTime, nullable=True)
+    reviewed_at = Column(DateTime, nullable=True)
+    signed_at = Column(DateTime, nullable=True)
+    rejected_at = Column(DateTime, nullable=True)
+    rejection_reason = Column(Text, nullable=True)
+    pdf_preview_path = Column(String(500), nullable=True)
+    reviewer_id = Column(String(150), nullable=True)
+    created_at = Column(DateTime, default=datetime.utcnow)
+    updated_at = Column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
+
+    # Relationships
+    app = relationship("DeveloperApp", back_populates="agreement_flows")
+    template = relationship("AgreementTemplate")
+    signed_agreement = relationship("SignedAgreement")
 
 
 class Customer(Base):

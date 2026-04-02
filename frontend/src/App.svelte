@@ -47,10 +47,14 @@
   import Reports from './pages/Reports.svelte';
   import AdminUsers from './pages/AdminUsers.svelte';
   import Agreements from './pages/Agreements.svelte';
+  import DeveloperPortal from './pages/DeveloperPortal.svelte';
   import Testimonials from './pages/Testimonials.svelte';
   import LandingSections from './pages/LandingSections.svelte';
   import Translations from './pages/Translations.svelte';
   import Migrations from './pages/Migrations.svelte';
+  import ApiKeys from './pages/ApiKeys.svelte';
+  import StripeConnect from './pages/StripeConnect.svelte';
+  import Quotas from './pages/Quotas.svelte';
   import { Spinner } from './lib/components';
   import Toast from './lib/components/Toast.svelte';
   import OfflineBanner from './lib/components/OfflineBanner.svelte';
@@ -92,9 +96,13 @@
     | 'reports'
     | 'admin-users'
     | 'agreements'
+    | 'developer-portal'
     | 'testimonials'
     | 'landing-sections'
     | 'translations'
+    | 'api-keys'
+    | 'stripe-connect'
+    | 'quotas'
     | 'signup'
     | 'recover-account'
     | 'accountants'
@@ -209,11 +217,15 @@
       case 'reports':
       case 'admin-users':
       case 'agreements':
+      case 'developer-portal':
       case 'testimonials':
       case 'landing-sections':
       case 'translations':
       case 'migrations':
       case 'accountant-portal':
+      case 'api-keys':
+      case 'stripe-connect':
+      case 'quotas':
         return route as AppPage;
       default:
         return 'notfound';
@@ -415,11 +427,15 @@
       case 'reports':
       case 'admin-users':
       case 'agreements':
+      case 'developer-portal':
       case 'testimonials':
       case 'landing-sections':
       case 'translations':
       case 'migrations':
       case 'accountant-portal':
+      case 'api-keys':
+      case 'stripe-connect':
+      case 'quotas':
       case 'signup':
       case 'recover-account':
       case 'partner-signup':
@@ -572,6 +588,8 @@
       <AdminUsers />
     {:else if currentPage === 'agreements'}
       <Agreements />
+    {:else if currentPage === 'developer-portal'}
+      <DeveloperPortal />
     {:else if currentPage === 'testimonials'}
       <Testimonials />
     {:else if currentPage === 'landing-sections'}
@@ -580,6 +598,12 @@
       <Translations />
     {:else if currentPage === 'migrations'}
       <Migrations />
+    {:else if currentPage === 'api-keys'}
+      <ApiKeys />
+    {:else if currentPage === 'stripe-connect'}
+      <StripeConnect />
+    {:else if currentPage === 'quotas'}
+      <Quotas />
     {:else}
       <div class="p-6">
         <h1 class="page-title">404 - Página no encontrada</h1>

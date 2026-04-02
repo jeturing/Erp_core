@@ -18,7 +18,7 @@ import { F as File_spreadsheet } from "./file-spreadsheet.js";
 import { S as Shopping_bag } from "./shopping-bag.js";
 import { C as Credit_card } from "./credit-card.js";
 import { P as Package } from "./package.js";
-import { R as Receipt } from "./receipt.js";
+import { R as Receipt, a as Rocket } from "./rocket.js";
 import { S as Scale } from "./scale.js";
 import { G as Git_compare_arrows, C as Clipboard_list } from "./git-compare-arrows.js";
 import { B as Boxes } from "./boxes.js";
@@ -33,6 +33,7 @@ import { S as Shield } from "./shield.js";
 import { S as Settings } from "./settings.js";
 import { Z as Zap } from "./zap.js";
 import { F as File_text } from "./file-text.js";
+import { K as Key } from "./key.js";
 import { S as Shield_check } from "./shield-check.js";
 import { E as External_link } from "./external-link.js";
 import { C as Chevron_down } from "./chevron-down.js";
@@ -63,6 +64,37 @@ function File_type($$renderer, $$props) {
        * @description Lucide SVG icon component, renders SVG Element with children.
        *
        * @preview ![img](data:image/svg+xml;base64,PHN2ZyAgeG1sbnM9Imh0dHA6Ly93d3cudzMub3JnLzIwMDAvc3ZnIgogIHdpZHRoPSIyNCIKICBoZWlnaHQ9IjI0IgogIHZpZXdCb3g9IjAgMCAyNCAyNCIKICBmaWxsPSJub25lIgogIHN0cm9rZT0iIzAwMCIgc3R5bGU9ImJhY2tncm91bmQtY29sb3I6ICNmZmY7IGJvcmRlci1yYWRpdXM6IDJweCIKICBzdHJva2Utd2lkdGg9IjIiCiAgc3Ryb2tlLWxpbmVjYXA9InJvdW5kIgogIHN0cm9rZS1saW5lam9pbj0icm91bmQiCj4KICA8cGF0aCBkPSJNNiAyMmEyIDIgMCAwIDEtMi0yVjRhMiAyIDAgMCAxIDItMmg4YTIuNCAyLjQgMCAwIDEgMS43MDQuNzA2bDMuNTg4IDMuNTg4QTIuNCAyLjQgMCAwIDEgMjAgOHYxMmEyIDIgMCAwIDEtMiAyeiIgLz4KICA8cGF0aCBkPSJNMTQgMnY1YTEgMSAwIDAgMCAxIDFoNSIgLz4KICA8cGF0aCBkPSJNMTEgMThoMiIgLz4KICA8cGF0aCBkPSJNMTIgMTJ2NiIgLz4KICA8cGF0aCBkPSJNOSAxM3YtLjVhLjUuNSAwIDAgMSAuNS0uNWg1YS41LjUgMCAwIDEgLjUuNXYuNSIgLz4KPC9zdmc+Cg==) - https://lucide.dev/icons/file-type
+       * @see https://lucide.dev/guide/packages/lucide-svelte - Documentation
+       *
+       * @param {Object} props - Lucide icons props and any valid SVG attribute
+       * @returns {FunctionalComponent} Svelte component
+       *
+       */
+      iconNode,
+      children: ($$renderer2) => {
+        $$renderer2.push(`<!--[-->`);
+        slot($$renderer2, $$props, "default", {});
+        $$renderer2.push(`<!--]-->`);
+      },
+      $$slots: { default: true }
+    }
+  ]));
+}
+function Gauge($$renderer, $$props) {
+  const $$sanitized_props = sanitize_props($$props);
+  const iconNode = [
+    ["path", { "d": "m12 14 4-4" }],
+    ["path", { "d": "M3.34 19a10 10 0 1 1 17.32 0" }]
+  ];
+  Icon($$renderer, spread_props([
+    { name: "gauge" },
+    $$sanitized_props,
+    {
+      /**
+       * @component @name Gauge
+       * @description Lucide SVG icon component, renders SVG Element with children.
+       *
+       * @preview ![img](data:image/svg+xml;base64,PHN2ZyAgeG1sbnM9Imh0dHA6Ly93d3cudzMub3JnLzIwMDAvc3ZnIgogIHdpZHRoPSIyNCIKICBoZWlnaHQ9IjI0IgogIHZpZXdCb3g9IjAgMCAyNCAyNCIKICBmaWxsPSJub25lIgogIHN0cm9rZT0iIzAwMCIgc3R5bGU9ImJhY2tncm91bmQtY29sb3I6ICNmZmY7IGJvcmRlci1yYWRpdXM6IDJweCIKICBzdHJva2Utd2lkdGg9IjIiCiAgc3Ryb2tlLWxpbmVjYXA9InJvdW5kIgogIHN0cm9rZS1saW5lam9pbj0icm91bmQiCj4KICA8cGF0aCBkPSJtMTIgMTQgNC00IiAvPgogIDxwYXRoIGQ9Ik0zLjM0IDE5YTEwIDEwIDAgMSAxIDE3LjMyIDAiIC8+Cjwvc3ZnPgo=) - https://lucide.dev/icons/gauge
        * @see https://lucide.dev/guide/packages/lucide-svelte - Documentation
        *
        * @param {Object} props - Lucide icons props and any valid SVG attribute
@@ -490,7 +522,8 @@ function Layout($$renderer, $$props) {
             label: "Dispersión",
             icon: Arrow_right_left,
             href: "/dispersion"
-          }
+          },
+          { id: "quotas", label: "Quotas", icon: Gauge, href: "/quotas" }
         ]
       },
       {
@@ -616,6 +649,24 @@ function Layout($$renderer, $$props) {
             label: "Acuerdos",
             icon: File_text,
             href: "/agreements"
+          },
+          {
+            id: "developer-portal",
+            label: "Developer Portal",
+            icon: Rocket,
+            href: "/developer-portal"
+          },
+          {
+            id: "api-keys",
+            label: "API Keys",
+            icon: Key,
+            href: "/api-keys"
+          },
+          {
+            id: "stripe-connect",
+            label: "Stripe Connect",
+            icon: Credit_card,
+            href: "/stripe-connect"
           },
           {
             id: "audit",

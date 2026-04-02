@@ -12,7 +12,7 @@ from typing import Any, Optional
 
 import redis.asyncio as aioredis
 from sqlalchemy import select, delete, and_
-from sqlalchemy.ext.asyncio import AsyncSession
+from sqlalchemy.orm import Session
 
 from ..config import (
     REDIS_HOST, REDIS_PORT, REDIS_PASSWORD, REDIS_DB,
@@ -158,7 +158,7 @@ def parse_session_data(session: dict) -> dict[str, Any]:
 # Sync to DB
 # ═══════════════════════════════════════════════════════
 
-async def sync_sessions_to_db(db: AsyncSession) -> dict[str, int]:
+async def sync_sessions_to_db(db: Session) -> dict[str, int]:
     """
     Escanea Redis → geolocaliza → upsert en active_sessions.
     Marca como inactivas las sesiones que ya no están en Redis.
@@ -184,7 +184,7 @@ async def sync_sessions_to_db(db: AsyncSession) -> dict[str, int]:
             geo = geolocate_ip(parsed["ip_address"])
 
             # Upsert active_sessions
-            result = await db.execute(
+            result = db.execute(
                 select(ActiveSession).where(
                     ActiveSession.redis_session_key == parsed["redis_session_key"]
                 )
@@ -244,7 +244,7 @@ async def sync_sessions_to_db(db: AsyncSession) -> dict[str, int]:
                 db.add(geo_event)
 
         # Marcar inactivas las sesiones que ya no están en Redis
-        stale_result = await db.execute(
+        stale_result = db.execute(
             select(ActiveSession).where(
                 and_(
                     ActiveSession.is_active == True,
@@ -257,10 +257,10 @@ async def sync_sessions_to_db(db: AsyncSession) -> dict[str, int]:
                 stale.is_active = False
                 stats["removed"] += 1
 
-        await db.commit()
+        db.commit()
     except Exception as e:
         logger.error("Error syncing sessions: %s", e)
-        await db.rollback()
+        db.rollback()
         raise
     finally:
         await r.aclose()
@@ -281,10 +281,10 @@ async def terminate_redis_session(session_key: str) -> bool:
 
 
 async def get_active_sessions_by_tenant(
-    db: AsyncSession, tenant_db: str
+    db: Session, tenant_db: str
 ) -> list[ActiveSession]:
     """Obtiene sesiones activas de un tenant desde la BD."""
-    result = await db.execute(
+    result = db.execute(
         select(ActiveSession).where(
             and_(ActiveSession.tenant_db == tenant_db, ActiveSession.is_active == True)
         ).order_by(ActiveSession.last_activity.desc())
@@ -293,10 +293,10 @@ async def get_active_sessions_by_tenant(
 
 
 async def get_active_sessions_by_user(
-    db: AsyncSession, tenant_db: str, odoo_login: str
+    db: Session, tenant_db: str, odoo_login: str
 ) -> list[ActiveSession]:
     """Obtiene sesiones activas de un usuario específico."""
-    result = await db.execute(
+    result = db.execute(
         select(ActiveSession).where(
             and_(
                 ActiveSession.tenant_db == tenant_db,
@@ -308,13 +308,13 @@ async def get_active_sessions_by_user(
     return result.scalars().all()
 
 
-async def get_session_stats(db: AsyncSession) -> dict[str, Any]:
+async def get_session_stats(db: Session) -> dict[str, Any]:
     """Dashboard global stats."""
     from sqlalchemy import func
-    total = await db.execute(
+    total = db.execute(
         select(func.count(ActiveSession.id)).where(ActiveSession.is_active == True)
     )
-    by_tenant = await db.execute(
+    by_tenant = db.execute(
         select(
             ActiveSession.tenant_db,
             func.count(ActiveSession.id).label("count"),
@@ -323,7 +323,7 @@ async def get_session_stats(db: AsyncSession) -> dict[str, Any]:
         .group_by(ActiveSession.tenant_db)
         .order_by(func.count(ActiveSession.id).desc())
     )
-    by_country = await db.execute(
+    by_country = db.execute(
         select(
             ActiveSession.geo_country_code,
             ActiveSession.geo_country,
@@ -346,12 +346,12 @@ async def get_session_stats(db: AsyncSession) -> dict[str, Any]:
 
 
 async def get_geo_heatmap_data(
-    db: AsyncSession, days: int = 30
+    db: Session, days: int = 30
 ) -> list[dict[str, Any]]:
     """Datos para mapa de calor geográfico."""
     from sqlalchemy import func
     cutoff = datetime.utcnow() - timedelta(days=days)
-    result = await db.execute(
+    result = db.execute(
         select(
             SessionGeoEvent.geo_country_code,
             SessionGeoEvent.geo_country,

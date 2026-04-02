@@ -47,7 +47,7 @@
       "_building-2.js",
       "_handshake.js",
       "_Icon.js",
-      "_receipt.js",
+      "_rocket.js",
       "_eye.js",
       "_package.js",
       "_users.js",
@@ -93,7 +93,7 @@
       "_shopping-bag.js",
       "_credit-card.js",
       "_package.js",
-      "_receipt.js",
+      "_rocket.js",
       "_scale.js",
       "_git-compare-arrows.js",
       "_boxes.js",
@@ -108,6 +108,7 @@
       "_settings.js",
       "_zap.js",
       "_file-text.js",
+      "_key.js",
       "_shield-check.js",
       "_external-link.js",
       "_chevron-down.js",
@@ -480,17 +481,17 @@
       "_Icon.js"
     ]
   },
-  "_receipt.js": {
-    "file": "chunks/receipt.js",
-    "name": "receipt",
+  "_refresh-cw.js": {
+    "file": "chunks/refresh-cw.js",
+    "name": "refresh-cw",
     "imports": [
       "_index2.js",
       "_Icon.js"
     ]
   },
-  "_refresh-cw.js": {
-    "file": "chunks/refresh-cw.js",
-    "name": "refresh-cw",
+  "_rocket.js": {
+    "file": "chunks/rocket.js",
+    "name": "rocket",
     "imports": [
       "_index2.js",
       "_Icon.js"
@@ -1627,7 +1628,7 @@
       "_darkMode.js"
     ],
     "css": [
-      "_app/immutable/assets/_layout.BVDdYunv.css"
+      "_app/immutable/assets/_layout.HEXaV1Ni.css"
     ]
   },
   "src/routes/+layout.ts": {

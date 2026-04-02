@@ -10,7 +10,7 @@ from typing import Any, Optional
 from fastapi import APIRouter, Depends, HTTPException, Query, Request, Cookie
 from pydantic import BaseModel, Field
 from sqlalchemy import select, and_, func, desc, update
-from sqlalchemy.ext.asyncio import AsyncSession
+from sqlalchemy.orm import Session
 
 from ..models.database import (
     ActiveSession, SessionSecurityRule, SessionGeoEvent,
@@ -94,19 +94,19 @@ class ResolveActionRequest(BaseModel):
 async def get_dashboard(
     request: Request,
     access_token: str = Cookie(None),
-    db: AsyncSession = Depends(get_db),
+    db: Session = Depends(get_db),
 ):
     """Dashboard principal DSAM con estadísticas globales."""
     _require_admin(request, access_token)
     stats = await get_session_stats(db)
 
     # Alertas sin resolver
-    unresolved = await db.execute(
+    unresolved = db.execute(
         select(func.count(AccountSecurityAction.id)).where(
             AccountSecurityAction.resolved == False
         )
     )
-    critical_unresolved = await db.execute(
+    critical_unresolved = db.execute(
         select(func.count(AccountSecurityAction.id)).where(
             and_(
                 AccountSecurityAction.resolved == False,
@@ -134,7 +134,7 @@ async def get_dashboard(
 async def sync_sessions(
     request: Request,
     access_token: str = Cookie(None),
-    db: AsyncSession = Depends(get_db),
+    db: Session = Depends(get_db),
 ):
     """Fuerza sincronización de sesiones desde Redis."""
     _require_admin(request, access_token)
@@ -150,7 +150,7 @@ async def list_all_sessions(
     active_only: bool = Query(True),
     page: int = Query(1, ge=1),
     limit: int = Query(50, ge=1, le=200),
-    db: AsyncSession = Depends(get_db),
+    db: Session = Depends(get_db),
 ):
     """Lista sesiones activas, opcionalmente filtradas por tenant."""
     _require_admin(request, access_token)
@@ -164,10 +164,10 @@ async def list_all_sessions(
         query = query.where(ActiveSession.is_active == True)
         count_query = count_query.where(ActiveSession.is_active == True)
 
-    total = (await db.execute(count_query)).scalar() or 0
+    total = db.execute(count_query).scalar() or 0
     offset = (page - 1) * limit
     query = query.order_by(ActiveSession.last_activity.desc()).offset(offset).limit(limit)
-    result = await db.execute(query)
+    result = db.execute(query)
     sessions = result.scalars().all()
 
     return {
@@ -202,7 +202,7 @@ async def sessions_by_tenant(
     tenant_db: str,
     request: Request,
     access_token: str = Cookie(None),
-    db: AsyncSession = Depends(get_db),
+    db: Session = Depends(get_db),
 ):
     """Sesiones activas para un tenant específico."""
     _require_admin(request, access_token)
@@ -230,14 +230,14 @@ async def terminate_session(
     body: TerminateSessionRequest,
     request: Request,
     access_token: str = Cookie(None),
-    db: AsyncSession = Depends(get_db),
+    db: Session = Depends(get_db),
 ):
     """Termina una sesión específica de Redis + marca inactiva en BD."""
     admin = _require_admin(request, access_token)
     terminated = await terminate_redis_session(body.session_key)
 
     # Marcar inactiva en BD
-    result = await db.execute(
+    result = db.execute(
         select(ActiveSession).where(
             ActiveSession.redis_session_key == body.session_key
         )
@@ -245,7 +245,7 @@ async def terminate_session(
     session = result.scalar_one_or_none()
     if session:
         session.is_active = False
-        await log_security_action(
+        log_security_action(
             db=db,
             action_type=SessionActionType.SESSION_TERMINATED,
             tenant_db=session.tenant_db,
@@ -255,7 +255,7 @@ async def terminate_session(
             details={"reason": body.reason, "session_key": body.session_key},
             actor_username=getattr(admin, "username", None) or getattr(admin, "email", None),
         )
-        await db.commit()
+        db.commit()
 
     return {
         "success": terminated,
@@ -277,7 +277,7 @@ async def geo_heatmap(
     request: Request,
     access_token: str = Cookie(None),
     days: int = Query(30, ge=1, le=365),
-    db: AsyncSession = Depends(get_db),
+    db: Session = Depends(get_db),
 ):
     """Datos de mapa de calor geográfico."""
     _require_admin(request, access_token)
@@ -289,11 +289,11 @@ async def geo_heatmap(
 async def geo_live_map(
     request: Request,
     access_token: str = Cookie(None),
-    db: AsyncSession = Depends(get_db),
+    db: Session = Depends(get_db),
 ):
     """Posiciones actuales de sesiones activas para mapa en vivo."""
     _require_admin(request, access_token)
-    result = await db.execute(
+    result = db.execute(
         select(ActiveSession).where(
             and_(
                 ActiveSession.is_active == True,
@@ -330,7 +330,7 @@ async def list_rules(
     request: Request,
     access_token: str = Cookie(None),
     tenant: Optional[str] = Query(None),
-    db: AsyncSession = Depends(get_db),
+    db: Session = Depends(get_db),
 ):
     """Lista todas las reglas de seguridad."""
     _require_admin(request, access_token)
@@ -339,7 +339,7 @@ async def list_rules(
         query = query.where(
             (SessionSecurityRule.tenant_db == tenant) | (SessionSecurityRule.tenant_db == None)
         )
-    result = await db.execute(query.order_by(SessionSecurityRule.id))
+    result = db.execute(query.order_by(SessionSecurityRule.id))
     rules = result.scalars().all()
     return {
         "success": True,
@@ -365,7 +365,7 @@ async def create_rule(
     body: CreateRuleRequest,
     request: Request,
     access_token: str = Cookie(None),
-    db: AsyncSession = Depends(get_db),
+    db: Session = Depends(get_db),
 ):
     """Crea una nueva regla de seguridad."""
     _require_admin(request, access_token)
@@ -384,8 +384,8 @@ async def create_rule(
         description=body.description,
     )
     db.add(rule)
-    await db.commit()
-    await db.refresh(rule)
+    db.commit()
+    db.refresh(rule)
 
     return {
         "success": True,
@@ -400,11 +400,11 @@ async def update_rule(
     body: CreateRuleRequest,
     request: Request,
     access_token: str = Cookie(None),
-    db: AsyncSession = Depends(get_db),
+    db: Session = Depends(get_db),
 ):
     """Actualiza una regla existente."""
     _require_admin(request, access_token)
-    result = await db.execute(
+    result = db.execute(
         select(SessionSecurityRule).where(SessionSecurityRule.id == rule_id)
     )
     rule = result.scalar_one_or_none()
@@ -417,7 +417,7 @@ async def update_rule(
     rule.exempt_tenants = body.exempt_tenants
     rule.description = body.description
     rule.tenant_db = body.tenant_db
-    await db.commit()
+    db.commit()
 
     return {"success": True, "data": {"id": rule.id}, "meta": {}}
 
@@ -427,18 +427,18 @@ async def delete_rule(
     rule_id: int,
     request: Request,
     access_token: str = Cookie(None),
-    db: AsyncSession = Depends(get_db),
+    db: Session = Depends(get_db),
 ):
     """Elimina una regla de seguridad."""
     _require_admin(request, access_token)
-    result = await db.execute(
+    result = db.execute(
         select(SessionSecurityRule).where(SessionSecurityRule.id == rule_id)
     )
     rule = result.scalar_one_or_none()
     if not rule:
         raise HTTPException(404, "Rule not found")
-    await db.delete(rule)
-    await db.commit()
+    db.delete(rule)
+    db.commit()
     return {"success": True, "data": {"deleted": rule_id}, "meta": {}}
 
 
@@ -451,11 +451,11 @@ async def get_tenant_config(
     tenant_db: str,
     request: Request,
     access_token: str = Cookie(None),
-    db: AsyncSession = Depends(get_db),
+    db: Session = Depends(get_db),
 ):
     """Obtiene la configuración DSAM de un tenant."""
     _require_admin(request, access_token)
-    result = await db.execute(
+    result = db.execute(
         select(TenantSessionConfig).where(TenantSessionConfig.tenant_db == tenant_db)
     )
     config = result.scalar_one_or_none()
@@ -490,11 +490,11 @@ async def upsert_tenant_config(
     body: UpdateTenantConfigRequest,
     request: Request,
     access_token: str = Cookie(None),
-    db: AsyncSession = Depends(get_db),
+    db: Session = Depends(get_db),
 ):
     """Crea o actualiza la configuración DSAM de un tenant."""
     _require_admin(request, access_token)
-    result = await db.execute(
+    result = db.execute(
         select(TenantSessionConfig).where(TenantSessionConfig.tenant_db == tenant_db)
     )
     config = result.scalar_one_or_none()
@@ -507,8 +507,8 @@ async def upsert_tenant_config(
     for key, value in update_data.items():
         setattr(config, key, value)
 
-    await db.commit()
-    await db.refresh(config)
+    db.commit()
+    db.refresh(config)
     return {"success": True, "data": {"id": config.id, "tenant_db": tenant_db}, "meta": {}}
 
 
@@ -525,7 +525,7 @@ async def list_security_actions(
     resolved: Optional[bool] = Query(None),
     page: int = Query(1, ge=1),
     limit: int = Query(50, ge=1, le=200),
-    db: AsyncSession = Depends(get_db),
+    db: Session = Depends(get_db),
 ):
     """Lista acciones de seguridad con filtros."""
     _require_admin(request, access_token)
@@ -548,9 +548,9 @@ async def list_security_actions(
         query = query.where(and_(*filters))
         count_query = count_query.where(and_(*filters))
 
-    total = (await db.execute(count_query)).scalar() or 0
+    total = db.execute(count_query).scalar() or 0
     offset = (page - 1) * limit
-    result = await db.execute(
+    result = db.execute(
         query.order_by(desc(AccountSecurityAction.created_at)).offset(offset).limit(limit)
     )
     actions = result.scalars().all()
@@ -585,11 +585,11 @@ async def resolve_action(
     body: ResolveActionRequest,
     request: Request,
     access_token: str = Cookie(None),
-    db: AsyncSession = Depends(get_db),
+    db: Session = Depends(get_db),
 ):
     """Marca una acción de seguridad como resuelta (playbook)."""
     admin = _require_admin(request, access_token)
-    result = await db.execute(
+    result = db.execute(
         select(AccountSecurityAction).where(AccountSecurityAction.id == action_id)
     )
     action = result.scalar_one_or_none()
@@ -600,7 +600,7 @@ async def resolve_action(
     action.resolved_at = datetime.utcnow()
     action.resolved_by = getattr(admin, "username", None) or getattr(admin, "email", "admin")
     action.resolution_note = body.resolution_note
-    await db.commit()
+    db.commit()
 
     return {"success": True, "data": {"id": action_id, "resolved": True}, "meta": {}}
 
@@ -614,7 +614,7 @@ async def lock_account(
     body: LockAccountRequest,
     request: Request,
     access_token: str = Cookie(None),
-    db: AsyncSession = Depends(get_db),
+    db: Session = Depends(get_db),
 ):
     """
     Bloquea una cuenta: termina todas las sesiones del usuario
@@ -623,7 +623,7 @@ async def lock_account(
     admin = _require_admin(request, access_token)
 
     # Terminar todas las sesiones del usuario
-    result = await db.execute(
+    result = db.execute(
         select(ActiveSession).where(
             and_(
                 ActiveSession.tenant_db == body.tenant_db,
@@ -640,7 +640,7 @@ async def lock_account(
             terminated_count += 1
 
     # Registrar acción
-    await log_security_action(
+    log_security_action(
         db=db,
         action_type=SessionActionType.ACCOUNT_LOCKED,
         tenant_db=body.tenant_db,
@@ -673,12 +673,12 @@ async def unlock_account(
     body: LockAccountRequest,
     request: Request,
     access_token: str = Cookie(None),
-    db: AsyncSession = Depends(get_db),
+    db: Session = Depends(get_db),
 ):
     """Desbloquea una cuenta previamente bloqueada."""
     admin = _require_admin(request, access_token)
 
-    await log_security_action(
+    log_security_action(
         db=db,
         action_type=SessionActionType.ACCOUNT_UNLOCKED,
         tenant_db=body.tenant_db,
@@ -709,7 +709,7 @@ async def unlock_account(
 async def run_scan(
     request: Request,
     access_token: str = Cookie(None),
-    db: AsyncSession = Depends(get_db),
+    db: Session = Depends(get_db),
 ):
     """Ejecuta un ciclo completo: sync Redis → evaluar reglas → enforce."""
     _require_admin(request, access_token)
@@ -725,7 +725,7 @@ async def run_scan(
 async def audit_seats(
     request: Request,
     access_token: str = Cookie(None),
-    db: AsyncSession = Depends(get_db),
+    db: Session = Depends(get_db),
 ):
     """Ejecuta auditoría de seats vs sesiones activas."""
     _require_admin(request, access_token)
@@ -738,7 +738,7 @@ async def seat_reconciliation(
     request: Request,
     access_token: str = Cookie(None),
     tenant: Optional[str] = Query(None),
-    db: AsyncSession = Depends(get_db),
+    db: Session = Depends(get_db),
 ):
     """Reporte de reconciliación de seats."""
     _require_admin(request, access_token)

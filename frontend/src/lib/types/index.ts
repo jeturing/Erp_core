@@ -203,6 +203,95 @@ export interface SignedAgreementsResponse {
   total: number;
 }
 
+// ── Developer Portal Types ──
+
+export type DeveloperAppMode = 'test' | 'production';
+
+export type DeveloperAppStatusValue =
+  | 'created'
+  | 'org_linked'
+  | 'agreements_pending'
+  | 'sandbox_granted'
+  | 'verification_requested'
+  | 'verified'
+  | 'rejected';
+
+export type AgreementFlowStatus =
+  | 'generated'
+  | 'pending'
+  | 'viewed'
+  | 'in_review'
+  | 'signed'
+  | 'rejected';
+
+export interface DeveloperApp {
+  id: number;
+  name: string;
+  description: string | null;
+  api_suite: string;
+  app_mode: DeveloperAppMode;
+  status: DeveloperAppStatusValue;
+  organization_name: string | null;
+  organization_linked: boolean;
+  sandbox_access: boolean;
+  webhook_url: string | null;
+  client_id: string | null;
+  created_by: string | null;
+  created_at: string | null;
+  updated_at: string | null;
+}
+
+export interface DeveloperAgreementFlowItem {
+  id: number;
+  template_id: number;
+  template_title: string | null;
+  template_type: string | null;
+  status: AgreementFlowStatus;
+  generated_at: string | null;
+  viewed_at: string | null;
+  submitted_at: string | null;
+  signed_at: string | null;
+  rejected_at: string | null;
+  rejection_reason: string | null;
+  has_pdf_preview: boolean;
+  signed_agreement_id: number | null;
+}
+
+export interface DeveloperAppProgress {
+  app_created: boolean;
+  org_linked: boolean;
+  agreements_signed: boolean;
+  sandbox_access: boolean;
+  verification_requested: boolean;
+  verified: boolean;
+}
+
+export interface DeveloperAppSummary extends DeveloperApp {
+  progress: DeveloperAppProgress;
+  agreements: DeveloperAgreementFlowItem[];
+  agreements_total: number;
+  agreements_signed: number;
+}
+
+export interface DeveloperAgreementFlow {
+  id: number;
+  app_id: number;
+  template_id: number;
+  template_title: string | null;
+  template_type: string | null;
+  template_version: string | null;
+  html_content: string;
+  status: AgreementFlowStatus;
+  generated_at: string | null;
+  viewed_at: string | null;
+  submitted_at: string | null;
+  signed_at: string | null;
+  rejected_at: string | null;
+  rejection_reason: string | null;
+  has_pdf_preview: boolean;
+  signed_agreement_id: number | null;
+}
+
 export interface ApiResponse<T> {
   data: T;
   success: boolean;

@@ -1,13 +1,13 @@
 <script lang="ts">
   import {
-    LayoutDashboard, Users, Globe, Server, CreditCard,
+    LayoutDashboard, Users, Globe, Server, CreditCard, Key,
     Settings as SettingsIcon, LogOut, Menu, X, FileText, Route, Shield,
     ExternalLink, Package, UserCheck, Handshake, Target,
     Percent, FileSpreadsheet, Boxes, UsersRound, Receipt,
     Scale, GitCompareArrows, ClipboardList, ShieldCheck, Palette,
     ShoppingBag, ChevronDown, Sliders, Mail, BarChart2,
     Languages, MessageCircle, FileType, ArrowRightLeft,
-    Moon, Sun, Activity, Zap
+    Moon, Sun, Activity, Zap, Rocket, Gauge
   } from 'lucide-svelte';
   import { auth } from '../stores';
   import { goto } from '$app/navigation';
@@ -63,6 +63,7 @@
         { id: 'settlements',    label: 'Liquidaciones', icon: Scale,            href: '/settlements' },
         { id: 'reconciliation', label: 'Conciliación',  icon: GitCompareArrows,  href: '/reconciliation' },
         { id: 'dispersion',    label: 'Dispersión',    icon: ArrowRightLeft,    href: '/dispersion' },
+        { id: 'quotas',         label: 'Quotas',         icon: Gauge,             href: '/quotas' },
       ],
     },
 
@@ -109,6 +110,9 @@
         { id: 'roles',             label: 'Roles',              icon: Shield,       href: '/roles' },
         { id: 'admin-users',       label: 'Usuarios Admin',     icon: UsersRound,   href: '/admin-users' },
         { id: 'agreements',        label: 'Acuerdos',           icon: FileText,     href: '/agreements' },
+        { id: 'developer-portal',  label: 'Developer Portal',   icon: Rocket,       href: '/developer-portal' },
+        { id: 'api-keys',          label: 'API Keys',           icon: Key,          href: '/api-keys' },
+        { id: 'stripe-connect',    label: 'Stripe Connect',     icon: CreditCard,   href: '/stripe-connect' },
         { id: 'audit',             label: 'Auditoría',          icon: ShieldCheck,  href: '/audit' },
         { id: 'logs',              label: 'Logs',               icon: FileText,     href: '/logs' },
         { id: 'portal',            label: 'Portal Tenant',      icon: ExternalLink, href: '/portal' },
