@@ -277,8 +277,9 @@ class BackgroundScheduler:
                 if not is_healthy:
                     try:
                         resp = _httpx.get(
-                            f"http://{node.hostname}:8070/health",
+                            f"https://{node.hostname}:8070/health",
                             timeout=5.0,
+                            verify=False,
                         )
                         is_healthy = resp.status_code == 200
                     except Exception:

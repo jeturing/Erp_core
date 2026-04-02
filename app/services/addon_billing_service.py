@@ -23,9 +23,83 @@ from ..models.database import (
     ServiceCatalogItem,
     Subscription,
 )
+from .stripe_connect import normalize_country_code
 from .stripe_billing import push_invoice_to_stripe
 
 logger = logging.getLogger(__name__)
+
+COUNTRY_ALIASES = {
+    "UNITED STATES": "US",
+    "UNITED STATES OF AMERICA": "US",
+    "USA": "US",
+    "US": "US",
+    "ESTADOS UNIDOS": "US",
+    "DOMINICAN REPUBLIC": "DO",
+    "REPUBLICA DOMINICANA": "DO",
+    "REPÚBLICA DOMINICANA": "DO",
+    "DO": "DO",
+    "RD": "DO",
+}
+SENSITIVE_METADATA_MARKERS = (
+    "token",
+    "secret",
+    "password",
+    "authorization",
+    "signature",
+)
+
+
+def _normalize_catalog_country(country: Optional[str]) -> Optional[str]:
+    raw = (country or "").strip()
+    if not raw:
+        return None
+    if len(raw) == 2 and raw.isalpha():
+        return normalize_country_code(raw, raw.upper())
+    return COUNTRY_ALIASES.get(raw.upper(), raw.upper())
+
+
+def _sanitize_metadata(value: Any, parent_key: str = "") -> Any:
+    if isinstance(value, dict):
+        return {
+            key: _sanitize_metadata(item, key)
+            for key, item in value.items()
+        }
+    if isinstance(value, list):
+        return [_sanitize_metadata(item, parent_key) for item in value]
+    key_name = (parent_key or "").lower()
+    if key_name and any(marker in key_name for marker in SENSITIVE_METADATA_MARKERS):
+        return "***"
+    return value
+
+
+def _resolve_customer_country(customer: Customer, partner: Optional[Partner]) -> Optional[str]:
+    return _normalize_catalog_country(customer.country or (partner.country if partner else None))
+
+
+def _item_allowed_for_country(item: ServiceCatalogItem, country_code: Optional[str]) -> bool:
+    metadata = item.metadata_json or {}
+    allowed = [
+        code for code in (
+            _normalize_catalog_country(entry)
+            for entry in metadata.get("allowed_countries", [])
+        )
+        if code
+    ]
+    blocked = [
+        code for code in (
+            _normalize_catalog_country(entry)
+            for entry in metadata.get("excluded_countries", [])
+        )
+        if code
+    ]
+
+    if allowed and not country_code:
+        return False
+    if allowed and country_code not in allowed:
+        return False
+    if blocked and country_code in blocked:
+        return False
+    return True
 
 
 def _next_invoice_number(db: Session) -> str:
@@ -58,7 +132,7 @@ def _serialize_catalog_item(item: ServiceCatalogItem) -> Dict[str, Any]:
         "requires_service_id": item.requires_service_id,
         "min_quantity": item.min_quantity,
         "service_code": item.service_code,
-        "metadata_json": item.metadata_json or {},
+        "metadata_json": _sanitize_metadata(item.metadata_json or {}),
         "is_active": item.is_active,
         "sort_order": item.sort_order,
         "created_at": item.created_at.isoformat() if item.created_at else None,
@@ -78,7 +152,7 @@ def _serialize_addon_subscription(addon: CustomerAddonSubscription) -> Dict[str,
         "unit_price_monthly": addon.unit_price_monthly,
         "currency": addon.currency,
         "service_code": addon.service_code,
-        "metadata_json": addon.metadata_json or {},
+        "metadata_json": _sanitize_metadata(addon.metadata_json or {}),
         "acquired_via": addon.acquired_via,
         "starts_at": addon.starts_at.isoformat() if addon.starts_at else None,
         "last_invoiced_year": addon.last_invoiced_year,
@@ -155,6 +229,9 @@ def _resolve_catalog_offer(
 
 
 def list_available_addon_services(db: Session, customer_id: int) -> List[Dict[str, Any]]:
+    customer, _subscription, _plan, partner = _get_customer_context(db, customer_id)
+    customer_country = _resolve_customer_country(customer, partner)
+
     items = (
         db.query(ServiceCatalogItem)
         .filter(ServiceCatalogItem.is_addon == True, ServiceCatalogItem.is_active == True)
@@ -174,6 +251,8 @@ def list_available_addon_services(db: Session, customer_id: int) -> List[Dict[st
 
     result: List[Dict[str, Any]] = []
     for item in items:
+        if not _item_allowed_for_country(item, customer_country):
+            continue
         offer = _resolve_catalog_offer(db, customer_id, item)
         data = _serialize_catalog_item(item)
         data.update({
@@ -182,6 +261,7 @@ def list_available_addon_services(db: Session, customer_id: int) -> List[Dict[st
             "included_quantity": offer["included_quantity"],
             "is_included_in_plan": offer["is_included_in_plan"],
             "active_quantity": active_quantities.get(item.id, 0),
+            "customer_country": customer_country,
         })
         result.append(data)
     return result
@@ -227,6 +307,10 @@ def purchase_customer_addon(
     customer: Customer = offer["customer"]
     subscription: Optional[Subscription] = offer["subscription"]
     partner: Optional[Partner] = _get_customer_context(db, customer_id)[3]
+    customer_country = _resolve_customer_country(customer, partner)
+
+    if not _item_allowed_for_country(item, customer_country):
+        raise ValueError("Este servicio no está disponible para el país configurado del cliente")
 
     if offer["is_included_in_plan"] and offer["effective_price_monthly"] == 0:
         raise ValueError("Este servicio ya está incluido en el plan del cliente")

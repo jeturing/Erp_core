@@ -82,6 +82,20 @@ class EnvironmentSwitchRequest(BaseModel):
 
 # Credenciales organizadas por categoría con metadatos
 CREDENTIAL_DEFINITIONS = {
+    "gusto": {
+        "label": "Gusto Embedded Payroll",
+        "items": [
+            {"key": "GUSTO_ENV", "description": "Ambiente activo (demo / production)", "is_secret": False, "default": "demo"},
+            {"key": "GUSTO_CLIENT_ID", "description": "Client ID de la app Gusto", "is_secret": False},
+            {"key": "GUSTO_CLIENT_SECRET", "description": "Client Secret de la app Gusto", "is_secret": True},
+            {"key": "GUSTO_API_VERSION", "description": "Versión API de Gusto", "is_secret": False, "default": "2025-06-15"},
+            {"key": "GUSTO_REDIRECT_URI", "description": "Redirect URI OAuth de Gusto", "is_secret": False, "default": "https://sajet.us/redirect"},
+            {"key": "GUSTO_WEBHOOK_URL", "description": "Webhook público registrado en Gusto", "is_secret": False, "default": "https://sajet.us/api/v1/gusto/webhook"},
+            {"key": "GUSTO_WEBHOOK_SECRET", "description": "Secret para validar X-Gusto-Signature", "is_secret": True},
+            {"key": "GUSTO_SCOPES", "description": "Scopes OAuth separados por espacio", "is_secret": False, "default": "public webhook_subscriptions:read webhook_subscriptions:write"},
+            {"key": "GUSTO_STATE_SECRET", "description": "Secret para firmar estado OAuth", "is_secret": True},
+        ],
+    },
     "stripe": {
         "label": "Stripe Payments",
         "items": [
@@ -829,6 +843,13 @@ async def initialize_default_configs(
     )
 
     defaults = [
+        # Gusto
+        ("GUSTO_ENV", "demo", "Ambiente activo de Gusto (demo / production)", "gusto", False),
+        ("GUSTO_API_VERSION", "2025-06-15", "Versión API de Gusto", "gusto", False),
+        ("GUSTO_REDIRECT_URI", "https://sajet.us/redirect", "Redirect URI OAuth de Gusto", "gusto", False),
+        ("GUSTO_WEBHOOK_URL", "https://sajet.us/api/v1/gusto/webhook", "Webhook URL pública para Gusto", "gusto", False),
+        ("GUSTO_SCOPES", "public webhook_subscriptions:read webhook_subscriptions:write", "Scopes OAuth de Gusto", "gusto", False),
+
         # Odoo
         ("ODOO_DEFAULT_ADMIN_LOGIN", ODOO_DEFAULT_ADMIN_LOGIN,
          "Email admin por defecto para nuevos tenants", "odoo", False),

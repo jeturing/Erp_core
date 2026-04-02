@@ -718,9 +718,10 @@ class MigrationOrchestrator:
         import httpx
         try:
             resp = httpx.get(
-                f"http://{node_ip}:8069/web/login",
+                f"https://{node_ip}:8069/web/login",
                 timeout=10.0,
                 follow_redirects=True,
+                verify=False,
             )
             if resp.status_code in (200, 303):
                 return True, f"Odoo OK (HTTP {resp.status_code})"

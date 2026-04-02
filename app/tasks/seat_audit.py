@@ -8,7 +8,7 @@ from datetime import datetime
 from typing import Any
 
 from sqlalchemy import select, func, and_
-from sqlalchemy.ext.asyncio import AsyncSession
+from sqlalchemy.orm import Session
 
 from ..models.database import (
     ActiveSession, Subscription, SeatEvent, SeatHighWater,
@@ -18,7 +18,7 @@ from ..models.database import (
 logger = logging.getLogger(__name__)
 
 
-async def run_seat_audit(db: AsyncSession) -> dict[str, Any]:
+async def run_seat_audit(db: Session) -> dict[str, Any]:
     """
     Ejecuta auditoría de seats:
     1. Cuenta sesiones activas por tenant desde active_sessions
@@ -26,7 +26,7 @@ async def run_seat_audit(db: AsyncSession) -> dict[str, Any]:
     3. Registra discrepancias
     """
     # Sesiones activas por tenant
-    active_result = await db.execute(
+    active_result = db.execute(
         select(
             ActiveSession.tenant_db,
             func.count(func.distinct(ActiveSession.odoo_login)).label("unique_users"),
@@ -44,7 +44,7 @@ async def run_seat_audit(db: AsyncSession) -> dict[str, Any]:
     }
 
     # Cargar suscripciones activas
-    subs_result = await db.execute(
+    subs_result = db.execute(
         select(Subscription).where(
             Subscription.status.in_([
                 SubscriptionStatus.ACTIVE,
@@ -96,7 +96,7 @@ async def run_seat_audit(db: AsyncSession) -> dict[str, Any]:
     # Actualizar last_seat_audit_at en configs
     now = datetime.utcnow()
     for tenant_db in active_by_tenant:
-        config_result = await db.execute(
+        config_result = db.execute(
             select(TenantSessionConfig).where(
                 TenantSessionConfig.tenant_db == tenant_db
             )
@@ -105,7 +105,7 @@ async def run_seat_audit(db: AsyncSession) -> dict[str, Any]:
         if config:
             config.last_seat_audit_at = now
 
-    await db.commit()
+    db.commit()
 
     return {
         "timestamp": now.isoformat(),
@@ -116,7 +116,7 @@ async def run_seat_audit(db: AsyncSession) -> dict[str, Any]:
 
 
 async def get_seat_reconciliation_report(
-    db: AsyncSession,
+    db: Session,
     tenant_db: str | None = None,
 ) -> dict[str, Any]:
     """
@@ -135,11 +135,11 @@ async def get_seat_reconciliation_report(
     if tenant_db:
         query = query.where(ActiveSession.tenant_db == tenant_db)
 
-    result = await db.execute(query)
+    result = db.execute(query)
     data = []
     for row in result.fetchall():
         # Buscar HWM más reciente
-        hwm_result = await db.execute(
+        hwm_result = db.execute(
             select(SeatHighWater)
             .where(SeatHighWater.subscription_id.isnot(None))
             .order_by(SeatHighWater.recorded_at.desc())

@@ -8,7 +8,7 @@ from datetime import datetime, timedelta
 from typing import Any, Optional
 
 from sqlalchemy import select, and_, func, desc
-from sqlalchemy.ext.asyncio import AsyncSession
+from sqlalchemy.orm import Session
 
 from ..config import (
     DSAM_IMPOSSIBLE_TRAVEL_MIN_HOURS,
@@ -30,8 +30,8 @@ logger = logging.getLogger(__name__)
 # Rule Evaluation
 # ═══════════════════════════════════════════════════════
 
-async def evaluate_rules_for_session(
-    db: AsyncSession,
+def evaluate_rules_for_session(
+    db: Session,
     session: ActiveSession,
 ) -> list[dict[str, Any]]:
     """
@@ -41,7 +41,7 @@ async def evaluate_rules_for_session(
     violations: list[dict[str, Any]] = []
 
     # Cargar reglas globales + del tenant
-    result = await db.execute(
+    result = db.execute(
         select(SessionSecurityRule).where(
             and_(
                 SessionSecurityRule.is_enabled == True,
@@ -55,7 +55,7 @@ async def evaluate_rules_for_session(
     rules = result.scalars().all()
 
     # Cargar config del tenant
-    config_result = await db.execute(
+    config_result = db.execute(
         select(TenantSessionConfig).where(
             TenantSessionConfig.tenant_db == session.tenant_db
         )
@@ -69,30 +69,30 @@ async def evaluate_rules_for_session(
         if session.tenant_db in (rule.exempt_tenants or []):
             continue
 
-        violation = await _evaluate_single_rule(db, rule, session, tenant_config)
+        violation = _evaluate_single_rule(db, rule, session, tenant_config)
         if violation:
             violations.append(violation)
 
     return violations
 
 
-async def _evaluate_single_rule(
-    db: AsyncSession,
+def _evaluate_single_rule(
+    db: Session,
     rule: SessionSecurityRule,
     session: ActiveSession,
     tenant_config: Optional[TenantSessionConfig],
 ) -> Optional[dict[str, Any]]:
     """Evalúa una regla individual contra una sesión."""
     if rule.rule_type == SessionRuleType.SINGLE_SESSION:
-        return await _check_single_session(db, rule, session, tenant_config)
+        return _check_single_session(db, rule, session, tenant_config)
     elif rule.rule_type == SessionRuleType.MAX_SESSIONS:
-        return await _check_max_sessions(db, rule, session)
+        return _check_max_sessions(db, rule, session)
     elif rule.rule_type == SessionRuleType.GEO_RESTRICTION:
-        return await _check_geo_restriction(rule, session)
+        return _check_geo_restriction(rule, session)
     elif rule.rule_type == SessionRuleType.IMPOSSIBLE_TRAVEL:
-        return await _check_impossible_travel(db, session)
+        return _check_impossible_travel(db, session)
     elif rule.rule_type == SessionRuleType.IP_WHITELIST:
-        return await _check_ip_whitelist(rule, session)
+        return _check_ip_whitelist(rule, session)
     elif rule.rule_type == SessionRuleType.TIME_RESTRICTION:
         return _check_time_restriction(rule, session)
     return None
@@ -100,8 +100,8 @@ async def _evaluate_single_rule(
 
 # ── Rule Checkers ──
 
-async def _check_single_session(
-    db: AsyncSession,
+def _check_single_session(
+    db: Session,
     rule: SessionSecurityRule,
     session: ActiveSession,
     tenant_config: Optional[TenantSessionConfig],
@@ -111,7 +111,7 @@ async def _check_single_session(
     if tenant_config and tenant_config.allow_multiple_sessions:
         return None
 
-    result = await db.execute(
+    result = db.execute(
         select(func.count(ActiveSession.id)).where(
             and_(
                 ActiveSession.tenant_db == session.tenant_db,
@@ -140,14 +140,14 @@ async def _check_single_session(
     return None
 
 
-async def _check_max_sessions(
-    db: AsyncSession,
+def _check_max_sessions(
+    db: Session,
     rule: SessionSecurityRule,
     session: ActiveSession,
 ) -> Optional[dict[str, Any]]:
     """Verifica límite máximo de sesiones por usuario."""
     max_allowed = (rule.config or {}).get("max", 3)
-    result = await db.execute(
+    result = db.execute(
         select(func.count(ActiveSession.id)).where(
             and_(
                 ActiveSession.tenant_db == session.tenant_db,
@@ -168,7 +168,7 @@ async def _check_max_sessions(
     return None
 
 
-async def _check_geo_restriction(
+def _check_geo_restriction(
     rule: SessionSecurityRule,
     session: ActiveSession,
 ) -> Optional[dict[str, Any]]:
@@ -197,8 +197,8 @@ async def _check_geo_restriction(
     return None
 
 
-async def _check_impossible_travel(
-    db: AsyncSession,
+def _check_impossible_travel(
+    db: Session,
     session: ActiveSession,
 ) -> Optional[dict[str, Any]]:
     """
@@ -209,7 +209,7 @@ async def _check_impossible_travel(
         return None
 
     # Buscar el evento geo anterior del mismo usuario
-    result = await db.execute(
+    result = db.execute(
         select(SessionGeoEvent)
         .where(
             and_(
@@ -264,7 +264,7 @@ async def _check_impossible_travel(
     return None
 
 
-async def _check_ip_whitelist(
+def _check_ip_whitelist(
     rule: SessionSecurityRule,
     session: ActiveSession,
 ) -> Optional[dict[str, Any]]:
@@ -337,8 +337,8 @@ def _check_time_restriction(
 # Action Logger
 # ═══════════════════════════════════════════════════════
 
-async def log_security_action(
-    db: AsyncSession,
+def log_security_action(
+    db: Session,
     action_type: SessionActionType,
     tenant_db: str,
     severity: SessionAlertSeverity = SessionAlertSeverity.MEDIUM,
@@ -362,8 +362,8 @@ async def log_security_action(
         actor_username=actor_username,
     )
     db.add(action)
-    await db.commit()
-    await db.refresh(action)
+    db.commit()
+    db.refresh(action)
     logger.info(
         "Security action logged: %s | %s | %s@%s | severity=%s",
         action_type.value, ip_address, odoo_login, tenant_db, severity.value,
@@ -372,7 +372,7 @@ async def log_security_action(
 
 
 async def enforce_violations(
-    db: AsyncSession,
+    db: Session,
     session: ActiveSession,
     violations: list[dict[str, Any]],
     auto_terminate: bool = True,
@@ -383,7 +383,7 @@ async def enforce_violations(
     """
     actions: list[AccountSecurityAction] = []
     for v in violations:
-        action = await log_security_action(
+        action = log_security_action(
             db=db,
             action_type=SessionActionType(v["action"]),
             tenant_db=session.tenant_db,
@@ -399,7 +399,7 @@ async def enforce_violations(
         if auto_terminate and v["severity"] == SessionAlertSeverity.CRITICAL.value:
             terminated = await terminate_redis_session(session.redis_session_key)
             if terminated:
-                await log_security_action(
+                log_security_action(
                     db=db,
                     action_type=SessionActionType.SESSION_TERMINATED,
                     tenant_db=session.tenant_db,
@@ -420,7 +420,7 @@ async def enforce_violations(
 # Full Scan & Enforce
 # ═══════════════════════════════════════════════════════
 
-async def run_full_security_scan(db: AsyncSession) -> dict[str, Any]:
+async def run_full_security_scan(db: Session) -> dict[str, Any]:
     """
     Ejecuta un ciclo completo:
     1. Sync sessions from Redis
@@ -431,7 +431,7 @@ async def run_full_security_scan(db: AsyncSession) -> dict[str, Any]:
     sync_stats = await sync_sessions_to_db(db)
 
     # Cargar todas las sesiones activas
-    result = await db.execute(
+    result = db.execute(
         select(ActiveSession).where(ActiveSession.is_active == True)
     )
     all_active = result.scalars().all()
@@ -440,7 +440,7 @@ async def run_full_security_scan(db: AsyncSession) -> dict[str, Any]:
     total_actions = 0
 
     for session in all_active:
-        violations = await evaluate_rules_for_session(db, session)
+        violations = evaluate_rules_for_session(db, session)
         if violations:
             actions = await enforce_violations(db, session, violations)
             total_violations += len(violations)

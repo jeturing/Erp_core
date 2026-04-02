@@ -55,6 +55,8 @@
   import ApiKeys from './pages/ApiKeys.svelte';
   import StripeConnect from './pages/StripeConnect.svelte';
   import Quotas from './pages/Quotas.svelte';
+  import NeuralUsers from './pages/NeuralUsers.svelte';
+  import SessionMonitoring from './pages/SessionMonitoring.svelte';
   import { Spinner } from './lib/components';
   import Toast from './lib/components/Toast.svelte';
   import OfflineBanner from './lib/components/OfflineBanner.svelte';
@@ -103,6 +105,8 @@
     | 'api-keys'
     | 'stripe-connect'
     | 'quotas'
+    | 'neural-users'
+    | 'session-monitoring'
     | 'signup'
     | 'recover-account'
     | 'accountants'
@@ -226,6 +230,8 @@
       case 'api-keys':
       case 'stripe-connect':
       case 'quotas':
+      case 'neural-users':
+      case 'session-monitoring':
         return route as AppPage;
       default:
         return 'notfound';
@@ -261,12 +267,14 @@
     }
 
     const path = window.location.pathname;
+    // Special path aliases
     if (path.startsWith('/admin')) return 'dashboard';
     if (path.startsWith('/tenant/portal')) return 'portal';
-    if (path.startsWith('/login')) return 'login';
-    if (path.startsWith('/signup')) return 'signup';
-    if (path.startsWith('/recover-account')) return 'recover-account';
-    if (path.startsWith('/partner-signup')) return 'partner-signup';
+    // Generic: extract first segment for all SPA routes
+    const segment = path.replace(/^\/+/, '').split('/')[0];
+    if (segment) {
+      return segment;
+    }
     return 'landing';
   }
 
@@ -348,7 +356,17 @@
       return;
     }
 
-    if (!$isAuthenticated && !$auth.isLoading) {
+    // Don't make auth-dependent redirects until auth bootstrap completes
+    if ($auth.isLoading || !authBootstrapped) {
+      // Optimistically set the page so the spinner shows the right title,
+      // but don't redirect anywhere — the $effect will re-run handleRouteChange
+      // once auth finishes.
+      const resolved = resolveInitialPage(route);
+      currentPage = resolved !== 'notfound' ? resolved : 'dashboard';
+      return;
+    }
+
+    if (!$isAuthenticated) {
       currentPage = 'login';
       setRouteHash('login');
       return;
@@ -436,6 +454,8 @@
       case 'api-keys':
       case 'stripe-connect':
       case 'quotas':
+      case 'neural-users':
+      case 'session-monitoring':
       case 'signup':
       case 'recover-account':
       case 'partner-signup':
@@ -460,6 +480,12 @@
       await auth.init();
       authBootstrapped = true;
       if (active) {
+        // If the URL has a valid pathname route but also a stale hash (e.g. #/login),
+        // clear the hash so the pathname takes precedence
+        const pathSegment = window.location.pathname.replace(/^\/+/, '').split('/')[0];
+        if (pathSegment && window.location.hash) {
+          history.replaceState(null, '', window.location.pathname + window.location.search);
+        }
         handleRouteChange();
       }
     };
@@ -604,6 +630,10 @@
       <StripeConnect />
     {:else if currentPage === 'quotas'}
       <Quotas />
+    {:else if currentPage === 'neural-users'}
+      <NeuralUsers />
+    {:else if currentPage === 'session-monitoring'}
+      <SessionMonitoring />
     {:else}
       <div class="p-6">
         <h1 class="page-title">404 - Página no encontrada</h1>

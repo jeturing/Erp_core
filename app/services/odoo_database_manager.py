@@ -258,7 +258,7 @@ class OdooServer:
     
     @property
     def base_url(self) -> str:
-        return f"http://{self.ip}:{self.port}"
+        return f"https://{self.ip}:{self.port}"
     
     @property
     def available_slots(self) -> int:
@@ -1467,10 +1467,14 @@ def _configure_tenant_localization(
     if modules_to_install:
         try:
             import xmlrpc.client
-            url = f"http://{server_ip}:{server_port}"
+            import ssl
+            url = f"https://{server_ip}:{server_port}"
+            _ssl_ctx = ssl.create_default_context()
+            _ssl_ctx.check_hostname = False
+            _ssl_ctx.verify_mode = ssl.CERT_NONE
 
             # Autenticar como admin
-            common = xmlrpc.client.ServerProxy(f"{url}/xmlrpc/2/common", allow_none=True)
+            common = xmlrpc.client.ServerProxy(f"{url}/xmlrpc/2/common", allow_none=True, context=_ssl_ctx)
             uid = common.authenticate(db_name, DEFAULT_ADMIN_LOGIN, DEFAULT_ADMIN_PASSWORD, {})
 
             if not uid:
@@ -1479,7 +1483,7 @@ def _configure_tenant_localization(
                 uid = common.authenticate(db_name, tenant_login, DEFAULT_ADMIN_PASSWORD, {})
 
             if uid:
-                models = xmlrpc.client.ServerProxy(f"{url}/xmlrpc/2/object", allow_none=True)
+                models = xmlrpc.client.ServerProxy(f"{url}/xmlrpc/2/object", allow_none=True, context=_ssl_ctx)
 
                 installed_modules = []
                 failed_modules = []
@@ -1834,6 +1838,21 @@ async def create_tenant_from_template(
         """
         
         _run_pct_sql(pct_id, subdomain, config_sql)
+
+        # 5b. Verificar protección de auditoría (heredada del template)
+        audit_check_sql = """
+        SELECT COUNT(*) FROM pg_trigger t
+        JOIN pg_class c ON t.tgrelid = c.oid
+        WHERE tgname LIKE 'trg_audit_del_%'
+        """
+        ok_audit, out_audit = _run_pct_sql(pct_id, subdomain, audit_check_sql)
+        if ok_audit and out_audit.strip().isdigit() and int(out_audit.strip()) > 0:
+            logger.info(f"✅ Audit DELETE protection: {out_audit.strip()} triggers heredados del template")
+        else:
+            logger.warning(
+                f"⚠️ Audit DELETE protection NO detectada en '{subdomain}'. "
+                f"Verificar que template_tenant tiene dblink + triggers."
+            )
 
         # 6. Credenciales admin Odoo (backend) — siempre actualizar
         cred_sql = (

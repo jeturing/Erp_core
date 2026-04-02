@@ -442,12 +442,12 @@ async def call_odoo_local_api(server_config: dict, method: str, endpoint: str, d
     """Llama a la API local del servidor Odoo"""
     ip = server_config["ip"]
     port = server_config.get("api_port", 8070)
-    url = f"http://{ip}:{port}{endpoint}"
+    url = f"https://{ip}:{port}{endpoint}"
     
     headers = {"X-API-KEY": _provisioning_api_key()}
     
     try:
-        async with httpx.AsyncClient(timeout=60.0) as client:
+        async with httpx.AsyncClient(timeout=60.0, verify=False) as client:
             if method == "GET":
                 resp = await client.get(url, headers=headers)
             elif method == "POST":
@@ -680,9 +680,9 @@ async def change_tenant_password(
         # IMPLEMENTACIÓN FUTURA: Llamar a odoo_local_api.py via HTTP
         # cuando esté disponible en PCT 105
         try:
-            async with httpx.AsyncClient(timeout=10.0) as client:
+            async with httpx.AsyncClient(timeout=10.0, verify=False) as client:
                 response = await client.put(
-                    f"http://{server_config['ip']}:8070/api/tenant/password",
+                    f"https://{server_config['ip']}:8070/api/tenant/password",
                     headers={"X-API-KEY": _provisioning_api_key()},
                     json={"subdomain": subdomain, "new_password": new_password}
                 )
@@ -998,9 +998,9 @@ async def suspend_tenant(
         
         # Fallback: Intentar via odoo_local_api.py
         try:
-            async with httpx.AsyncClient(timeout=10.0) as client:
+            async with httpx.AsyncClient(timeout=10.0, verify=False) as client:
                 response = await client.put(
-                    f"http://{server_config['ip']}:8070/api/tenant/suspend",
+                    f"https://{server_config['ip']}:8070/api/tenant/suspend",
                     headers={"X-API-KEY": _provisioning_api_key()},
                     json={
                         "subdomain": subdomain,

@@ -52,7 +52,7 @@
         </p>
         <div class="flex items-center gap-3">
           <!-- LinkedIn -->
-          <a href="https://www.linkedin.com/in/jhonatancarvajal/" target="_blank" rel="noopener" class="w-8 h-8 rounded-lg bg-white/10 flex items-center justify-center text-slate-400 hover:bg-primary hover:text-white transition-all" aria-label="LinkedIn">
+          <a href="https://www.linkedin.com/in/jeturing/" target="_blank" rel="noopener" class="w-8 h-8 rounded-lg bg-white/10 flex items-center justify-center text-slate-400 hover:bg-primary hover:text-white transition-all" aria-label="LinkedIn">
             <Linkedin class="w-4 h-4" />
           </a>
           <!-- WhatsApp -->
@@ -63,7 +63,7 @@
             </svg>
           </a>
           <!-- YouTube -->
-          <a href="https://youtube.com/@sajet" target="_blank" rel="noopener" class="w-8 h-8 rounded-lg bg-white/10 flex items-center justify-center text-slate-400 hover:bg-red-600 hover:text-white transition-all" aria-label="YouTube">
+          <a href="https://youtube.com/@jeturing" target="_blank" rel="noopener" class="w-8 h-8 rounded-lg bg-white/10 flex items-center justify-center text-slate-400 hover:bg-red-600 hover:text-white transition-all" aria-label="YouTube">
             <Youtube class="w-4 h-4" />
           </a>
         </div>

@@ -345,7 +345,8 @@ class DedicatedServiceManager:
 
             # 5. Desplegar conf y habilitar servicio
             await asyncio.to_thread(
-                self._deploy_tenant_conf, node_ip, conf_path, conf_content, subdomain
+                self._deploy_tenant_conf, node_ip, conf_path, conf_content, subdomain,
+                db_name=db_name,
             )
             result["steps"]["conf"] = {"status": "ok", "path": conf_path}
             logger.info(f"  📝 Tenant conf deployed: {conf_path}")
@@ -591,19 +592,22 @@ class DedicatedServiceManager:
         )
 
     def _deploy_tenant_conf(
-        self, node_ip: str, conf_path: str, content: str, subdomain: str
+        self, node_ip: str, conf_path: str, content: str, subdomain: str,
+        db_name: str = "",
     ) -> None:
         """Despliega la configuración per-tenant y habilita el servicio."""
         import base64
         b64 = base64.b64encode(content.encode()).decode()
         service_name = f"odoo-tenant@{subdomain}"
+        fs_db = db_name or subdomain
 
-        # Crear directorios necesarios (logs + data_dir per-tenant)
+        # Crear directorios necesarios (logs + data_dir + filestore per-tenant)
         data_dir = f"/opt/odoo/.local/share/Odoo-{subdomain}"
+        filestore_dir = f"{data_dir}/filestore/{fs_db}"
         self._ssh_cmd(
             node_ip,
             f"mkdir -p /var/log/odoo && chown odoo:odoo /var/log/odoo && "
-            f"mkdir -p {data_dir} && chown odoo:odoo {data_dir}",
+            f"mkdir -p {filestore_dir} && chown -R odoo:odoo {data_dir}",
         )
 
         # Desplegar conf
@@ -674,6 +678,15 @@ class DedicatedServiceManager:
         dst_data_dir = f"/opt/odoo/.local/share/Odoo-{subdomain}"
         dst = f"{dst_data_dir}/filestore/{db_name}"
 
+        # Garantizar que el directorio destino siempre existe
+        # (incluso si el shared no tiene datos, Odoo necesita el dir para
+        # escribir assets compilados CSS/JS al primer request)
+        self._ssh_cmd(
+            node_ip,
+            f"mkdir -p {dst} && chown -R odoo:odoo {dst_data_dir}",
+            timeout=15,
+        )
+
         # Verificar que el filestore fuente existe
         rc, out, _ = self._ssh_cmd(
             node_ip,
@@ -681,12 +694,12 @@ class DedicatedServiceManager:
             timeout=10,
         )
         if "missing" in out or rc != 0:
-            return False, f"Shared filestore not found: {src}"
+            # Sin fuente shared, pero el directorio destino ya fue creado
+            return True, f"No shared filestore to sync ({src}), empty dir created at {dst}"
 
-        # Crear directorio destino y sincronizar
+        # Sincronizar archivos del shared al dedicado
         rc, out, err = self._ssh_cmd(
             node_ip,
-            f"mkdir -p {dst} && "
             f"rsync -a {src}/ {dst}/ && "
             f"chown -R odoo:odoo {dst_data_dir} && "
             f"echo synced_files=$(find {dst} -type f | wc -l)",

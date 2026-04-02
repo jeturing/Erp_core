@@ -7,7 +7,7 @@
 
 	let activeTab = 'smtp';
 	let apiKey = 'prov-key-2026-secure';
-	let baseUrl = 'http://localhost:4443/api/admin';
+	let baseUrl = '/api/admin';
 
 	// Headers comunes para todas las peticiones
 	const getHeaders = () => ({

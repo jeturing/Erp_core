@@ -53,14 +53,27 @@ ON CONFLICT (key) DO UPDATE SET value = EXCLUDED.value;
 UPDATE ir_config_parameter SET value = 'False' WHERE key = 'web.base.url.freeze';
 SQL
 
-# Sincronizar filestore desde template si el nuevo tenant tiene menos archivos
+# Sincronizar filestore desde template para shared data_dir
 FS_BASE="/var/lib/odoo/filestore"
 if [ -d "$FS_BASE/$TEMPLATE_DB" ]; then
     mkdir -p "$FS_BASE/$SUBDOMAIN"
     cp -an "$FS_BASE/$TEMPLATE_DB/." "$FS_BASE/$SUBDOMAIN/"
     chown -R odoo:odoo "$FS_BASE/$SUBDOMAIN" 2>/dev/null || true
-    echo "[✓] Filestore sincronizado desde $TEMPLATE_DB"
+    echo "[✓] Filestore shared sincronizado desde $TEMPLATE_DB"
+else
+    mkdir -p "$FS_BASE/$SUBDOMAIN"
+    chown -R odoo:odoo "$FS_BASE/$SUBDOMAIN" 2>/dev/null || true
+    echo "[✓] Filestore shared creado (vacío, sin template)"
 fi
+
+# Crear filestore dedicado (para que esté listo si se migra a dedicated_service)
+FS_DEDICATED="/opt/odoo/.local/share/Odoo-${SUBDOMAIN}/filestore/${SUBDOMAIN}"
+mkdir -p "$FS_DEDICATED"
+if [ -d "$FS_BASE/$SUBDOMAIN" ]; then
+    cp -an "$FS_BASE/$SUBDOMAIN/." "$FS_DEDICATED/" 2>/dev/null || true
+fi
+chown -R odoo:odoo "/opt/odoo/.local/share/Odoo-${SUBDOMAIN}" 2>/dev/null || true
+echo "[✓] Filestore dedicado preparado: $FS_DEDICATED"
 
 echo "[✓] Tenant '$SUBDOMAIN' creado exitosamente"
 echo "[✓] URL: https://$SUBDOMAIN.$DOMAIN"

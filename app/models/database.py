@@ -490,7 +490,7 @@ class Customer(Base):
     full_name = Column(String, nullable=False)
     company_name = Column(String)
     subdomain = Column(String, unique=True, index=True, nullable=False)
-    stripe_customer_id = Column(String, unique=True, index=True)
+    stripe_customer_id = Column(String, index=True)
     plan = Column(Enum(PlanType), default=PlanType.basic)
     status = Column(Enum(CustomerStatus), default=CustomerStatus.active)
     phone = Column(String(50))

@@ -44,6 +44,7 @@ from .routes import admin_control_panel  # 🔧 Panel de control administrativo 
 from .routes import api_keys             # 🔑 API Key Management (rate limit, RBAC, rotación estilo Stripe)
 from .routes import odoo_webhooks        # 🔄 Webhooks Odoo → Portal (sync bidireccional)
 from .routes import postal_webhooks      # 📧 Postal Mail webhooks + uso de correo
+from .routes import gusto_payroll        # 💼 Gusto Payroll USA + OAuth + webhooks
 from .routes import migration            # 🚚 Migración live de tenants entre nodos (Fase 2)
 from .routes import session_monitoring   # 🛡️ DSAM — Dynamic Session & Anti-Theft Monitor
 from .routes import developer_portal     # 🔧 Developer Portal — Apps & Agreement Flows
@@ -255,6 +256,7 @@ app.include_router(admin_control_panel.router)   # 🔧 Panel de control: SMTP, 
 app.include_router(api_keys.router)              # 🔑 API Key Management (rate limit, rotación Stripe)
 app.include_router(odoo_webhooks.router)         # 🔄 Webhooks Odoo → Portal (sync bidireccional)
 app.include_router(postal_webhooks.router)       # 📧 Postal Mail webhooks + uso de correo
+app.include_router(gusto_payroll.router)         # 💼 Gusto Payroll USA + OAuth + webhooks
 app.include_router(migration.router)             # 🚚 Migración live de tenants entre nodos (Fase 2)
 app.include_router(session_monitoring.router)    # 🛡️ DSAM — Dynamic Session & Anti-Theft Monitor
 app.include_router(developer_portal.router)      # 🔧 Developer Portal — Apps & Agreement Flows
@@ -328,7 +330,7 @@ _SPA_ROUTES = {
     "/developer-portal", "/api-keys", "/stripe-connect", "/quotas",
     "/recover-account", "/about", "/privacy", "/terms", "/data-processing",
     "/security", "/sla", "/login", "/signup", "/pricing",
-    "/session-monitoring",
+    "/session-monitoring", "/neural-users",
 }
 
 
@@ -357,11 +359,16 @@ class _SPAFallbackASGI:
 
         # Buffer the response to check status code
         response_started = False
+        response_completed = False
         status_code = 200
         initial_message = None
 
         async def send_wrapper(message):
-            nonlocal response_started, status_code, initial_message
+            nonlocal response_started, response_completed, status_code, initial_message
+
+            # Once we've sent a complete SPA replacement, ignore further messages
+            if response_completed:
+                return
 
             if message["type"] == "http.response.start":
                 status_code = message.get("status", 200)
@@ -390,7 +397,9 @@ class _SPAFallbackASGI:
                     await send({
                         "type": "http.response.body",
                         "body": body_bytes,
+                        "more_body": False,
                     })
+                    response_completed = True
                     return
                 await send(message)
 

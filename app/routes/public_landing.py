@@ -34,10 +34,22 @@ from ..models.database import (
     Testimonial, LandingSection, Translation, AccountantTenantAccess,
     SessionLocal, PartnerStatus, SubscriptionStatus, Subscription, BillingScenario,
 )
+from ..services.stripe_connect import normalize_country_code
 
 logger = logging.getLogger(__name__)
 
 router = APIRouter(prefix="/api/public", tags=["Public Landing"])
+
+COUNTRY_ALIASES = {
+    "UNITED STATES": "US",
+    "UNITED STATES OF AMERICA": "US",
+    "USA": "US",
+    "ESTADOS UNIDOS": "US",
+    "DOMINICAN REPUBLIC": "DO",
+    "REPUBLICA DOMINICANA": "DO",
+    "REPÚBLICA DOMINICANA": "DO",
+    "RD": "DO",
+}
 
 
 # ═══════════════════════════════════════════
@@ -109,6 +121,42 @@ def _plan_to_dict(plan: Plan, include_stripe: bool = False) -> dict:
     if include_stripe:
         data["stripe_price_id"] = plan.stripe_price_id
     return data
+
+
+def _normalize_catalog_country(country: Optional[str]) -> Optional[str]:
+    raw = (country or "").strip()
+    if not raw:
+        return None
+    if len(raw) == 2 and raw.isalpha():
+        return normalize_country_code(raw, raw.upper())
+    return COUNTRY_ALIASES.get(raw.upper(), raw.upper())
+
+
+def _catalog_item_visible_for_country(item: ServiceCatalogItem, country: Optional[str]) -> bool:
+    metadata = item.metadata_json or {}
+    allowed = {
+        code for code in (
+            _normalize_catalog_country(entry)
+            for entry in metadata.get("allowed_countries", [])
+        )
+        if code
+    }
+    blocked = {
+        code for code in (
+            _normalize_catalog_country(entry)
+            for entry in metadata.get("excluded_countries", [])
+        )
+        if code
+    }
+    normalized_country = _normalize_catalog_country(country)
+
+    if allowed and not normalized_country:
+        return False
+    if allowed and normalized_country not in allowed:
+        return False
+    if blocked and normalized_country in blocked:
+        return False
+    return True
 
 
 # ═══════════════════════════════════════════
@@ -653,7 +701,7 @@ async def get_landing_content(locale: str = Query("en")):
 # ═══════════════════════════════════════════
 
 @router.get("/catalog")
-async def get_public_catalog():
+async def get_public_catalog(country: Optional[str] = Query(default=None)):
     """
     Catálogo de servicios agrupado por categoría.
     Usado para mostrar servicios adicionales.
@@ -665,7 +713,9 @@ async def get_public_catalog():
         ).order_by(ServiceCatalogItem.sort_order).all()
 
         categories = {}
-        for item in items:
+        visible_items = [item for item in items if _catalog_item_visible_for_country(item, country)]
+
+        for item in visible_items:
             cat = item.category.value if item.category else "other"
             if cat not in categories:
                 categories[cat] = []
@@ -681,7 +731,7 @@ async def get_public_catalog():
                 "metadata_json": item.metadata_json or {},
             })
 
-        response = JSONResponse(content={"categories": categories, "total": len(items)})
+        response = JSONResponse(content={"categories": categories, "total": len(visible_items), "country": _normalize_catalog_country(country)})
         response.headers["Cache-Control"] = "public, max-age=300"
         return response
     finally:

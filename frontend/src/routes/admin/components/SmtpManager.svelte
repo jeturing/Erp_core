@@ -1,7 +1,7 @@
 <script>
 	import { onMount } from 'svelte';
 
-	const baseUrl = 'http://localhost:4443/api/admin';
+	const baseUrl = '/api/admin';
 	const apiKey = 'prov-key-2026-secure';
 
 	let smtpConfig = {
