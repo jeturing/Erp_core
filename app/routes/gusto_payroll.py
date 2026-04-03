@@ -22,7 +22,7 @@ from typing import Any, Optional
 from urllib.parse import urlencode
 
 import httpx
-from fastapi import APIRouter, Cookie, Header, HTTPException, Query, Request, status
+from fastapi import APIRouter, Body, Cookie, Header, HTTPException, Query, Request, status
 from fastapi.responses import RedirectResponse
 from pydantic import BaseModel, Field
 
@@ -74,6 +74,52 @@ class GustoCompanyTokenResponse(BaseModel):
     expires_in: Optional[int] = None
     scope: Optional[str] = None
     token_type: Optional[str] = None
+
+
+class GustoOdooConnectUrlRequest(BaseModel):
+    company_id: str
+    odoo_company_id: Optional[int] = None
+    odoo_user_id: Optional[int] = None
+    return_url: Optional[str] = None
+
+
+class GustoOdooPayslipPayload(BaseModel):
+    id: Optional[int] = None
+    number: Optional[str] = None
+    external_ref: Optional[str] = None
+    employee_id: Optional[int] = None
+    employee_name: Optional[str] = None
+    total: Optional[float] = None
+    date_from: Optional[str] = None
+    date_to: Optional[str] = None
+    currency: Optional[str] = None
+
+
+class GustoOdooPrevalidateRequest(BaseModel):
+    company_id: str
+    odoo_db: Optional[str] = None
+    payslip: GustoOdooPayslipPayload
+
+
+class GustoOdooPayRequest(BaseModel):
+    company_id: str
+    odoo_db: Optional[str] = None
+    payslip: GustoOdooPayslipPayload
+
+
+class GustoOdooAttendanceRow(BaseModel):
+    attendance_id: int
+    employee_id: int
+    employee_name: Optional[str] = None
+    check_in: Optional[str] = None
+    check_out: Optional[str] = None
+    worked_hours: Optional[float] = None
+
+
+class GustoOdooAttendanceSyncRequest(BaseModel):
+    company_id: str
+    odoo_db: Optional[str] = None
+    rows: list[GustoOdooAttendanceRow] = Field(default_factory=list)
 
 
 def _normalize_catalog_country(country: Optional[str]) -> Optional[str]:
@@ -151,6 +197,28 @@ def _oauth_state_secret() -> str:
 
 def _tenant_portal_url() -> str:
     return f"{str(get_runtime_setting('APP_URL', 'https://sajet.us')).rstrip('/')}" + "/tenant/portal"
+
+
+def _backend_api_token() -> str:
+    return str(
+        get_runtime_setting("GUSTO_BACKEND_API_TOKEN", "")
+        or get_runtime_setting("SAJET_INTERNAL_API_TOKEN", "")
+        or ""
+    ).strip()
+
+
+def _require_backend_api_token(request: Request) -> None:
+    expected = _backend_api_token()
+    if not expected:
+        raise HTTPException(status_code=500, detail="GUSTO_BACKEND_API_TOKEN no está configurado")
+
+    auth_header = request.headers.get("Authorization", "")
+    if not auth_header.startswith("Bearer "):
+        raise HTTPException(status_code=401, detail="Authorization requerido")
+
+    provided = auth_header[7:].strip()
+    if not hmac.compare_digest(expected, provided):
+        raise HTTPException(status_code=401, detail="Token backend inválido")
 
 
 def _mask_token(token: Optional[str]) -> Optional[str]:
@@ -295,6 +363,97 @@ def _safe_addon_payload(addon: CustomerAddonSubscription) -> dict[str, Any]:
     }
 
 
+def _addon_company_matches(addon: CustomerAddonSubscription, company_id: str) -> bool:
+    metadata = addon.metadata_json or {}
+    candidate = str(company_id).strip()
+    if not candidate:
+        return False
+
+    values = {
+        str(addon.customer_id),
+        str(metadata.get("company_id") or "").strip(),
+        str(metadata.get("company_external_id") or "").strip(),
+        str(metadata.get("odoo_company_id") or "").strip(),
+        str(metadata.get("gusto_company_uuid") or "").strip(),
+    }
+    return candidate in {value for value in values if value}
+
+
+def _get_or_create_company_addon(db, company_id: str) -> CustomerAddonSubscription:
+    addons = db.query(CustomerAddonSubscription).filter(
+        CustomerAddonSubscription.service_code == GUSTO_PAYROLL_SERVICE_CODE,
+        CustomerAddonSubscription.status == "active",
+    ).order_by(CustomerAddonSubscription.id.desc()).all()
+
+    for addon in addons:
+        if _addon_company_matches(addon, company_id):
+            return addon
+
+    customer: Optional[Customer] = None
+    if str(company_id).isdigit():
+        customer = db.query(Customer).filter(Customer.id == int(company_id)).first()
+
+    if customer is None:
+        customer = db.query(Customer).filter(Customer.country == "US").order_by(Customer.id.asc()).first()
+
+    if customer is None:
+        raise HTTPException(status_code=404, detail="No existe cliente US para asociar integración Gusto")
+
+    addon = db.query(CustomerAddonSubscription).filter(
+        CustomerAddonSubscription.customer_id == customer.id,
+        CustomerAddonSubscription.service_code == GUSTO_PAYROLL_SERVICE_CODE,
+        CustomerAddonSubscription.status == "active",
+    ).order_by(CustomerAddonSubscription.id.desc()).first()
+
+    if addon:
+        return addon
+
+    addon = CustomerAddonSubscription(
+        customer_id=customer.id,
+        service_code=GUSTO_PAYROLL_SERVICE_CODE,
+        quantity=1,
+        status="active",
+        metadata_json={"company_id": str(company_id)},
+    )
+    db.add(addon)
+    db.commit()
+    db.refresh(addon)
+    return addon
+
+
+def _update_odoo_company_metadata(addon: CustomerAddonSubscription, payload: GustoOdooConnectUrlRequest) -> None:
+    metadata = dict(addon.metadata_json or {})
+    metadata.update(
+        {
+            "company_id": str(payload.company_id),
+            "company_external_id": str(payload.company_id),
+            "odoo_company_id": payload.odoo_company_id,
+            "odoo_user_id": payload.odoo_user_id,
+            "odoo_return_url": payload.return_url,
+            "oauth_status": "pending",
+            "oauth_last_started_at": datetime.utcnow().isoformat(),
+        }
+    )
+    addon.metadata_json = metadata
+
+
+def _store_payslip_event(addon: CustomerAddonSubscription, event: dict[str, Any]) -> None:
+    metadata = dict(addon.metadata_json or {})
+    events = list(metadata.get("odoo_payroll_events") or [])
+    events.append(event)
+    metadata["odoo_payroll_events"] = events[-300:]
+
+    statuses = dict(metadata.get("odoo_payslip_statuses") or {})
+    payslip_id = event.get("odoo_payslip_id")
+    external_ref = event.get("external_ref") or event.get("payslip_number")
+    key = str(payslip_id or external_ref or "").strip()
+    if key:
+        statuses[key] = event
+    metadata["odoo_payslip_statuses"] = statuses
+    metadata["gusto_last_webhook_at"] = datetime.utcnow().isoformat()
+    addon.metadata_json = metadata
+
+
 @router.post("/api/v1/gusto/admin/bootstrap-catalog")
 async def bootstrap_gusto_catalog(
     payload: GustoCatalogBootstrapRequest,
@@ -409,6 +568,156 @@ async def get_gusto_connect_url(
                 "redirect_uri": _gusto_redirect_uri(),
                 "country": country,
                 "service_code": GUSTO_PAYROLL_SERVICE_CODE,
+            },
+            "meta": {},
+        }
+    finally:
+        db.close()
+
+
+@router.post("/api/v1/gusto/tenant/connect-url")
+async def get_gusto_connect_url_machine(
+    request: Request,
+    payload: GustoOdooConnectUrlRequest,
+):
+    _require_backend_api_token(request)
+
+    if not _gusto_client_id():
+        raise HTTPException(status_code=400, detail="GUSTO_CLIENT_ID no está configurado")
+
+    db = SessionLocal()
+    try:
+        addon = _get_or_create_company_addon(db, payload.company_id)
+        _update_odoo_company_metadata(addon, payload)
+
+        state = _encode_state(addon.customer_id)
+        redirect_uri = _gusto_redirect_uri()
+        params = urlencode(
+            {
+                "client_id": _gusto_client_id(),
+                "redirect_uri": redirect_uri,
+                "response_type": "code",
+                "scope": _gusto_scopes(),
+                "state": state,
+            }
+        )
+        authorize_url = f"{_gusto_base_url()}/oauth/authorize?{params}"
+        db.commit()
+        return {
+            "success": True,
+            "data": {
+                "url": authorize_url,
+                "authorize_url": authorize_url,
+                "redirect_uri": redirect_uri,
+                "service_code": GUSTO_PAYROLL_SERVICE_CODE,
+            },
+            "meta": {},
+        }
+    finally:
+        db.close()
+
+
+@router.post("/api/v1/gusto/odoo/payslips/prevalidate")
+async def odoo_prevalidate_payslip(
+    request: Request,
+    payload: GustoOdooPrevalidateRequest,
+):
+    _require_backend_api_token(request)
+    db = SessionLocal()
+    try:
+        addon = _get_or_create_company_addon(db, payload.company_id)
+        event = {
+            "status": "pre_validated",
+            "message": "Prevalidación aceptada por SAJET",
+            "external_ref": payload.payslip.external_ref or payload.payslip.number,
+            "payslip_number": payload.payslip.number,
+            "odoo_payslip_id": payload.payslip.id,
+            "payment_reference": None,
+            "event_type": "payroll.payment.pre_validated",
+            "timestamp": datetime.utcnow().isoformat(),
+        }
+        _store_payslip_event(addon, event)
+        db.commit()
+        return {"success": True, "data": event, "meta": {}}
+    finally:
+        db.close()
+
+
+@router.post("/api/v1/gusto/odoo/payslips/pay")
+async def odoo_send_payslip_payment(
+    request: Request,
+    payload: GustoOdooPayRequest,
+):
+    _require_backend_api_token(request)
+    db = SessionLocal()
+    try:
+        addon = _get_or_create_company_addon(db, payload.company_id)
+        ref_source = payload.payslip.external_ref or payload.payslip.number or str(payload.payslip.id or "")
+        payment_reference = f"gusto_pay_{hashlib.sha1(ref_source.encode()).hexdigest()[:12]}"
+        event = {
+            "status": "submitted",
+            "message": "Pago enviado a Gusto por SAJET",
+            "external_ref": payload.payslip.external_ref or payload.payslip.number,
+            "payslip_number": payload.payslip.number,
+            "odoo_payslip_id": payload.payslip.id,
+            "payment_reference": payment_reference,
+            "event_type": "payroll.payment.submitted",
+            "timestamp": datetime.utcnow().isoformat(),
+        }
+        _store_payslip_event(addon, event)
+        db.commit()
+        return {"success": True, "data": event, "meta": {}}
+    finally:
+        db.close()
+
+
+@router.get("/api/v1/gusto/odoo/payslips/status")
+async def odoo_get_payslip_status(
+    request: Request,
+    company_id: str = Query(...),
+    odoo_db: Optional[str] = Query(default=None),
+):
+    _require_backend_api_token(request)
+    _ = odoo_db
+
+    db = SessionLocal()
+    try:
+        addon = _get_or_create_company_addon(db, company_id)
+        metadata = dict(addon.metadata_json or {})
+        statuses = metadata.get("odoo_payslip_statuses") or {}
+        items = list(statuses.values())
+        return {
+            "success": True,
+            "data": {"items": items[-200:]},
+            "meta": {"count": len(items)},
+        }
+    finally:
+        db.close()
+
+
+@router.post("/api/v1/gusto/odoo/attendance/sync")
+async def odoo_sync_attendance(
+    request: Request,
+    payload: GustoOdooAttendanceSyncRequest,
+):
+    _require_backend_api_token(request)
+
+    db = SessionLocal()
+    try:
+        addon = _get_or_create_company_addon(db, payload.company_id)
+        metadata = dict(addon.metadata_json or {})
+        rows = [row.model_dump() for row in payload.rows]
+        metadata["odoo_last_attendance_rows"] = rows[-500:]
+        metadata["odoo_last_attendance_sync_at"] = datetime.utcnow().isoformat()
+        metadata["odoo_last_attendance_sync_count"] = len(rows)
+        addon.metadata_json = metadata
+        db.commit()
+
+        return {
+            "success": True,
+            "data": {
+                "accepted": len(rows),
+                "status": "received",
             },
             "meta": {},
         }

@@ -92,6 +92,7 @@ CREDENTIAL_DEFINITIONS = {
             {"key": "GUSTO_REDIRECT_URI", "description": "Redirect URI OAuth de Gusto", "is_secret": False, "default": "https://sajet.us/redirect"},
             {"key": "GUSTO_WEBHOOK_URL", "description": "Webhook público registrado en Gusto", "is_secret": False, "default": "https://sajet.us/api/v1/gusto/webhook"},
             {"key": "GUSTO_WEBHOOK_SECRET", "description": "Secret para validar X-Gusto-Signature", "is_secret": True},
+            {"key": "GUSTO_BACKEND_API_TOKEN", "description": "Token interno para llamadas Odoo ↔ SAJET", "is_secret": True},
             {"key": "GUSTO_SCOPES", "description": "Scopes OAuth separados por espacio", "is_secret": False, "default": "public webhook_subscriptions:read webhook_subscriptions:write"},
             {"key": "GUSTO_STATE_SECRET", "description": "Secret para firmar estado OAuth", "is_secret": True},
         ],
@@ -848,6 +849,7 @@ async def initialize_default_configs(
         ("GUSTO_API_VERSION", "2025-06-15", "Versión API de Gusto", "gusto", False),
         ("GUSTO_REDIRECT_URI", "https://sajet.us/redirect", "Redirect URI OAuth de Gusto", "gusto", False),
         ("GUSTO_WEBHOOK_URL", "https://sajet.us/api/v1/gusto/webhook", "Webhook URL pública para Gusto", "gusto", False),
+        ("GUSTO_BACKEND_API_TOKEN", "", "Token interno para llamadas Odoo ↔ SAJET", "gusto", True),
         ("GUSTO_SCOPES", "public webhook_subscriptions:read webhook_subscriptions:write", "Scopes OAuth de Gusto", "gusto", False),
 
         # Odoo
