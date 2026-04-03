@@ -35,3 +35,5 @@ export { stripeConnectApi } from './stripeConnect';
 export type { ConnectStatus, ConnectBalance, TransferRequest } from './stripeConnect';
 export { quotasApi } from './quotas';
 export type { QuotaResource, CustomerQuotas, AllQuotasResponse } from './quotas';
+export { planGovernanceApi } from './planGovernance';
+export type { PlanGovernanceSummaryResponse, GovernanceCustomerSummary, GovernancePlan } from './planGovernance';

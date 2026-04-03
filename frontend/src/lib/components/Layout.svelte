@@ -64,6 +64,7 @@
         { id: 'reconciliation', label: 'Conciliación',  icon: GitCompareArrows,  href: '/reconciliation' },
         { id: 'dispersion',    label: 'Dispersión',    icon: ArrowRightLeft,    href: '/dispersion' },
         { id: 'quotas',         label: 'Quotas',         icon: Gauge,             href: '/quotas' },
+        { id: 'plan-governance', label: 'Gobernanza',    icon: ShieldCheck,       href: '/plan-governance' },
       ],
     },
 

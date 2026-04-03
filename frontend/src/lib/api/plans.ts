@@ -8,7 +8,16 @@ export interface Plan {
   max_domains: number;
   max_users: number;
   max_storage_mb: number;
+  max_stock_sku: number;
   is_active: boolean;
+  is_public: boolean;
+  is_highlighted: boolean;
+  trial_days: number;
+  annual_discount_percent: number;
+  quota_warning_percent: number;
+  quota_recommend_percent: number;
+  quota_block_percent: number;
+  fair_use_new_customers_only: boolean;
 }
 
 type PlansListResponse = {

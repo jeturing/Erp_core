@@ -496,9 +496,12 @@ class Customer(Base):
     phone = Column(String(50))
     notes = Column(Text)
     user_count = Column(Integer, default=1)              # Usuarios Odoo del tenant
+    stock_sku_count = Column(Integer, default=0)         # SKUs únicos con stock real reportados desde Odoo
     is_admin_account = Column(Boolean, default=False)    # True = admin@sajet.us (no se cobra)
     is_accountant = Column(Boolean, default=False)       # True = Contador/CPA con acceso multi-tenant
     accountant_firm_name = Column(String(200), nullable=True)  # Nombre de la firma contable
+    fair_use_enabled = Column(Boolean, default=False)    # Estrategia fair use aplica solo a clientes nuevos
+    last_usage_sync_at = Column(DateTime, nullable=True) # Último snapshot de uso recibido desde Odoo
 
     # ── Onboarding flow ──
     onboarding_step = Column(Integer, default=0)         # 0=nuevo, 1=perfil, 2=ecf(si RD), 3=pago, 4=completo
@@ -600,6 +603,11 @@ class Plan(Base):
     max_companies = Column(Integer, default=1)                   # Multi-company
     max_backups = Column(Integer, default=0)                     # Backups automáticos retenidos, 0=ilimitado
     max_api_calls_day = Column(Integer, default=0)               # Llamadas API diarias, 0=ilimitado
+    max_stock_sku = Column(Integer, default=0)                   # 0 = ilimitado; SKUs únicos con stock real permitidos
+    quota_warning_percent = Column(Integer, default=80)          # Banner amarillo a partir de este %
+    quota_recommend_percent = Column(Integer, default=95)        # Recomendación de upgrade a partir de este %
+    quota_block_percent = Column(Integer, default=100)           # Fase 2: bloqueo a partir de este %
+    fair_use_new_customers_only = Column(Boolean, default=True)  # Política aplica solo a clientes nuevos
     currency = Column(String(3), default="USD")
     stripe_price_id = Column(String(100))                        # Price ID de Stripe (recurrente)
     stripe_product_id = Column(String(100))                      # Product ID de Stripe
@@ -802,6 +810,9 @@ class PartnerPricingOverride(Base):
     base_price_override = Column(Float, nullable=True)                # Precio base mensual USD
     price_per_user_override = Column(Float, nullable=True)            # Precio por usuario adicional
     included_users_override = Column(Integer, nullable=True)          # Usuarios incluidos en base
+    max_users_override = Column(Integer, nullable=True)               # Override cuota de usuarios
+    max_storage_mb_override = Column(Integer, nullable=True)          # Override cuota almacenamiento (MB)
+    max_stock_sku_override = Column(Integer, nullable=True)           # Override SKUs con stock real
 
     # Tarifas adicionales del partner
     setup_fee = Column(Float, default=0)                              # Fee de setup/implementación

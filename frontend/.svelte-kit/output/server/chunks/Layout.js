@@ -21,6 +21,7 @@ import { P as Package } from "./package.js";
 import { R as Receipt, a as Rocket } from "./rocket.js";
 import { S as Scale } from "./scale.js";
 import { G as Git_compare_arrows, C as Clipboard_list } from "./git-compare-arrows.js";
+import { S as Shield_check } from "./shield-check.js";
 import { B as Boxes } from "./boxes.js";
 import { P as Percent } from "./percent.js";
 import { P as Palette } from "./palette.js";
@@ -34,7 +35,6 @@ import { S as Settings } from "./settings.js";
 import { Z as Zap } from "./zap.js";
 import { F as File_text } from "./file-text.js";
 import { K as Key } from "./key.js";
-import { S as Shield_check } from "./shield-check.js";
 import { E as External_link } from "./external-link.js";
 import { C as Chevron_down } from "./chevron-down.js";
 import { L as Log_out } from "./log-out.js";
@@ -523,7 +523,13 @@ function Layout($$renderer, $$props) {
             icon: Arrow_right_left,
             href: "/dispersion"
           },
-          { id: "quotas", label: "Quotas", icon: Gauge, href: "/quotas" }
+          { id: "quotas", label: "Quotas", icon: Gauge, href: "/quotas" },
+          {
+            id: "plan-governance",
+            label: "Gobernanza",
+            icon: Shield_check,
+            href: "/plan-governance"
+          }
         ]
       },
       {

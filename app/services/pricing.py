@@ -7,6 +7,12 @@ Módulo compartido usado por:
 - plans.py (recálculo de suscripciones)
 
 Elimina duplicación de lógica de pricing y el price_map hardcodeado.
+
+Auto-upgrade por users:
+  resolve_auto_plan() evalúa si el user_count supera el max_users del plan
+  actual y retorna el plan correcto (siguiente tier). Se integra en
+  get_effective_plan_snapshot() para que el pricing siempre refleje el plan
+  correcto según la cantidad de usuarios activos del tenant.
 """
 import logging
 from typing import Optional
@@ -14,6 +20,9 @@ from typing import Optional
 from ..models.database import Customer, PartnerPricingOverride, Plan, SessionLocal
 
 logger = logging.getLogger(__name__)
+
+# Orden canónico de upgrade de planes
+_PLAN_UPGRADE_ORDER = ["basic", "pro", "enterprise"]
 
 
 def get_plan_prices(db) -> dict:
@@ -44,6 +53,73 @@ def resolve_subscription_partner_id(db, sub, customer: Optional[Customer] = None
 
     customer = get_subscription_customer(db, sub, customer=customer)
     return customer.partner_id if customer else None
+
+
+def resolve_auto_plan(db, current_plan: Plan, user_count: int) -> Plan:
+    """
+    Resuelve el plan correcto según la cantidad de usuarios activos.
+
+    Si user_count supera el max_users del plan actual, hace upgrade al
+    siguiente tier disponible. El plan se determina evaluando los planes
+    activos en orden canónico (basic → pro → enterprise).
+
+    Reglas:
+    - max_users = 0  → ilimitado, nunca se hace upgrade desde este plan.
+    - Se selecciona el plan más bajo cuyo max_users >= user_count (o max_users=0).
+    - Si el plan calculado es de tier superior al actual, se retorna el nuevo.
+    - Si es igual o inferior, se respeta el plan actual (no hay downgrade automático).
+
+    Args:
+        db: Sesión SQLAlchemy activa.
+        current_plan: Plan actualmente asignado a la suscripción.
+        user_count: Cantidad de usuarios facturables del tenant.
+
+    Returns:
+        Plan a usar (puede ser el mismo o uno superior).
+    """
+    if current_plan is None:
+        return current_plan
+
+    # max_users=0 = ilimitado → el plan actual siempre es suficiente
+    if (current_plan.max_users or 0) == 0:
+        return current_plan
+
+    # Si cabe en el plan actual, no hay upgrade
+    if user_count <= current_plan.max_users:
+        return current_plan
+
+    # Cargar todos los planes activos ordenados por sort_order, luego por orden canónico
+    all_plans = (
+        db.query(Plan)
+        .filter(Plan.is_active == True)
+        .order_by(Plan.sort_order, Plan.id)
+        .all()
+    )
+
+    # Ordenar según el orden canónico conocido; planes no reconocidos van al final
+    def _plan_rank(p: Plan) -> int:
+        try:
+            return _PLAN_UPGRADE_ORDER.index(p.name.lower())
+        except ValueError:
+            return len(_PLAN_UPGRADE_ORDER)
+
+    ordered = sorted(all_plans, key=_plan_rank)
+    current_rank = _plan_rank(current_plan)
+
+    # Buscar el primer plan de tier >= actual que tenga capacidad suficiente
+    for plan in ordered:
+        if _plan_rank(plan) < current_rank:
+            continue  # No hacer downgrade automático
+        max_u = plan.max_users or 0
+        if max_u == 0 or max_u >= user_count:
+            logger.info(
+                "pricing: auto-upgrade %s→%s (user_count=%d, max_users=%d)",
+                current_plan.name, plan.name, user_count, current_plan.max_users,
+            )
+            return plan
+
+    # Si ningún plan tiene capacidad, retornar el de mayor tier (enterprise normalmente ilimitado)
+    return ordered[-1] if ordered else current_plan
 
 
 def get_effective_plan_snapshot(
@@ -77,6 +153,10 @@ def get_effective_plan_snapshot(
         normalized_users = max(1, int(normalized_users))
     except (TypeError, ValueError):
         normalized_users = 1
+
+    # Auto-upgrade: si user_count supera max_users del plan asignado, subir al tier correcto
+    if plan is not None:
+        plan = resolve_auto_plan(db, plan, normalized_users)
 
     snapshot = {
         "plan": plan,

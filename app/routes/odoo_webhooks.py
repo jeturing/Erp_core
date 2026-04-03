@@ -318,6 +318,7 @@ def _upsert_customer_from_snapshot(db, tenant_db: str, data: Dict[str, Any]) -> 
             phone=data.get("company_phone") or data.get("phone"),
             country=data.get("country"),
             user_count=user_count,
+            fair_use_enabled=False,
         )
         db.add(customer)
         db.flush()
@@ -330,6 +331,13 @@ def _upsert_customer_from_snapshot(db, tenant_db: str, data: Dict[str, Any]) -> 
             customer.phone = data.get("company_phone") or data.get("phone")
         if data.get("country"):
             customer.country = data.get("country")
+
+    stock_sku_raw = data.get("stock_sku_count") or 0
+    try:
+        customer.stock_sku_count = max(0, int(stock_sku_raw))
+    except (TypeError, ValueError):
+        customer.stock_sku_count = max(0, customer.stock_sku_count or 0)
+    customer.last_usage_sync_at = datetime.utcnow()
 
     owner_partner_id = _coerce_positive_int(data.get("owner_partner_id") or data.get("partner_id"))
     if owner_partner_id:

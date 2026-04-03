@@ -381,6 +381,7 @@ export interface Plan {
   max_users: number;
   max_domains: number;
   max_storage_mb: number;
+  max_stock_sku: number;
   max_websites: number;
   max_companies: number;
   max_backups: number;
@@ -390,6 +391,15 @@ export interface Plan {
   stripe_product_id?: string | null;
   features: string[];
   is_active: boolean;
+  is_public: boolean;
+  is_highlighted: boolean;
+  trial_days: number;
+  annual_discount_percent: number;
+  quota_warning_percent: number;
+  quota_recommend_percent: number;
+  quota_block_percent: number;
+  fair_use_new_customers_only: boolean;
+  storage_gb?: number;
   sort_order: number;
   active_subscribers: number;
   created_at?: string | null;
@@ -1372,6 +1382,9 @@ export interface PartnerPricingOverrideItem {
   base_price_override: number | null;
   price_per_user_override: number | null;
   included_users_override: number | null;
+  max_users_override: number | null;
+  max_storage_mb_override: number | null;
+  max_stock_sku_override: number | null;
   setup_fee: number;
   customization_hourly_rate: number | null;
   support_level: SupportLevelType | null;
@@ -1388,6 +1401,9 @@ export interface PartnerPricingOverrideItem {
   global_base_price?: number;
   global_price_per_user?: number;
   global_included_users?: number;
+  global_max_users?: number;
+  global_max_storage_mb?: number;
+  global_max_stock_sku?: number;
 }
 
 export interface PartnerPricingOverridesResponse {

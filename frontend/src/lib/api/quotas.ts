@@ -9,6 +9,7 @@ export interface QuotaResource {
   unlimited: boolean;
   can_add: boolean;
   exceeded: boolean;
+  status?: 'ok' | 'warning' | 'critical' | 'exceeded' | string;
 }
 
 export interface CustomerQuotas {
@@ -17,6 +18,7 @@ export interface CustomerQuotas {
   company_name: string;
   plan_name: string;
   plan_key: string;
+  fair_use_enabled?: boolean;
   quotas: Record<string, QuotaResource>;
 }
 
@@ -26,11 +28,13 @@ export interface CustomerQuotaSummary {
   subdomain: string;
   plan_name: string;
   plan_key: string;
+  fair_use_enabled?: boolean;
   resources: Record<string, {
     used: number;
     limit: number;
     unlimited: boolean;
     exceeded: boolean;
+    status?: 'ok' | 'warning' | 'critical' | 'exceeded' | string;
   }>;
 }
 

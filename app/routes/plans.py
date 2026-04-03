@@ -46,10 +46,19 @@ class PlanCreate(BaseModel):
     max_companies: int = 1
     max_backups: int = 0
     max_api_calls_day: int = 0
+    max_stock_sku: int = 0
     currency: str = "USD"
     stripe_price_id: Optional[str] = None
     stripe_product_id: Optional[str] = None
     features: Optional[str] = None  # JSON string
+    is_public: bool = True
+    is_highlighted: bool = False
+    trial_days: int = 14
+    annual_discount_percent: float = 20
+    quota_warning_percent: int = 80
+    quota_recommend_percent: int = 95
+    quota_block_percent: int = 100
+    fair_use_new_customers_only: bool = True
     sort_order: int = 0
 
 
@@ -66,10 +75,20 @@ class PlanUpdate(BaseModel):
     max_companies: Optional[int] = None
     max_backups: Optional[int] = None
     max_api_calls_day: Optional[int] = None
+    max_stock_sku: Optional[int] = None
+    currency: Optional[str] = None
     stripe_price_id: Optional[str] = None
     stripe_product_id: Optional[str] = None
     features: Optional[str] = None
     is_active: Optional[bool] = None
+    is_public: Optional[bool] = None
+    is_highlighted: Optional[bool] = None
+    trial_days: Optional[int] = None
+    annual_discount_percent: Optional[float] = None
+    quota_warning_percent: Optional[int] = None
+    quota_recommend_percent: Optional[int] = None
+    quota_block_percent: Optional[int] = None
+    fair_use_new_customers_only: Optional[bool] = None
     sort_order: Optional[int] = None
 
 
@@ -117,11 +136,21 @@ async def list_plans(
                 "max_companies": _quota_or_default(p.max_companies, 1),
                 "max_backups": _quota_or_default(p.max_backups, 0),
                 "max_api_calls_day": _quota_or_default(p.max_api_calls_day, 0),
+                "max_stock_sku": _quota_or_default(p.max_stock_sku, 0),
                 "currency": p.currency,
                 "stripe_price_id": p.stripe_price_id,
                 "stripe_product_id": p.stripe_product_id,
                 "features": json.loads(p.features) if p.features else [],
                 "is_active": p.is_active,
+                "is_public": p.is_public,
+                "is_highlighted": p.is_highlighted,
+                "trial_days": p.trial_days,
+                "annual_discount_percent": p.annual_discount_percent,
+                "quota_warning_percent": p.quota_warning_percent,
+                "quota_recommend_percent": p.quota_recommend_percent,
+                "quota_block_percent": p.quota_block_percent,
+                "fair_use_new_customers_only": p.fair_use_new_customers_only,
+                "storage_gb": round((_quota_or_default(p.max_storage_mb, 0) / 1024), 2) if _quota_or_default(p.max_storage_mb, 0) else 0,
                 "sort_order": p.sort_order,
                 "active_subscribers": sub_count,
                 "created_at": p.created_at.isoformat() if p.created_at else None,
@@ -161,10 +190,19 @@ async def create_plan(
             max_companies=payload.max_companies,
             max_backups=payload.max_backups,
             max_api_calls_day=payload.max_api_calls_day,
+            max_stock_sku=payload.max_stock_sku,
             currency=payload.currency,
             stripe_price_id=payload.stripe_price_id,
             stripe_product_id=payload.stripe_product_id,
             features=payload.features,
+            is_public=payload.is_public,
+            is_highlighted=payload.is_highlighted,
+            trial_days=payload.trial_days,
+            annual_discount_percent=payload.annual_discount_percent,
+            quota_warning_percent=payload.quota_warning_percent,
+            quota_recommend_percent=payload.quota_recommend_percent,
+            quota_block_percent=payload.quota_block_percent,
+            fair_use_new_customers_only=payload.fair_use_new_customers_only,
             sort_order=payload.sort_order,
         )
         db.add(plan)

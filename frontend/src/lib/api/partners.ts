@@ -227,6 +227,9 @@ export const partnersApi = {
     base_price_override?: number | null;
     price_per_user_override?: number | null;
     included_users_override?: number | null;
+    max_users_override?: number | null;
+    max_storage_mb_override?: number | null;
+    max_stock_sku_override?: number | null;
     setup_fee?: number;
     customization_hourly_rate?: number | null;
     support_level?: string;
@@ -234,6 +237,8 @@ export const partnersApi = {
     ecf_monthly_cost?: number | null;
     label?: string;
     notes?: string;
+    valid_from?: string | null;
+    valid_until?: string | null;
   }): Promise<{ message: string; override: PartnerPricingOverrideItem }> {
     return api.post(`/api/partners/${partnerId}/pricing`, data);
   },

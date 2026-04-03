@@ -257,7 +257,7 @@ class StorageAlertService:
     def _get_alert_message(self, status: str, usage_percent: float) -> str:
         """Genera mensaje de alerta basado en status"""
         messages = {
-            "warning": f"🟡 WARNING: {usage_percent:.1f}% del límite de almacenamiento. Se recomienda upgrade pronto.",
+            "warning": f"🟡 WARNING: {usage_percent:.1f}% del límite de almacenamiento. Se recomienda revisar capacidad.",
             "critical": f"🔴 CRITICAL: {usage_percent:.1f}% del límite. Se recomienda upgrade inmediato.",
             "exceeded": f"⚠️  EXCEDIDO: {usage_percent:.1f}% del límite. Se requiere upgrade urgente.",
         }
@@ -315,8 +315,8 @@ class StorageAlertService:
     def _get_email_subject(self, status: str, subdomain: str) -> str:
         """Genera asunto del email basado en status"""
         subjects = {
-            "warning": f"⚠️  Alerta de Almacenamiento: {subdomain} - 75% del límite",
-            "critical": f"🔴 Alerta Crítica: {subdomain} - 90% del límite",
+            "warning": f"⚠️  Alerta de Almacenamiento: {subdomain} - 80% del límite",
+            "critical": f"🔴 Alerta Crítica: {subdomain} - 95% del límite",
             "exceeded": f"⚠️  URGENTE: {subdomain} ha superado el límite de almacenamiento",
         }
         return subjects.get(status, "Alerta de Almacenamiento")
@@ -344,11 +344,11 @@ class StorageAlertService:
         
         # Determinar mensaje según status
         if status_value == "warning":
-            alert_title = "⚠️  Alerta de Almacenamiento - Advértencia (75%)"
+            alert_title = "⚠️  Alerta de Almacenamiento - Advertencia (80%)"
             alert_text = "Su almacenamiento se está acercando al límite. Se recomienda actualizar el plan pronto para evitar interrupciones."
             color = "#FFA500"
         elif status_value == "critical":
-            alert_title = "🔴 Alerta Crítica de Almacenamiento (90%)"
+            alert_title = "🔴 Alerta Crítica de Almacenamiento (95%)"
             alert_text = "Su almacenamiento está muy cerca del límite. Se recomienda actualizar el plan inmediatamente."
             color = "#FF6B6B"
         else:  # exceeded

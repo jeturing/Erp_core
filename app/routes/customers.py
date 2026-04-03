@@ -393,6 +393,7 @@ async def create_customer(
             company_name=payload.company_name,
             subdomain=payload.subdomain,
             user_count=payload.user_count,
+            fair_use_enabled=True,
             partner_id=partner_id,
         )
         db.add(customer)

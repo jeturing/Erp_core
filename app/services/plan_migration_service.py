@@ -6,7 +6,7 @@ Evalúa el uso de recursos (principalmente tamaño de BD) de cada tenant y:
 - Detecta cuándo se acerca o supera el límite del plan actual
 - Sugiere planes superiores apropiados
 - Ejecuta migraciones automáticas (opcional)
-- Envía alertas cuando el consumo supera umbrales (75%, 90%, 100%)
+- Envía alertas cuando el consumo supera umbrales (80%, 95%, 100%)
 
 Ejemplo de uso:
     # Evaluar un tenant específico
@@ -39,8 +39,8 @@ logger = logging.getLogger("plan_migration")
 
 # Umbrales de alerta (% de uso del límite)
 ALERT_THRESHOLDS = {
-    "warning": 75,   # 75% del límite
-    "critical": 90,  # 90% del límite
+    "warning": 80,   # 80% del límite
+    "critical": 95,  # 95% del límite
     "exceeded": 100, # 100% o más
 }
 

@@ -143,6 +143,10 @@
 		"src/routes/(admin)/+layout.ts",
 		"src/routes/+layout.ts"
 	],
+	"/(admin)/plan-governance": [
+		"src/routes/(admin)/+layout.ts",
+		"src/routes/+layout.ts"
+	],
 	"/(admin)/plans": [
 		"src/routes/(admin)/+layout.ts",
 		"src/routes/+layout.ts"

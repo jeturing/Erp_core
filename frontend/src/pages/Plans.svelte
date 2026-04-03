@@ -30,13 +30,23 @@
     max_users: 0,
     max_domains: 0,
     max_storage_mb: 0,
+    max_stock_sku: 0,
     max_websites: 1,
     max_companies: 1,
     max_backups: 0,
     max_api_calls_day: 0,
+    currency: 'USD',
     stripe_price_id: '',
     stripe_product_id: '',
     features: '',
+    is_public: true,
+    is_highlighted: false,
+    trial_days: 14,
+    annual_discount_percent: 20,
+    quota_warning_percent: 80,
+    quota_recommend_percent: 95,
+    quota_block_percent: 100,
+    fair_use_new_customers_only: true,
     sort_order: 0,
   });
 
@@ -65,13 +75,23 @@
       max_users: 0,
       max_domains: 0,
       max_storage_mb: 0,
+      max_stock_sku: 0,
       max_websites: 1,
       max_companies: 1,
       max_backups: 0,
       max_api_calls_day: 0,
+      currency: 'USD',
       stripe_price_id: '',
       stripe_product_id: '',
       features: '',
+      is_public: true,
+      is_highlighted: false,
+      trial_days: 14,
+      annual_discount_percent: 20,
+      quota_warning_percent: 80,
+      quota_recommend_percent: 95,
+      quota_block_percent: 100,
+      fair_use_new_customers_only: true,
       sort_order: plans.length + 1,
     };
     showModal = true;
@@ -89,13 +109,23 @@
       max_users: plan.max_users,
       max_domains: plan.max_domains ?? 0,
       max_storage_mb: plan.max_storage_mb ?? 0,
+      max_stock_sku: plan.max_stock_sku ?? 0,
       max_websites: plan.max_websites ?? 1,
       max_companies: plan.max_companies ?? 1,
       max_backups: plan.max_backups ?? 0,
       max_api_calls_day: plan.max_api_calls_day ?? 0,
+      currency: plan.currency || 'USD',
       stripe_price_id: plan.stripe_price_id || '',
       stripe_product_id: plan.stripe_product_id || '',
       features: Array.isArray(plan.features) ? plan.features.join('\n') : '',
+      is_public: plan.is_public ?? true,
+      is_highlighted: plan.is_highlighted ?? false,
+      trial_days: plan.trial_days ?? 14,
+      annual_discount_percent: plan.annual_discount_percent ?? 20,
+      quota_warning_percent: plan.quota_warning_percent ?? 80,
+      quota_recommend_percent: plan.quota_recommend_percent ?? 95,
+      quota_block_percent: plan.quota_block_percent ?? 100,
+      fair_use_new_customers_only: plan.fair_use_new_customers_only ?? true,
       sort_order: plan.sort_order,
     };
     showModal = true;
@@ -112,6 +142,16 @@
       };
 
       if (editingPlan && editingPlan.id) {
+        const priceChanged =
+          editingPlan.base_price !== form.base_price ||
+          editingPlan.price_per_user !== form.price_per_user;
+        if (priceChanged && (editingPlan.active_subscribers ?? 0) > 0) {
+          const confirmed = confirm(`¿Confirmas actualizar precios? Afecta ${editingPlan.active_subscribers} suscripciones activas.`);
+          if (!confirmed) {
+            saving = false;
+            return;
+          }
+        }
         const { name, ...updateData } = payload;
         await billingApi.updatePlan(editingPlan.id, updateData);
       } else {
@@ -238,6 +278,10 @@
               <HardDrive size={12} class="text-purple-400" />
               <span>Storage: <span class="text-text-light font-medium">{plan.max_storage_mb === 0 ? '∞' : plan.max_storage_mb + 'MB'}</span></span>
             </div>
+            <div class="flex items-center gap-1.5 text-gray-400" title="SKU con stock real ({plan.max_stock_sku === 0 ? 'ilimitado' : plan.max_stock_sku})">
+              <Package size={12} class="text-cyan-400" />
+              <span>SKU: <span class="text-text-light font-medium">{plan.max_stock_sku === 0 ? '∞' : plan.max_stock_sku}</span></span>
+            </div>
             <div class="flex items-center gap-1.5 text-gray-400" title="Websites Sajet">
               <LayoutGrid size={12} class="text-green-400" />
               <span>Websites: <span class="text-text-light font-medium">{plan.max_websites}</span></span>
@@ -288,6 +332,11 @@
           {:else}
             <div class="text-xs text-yellow-500/60 mt-2">⚠ Sin Stripe Price ID</div>
           {/if}
+
+          <div class="mt-2 text-xs text-gray-500 space-y-1">
+            <div>Trial: <span class="text-text-light">{plan.trial_days} días</span> · Descuento anual: <span class="text-text-light">{plan.annual_discount_percent}%</span></div>
+            <div>Fair use: <span class="text-text-light">{plan.quota_warning_percent}/{plan.quota_recommend_percent}/{plan.quota_block_percent}%</span> · Nuevos clientes: <span class="text-text-light">{plan.fair_use_new_customers_only ? 'Sí' : 'No'}</span></div>
+          </div>
 
           <!-- Actions -->
           <div class="flex gap-2 mt-4">
@@ -418,6 +467,21 @@
           </div>
         </div>
 
+        <div class="grid grid-cols-3 gap-4">
+          <div>
+            <label class="label" for="plan-currency">Moneda</label>
+            <input id="plan-currency" class="input" bind:value={form.currency} maxlength="3" />
+          </div>
+          <div>
+            <label class="label" for="plan-trial">Trial días</label>
+            <input id="plan-trial" type="number" min="0" class="input" bind:value={form.trial_days} />
+          </div>
+          <div>
+            <label class="label" for="plan-discount">Desc. anual %</label>
+            <input id="plan-discount" type="number" min="0" max="100" step="0.1" class="input" bind:value={form.annual_discount_percent} />
+          </div>
+        </div>
+
         <!-- Resource Quotas -->
         <div class="border border-border-dark rounded-lg p-4 space-y-3">
           <h3 class="text-sm font-semibold text-gray-400 uppercase tracking-wide">Cuotas de Recursos</h3>
@@ -429,6 +493,10 @@
             <div>
               <label class="label text-xs" for="plan-storage">Storage MB (0=∞)</label>
               <input id="plan-storage" type="number" min="0" class="input" bind:value={form.max_storage_mb} />
+            </div>
+            <div>
+              <label class="label text-xs" for="plan-sku">SKU stock (0=∞)</label>
+              <input id="plan-sku" type="number" min="0" class="input" bind:value={form.max_stock_sku} />
             </div>
             <div>
               <label class="label text-xs" for="plan-websites">Websites</label>
@@ -446,6 +514,38 @@
               <label class="label text-xs" for="plan-api">API calls/día (0=∞)</label>
               <input id="plan-api" type="number" min="0" class="input" bind:value={form.max_api_calls_day} />
             </div>
+          </div>
+        </div>
+
+        <div class="border border-border-dark rounded-lg p-4 space-y-3">
+          <h3 class="text-sm font-semibold text-gray-400 uppercase tracking-wide">Fair Use</h3>
+          <div class="grid grid-cols-3 gap-3">
+            <div>
+              <label class="label text-xs" for="plan-warning">Banner %</label>
+              <input id="plan-warning" type="number" min="1" max="100" class="input" bind:value={form.quota_warning_percent} />
+            </div>
+            <div>
+              <label class="label text-xs" for="plan-recommend">Upgrade %</label>
+              <input id="plan-recommend" type="number" min="1" max="100" class="input" bind:value={form.quota_recommend_percent} />
+            </div>
+            <div>
+              <label class="label text-xs" for="plan-block">Block %</label>
+              <input id="plan-block" type="number" min="1" max="100" class="input" bind:value={form.quota_block_percent} />
+            </div>
+          </div>
+          <div class="flex flex-wrap gap-4">
+            <label class="flex items-center gap-2 text-sm cursor-pointer">
+              <input type="checkbox" bind:checked={form.is_public} class="accent-terracotta" />
+              Público
+            </label>
+            <label class="flex items-center gap-2 text-sm cursor-pointer">
+              <input type="checkbox" bind:checked={form.is_highlighted} class="accent-terracotta" />
+              Destacado
+            </label>
+            <label class="flex items-center gap-2 text-sm cursor-pointer">
+              <input type="checkbox" bind:checked={form.fair_use_new_customers_only} class="accent-terracotta" />
+              Solo clientes nuevos
+            </label>
           </div>
         </div>
 

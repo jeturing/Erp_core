@@ -10,7 +10,7 @@ return {
 	assets: new Set(["favicon.png","favicon.svg","icons/apple-touch-icon.png","icons/icon-192.png","icons/icon-512.png","icons/icon-base.svg","vite.svg"]),
 	mimeTypes: {".png":"image/png",".svg":"image/svg+xml"},
 	_: {
-		client: {start:"_app/immutable/entry/start.grHP6dN3.js",app:"_app/immutable/entry/app.DZisWuEy.js",imports:["_app/immutable/entry/start.grHP6dN3.js","_app/immutable/chunks/NhALfKpU.js","_app/immutable/chunks/Cdb7CLZ3.js","_app/immutable/chunks/oeZQXk1L.js","_app/immutable/chunks/BUApaBEI.js","_app/immutable/chunks/BsyhDQkw.js","_app/immutable/entry/app.DZisWuEy.js","_app/immutable/chunks/PPVm8Dsz.js","_app/immutable/chunks/CXc-U5-s.js","_app/immutable/chunks/BmTRDpZN.js","_app/immutable/chunks/oeZQXk1L.js","_app/immutable/chunks/Cdb7CLZ3.js","_app/immutable/chunks/Cpj98o6Y.js","_app/immutable/chunks/BukGMgQs.js","_app/immutable/chunks/BVnmgpgR.js","_app/immutable/chunks/CMr6kB8e.js","_app/immutable/chunks/B26qZVl3.js","_app/immutable/chunks/BsyhDQkw.js","_app/immutable/chunks/B_gXe2LV.js","_app/immutable/chunks/B7sJSLtT.js","_app/immutable/chunks/BZ-0sN06.js","_app/immutable/chunks/BvAcj2BQ.js","_app/immutable/chunks/HQkmSzia.js","_app/immutable/chunks/1U3-xvSt.js"],stylesheets:[],fonts:[],uses_env_dynamic_public:false},
+		client: {start:"_app/immutable/entry/start.D486_Arv.js",app:"_app/immutable/entry/app.DfhKbOc6.js",imports:["_app/immutable/entry/start.D486_Arv.js","_app/immutable/chunks/DtRhiX5n.js","_app/immutable/chunks/Cdb7CLZ3.js","_app/immutable/chunks/oeZQXk1L.js","_app/immutable/chunks/BUApaBEI.js","_app/immutable/chunks/BsyhDQkw.js","_app/immutable/entry/app.DfhKbOc6.js","_app/immutable/chunks/PPVm8Dsz.js","_app/immutable/chunks/CXc-U5-s.js","_app/immutable/chunks/BmTRDpZN.js","_app/immutable/chunks/oeZQXk1L.js","_app/immutable/chunks/Cdb7CLZ3.js","_app/immutable/chunks/Cpj98o6Y.js","_app/immutable/chunks/BukGMgQs.js","_app/immutable/chunks/BVnmgpgR.js","_app/immutable/chunks/CMr6kB8e.js","_app/immutable/chunks/B26qZVl3.js","_app/immutable/chunks/BsyhDQkw.js","_app/immutable/chunks/B_gXe2LV.js","_app/immutable/chunks/B7sJSLtT.js","_app/immutable/chunks/BZ-0sN06.js","_app/immutable/chunks/BvAcj2BQ.js","_app/immutable/chunks/HQkmSzia.js","_app/immutable/chunks/1U3-xvSt.js"],stylesheets:[],fonts:[],uses_env_dynamic_public:false},
 		nodes: [
 			__memo(() => import('./nodes/0.js')),
 			__memo(() => import('./nodes/1.js')),
@@ -73,7 +73,8 @@ return {
 			__memo(() => import('./nodes/58.js')),
 			__memo(() => import('./nodes/59.js')),
 			__memo(() => import('./nodes/60.js')),
-			__memo(() => import('./nodes/61.js'))
+			__memo(() => import('./nodes/61.js')),
+			__memo(() => import('./nodes/62.js'))
 		],
 		remotes: {
 			
@@ -83,28 +84,28 @@ return {
 				id: "/(public)",
 				pattern: /^\/?$/,
 				params: [],
-				page: { layouts: [0,4,], errors: [1,,], leaf: 45 },
+				page: { layouts: [0,4,], errors: [1,,], leaf: 46 },
 				endpoint: null
 			},
 			{
 				id: "/(public)/about",
 				pattern: /^\/about\/?$/,
 				params: [],
-				page: { layouts: [0,4,], errors: [1,,], leaf: 46 },
+				page: { layouts: [0,4,], errors: [1,,], leaf: 47 },
 				endpoint: null
 			},
 			{
 				id: "/(portal)/accountant-portal",
 				pattern: /^\/accountant-portal\/?$/,
 				params: [],
-				page: { layouts: [0,3,], errors: [1,,], leaf: 41 },
+				page: { layouts: [0,3,], errors: [1,,], leaf: 42 },
 				endpoint: null
 			},
 			{
 				id: "/(public)/accountants",
 				pattern: /^\/accountants\/?$/,
 				params: [],
-				page: { layouts: [0,4,], errors: [1,,], leaf: 47 },
+				page: { layouts: [0,4,], errors: [1,,], leaf: 48 },
 				endpoint: null
 			},
 			{
@@ -118,7 +119,7 @@ return {
 				id: "/admin",
 				pattern: /^\/admin\/?$/,
 				params: [],
-				page: { layouts: [0,], errors: [1,], leaf: 61 },
+				page: { layouts: [0,], errors: [1,], leaf: 62 },
 				endpoint: null
 			},
 			{
@@ -188,7 +189,7 @@ return {
 				id: "/(portal)/customer-onboarding",
 				pattern: /^\/customer-onboarding\/?$/,
 				params: [],
-				page: { layouts: [0,3,], errors: [1,,], leaf: 42 },
+				page: { layouts: [0,3,], errors: [1,,], leaf: 43 },
 				endpoint: null
 			},
 			{
@@ -202,7 +203,7 @@ return {
 				id: "/(public)/data-processing",
 				pattern: /^\/data-processing\/?$/,
 				params: [],
-				page: { layouts: [0,4,], errors: [1,,], leaf: 48 },
+				page: { layouts: [0,4,], errors: [1,,], leaf: 49 },
 				endpoint: null
 			},
 			{
@@ -251,7 +252,7 @@ return {
 				id: "/(public)/login",
 				pattern: /^\/login\/?$/,
 				params: [],
-				page: { layouts: [0,4,], errors: [1,,], leaf: 49 },
+				page: { layouts: [0,4,], errors: [1,,], leaf: 50 },
 				endpoint: null
 			},
 			{
@@ -279,7 +280,7 @@ return {
 				id: "/(public)/onboarding-access",
 				pattern: /^\/onboarding-access\/?$/,
 				params: [],
-				page: { layouts: [0,4,], errors: [1,,], leaf: 50 },
+				page: { layouts: [0,4,], errors: [1,,], leaf: 51 },
 				endpoint: null
 			},
 			{
@@ -293,14 +294,14 @@ return {
 				id: "/(portal)/partner-portal",
 				pattern: /^\/partner-portal\/?$/,
 				params: [],
-				page: { layouts: [0,3,], errors: [1,,], leaf: 43 },
+				page: { layouts: [0,3,], errors: [1,,], leaf: 44 },
 				endpoint: null
 			},
 			{
 				id: "/(public)/partner-signup",
 				pattern: /^\/partner-signup\/?$/,
 				params: [],
-				page: { layouts: [0,4,], errors: [1,,], leaf: 51 },
+				page: { layouts: [0,4,], errors: [1,,], leaf: 52 },
 				endpoint: null
 			},
 			{
@@ -311,171 +312,178 @@ return {
 				endpoint: null
 			},
 			{
+				id: "/(admin)/plan-governance",
+				pattern: /^\/plan-governance\/?$/,
+				params: [],
+				page: { layouts: [0,2,], errors: [1,,], leaf: 27 },
+				endpoint: null
+			},
+			{
 				id: "/(admin)/plans",
 				pattern: /^\/plans\/?$/,
 				params: [],
-				page: { layouts: [0,2,], errors: [1,,], leaf: 27 },
+				page: { layouts: [0,2,], errors: [1,,], leaf: 28 },
 				endpoint: null
 			},
 			{
 				id: "/(public)/plt/[slug]",
 				pattern: /^\/plt\/([^/]+?)\/?$/,
 				params: [{"name":"slug","optional":false,"rest":false,"chained":false}],
-				page: { layouts: [0,4,], errors: [1,,], leaf: 52 },
+				page: { layouts: [0,4,], errors: [1,,], leaf: 53 },
 				endpoint: null
 			},
 			{
 				id: "/(portal)/portal",
 				pattern: /^\/portal\/?$/,
 				params: [],
-				page: { layouts: [0,3,], errors: [1,,], leaf: 44 },
+				page: { layouts: [0,3,], errors: [1,,], leaf: 45 },
 				endpoint: null
 			},
 			{
 				id: "/(public)/pricing",
 				pattern: /^\/pricing\/?$/,
 				params: [],
-				page: { layouts: [0,4,], errors: [1,,], leaf: 53 },
+				page: { layouts: [0,4,], errors: [1,,], leaf: 54 },
 				endpoint: null
 			},
 			{
 				id: "/(public)/privacy",
 				pattern: /^\/privacy\/?$/,
 				params: [],
-				page: { layouts: [0,4,], errors: [1,,], leaf: 54 },
+				page: { layouts: [0,4,], errors: [1,,], leaf: 55 },
 				endpoint: null
 			},
 			{
 				id: "/(admin)/quotations",
 				pattern: /^\/quotations\/?$/,
 				params: [],
-				page: { layouts: [0,2,], errors: [1,,], leaf: 28 },
+				page: { layouts: [0,2,], errors: [1,,], leaf: 29 },
 				endpoint: null
 			},
 			{
 				id: "/(admin)/reconciliation",
 				pattern: /^\/reconciliation\/?$/,
 				params: [],
-				page: { layouts: [0,2,], errors: [1,,], leaf: 29 },
+				page: { layouts: [0,2,], errors: [1,,], leaf: 30 },
 				endpoint: null
 			},
 			{
 				id: "/(public)/recover-account",
 				pattern: /^\/recover-account\/?$/,
 				params: [],
-				page: { layouts: [0,4,], errors: [1,,], leaf: 55 },
+				page: { layouts: [0,4,], errors: [1,,], leaf: 56 },
 				endpoint: null
 			},
 			{
 				id: "/(admin)/reports",
 				pattern: /^\/reports\/?$/,
 				params: [],
-				page: { layouts: [0,2,], errors: [1,,], leaf: 30 },
+				page: { layouts: [0,2,], errors: [1,,], leaf: 31 },
 				endpoint: null
 			},
 			{
 				id: "/(admin)/roles",
 				pattern: /^\/roles\/?$/,
 				params: [],
-				page: { layouts: [0,2,], errors: [1,,], leaf: 31 },
+				page: { layouts: [0,2,], errors: [1,,], leaf: 32 },
 				endpoint: null
 			},
 			{
 				id: "/(admin)/seats",
 				pattern: /^\/seats\/?$/,
 				params: [],
-				page: { layouts: [0,2,], errors: [1,,], leaf: 32 },
+				page: { layouts: [0,2,], errors: [1,,], leaf: 33 },
 				endpoint: null
 			},
 			{
 				id: "/(public)/security",
 				pattern: /^\/security\/?$/,
 				params: [],
-				page: { layouts: [0,4,], errors: [1,,], leaf: 56 },
+				page: { layouts: [0,4,], errors: [1,,], leaf: 57 },
 				endpoint: null
 			},
 			{
 				id: "/(public)/servicios",
 				pattern: /^\/servicios\/?$/,
 				params: [],
-				page: { layouts: [0,4,], errors: [1,,], leaf: 57 },
+				page: { layouts: [0,4,], errors: [1,,], leaf: 58 },
 				endpoint: null
 			},
 			{
 				id: "/(admin)/session-monitoring",
 				pattern: /^\/session-monitoring\/?$/,
 				params: [],
-				page: { layouts: [0,2,], errors: [1,,], leaf: 33 },
+				page: { layouts: [0,2,], errors: [1,,], leaf: 34 },
 				endpoint: null
 			},
 			{
 				id: "/(admin)/settings",
 				pattern: /^\/settings\/?$/,
 				params: [],
-				page: { layouts: [0,2,], errors: [1,,], leaf: 34 },
+				page: { layouts: [0,2,], errors: [1,,], leaf: 35 },
 				endpoint: null
 			},
 			{
 				id: "/(admin)/settlements",
 				pattern: /^\/settlements\/?$/,
 				params: [],
-				page: { layouts: [0,2,], errors: [1,,], leaf: 35 },
+				page: { layouts: [0,2,], errors: [1,,], leaf: 36 },
 				endpoint: null
 			},
 			{
 				id: "/(public)/signup",
 				pattern: /^\/signup\/?$/,
 				params: [],
-				page: { layouts: [0,4,], errors: [1,,], leaf: 58 },
+				page: { layouts: [0,4,], errors: [1,,], leaf: 59 },
 				endpoint: null
 			},
 			{
 				id: "/(public)/sla",
 				pattern: /^\/sla\/?$/,
 				params: [],
-				page: { layouts: [0,4,], errors: [1,,], leaf: 59 },
+				page: { layouts: [0,4,], errors: [1,,], leaf: 60 },
 				endpoint: null
 			},
 			{
 				id: "/(admin)/tenants",
 				pattern: /^\/tenants\/?$/,
 				params: [],
-				page: { layouts: [0,2,], errors: [1,,], leaf: 36 },
+				page: { layouts: [0,2,], errors: [1,,], leaf: 37 },
 				endpoint: null
 			},
 			{
 				id: "/(public)/terms",
 				pattern: /^\/terms\/?$/,
 				params: [],
-				page: { layouts: [0,4,], errors: [1,,], leaf: 60 },
+				page: { layouts: [0,4,], errors: [1,,], leaf: 61 },
 				endpoint: null
 			},
 			{
 				id: "/(admin)/testimonials",
 				pattern: /^\/testimonials\/?$/,
 				params: [],
-				page: { layouts: [0,2,], errors: [1,,], leaf: 37 },
+				page: { layouts: [0,2,], errors: [1,,], leaf: 38 },
 				endpoint: null
 			},
 			{
 				id: "/(admin)/translations",
 				pattern: /^\/translations\/?$/,
 				params: [],
-				page: { layouts: [0,2,], errors: [1,,], leaf: 38 },
+				page: { layouts: [0,2,], errors: [1,,], leaf: 39 },
 				endpoint: null
 			},
 			{
 				id: "/(admin)/tunnels",
 				pattern: /^\/tunnels\/?$/,
 				params: [],
-				page: { layouts: [0,2,], errors: [1,,], leaf: 39 },
+				page: { layouts: [0,2,], errors: [1,,], leaf: 40 },
 				endpoint: null
 			},
 			{
 				id: "/(admin)/workorders",
 				pattern: /^\/workorders\/?$/,
 				params: [],
-				page: { layouts: [0,2,], errors: [1,,], leaf: 40 },
+				page: { layouts: [0,2,], errors: [1,,], leaf: 41 },
 				endpoint: null
 			}
 		],

@@ -23,7 +23,7 @@ from sqlalchemy.orm import Session
 
 from ..models.database import (
     Customer, Subscription, SubscriptionStatus,
-    Plan, CustomDomain, TenantDeployment,
+    Plan, CustomDomain, TenantDeployment, PartnerPricingOverride,
 )
 
 logger = logging.getLogger("quota_service")
@@ -36,6 +36,7 @@ QUOTA_FIELDS = {
     "websites":   "max_websites",
     "companies":  "max_companies",
     "storage_mb": "max_storage_mb",
+    "stock_sku":  "max_stock_sku",
     "backups":    "max_backups",
     "api_calls":  "max_api_calls_day",
 }
@@ -60,12 +61,14 @@ class QuotaService:
 
         plan, plan_name = self._get_active_plan(customer_id)
         usage = self._get_current_usage(customer_id)
+        limits = self._get_effective_limits(customer, plan, plan_name)
 
         quotas = {}
         for resource, field in QUOTA_FIELDS.items():
-            limit = getattr(plan, field, 0) if plan else 0
+            limit = limits.get(resource, getattr(plan, field, 0) if plan else 0)
             used = usage.get(resource, 0)
             unlimited = self._is_unlimited(resource, limit)
+            status = self._quota_status(plan, used, limit, unlimited)
 
             quotas[resource] = {
                 "limit": limit,
@@ -75,6 +78,7 @@ class QuotaService:
                 "unlimited": unlimited,
                 "can_add": unlimited or used < limit,
                 "exceeded": not unlimited and used > limit,
+                "status": status,
             }
 
         return {
@@ -83,6 +87,7 @@ class QuotaService:
             "company_name": customer.company_name,
             "plan_name": plan.display_name if plan else plan_name,
             "plan_key": plan_name,
+            "fair_use_enabled": bool(getattr(customer, "fair_use_enabled", False)),
             "quotas": quotas,
         }
 
@@ -147,6 +152,7 @@ class QuotaService:
         for c in customers:
             plan, plan_name = self._get_active_plan(c.id)
             usage = self._get_current_usage(c.id)
+            limits = self._get_effective_limits(c, plan, plan_name)
 
             summary = {
                 "customer_id": c.id,
@@ -154,11 +160,12 @@ class QuotaService:
                 "subdomain": c.subdomain,
                 "plan_name": plan.display_name if plan else plan_name,
                 "plan_key": plan_name,
+                "fair_use_enabled": bool(getattr(c, "fair_use_enabled", False)),
                 "resources": {},
             }
 
             for resource, field in QUOTA_FIELDS.items():
-                limit = getattr(plan, field, 0) if plan else 0
+                limit = limits.get(resource, getattr(plan, field, 0) if plan else 0)
                 used = usage.get(resource, 0)
                 unlimited = self._is_unlimited(resource, limit)
                 summary["resources"][resource] = {
@@ -166,6 +173,7 @@ class QuotaService:
                     "limit": limit,
                     "unlimited": unlimited,
                     "exceeded": not unlimited and used > limit,
+                    "status": self._quota_status(plan, used, limit, unlimited),
                 }
 
             result.append(summary)
@@ -198,6 +206,7 @@ class QuotaService:
     def _get_current_usage(self, customer_id: int) -> Dict[str, int]:
         """Calcula el uso actual de todos los recursos del cliente."""
         usage = {}
+        customer = self.db.query(Customer).filter(Customer.id == customer_id).first()
 
         # Dominios custom
         usage["domains"] = self.db.query(CustomDomain).filter(
@@ -210,6 +219,7 @@ class QuotaService:
             Subscription.status == SubscriptionStatus.active,
         ).first()
         usage["users"] = sub.user_count if sub else 1
+        usage["stock_sku"] = max(0, int(getattr(customer, "stock_sku_count", 0) or 0))
 
         # Websites, companies, storage — requieren consulta a Odoo
         # Por ahora usamos valores por defecto; se pueden enriquecer con
@@ -232,6 +242,50 @@ class QuotaService:
         usage["api_calls"] = 0  # TODO: integrar con rate limiter
 
         return usage
+
+    def _get_effective_limits(self, customer: Customer, plan: Optional[Plan], plan_name: str) -> Dict[str, int]:
+        limits = {
+            resource: getattr(plan, field, 0) if plan else 0
+            for resource, field in QUOTA_FIELDS.items()
+        }
+        if not customer:
+            return limits
+
+        partner_id = getattr(customer, "partner_id", None)
+        if not partner_id or not plan_name:
+            return limits
+
+        override = self.db.query(PartnerPricingOverride).filter(
+            PartnerPricingOverride.partner_id == partner_id,
+            PartnerPricingOverride.plan_name == plan_name,
+            PartnerPricingOverride.is_active == True,
+        ).first()
+        if not override:
+            return limits
+
+        if override.max_users_override is not None:
+            limits["users"] = int(override.max_users_override)
+        if override.max_storage_mb_override is not None:
+            limits["storage_mb"] = int(override.max_storage_mb_override)
+        if override.max_stock_sku_override is not None:
+            limits["stock_sku"] = int(override.max_stock_sku_override)
+        return limits
+
+    @staticmethod
+    def _quota_status(plan: Optional[Plan], used: int, limit: int, unlimited: bool) -> str:
+        if unlimited or limit <= 0:
+            return "ok"
+        percentage = (used / limit) * 100 if limit else 0
+        warning_pct = int(getattr(plan, "quota_warning_percent", 80) or 80)
+        recommend_pct = int(getattr(plan, "quota_recommend_percent", 95) or 95)
+        block_pct = int(getattr(plan, "quota_block_percent", 100) or 100)
+        if percentage >= block_pct:
+            return "exceeded"
+        if percentage >= recommend_pct:
+            return "critical"
+        if percentage >= warning_pct:
+            return "warning"
+        return "ok"
 
     def _get_odoo_usage(self, tenant_db: str) -> Dict[str, int]:
         """Consulta uso real desde la BD Odoo del tenant."""

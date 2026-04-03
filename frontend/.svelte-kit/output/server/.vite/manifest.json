@@ -96,6 +96,7 @@
       "_rocket.js",
       "_scale.js",
       "_git-compare-arrows.js",
+      "_shield-check.js",
       "_boxes.js",
       "_percent.js",
       "_palette.js",
@@ -109,7 +110,6 @@
       "_zap.js",
       "_file-text.js",
       "_key.js",
-      "_shield-check.js",
       "_external-link.js",
       "_chevron-down.js",
       "_log-out.js"
@@ -351,6 +351,14 @@
   "_handshake.js": {
     "file": "chunks/handshake.js",
     "name": "handshake",
+    "imports": [
+      "_index2.js",
+      "_Icon.js"
+    ]
+  },
+  "_hard-drive.js": {
+    "file": "chunks/hard-drive.js",
+    "name": "hard-drive",
     "imports": [
       "_index2.js",
       "_Icon.js"
@@ -910,6 +918,7 @@
       "_zap.js",
       "_target.js",
       "_server.js",
+      "_hard-drive.js",
       "_git-compare-arrows.js",
       "_activity.js",
       "_circle-check.js",
@@ -1097,6 +1106,24 @@
       "_toast.js",
       "_handshake.js",
       "_plus.js",
+      "_search.js"
+    ]
+  },
+  "src/routes/(admin)/plan-governance/+page.svelte": {
+    "file": "entries/pages/(admin)/plan-governance/_page.svelte.js",
+    "name": "entries/pages/(admin)/plan-governance/_page.svelte",
+    "src": "src/routes/(admin)/plan-governance/+page.svelte",
+    "isEntry": true,
+    "imports": [
+      "_index2.js",
+      "_client.js",
+      "_darkMode.js",
+      "_toast.js",
+      "_shield-check.js",
+      "_refresh-cw.js",
+      "_users.js",
+      "_hard-drive.js",
+      "_package.js",
       "_search.js"
     ]
   },
@@ -1628,7 +1655,7 @@
       "_darkMode.js"
     ],
     "css": [
-      "_app/immutable/assets/_layout.HEXaV1Ni.css"
+      "_app/immutable/assets/_layout.Bo-_NkfF.css"
     ]
   },
   "src/routes/+layout.ts": {

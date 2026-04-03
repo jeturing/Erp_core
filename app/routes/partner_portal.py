@@ -741,6 +741,7 @@ async def create_partner_client(
             company_name=payload.company_name,
             subdomain=subdomain,
             user_count=payload.user_count,
+            fair_use_enabled=True,
             partner_id=partner.id,
         )
         db.add(customer)

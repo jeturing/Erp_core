@@ -266,6 +266,7 @@ async def create_checkout_session(payload: CheckoutRequest, background_tasks: Ba
             company_name=payload.company_name,
             subdomain=payload.subdomain,
             user_count=user_count,
+            fair_use_enabled=True,
             partner_id=partner.id if partner else None,
             is_accountant=payload.is_accountant,
             accountant_firm_name=payload.company_name if payload.is_accountant else None,

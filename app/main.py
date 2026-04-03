@@ -38,6 +38,7 @@ from .routes import payments  # Nuevo: Pagos y dispersión a proveedores
 from .routes import mercury_webhooks  # Webhooks Mercury para conciliación
 from .routes import dispersion  # Dispersión Mercury con feature flag y auth 4-ojos
 from .routes import plan_migration  # Migración automática de planes por consumo
+from .routes import plan_governance  # Gobernanza de planes y fair use
 from .routes import storage_alerts  # Alertas de almacenamiento con notificaciones
 from .routes import monitoring_dashboard  # Dashboard de monitoreo completo
 from .routes import admin_control_panel  # 🔧 Panel de control administrativo (SMTP, templates, alertas)
@@ -250,6 +251,7 @@ app.include_router(payments.router)              # Pagos y dispersión a proveed
 app.include_router(mercury_webhooks.router)      # Webhooks Mercury para conciliación
 app.include_router(dispersion.router)            # Dispersión Mercury con feature flag y auth 4-ojos
 app.include_router(plan_migration.router)        # Migración automática de planes por consumo
+app.include_router(plan_governance.router)       # Gobernanza de planes / fair use
 app.include_router(storage_alerts.router)        # Alertas de almacenamiento con notificaciones
 app.include_router(monitoring_dashboard.router)  # Dashboard de monitoreo completo
 app.include_router(admin_control_panel.router)   # 🔧 Panel de control: SMTP, templates, alertas

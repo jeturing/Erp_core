@@ -34,13 +34,7 @@
   let linkingCustomerId: number | null = null;
   let unlinkingCustomerId: number | null = null;
 
-  async function toggleClients(partnerId: number) {
-    if (expandedClientsId === partnerId) { expandedClientsId = null; return; }
-    expandedClientsId = partnerId;
-    expandedPricingId = null; // cerrar pricing si estaba abierto
-    showLinkSearch = false;
-    linkSearch = '';
-    availableCustomers = [];
+  async function loadPartnerClients(partnerId: number) {
     clientsLoading = true;
     try {
       const res = await billingApi.getCustomers(partnerId);
@@ -51,6 +45,16 @@
     } finally {
       clientsLoading = false;
     }
+  }
+
+  async function toggleClients(partnerId: number) {
+    if (expandedClientsId === partnerId) { expandedClientsId = null; return; }
+    expandedClientsId = partnerId;
+    expandedPricingId = null; // cerrar pricing si estaba abierto
+    showLinkSearch = false;
+    linkSearch = '';
+    availableCustomers = [];
+    await loadPartnerClients(partnerId);
   }
 
   async function searchAvailableCustomers() {
@@ -77,9 +81,7 @@
       showLinkSearch = false;
       linkSearch = '';
       availableCustomers = [];
-      const pid = expandedClientsId;
-      await toggleClients(pid);
-      expandedClientsId = pid;
+      await loadPartnerClients(expandedClientsId);
     } catch (e: any) {
       toasts.error(e.message || 'Error vinculando cliente');
     } finally {
@@ -94,9 +96,7 @@
     try {
       const res = await partnersApi.unlinkCustomer(expandedClientsId, customerId);
       toasts.success(res.message || 'Cliente desvinculado');
-      const pid = expandedClientsId;
-      await toggleClients(pid);
-      expandedClientsId = pid;
+      await loadPartnerClients(expandedClientsId);
     } catch (e: any) {
       toasts.error(e.message || 'Error desvinculando');
     } finally {
@@ -109,11 +109,15 @@
   let pricingOverrides: PartnerPricingOverrideItem[] = [];
   let pricingLoading = false;
   let showPricingForm = false;
+  let editingPricingId: number | null = null;
   let pricingForm = {
     plan_name: 'basic',
     base_price_override: null as number | null,
     price_per_user_override: null as number | null,
     included_users_override: null as number | null,
+    max_users_override: null as number | null,
+    max_storage_mb_override: null as number | null,
+    max_stock_sku_override: null as number | null,
     setup_fee: 0,
     customization_hourly_rate: null as number | null,
     support_level: 'helpdesk_only',
@@ -121,23 +125,11 @@
     ecf_monthly_cost: null as number | null,
     label: '',
     notes: '',
+    valid_from: '',
+    valid_until: '',
   };
 
-  function resetPricingForm() {
-    pricingForm = {
-      plan_name: 'basic', base_price_override: null, price_per_user_override: null,
-      included_users_override: null, setup_fee: 0, customization_hourly_rate: null,
-      support_level: 'helpdesk_only', ecf_passthrough: false, ecf_monthly_cost: null,
-      label: '', notes: '',
-    };
-  }
-
-  async function togglePricing(partnerId: number) {
-    if (expandedPricingId === partnerId) {
-      expandedPricingId = null;
-      return;
-    }
-    expandedPricingId = partnerId;
+  async function loadPricingOverrides(partnerId: number) {
     pricingLoading = true;
     try {
       const res = await partnersApi.getPricingOverrides(partnerId);
@@ -150,18 +142,70 @@
     }
   }
 
+  function resetPricingForm() {
+    pricingForm = {
+      plan_name: 'basic', base_price_override: null, price_per_user_override: null,
+      included_users_override: null, max_users_override: null, max_storage_mb_override: null,
+      max_stock_sku_override: null, setup_fee: 0, customization_hourly_rate: null,
+      support_level: 'helpdesk_only', ecf_passthrough: false, ecf_monthly_cost: null,
+      label: '', notes: '', valid_from: '', valid_until: '',
+    };
+    editingPricingId = null;
+  }
+
+  async function togglePricing(partnerId: number) {
+    if (expandedPricingId === partnerId) {
+      expandedPricingId = null;
+      return;
+    }
+    expandedPricingId = partnerId;
+    await loadPricingOverrides(partnerId);
+  }
+
   async function handleCreatePricing() {
     if (!expandedPricingId) return;
     try {
-      await partnersApi.createPricingOverride(expandedPricingId, pricingForm as any);
-      toasts.success('Tarifa creada');
+      const payload = {
+        ...pricingForm,
+        valid_from: pricingForm.valid_from || null,
+        valid_until: pricingForm.valid_until || null,
+      };
+      if (editingPricingId) {
+        await partnersApi.updatePricingOverride(expandedPricingId, editingPricingId, payload as any);
+        toasts.success('Tarifa actualizada');
+      } else {
+        await partnersApi.createPricingOverride(expandedPricingId, payload as any);
+        toasts.success('Tarifa creada');
+      }
       showPricingForm = false;
       resetPricingForm();
-      await togglePricing(expandedPricingId);
-      expandedPricingId = expandedPricingId; // keep open
+      await loadPricingOverrides(expandedPricingId);
     } catch (e: any) {
-      toasts.error(e.message || 'Error creando tarifa');
+      toasts.error(e.message || `Error ${editingPricingId ? 'actualizando' : 'creando'} tarifa`);
     }
+  }
+
+  function editPricing(po: PartnerPricingOverrideItem) {
+    editingPricingId = po.id;
+    pricingForm = {
+      plan_name: po.plan_name,
+      base_price_override: po.base_price_override,
+      price_per_user_override: po.price_per_user_override,
+      included_users_override: po.included_users_override,
+      max_users_override: po.max_users_override,
+      max_storage_mb_override: po.max_storage_mb_override,
+      max_stock_sku_override: po.max_stock_sku_override,
+      setup_fee: po.setup_fee ?? 0,
+      customization_hourly_rate: po.customization_hourly_rate,
+      support_level: po.support_level || 'helpdesk_only',
+      ecf_passthrough: po.ecf_passthrough,
+      ecf_monthly_cost: po.ecf_monthly_cost,
+      label: po.label || '',
+      notes: po.notes || '',
+      valid_from: po.valid_from ? po.valid_from.slice(0, 16) : '',
+      valid_until: po.valid_until ? po.valid_until.slice(0, 16) : '',
+    };
+    showPricingForm = true;
   }
 
   async function handleDeletePricing(overrideId: number) {
@@ -169,9 +213,7 @@
     try {
       await partnersApi.deletePricingOverride(expandedPricingId, overrideId);
       toasts.success('Tarifa eliminada');
-      const pid = expandedPricingId;
-      await togglePricing(pid);
-      expandedPricingId = pid;
+      await loadPricingOverrides(expandedPricingId);
     } catch (e: any) {
       toasts.error(e.message);
     }
@@ -411,39 +453,39 @@
       <h2 class="section-heading mb-4">{editingId ? 'Editar' : 'Nuevo'} Partner</h2>
       <form on:submit|preventDefault={handleSubmit} class="grid grid-cols-1 md:grid-cols-2 gap-4">
         <div>
-          <label class="label">Empresa *</label>
+          <div class="label">Empresa *</div>
           <input type="text" bind:value={form.company_name} required class="input w-full" />
         </div>
         <div>
-          <label class="label">Razón Social</label>
+          <div class="label">Razón Social</div>
           <input type="text" bind:value={form.legal_name} class="input w-full" />
         </div>
         <div>
-          <label class="label">Tax ID / EIN</label>
+          <div class="label">Tax ID / EIN</div>
           <input type="text" bind:value={form.tax_id} class="input w-full" />
         </div>
         <div>
-          <label class="label">Contacto</label>
+          <div class="label">Contacto</div>
           <input type="text" bind:value={form.contact_name} class="input w-full" />
         </div>
         <div>
-          <label class="label">Email *</label>
+          <div class="label">Email *</div>
           <input type="email" bind:value={form.contact_email} required class="input w-full" />
         </div>
         <div>
-          <label class="label">Teléfono</label>
+          <div class="label">Teléfono</div>
           <input type="text" bind:value={form.phone} class="input w-full" />
         </div>
         <div>
-          <label class="label">País</label>
+          <div class="label">País</div>
           <input type="text" bind:value={form.country} class="input w-full" />
         </div>
         <div>
-          <label class="label">Ref. Contrato</label>
+          <div class="label">Ref. Contrato</div>
           <input type="text" bind:value={form.contract_reference} class="input w-full" />
         </div>
         <div>
-          <label class="label">Escenario de cobro</label>
+          <div class="label">Escenario de cobro</div>
           <select bind:value={form.billing_scenario} class="input w-full">
             <option value="jeturing_collects">Jeturing cobra al cliente</option>
             <option value="partner_collects">Partner cobra al cliente</option>
@@ -451,16 +493,16 @@
         </div>
         <div class="grid grid-cols-2 gap-3">
           <div>
-            <label class="label">Comisión %</label>
+            <div class="label">Comisión %</div>
             <input type="number" bind:value={form.commission_rate} min="0" max="100" step="0.5" class="input w-full" />
           </div>
           <div>
-            <label class="label">Cap margen %</label>
+            <div class="label">Cap margen %</div>
             <input type="number" bind:value={form.margin_cap} min="0" max="100" step="0.5" class="input w-full" />
           </div>
         </div>
         <div class="md:col-span-2">
-          <label class="label">Notas</label>
+          <div class="label">Notas</div>
           <textarea bind:value={form.notes} rows="2" class="input w-full"></textarea>
         </div>
         <div class="md:col-span-2 flex gap-3">
@@ -564,42 +606,54 @@
                         <DollarSign size={14} /> Tarifario — {p.company_name}
                       </h3>
                       <button class="btn-accent btn-sm" on:click={() => { resetPricingForm(); showPricingForm = !showPricingForm; }}>
-                        <Plus size={14} /> Agregar Tarifa
+                        <Plus size={14} /> {showPricingForm ? 'Cerrar' : 'Agregar Tarifa'}
                       </button>
                     </div>
 
                     {#if showPricingForm}
                       <form on:submit|preventDefault={handleCreatePricing} class="card p-4 grid grid-cols-2 md:grid-cols-4 gap-3 border border-border-dark">
                         <div>
-                          <label class="label">Plan *</label>
-                          <select bind:value={pricingForm.plan_name} class="input w-full">
+                          <div class="label">Plan *</div>
+                          <select bind:value={pricingForm.plan_name} class="input w-full" disabled={editingPricingId !== null}>
                             <option value="basic">Basic</option>
                             <option value="pro">Pro</option>
                             <option value="enterprise">Enterprise</option>
                           </select>
                         </div>
                         <div>
-                          <label class="label">Precio Base USD</label>
+                          <div class="label">Precio Base USD</div>
                           <input type="number" bind:value={pricingForm.base_price_override} step="0.01" min="0" class="input w-full" placeholder="Override..." />
                         </div>
                         <div>
-                          <label class="label">$/Usuario</label>
+                          <div class="label">$/Usuario</div>
                           <input type="number" bind:value={pricingForm.price_per_user_override} step="0.01" min="0" class="input w-full" placeholder="Override..." />
                         </div>
                         <div>
-                          <label class="label">Usuarios incl.</label>
+                          <div class="label">Usuarios incl.</div>
                           <input type="number" bind:value={pricingForm.included_users_override} min="0" class="input w-full" placeholder="Override..." />
                         </div>
                         <div>
-                          <label class="label">Setup Fee</label>
+                          <div class="label">Máx. users</div>
+                          <input type="number" bind:value={pricingForm.max_users_override} min="0" class="input w-full" placeholder="Override..." />
+                        </div>
+                        <div>
+                          <div class="label">Storage MB</div>
+                          <input type="number" bind:value={pricingForm.max_storage_mb_override} min="0" class="input w-full" placeholder="Override..." />
+                        </div>
+                        <div>
+                          <div class="label">SKU stock</div>
+                          <input type="number" bind:value={pricingForm.max_stock_sku_override} min="0" class="input w-full" placeholder="Override..." />
+                        </div>
+                        <div>
+                          <div class="label">Setup Fee</div>
                           <input type="number" bind:value={pricingForm.setup_fee} step="0.01" min="0" class="input w-full" />
                         </div>
                         <div>
-                          <label class="label">$/Hora Custom.</label>
+                          <div class="label">$/Hora Custom.</div>
                           <input type="number" bind:value={pricingForm.customization_hourly_rate} step="0.01" min="0" class="input w-full" placeholder="Ej: 80" />
                         </div>
                         <div>
-                          <label class="label">Soporte</label>
+                          <div class="label">Soporte</div>
                           <select bind:value={pricingForm.support_level} class="input w-full">
                             <option value="helpdesk_only">Solo Helpdesk</option>
                             <option value="priority">Prioritario</option>
@@ -607,8 +661,16 @@
                           </select>
                         </div>
                         <div>
-                          <label class="label">Etiqueta</label>
+                          <div class="label">Etiqueta</div>
                           <input type="text" bind:value={pricingForm.label} class="input w-full" placeholder="Ej: Plan Partner SMB" />
+                        </div>
+                        <div>
+                          <div class="label">Válido desde</div>
+                          <input type="datetime-local" bind:value={pricingForm.valid_from} class="input w-full" />
+                        </div>
+                        <div>
+                          <div class="label">Válido hasta</div>
+                          <input type="datetime-local" bind:value={pricingForm.valid_until} class="input w-full" />
                         </div>
                         <div class="flex items-end gap-2">
                           <label class="flex items-center gap-2 text-sm cursor-pointer">
@@ -616,9 +678,13 @@
                             e-CF pass-through
                           </label>
                         </div>
+                        <div class="md:col-span-4">
+                          <div class="label">Notas</div>
+                          <textarea bind:value={pricingForm.notes} class="input w-full min-h-[72px]" placeholder="Notas del override, acuerdos comerciales, vigencia..."></textarea>
+                        </div>
                         <div class="col-span-2 md:col-span-3 flex gap-2 items-end">
-                          <button type="submit" class="btn-accent btn-sm">Guardar</button>
-                          <button type="button" class="btn-secondary btn-sm" on:click={() => showPricingForm = false}>Cancelar</button>
+                          <button type="submit" class="btn-accent btn-sm">{editingPricingId ? 'Actualizar' : 'Guardar'}</button>
+                          <button type="button" class="btn-secondary btn-sm" on:click={() => { showPricingForm = false; resetPricingForm(); }}>Cancelar</button>
                         </div>
                       </form>
                     {/if}
@@ -636,6 +702,9 @@
                             <th>Base Global</th>
                             <th>$/User Partner</th>
                             <th>$/User Global</th>
+                            <th>Users</th>
+                            <th>Storage</th>
+                            <th>SKU</th>
                             <th>Setup</th>
                             <th>$/Hr</th>
                             <th>Soporte</th>
@@ -650,6 +719,9 @@
                               <td class="font-mono text-gray-500">${po.global_base_price ?? '—'}</td>
                               <td class="font-mono text-emerald-400">${po.price_per_user_override ?? '—'}</td>
                               <td class="font-mono text-gray-500">${po.global_price_per_user ?? '—'}</td>
+                              <td class="font-mono text-text-light">{po.max_users_override ?? po.global_max_users ?? '—'}</td>
+                              <td class="font-mono text-text-light">{po.max_storage_mb_override ?? po.global_max_storage_mb ?? '—'}</td>
+                              <td class="font-mono text-text-light">{po.max_stock_sku_override ?? po.global_max_stock_sku ?? '—'}</td>
                               <td class="font-mono">${po.setup_fee ?? 0}</td>
                               <td class="font-mono">{po.customization_hourly_rate ? `$${po.customization_hourly_rate}` : '—'}</td>
                               <td>
@@ -658,7 +730,10 @@
                                 </span>
                               </td>
                               <td>
-                                <button class="btn-sm btn-danger" title="Eliminar" on:click={() => handleDeletePricing(po.id)}><Trash2 size={12} /></button>
+                                <div class="flex gap-1">
+                                  <button class="btn-sm btn-secondary" title="Editar" on:click={() => editPricing(po)}><Pencil size={12} /></button>
+                                  <button class="btn-sm btn-danger" title="Eliminar" on:click={() => handleDeletePricing(po.id)}><Trash2 size={12} /></button>
+                                </div>
                               </td>
                             </tr>
                           {/each}
@@ -839,13 +914,13 @@
 
         <div class="space-y-4">
           <div>
-            <label class="label">Email de acceso al portal</label>
+            <div class="label">Email de acceso al portal</div>
             <input type="email" bind:value={credentialsEmail} class="input w-full" placeholder="socio@empresa.com" />
             <p class="text-[10px] text-gray-500 mt-1">Se usará como usuario de login. Por defecto es el email de contacto.</p>
           </div>
 
           <div>
-            <label class="label">Contraseña temporal</label>
+            <div class="label">Contraseña temporal</div>
             <div class="flex gap-2">
               <div class="relative flex-1">
                 {#if showTempPassword}

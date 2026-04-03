@@ -332,6 +332,9 @@ class PricingOverrideCreate(BaseModel):
     base_price_override: Optional[float] = None
     price_per_user_override: Optional[float] = None
     included_users_override: Optional[int] = None
+    max_users_override: Optional[int] = None
+    max_storage_mb_override: Optional[int] = None
+    max_stock_sku_override: Optional[int] = None
     setup_fee: float = 0
     customization_hourly_rate: Optional[float] = None
     support_level: str = "helpdesk_only"
@@ -339,12 +342,17 @@ class PricingOverrideCreate(BaseModel):
     ecf_monthly_cost: Optional[float] = None
     label: Optional[str] = None
     notes: Optional[str] = None
+    valid_from: Optional[datetime] = None
+    valid_until: Optional[datetime] = None
 
 
 class PricingOverrideUpdate(BaseModel):
     base_price_override: Optional[float] = None
     price_per_user_override: Optional[float] = None
     included_users_override: Optional[int] = None
+    max_users_override: Optional[int] = None
+    max_storage_mb_override: Optional[int] = None
+    max_stock_sku_override: Optional[int] = None
     setup_fee: Optional[float] = None
     customization_hourly_rate: Optional[float] = None
     support_level: Optional[str] = None
@@ -352,6 +360,8 @@ class PricingOverrideUpdate(BaseModel):
     ecf_monthly_cost: Optional[float] = None
     label: Optional[str] = None
     notes: Optional[str] = None
+    valid_from: Optional[datetime] = None
+    valid_until: Optional[datetime] = None
     is_active: Optional[bool] = None
 
 
@@ -363,6 +373,9 @@ def _pricing_override_to_dict(po: PartnerPricingOverride) -> dict:
         "base_price_override": po.base_price_override,
         "price_per_user_override": po.price_per_user_override,
         "included_users_override": po.included_users_override,
+        "max_users_override": po.max_users_override,
+        "max_storage_mb_override": po.max_storage_mb_override,
+        "max_stock_sku_override": po.max_stock_sku_override,
         "setup_fee": po.setup_fee,
         "customization_hourly_rate": po.customization_hourly_rate,
         "support_level": po.support_level.value if po.support_level else None,
@@ -376,6 +389,30 @@ def _pricing_override_to_dict(po: PartnerPricingOverride) -> dict:
         "created_at": po.created_at.isoformat() if po.created_at else None,
         "updated_at": po.updated_at.isoformat() if po.updated_at else None,
     }
+
+
+def _validate_partner_override_quotas(db, plan_name: str, payload) -> None:
+    plan = db.query(Plan).filter(Plan.name == plan_name).first()
+    if not plan:
+        raise HTTPException(status_code=400, detail=f"Plan '{plan_name}' no existe")
+
+    storage_override = getattr(payload, "max_storage_mb_override", None)
+    if storage_override is not None and plan.max_storage_mb not in (None, 0):
+        storage_limit = int(plan.max_storage_mb) * 2
+        if storage_override > storage_limit:
+            raise HTTPException(
+                status_code=400,
+                detail=f"max_storage_mb_override excede el techo permitido ({storage_limit} MB)",
+            )
+
+    stock_override = getattr(payload, "max_stock_sku_override", None)
+    if stock_override is not None and plan.max_stock_sku not in (None, 0):
+        stock_limit = int(plan.max_stock_sku) * 2
+        if stock_override > stock_limit:
+            raise HTTPException(
+                status_code=400,
+                detail=f"max_stock_sku_override excede el techo permitido ({stock_limit} SKU)",
+            )
 
 
 @router.get("/{partner_id}/pricing")
@@ -405,6 +442,9 @@ async def list_pricing_overrides(
                 item["global_base_price"] = plan.base_price
                 item["global_price_per_user"] = plan.price_per_user
                 item["global_included_users"] = plan.included_users
+                item["global_max_users"] = plan.max_users
+                item["global_max_storage_mb"] = plan.max_storage_mb
+                item["global_max_stock_sku"] = plan.max_stock_sku
 
         return {"items": items, "total": len(items), "partner_id": partner_id}
     finally:
@@ -439,6 +479,8 @@ async def create_pricing_override(
         if payload.plan_name not in valid_plans:
             raise HTTPException(status_code=400, detail=f"Plan inválido. Opciones: {valid_plans}")
 
+        _validate_partner_override_quotas(db, payload.plan_name, payload)
+
         try:
             sl = SupportLevel(payload.support_level)
         except ValueError:
@@ -450,6 +492,9 @@ async def create_pricing_override(
             base_price_override=payload.base_price_override,
             price_per_user_override=payload.price_per_user_override,
             included_users_override=payload.included_users_override,
+            max_users_override=payload.max_users_override,
+            max_storage_mb_override=payload.max_storage_mb_override,
+            max_stock_sku_override=payload.max_stock_sku_override,
             setup_fee=payload.setup_fee,
             customization_hourly_rate=payload.customization_hourly_rate,
             support_level=sl,
@@ -457,6 +502,8 @@ async def create_pricing_override(
             ecf_monthly_cost=payload.ecf_monthly_cost,
             label=payload.label,
             notes=payload.notes,
+            valid_from=payload.valid_from,
+            valid_until=payload.valid_until,
         )
         db.add(override)
         db.commit()
@@ -485,6 +532,8 @@ async def update_pricing_override(
         ).first()
         if not override:
             raise HTTPException(status_code=404, detail="Pricing override no encontrado")
+
+        _validate_partner_override_quotas(db, override.plan_name, payload)
 
         changes = []
         for field, value in payload.dict(exclude_unset=True).items():
