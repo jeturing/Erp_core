@@ -152,18 +152,11 @@ logger = logging.getLogger(__name__)
 
 _SUBDOMAIN_RE = re.compile(r'^[a-z0-9][a-z0-9_]{1,28}[a-z0-9]$')
 
-
-def _generate_bootstrap_password(length: int = 20) -> str:
-    """Genera una contraseña robusta (sin comillas simples para evitar problemas SQL legacy)."""
-    alphabet = string.ascii_letters + string.digits + "@#$%!-_"
-    return "".join(secrets.choice(alphabet) for _ in range(max(12, length)))
-
-
-def _build_tenant_admin_credentials(subdomain: str, base_domain: str = "sajet.us") -> tuple[str, str]:
-    """Credenciales bootstrap del admin del tenant: <subdomain>@<base_domain> + password aleatoria."""
-    login = f"{subdomain}@{base_domain}"
-    password = _generate_bootstrap_password()
-    return login, password
+# Credenciales bootstrap — módulo compartido con onboarding.py
+from ..services.tenant_credentials import (
+    generate_bootstrap_password as _generate_bootstrap_password,
+    build_tenant_admin_credentials as _build_tenant_admin_credentials,
+)
 
 
 def _safe_actor_from_request(request: Request) -> tuple[Optional[int], Optional[str], Optional[str], Optional[str], Optional[str]]:

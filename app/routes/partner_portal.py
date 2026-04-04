@@ -21,6 +21,7 @@ from ..models.database import (
 )
 from ..services.stripe_connect import (
     create_connect_account,
+    create_connect_account_auto,
     create_onboarding_link,
     create_login_link,
     get_account_status,
@@ -331,8 +332,8 @@ async def onboarding_start_stripe(
                 raise HTTPException(status_code=400, detail=link_result["error"])
             return {"onboarding_url": link_result["url"], "account_id": partner.stripe_account_id}
 
-        # Crear cuenta nueva
-        result = await create_connect_account(
+        # Crear cuenta nueva (auto-detecta v1 Express o v2 para países LATAM)
+        result = await create_connect_account_auto(
             partner_email=partner.portal_email or partner.contact_email,
             partner_company=partner.company_name,
             partner_country=partner.country or "US",

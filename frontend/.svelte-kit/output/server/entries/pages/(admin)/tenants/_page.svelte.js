@@ -1,10 +1,48 @@
 import "clsx";
-import { d as escape_html, c as attr, e as ensure_array_like, f as derived } from "../../../../chunks/index2.js";
+import { h as sanitize_props, i as spread_props, j as slot, d as escape_html, c as attr, e as ensure_array_like, f as derived } from "../../../../chunks/index2.js";
 import "../../../../chunks/client.js";
 import "../../../../chunks/toast.js";
 import "../../../../chunks/darkMode.js";
+import { I as Icon } from "../../../../chunks/Icon.js";
 import { P as Plus } from "../../../../chunks/plus.js";
 import { S as Search } from "../../../../chunks/search.js";
+function Ghost($$renderer, $$props) {
+  const $$sanitized_props = sanitize_props($$props);
+  const iconNode = [
+    ["path", { "d": "M9 10h.01" }],
+    ["path", { "d": "M15 10h.01" }],
+    [
+      "path",
+      {
+        "d": "M12 2a8 8 0 0 0-8 8v12l3-3 2.5 2.5L12 19l2.5 2.5L17 19l3 3V10a8 8 0 0 0-8-8z"
+      }
+    ]
+  ];
+  Icon($$renderer, spread_props([
+    { name: "ghost" },
+    $$sanitized_props,
+    {
+      /**
+       * @component @name Ghost
+       * @description Lucide SVG icon component, renders SVG Element with children.
+       *
+       * @preview ![img](data:image/svg+xml;base64,PHN2ZyAgeG1sbnM9Imh0dHA6Ly93d3cudzMub3JnLzIwMDAvc3ZnIgogIHdpZHRoPSIyNCIKICBoZWlnaHQ9IjI0IgogIHZpZXdCb3g9IjAgMCAyNCAyNCIKICBmaWxsPSJub25lIgogIHN0cm9rZT0iIzAwMCIgc3R5bGU9ImJhY2tncm91bmQtY29sb3I6ICNmZmY7IGJvcmRlci1yYWRpdXM6IDJweCIKICBzdHJva2Utd2lkdGg9IjIiCiAgc3Ryb2tlLWxpbmVjYXA9InJvdW5kIgogIHN0cm9rZS1saW5lam9pbj0icm91bmQiCj4KICA8cGF0aCBkPSJNOSAxMGguMDEiIC8+CiAgPHBhdGggZD0iTTE1IDEwaC4wMSIgLz4KICA8cGF0aCBkPSJNMTIgMmE4IDggMCAwIDAtOCA4djEybDMtMyAyLjUgMi41TDEyIDE5bDIuNSAyLjVMMTcgMTlsMyAzVjEwYTggOCAwIDAgMC04LTh6IiAvPgo8L3N2Zz4K) - https://lucide.dev/icons/ghost
+       * @see https://lucide.dev/guide/packages/lucide-svelte - Documentation
+       *
+       * @param {Object} props - Lucide icons props and any valid SVG attribute
+       * @returns {FunctionalComponent} Svelte component
+       *
+       */
+      iconNode,
+      children: ($$renderer2) => {
+        $$renderer2.push(`<!--[-->`);
+        slot($$renderer2, $$props, "default", {});
+        $$renderer2.push(`<!--]-->`);
+      },
+      $$slots: { default: true }
+    }
+  ]));
+}
 function Tenants($$renderer, $$props) {
   $$renderer.component(($$renderer2) => {
     let tenants = [];
@@ -21,9 +59,11 @@ function Tenants($$renderer, $$props) {
     let uniquePartnerNames = derived(() => [
       ...new Set(tenants.map((t) => t.partner_name).filter(Boolean))
     ]);
-    $$renderer2.push(`<div class="space-y-6"><div class="flex items-center justify-between"><div><h1 class="page-title">TENANTS</h1> <p class="page-subtitle">Gestión de clientes y sus instancias</p></div> <button class="btn-accent px-4 py-2 flex items-center gap-2">`);
+    $$renderer2.push(`<div class="space-y-6"><div class="flex items-center justify-between"><div><h1 class="page-title">TENANTS</h1> <p class="page-subtitle">Gestión de clientes y sus instancias</p></div> <div class="flex items-center gap-3"><button class="btn-secondary px-4 py-2 flex items-center gap-2 text-amber-400 border-amber-500/30 hover:bg-amber-900/20">`);
+    Ghost($$renderer2, { size: 14 });
+    $$renderer2.push(`<!----> FANTASMAS</button> <button class="btn-accent px-4 py-2 flex items-center gap-2">`);
     Plus($$renderer2, { size: 14 });
-    $$renderer2.push(`<!----> NUEVO TENANT</button></div> `);
+    $$renderer2.push(`<!----> NUEVO TENANT</button></div></div> `);
     {
       $$renderer2.push("<!--[!-->");
     }
@@ -90,6 +130,10 @@ function Tenants($$renderer, $$props) {
       $$renderer2.push(`<div class="p-8 text-center text-gray-500 text-sm">Cargando tenants...</div>`);
     }
     $$renderer2.push(`<!--]--></div> `);
+    {
+      $$renderer2.push("<!--[!-->");
+    }
+    $$renderer2.push(`<!--]--> `);
     {
       $$renderer2.push("<!--[!-->");
     }

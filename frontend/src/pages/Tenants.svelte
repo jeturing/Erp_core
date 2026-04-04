@@ -3,12 +3,12 @@
   import { tenantsApi } from '../lib/api';
   import { partnersApi } from '../lib/api/partners';
   import { blueprintsApi } from '../lib/api/blueprints';
-  import type { TenantAccountItem } from '../lib/api/tenants';
+  import type { TenantAccountItem, PhantomTenant } from '../lib/api/tenants';
   import type { BlueprintPackage } from '../lib/types';
   import { toasts } from '../lib/stores/toast';
   import { currentUser } from '../lib/stores';
   import { formatDate } from '../lib/utils/formatters';
-  import { Plus, RefreshCw, Search } from 'lucide-svelte';
+  import { Plus, RefreshCw, Search, Ghost, Trash2 } from 'lucide-svelte';
   import type { Tenant } from '../lib/types';
   import type { PartnerItem } from '../lib/types';
 
@@ -59,6 +59,14 @@
   let showSuspendModal = $state(false);
   let suspendTenantTarget = $state<Tenant | null>(null);
   let suspendLoading = $state(false);
+
+  // Phantom cleanup
+  let showPhantomModal = $state(false);
+  let phantoms = $state<PhantomTenant[]>([]);
+  let phantomLoading = $state(false);
+  let phantomPurging = $state<string | null>(null);
+  let phantomPurgeAllLoading = $state(false);
+  let phantomScanned = $state(0);
 
   async function loadTenants() {
     loading = true;
@@ -390,6 +398,59 @@
     return `${subdomain}:${server}:${tenant.id}:${index}`;
   }
 
+  // ─── Phantom Tenants ───
+  async function openPhantomModal() {
+    showPhantomModal = true;
+    phantomLoading = true;
+    phantoms = [];
+    phantomScanned = 0;
+    try {
+      const res = await tenantsApi.detectPhantoms();
+      phantoms = res.phantoms ?? [];
+      phantomScanned = res.scanned ?? 0;
+    } catch (e: any) {
+      toasts.error(e?.message ?? 'Error detectando fantasmas');
+    } finally {
+      phantomLoading = false;
+    }
+  }
+
+  function closePhantomModal() {
+    if (phantomPurgeAllLoading) return;
+    showPhantomModal = false;
+    phantoms = [];
+  }
+
+  async function handlePurgePhantom(subdomain: string) {
+    phantomPurging = subdomain;
+    try {
+      await tenantsApi.purgePhantom(subdomain, true);
+      phantoms = phantoms.filter(p => p.subdomain !== subdomain);
+      toasts.success(`Fantasma "${subdomain}" eliminado`);
+      await loadTenants();
+    } catch (e: any) {
+      toasts.error(e?.message ?? `Error purgando ${subdomain}`);
+    } finally {
+      phantomPurging = null;
+    }
+  }
+
+  async function handlePurgeAllPhantoms() {
+    if (phantoms.length === 0) return;
+    phantomPurgeAllLoading = true;
+    try {
+      const res = await tenantsApi.purgeAllPhantoms(true);
+      toasts.success(`${res.purged} fantasmas eliminados` + (res.failed > 0 ? `, ${res.failed} fallaron` : ''));
+      phantoms = [];
+      closePhantomModal();
+      await loadTenants();
+    } catch (e: any) {
+      toasts.error(e?.message ?? 'Error en purga masiva');
+    } finally {
+      phantomPurgeAllLoading = false;
+    }
+  }
+
   let filteredTenants = $derived(
     tenants.filter(t => {
       // Text search
@@ -427,10 +488,16 @@
       <h1 class="page-title">TENANTS</h1>
       <p class="page-subtitle">Gestión de clientes y sus instancias</p>
     </div>
-    <button class="btn-accent px-4 py-2 flex items-center gap-2" onclick={() => showForm = !showForm}>
-      <Plus size={14} />
-      NUEVO TENANT
-    </button>
+    <div class="flex items-center gap-3">
+      <button class="btn-secondary px-4 py-2 flex items-center gap-2 text-amber-400 border-amber-500/30 hover:bg-amber-900/20" onclick={openPhantomModal}>
+        <Ghost size={14} />
+        FANTASMAS
+      </button>
+      <button class="btn-accent px-4 py-2 flex items-center gap-2" onclick={() => showForm = !showForm}>
+        <Plus size={14} />
+        NUEVO TENANT
+      </button>
+    </div>
   </div>
 
   <!-- Inline Add Form -->
@@ -976,6 +1043,90 @@
             {:else}
               REACTIVAR
             {/if}
+          </button>
+        </div>
+      </div>
+    </div>
+  {/if}
+
+  <!-- Phantom Cleanup Modal -->
+  {#if showPhantomModal}
+    <div class="fixed inset-0 z-50 flex items-center justify-center p-4" role="dialog" aria-modal="true" aria-label="Limpiar tenants fantasma">
+      <button
+        type="button"
+        class="fixed inset-0 bg-black/70"
+        aria-label="Cerrar modal"
+        onclick={closePhantomModal}
+      ></button>
+
+      <div class="relative z-10 w-full max-w-2xl card border border-amber-700/40 max-h-[80vh] flex flex-col">
+        <div class="mb-4 flex items-center justify-between">
+          <div>
+            <h3 class="text-lg font-semibold text-text-primary flex items-center gap-2">
+              <Ghost size={18} class="text-amber-400" />
+              Tenants Fantasma
+            </h3>
+            <p class="text-sm text-gray-400 mt-1">
+              Registros de Customer/Subscription sin BD Odoo real asociada.
+              {#if phantomScanned > 0}
+                <span class="text-gray-500">({phantomScanned} tenants escaneados)</span>
+              {/if}
+            </p>
+          </div>
+          {#if phantoms.length > 0}
+            <button
+              class="btn-danger btn-sm flex items-center gap-1 disabled:opacity-60"
+              disabled={phantomPurgeAllLoading}
+              onclick={handlePurgeAllPhantoms}
+            >
+              <Trash2 size={12} />
+              {phantomPurgeAllLoading ? 'PURGANDO...' : `PURGAR TODOS (${phantoms.length})`}
+            </button>
+          {/if}
+        </div>
+
+        <div class="overflow-y-auto flex-1">
+          {#if phantomLoading}
+            <div class="p-8 text-center text-gray-500 text-sm">Escaneando tenants...</div>
+          {:else if phantoms.length === 0}
+            <div class="p-8 text-center text-emerald-400 text-sm">
+              ✅ No se encontraron tenants fantasma. Todo limpio.
+            </div>
+          {:else}
+            <div class="space-y-2">
+              {#each phantoms as phantom (phantom.subdomain)}
+                <div class="flex items-center justify-between bg-bg-page rounded-lg px-4 py-3 border border-border-light">
+                  <div class="flex-1 min-w-0">
+                    <div class="flex items-center gap-2">
+                      <span class="font-mono text-sm text-text-primary">{phantom.subdomain}.sajet.us</span>
+                      <span class="badge-warning text-[9px]">FANTASMA</span>
+                    </div>
+                    <div class="text-xs text-gray-500 mt-1">
+                      {phantom.company_name || 'Sin nombre'} · {phantom.reason}
+                    </div>
+                    <div class="text-[10px] text-gray-600 mt-0.5">
+                      Customer#{phantom.customer_id ?? '—'}
+                      · Sub#{phantom.subscription_id ?? '—'}
+                      · Deploy: {phantom.has_deployment ? 'sí' : 'no'}
+                    </div>
+                  </div>
+                  <button
+                    class="btn-danger btn-sm ml-3 flex items-center gap-1 disabled:opacity-60"
+                    disabled={phantomPurging === phantom.subdomain}
+                    onclick={() => handlePurgePhantom(phantom.subdomain)}
+                  >
+                    <Trash2 size={11} />
+                    {phantomPurging === phantom.subdomain ? '...' : 'ELIMINAR'}
+                  </button>
+                </div>
+              {/each}
+            </div>
+          {/if}
+        </div>
+
+        <div class="flex justify-end pt-4 mt-4 border-t border-border-light">
+          <button class="btn-secondary btn-sm" onclick={closePhantomModal} disabled={phantomPurgeAllLoading}>
+            CERRAR
           </button>
         </div>
       </div>

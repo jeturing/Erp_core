@@ -7,11 +7,13 @@ from typing import Optional
 from ..models.database import Partner, Customer, SessionLocal
 from ..services.stripe_connect import (
     create_connect_account,
+    create_connect_account_auto,
     create_onboarding_link,
     create_login_link,
     get_account_status,
     create_transfer,
     get_partner_balance,
+    requires_api_v2,
 )
 from .roles import _require_admin, _extract_token, verify_token_with_role
 import logging
@@ -54,7 +56,7 @@ async def create_partner_connect_account(
                 detail=f"Partner ya tiene cuenta Connect: {partner.stripe_account_id}",
             )
 
-        result = await create_connect_account(
+        result = await create_connect_account_auto(
             partner_email=partner.contact_email,
             partner_company=partner.company_name,
             partner_country=payload.country or "US",

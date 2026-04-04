@@ -14,11 +14,23 @@ from ..models.database import (
     Customer, Subscription, StripeEvent, SubscriptionStatus, SessionLocal,
     BillingMode, BillingScenario, InvoiceIssuer, CollectorType, PayerType,
     Partner, PartnerStatus, Plan, Lead, LeadStatus, Invoice, InvoiceStatus,
+    AuditEventRecord, TenantDeployment,
 )
 from ..services.tunnel_lifecycle import handle_stripe_subscription_event
-from ..services.odoo_provisioner import provision_tenant
+from ..services.odoo_database_manager import (
+    create_tenant_from_template,
+    provision_tenant as provision_tenant_standard,
+    COUNTRY_LOCALIZATION,
+)
+from ..services.deployment_writer import ensure_tenant_deployment
+from ..services.nginx_domain_configurator import provision_sajet_subdomain
+from ..services.tenant_credentials import build_tenant_admin_credentials
 from ..services.spa_shell import render_spa_shell
-from ..services.email_service import send_payment_failed_email, send_subscription_cancelled_email
+from ..services.email_service import (
+    send_payment_failed_email,
+    send_subscription_cancelled_email,
+    send_tenant_credentials,
+)
 from ..services.stripe_connect import compute_application_fee_percent, should_use_on_behalf_of
 from ..config import get_runtime_setting
 import logging
@@ -155,11 +167,193 @@ class CheckoutRequest(BaseModel):
     company_name: str
     subdomain: str
     plan: str
-    user_count: int = 1                  # Cantidad de usuarios (asientos)
-    billing_period: str = "monthly"      # "monthly" | "annual"
-    partner_code: Optional[str] = None      # Si viene de un partner
-    custom_domain: Optional[str] = None      # Épica 8: dominio temprano
-    is_accountant: bool = False              # True = registro como contador/CPA
+    user_count: int = 1                          # Cantidad de usuarios (asientos)
+    billing_period: str = "monthly"              # "monthly" | "annual"
+    partner_code: Optional[str] = None           # Si viene de un partner
+    custom_domain: Optional[str] = None          # Épica 8: dominio temprano
+    is_accountant: bool = False                  # True = registro como contador/CPA
+    country_code: Optional[str] = None           # Código ISO país (DO, US, MX, etc.)
+    blueprint_package_name: Optional[str] = None # Blueprint de módulos predefinido
+
+
+# ─────────────────────────────────────────────────────────────────
+#  Helper: Auditoría de provisioning (sin Request object)
+# ─────────────────────────────────────────────────────────────────
+def _log_provisioning_audit(
+    action: str,
+    *,
+    subdomain: str,
+    detail: str = "",
+    success: bool = True,
+    subscription_id: int | None = None,
+):
+    """Registra un evento de auditoría desde un background task (sin Request)."""
+    try:
+        db = SessionLocal()
+        record = AuditEventRecord(
+            actor_username="stripe_webhook",
+            actor_ip="background",
+            action=action,
+            target_type="tenant",
+            target_id=subdomain,
+            detail=detail[:2000] if detail else "",
+            success=success,
+        )
+        db.add(record)
+        db.commit()
+    except Exception as exc:
+        logger.warning("Audit log failed for %s/%s: %s", action, subdomain, exc)
+    finally:
+        try:
+            db.close()
+        except Exception:
+            pass
+
+
+# ─────────────────────────────────────────────────────────────────
+#  Motor maduro de provisioning desde Stripe checkout (background)
+# ─────────────────────────────────────────────────────────────────
+CT105_IP = "10.10.10.100"
+
+async def _provision_tenant_from_checkout(
+    *,
+    subdomain: str,
+    company_name: str,
+    admin_email: str,
+    subscription_id: int,
+    customer_id: int,
+    plan_name: str = "enterprise",
+    partner_id: int | None = None,
+    country_code: str | None = None,
+    blueprint_package_name: str | None = None,
+):
+    """
+    Provisiona un tenant Odoo completo tras un pago exitoso en Stripe.
+    Usa el motor maduro (SQL fast-path → fallback HTTP) en lugar del legacy shell.
+    """
+    import asyncio
+    log_prefix = f"[provision:{subdomain}]"
+
+    # 1 ── Credenciales
+    admin_login, admin_password = build_tenant_admin_credentials(subdomain)
+    logger.info("%s Generando credenciales admin_login=%s", log_prefix, admin_login)
+
+    # 2 ── Crear base de datos Odoo (fast-path SQL → fallback HTTP)
+    db_name = subdomain  # Convención: subdomain == db name
+    loc = COUNTRY_LOCALIZATION.get((country_code or "US").upper(), COUNTRY_LOCALIZATION["US"])
+
+    try:
+        # Fast path: SQL CREATE DATABASE WITH TEMPLATE
+        ok = create_tenant_from_template(
+            new_db=db_name,
+            admin_login=admin_login,
+            admin_password=admin_password,
+            company_name=company_name,
+            country_code=(country_code or "US").upper(),
+        )
+        if ok:
+            logger.info("%s DB creada vía SQL fast-path ✅", log_prefix)
+        else:
+            raise RuntimeError("create_tenant_from_template retornó False")
+    except Exception as e:
+        logger.warning("%s SQL fast-path falló: %s — fallback HTTP", log_prefix, e)
+        try:
+            result = provision_tenant_standard(
+                db_name=db_name,
+                admin_login=admin_login,
+                admin_password=admin_password,
+                admin_email=admin_email,
+                company_name=company_name,
+                country_code=(country_code or "US").upper(),
+                phone=loc.get("phone", "+1"),
+                lang=loc.get("lang", "en_US"),
+            )
+            if not result.get("success"):
+                raise RuntimeError(result.get("error", "provision_tenant_standard failed"))
+            logger.info("%s DB creada vía HTTP fallback ✅", log_prefix)
+        except Exception as e2:
+            logger.error("%s ❌ Provisioning DB falló: %s", log_prefix, e2)
+            _log_provisioning_audit(
+                "tenant.provision.failed",
+                subdomain=subdomain,
+                detail=str(e2),
+                success=False,
+                subscription_id=subscription_id,
+            )
+            return
+
+    # 3 ── Registrar deployment
+    try:
+        db_session = SessionLocal()
+        ensure_tenant_deployment(
+            subdomain=subdomain,
+            subscription_id=subscription_id,
+            customer_id=customer_id,
+            server_ip=CT105_IP,
+            plan_name=plan_name,
+            db=db_session,
+        )
+        db_session.commit()
+        logger.info("%s Deployment registrado ✅", log_prefix)
+    except Exception as e:
+        logger.warning("%s Deployment write falló: %s", log_prefix, e)
+    finally:
+        try:
+            db_session.close()
+        except Exception:
+            pass
+
+    # 4 ── Configurar nginx (subdomain → nodo Odoo)
+    try:
+        nginx_result = provision_sajet_subdomain(subdomain, node_ip=CT105_IP)
+        logger.info("%s Nginx configurado: %s ✅", log_prefix, nginx_result)
+    except Exception as e:
+        logger.warning("%s Nginx config falló (no bloquea): %s", log_prefix, e)
+
+    # 5 ── Actualizar subscription status
+    try:
+        db_session = SessionLocal()
+        sub = db_session.query(Subscription).filter_by(id=subscription_id).first()
+        if sub:
+            sub.status = SubscriptionStatus.ACTIVE
+            sub.odoo_db_name = db_name
+            db_session.commit()
+        logger.info("%s Subscription %s → ACTIVE ✅", log_prefix, subscription_id)
+    except Exception as e:
+        logger.warning("%s Subscription update falló: %s", log_prefix, e)
+    finally:
+        try:
+            db_session.close()
+        except Exception:
+            pass
+
+    # 6 ── Auditoría
+    _log_provisioning_audit(
+        "tenant.provisioned",
+        subdomain=subdomain,
+        detail=f"plan={plan_name} partner_id={partner_id} country={country_code}",
+        success=True,
+        subscription_id=subscription_id,
+    )
+
+    # 7 ── Enviar credenciales por email
+    try:
+        send_tenant_credentials(
+            to_email=admin_email,
+            company_name=company_name,
+            subdomain=subdomain,
+            admin_login=admin_login,
+            admin_password=admin_password,
+            plan_name=plan_name,
+        )
+        logger.info("%s Email de credenciales enviado a %s ✅", log_prefix, admin_email)
+    except Exception as e:
+        logger.warning("%s Email de credenciales falló: %s", log_prefix, e)
+
+    logger.info(
+        "%s 🎉 Provisioning completo — %s.sajet.us listo para %s",
+        log_prefix, subdomain, admin_email,
+    )
 
 
 @router.get("/", response_class=HTMLResponse)
@@ -324,6 +518,8 @@ async def create_checkout_session(payload: CheckoutRequest, background_tasks: Ba
                 "plan": payload.plan,
                 "user_count": str(user_count),
                 "is_accountant": str(payload.is_accountant),
+                "country_code": payload.country_code or "",
+                "blueprint_package_name": payload.blueprint_package_name or "",
             },
         }
 
@@ -414,6 +610,8 @@ async def stripe_webhook(request: Request, background_tasks: BackgroundTasks):
 
             partner_id = int(metadata.get("partner_id")) if metadata.get("partner_id") else None
             plan_name = metadata.get("plan", "enterprise")
+            country_code = metadata.get("country_code") or None
+            blueprint_package_name = metadata.get("blueprint_package_name") or None
 
             # Obtener customer
             customer = db.query(Customer).filter_by(id=customer_id).first()
@@ -461,13 +659,18 @@ async def stripe_webhook(request: Request, background_tasks: BackgroundTasks):
                             lead.converted_at = datetime.utcnow()
                         db.commit()
 
-                # Provisionar tenant en background con subscription_id
+                # ═══ Provisionar tenant con motor maduro (background) ═══
                 background_tasks.add_task(
-                    provision_tenant,
-                    customer.subdomain,
-                    customer.email,
-                    customer.company_name,
-                    subscription.id  # Pasar ID para actualizar estado
+                    _provision_tenant_from_checkout,
+                    subdomain=customer.subdomain,
+                    company_name=customer.company_name,
+                    admin_email=customer.email,
+                    subscription_id=subscription.id,
+                    customer_id=customer.id,
+                    plan_name=plan_name,
+                    partner_id=partner_id,
+                    country_code=country_code,
+                    blueprint_package_name=blueprint_package_name,
                 )
 
         elif event["type"] == "account.updated":

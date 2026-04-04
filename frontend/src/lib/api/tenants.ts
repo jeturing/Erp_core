@@ -95,6 +95,57 @@ export interface UpdateTenantAccountCredentialsRequest {
   server?: string;
 }
 
+// ─── Phantom Tenants ───
+export interface PhantomTenant {
+  subdomain: string;
+  company_name: string | null;
+  customer_id: number | null;
+  subscription_id: number | null;
+  has_deployment: boolean;
+  reason: string;
+}
+
+export interface PhantomDetectResponse {
+  success: boolean;
+  phantoms: PhantomTenant[];
+  total: number;
+  scanned: number;
+}
+
+export interface PhantomPurgeResponse {
+  success: boolean;
+  message: string;
+  deleted: {
+    customer: boolean;
+    subscription: boolean;
+    deployment: boolean;
+    dns_cleaned: boolean;
+  };
+}
+
+export interface PhantomPurgeAllResponse {
+  success: boolean;
+  message: string;
+  purged: number;
+  failed: number;
+  details: Array<{ subdomain: string; status: string; error?: string }>;
+}
+
+export interface ReservedSubdomain {
+  id: number;
+  subdomain: string;
+  reason: string | null;
+  category: string;
+  is_active: boolean;
+  created_at: string;
+}
+
+export interface ReservedSubdomainListResponse {
+  success: boolean;
+  items: ReservedSubdomain[];
+  total: number;
+}
+
 export const tenantsApi = {
   async list(): Promise<TenantListResponse> {
     return api.get<TenantListResponse>('/api/tenants');
@@ -191,6 +242,33 @@ export const tenantsApi = {
       `/api/tenants/${encodeURIComponent(subdomain)}/modules/install`,
       payload,
     );
+  },
+
+  // ─── Phantom Tenants ───
+  async detectPhantoms(): Promise<PhantomDetectResponse> {
+    return api.get<PhantomDetectResponse>('/api/tenants/phantoms/detect');
+  },
+
+  async purgePhantom(subdomain: string, cleanDns = true): Promise<PhantomPurgeResponse> {
+    const qs = cleanDns ? '?clean_dns=true' : '';
+    return api.delete<PhantomPurgeResponse>(`/api/tenants/${encodeURIComponent(subdomain)}/purge-phantom${qs}`);
+  },
+
+  async purgeAllPhantoms(cleanDns = true): Promise<PhantomPurgeAllResponse> {
+    return api.post<PhantomPurgeAllResponse>('/api/tenants/phantoms/purge-all', { clean_dns: cleanDns });
+  },
+
+  // ─── Reserved Subdomains ───
+  async listReservedSubdomains(): Promise<ReservedSubdomainListResponse> {
+    return api.get<ReservedSubdomainListResponse>('/api/tenants/reserved-subdomains');
+  },
+
+  async addReservedSubdomain(subdomain: string, reason?: string, category?: string): Promise<{ success: boolean; item: ReservedSubdomain }> {
+    return api.post('/api/tenants/reserved-subdomains', { subdomain, reason, category });
+  },
+
+  async removeReservedSubdomain(subdomain: string): Promise<{ success: boolean; message: string }> {
+    return api.delete(`/api/tenants/reserved-subdomains/${encodeURIComponent(subdomain)}`);
   },
 };
 

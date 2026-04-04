@@ -366,3 +366,187 @@ async def get_partner_balance(account_id: str) -> Dict[str, Any]:
     except stripe.error.StripeError as e:
         logger.error(f"Error consultando balance: {e}")
         return {"success": False, "error": str(e)}
+
+
+# ═══════════════════════════════════════════════════════════════════
+#  Stripe API v2 — Cuentas Connect para países no self-serve (DO, etc.)
+#  Docs: https://docs.stripe.com/connect/design-an-integration
+#  Endpoint: POST /v2/core/accounts
+#  Requiere Stripe-Version: 2025-01-27.acacia
+# ═══════════════════════════════════════════════════════════════════
+
+import requests as _requests
+
+STRIPE_API_V2_BASE = "https://api.stripe.com/v2"
+STRIPE_V2_VERSION = "2025-01-27.acacia"
+
+# Países que requieren API v2 (no soportados por Express v1 self-serve)
+API_V2_REQUIRED_COUNTRIES = {"DO", "PR", "VE", "CO", "PE", "EC", "BO", "PY", "UY", "CL", "AR", "PA", "CR", "GT", "HN", "NI", "SV"}
+
+
+def requires_api_v2(country_code: Optional[str]) -> bool:
+    """Determina si el país requiere la API v2 de Connect para crear cuentas."""
+    code = normalize_country_code(country_code, "US")
+    return code not in SELF_SERVE_CROSS_BORDER_COUNTRIES
+
+
+def _stripe_request_v2(
+    endpoint: str,
+    payload: Dict[str, Any],
+    method: str = "POST",
+) -> Dict[str, Any]:
+    """
+    Ejecuta una solicitud directa al API v2 de Stripe.
+    
+    v2 usa JSON nativo (no form-encoded) y requiere header Stripe-Version.
+    """
+    api_key = _configure_stripe()
+    url = f"{STRIPE_API_V2_BASE}/{endpoint.lstrip('/')}"
+    headers = {
+        "Authorization": f"Bearer {api_key}",
+        "Content-Type": "application/json",
+        "Stripe-Version": STRIPE_V2_VERSION,
+    }
+
+    response = _requests.request(
+        method=method.upper(),
+        url=url,
+        headers=headers,
+        json=payload,
+        timeout=30,
+    )
+
+    if response.status_code >= 400:
+        error_body = response.json() if response.content else {}
+        error_msg = error_body.get("error", {}).get("message", response.text[:500])
+        logger.error(
+            "Stripe API v2 %s %s → %s: %s",
+            method, endpoint, response.status_code, error_msg,
+        )
+        return {"success": False, "error": error_msg, "status_code": response.status_code}
+
+    return {"success": True, "data": response.json()}
+
+
+def _get_connect_capabilities_v2(country_code: str) -> Dict[str, Any]:
+    """
+    Retorna las capabilities solicitadas según el país (API v2 format).
+    
+    Para países cross-border no self-serve (DO, LATAM) solo se pueden
+    solicitar `transfers` con service_agreement = "recipient".
+    """
+    code = normalize_country_code(country_code, "US")
+    if code in SELF_SERVE_CROSS_BORDER_COUNTRIES:
+        caps: Dict[str, Any] = {"transfers": {"requested": True}}
+        if should_request_card_payments(code):
+            caps["card_payments"] = {"requested": True}
+        return caps
+    # Recipient accounts: solo transfers
+    return {"transfers": {"requested": True}}
+
+
+async def create_connected_account_v2(
+    partner_email: str,
+    partner_company: str,
+    partner_country: str = "DO",
+) -> Dict[str, Any]:
+    """
+    Crea una cuenta Connect usando la API v2 de Stripe.
+    
+    Esto es necesario para países fuera de SELF_SERVE_CROSS_BORDER_COUNTRIES
+    (e.g., República Dominicana, Colombia, etc.).
+    
+    La cuenta se crea con:
+    - controller.stripe_dashboard.type = "express" (misma UX que Express v1)
+    - tos_acceptance.service_agreement = "recipient" (para cross-border)
+    - capabilities: solo "transfers" (card_payments no disponible para recipient)
+    
+    Returns:
+        {"success": True, "account_id": "acct_XXX"} o {"success": False, "error": "..."}
+    """
+    normalized_country = normalize_country_code(partner_country, "DO")
+    is_recipient = normalized_country not in SELF_SERVE_CROSS_BORDER_COUNTRIES
+
+    payload: Dict[str, Any] = {
+        "contact_email": partner_email,
+        "country": normalized_country,
+        "include": ["identity.country_specs"],
+        "controller": {
+            "stripe_dashboard": {"type": "express"},
+            "fees": {"payer": "application"},
+            "losses": {"payments": "application"},
+        },
+        "capabilities": _get_connect_capabilities_v2(normalized_country),
+        "business_details": {
+            "company": {
+                "name": partner_company,
+            },
+        },
+        "metadata": {
+            "platform": "sajet",
+            "partner_email": partner_email,
+            "api_version": "v2",
+            "settlement_mode": "cross_border_recipient" if is_recipient else "cross_border",
+        },
+    }
+
+    if is_recipient:
+        payload["tos_acceptance"] = {"service_agreement": "recipient"}
+
+    logger.info(
+        "🌐 Stripe API v2: creando cuenta Connect para %s (país=%s, recipient=%s)",
+        partner_email, normalized_country, is_recipient,
+    )
+
+    result = _stripe_request_v2("core/accounts", payload)
+
+    if not result.get("success"):
+        return {"success": False, "error": result.get("error", "Unknown v2 error")}
+
+    account_data = result["data"]
+    account_id = account_data.get("id", "")
+
+    logger.info("✅ Stripe Connect v2 account creada: %s para %s", account_id, partner_email)
+
+    return {
+        "success": True,
+        "account_id": account_id,
+        "api_version": "v2",
+        "service_agreement": "recipient" if is_recipient else "full",
+        "country": normalized_country,
+    }
+
+
+async def create_connect_account_auto(
+    partner_email: str,
+    partner_company: str,
+    partner_country: str = "US",
+) -> Dict[str, Any]:
+    """
+    Auto-detecta y crea cuenta Connect usando v1 (Express) o v2 según el país.
+    
+    - Países self-serve (US, EEA, GB, CA, CH) → API v1 (Express nativo)
+    - Países no self-serve (DO, LATAM, otros) → API v2 (recipient)
+    
+    Returns:
+        {"success": True, "account_id": "acct_XXX", "api_version": "v1"|"v2"}
+    """
+    normalized_country = normalize_country_code(partner_country, "US")
+
+    if requires_api_v2(normalized_country):
+        logger.info("País %s requiere API v2 → usando create_connected_account_v2", normalized_country)
+        return await create_connected_account_v2(
+            partner_email=partner_email,
+            partner_company=partner_company,
+            partner_country=normalized_country,
+        )
+    else:
+        logger.info("País %s soportado por v1 → usando create_connect_account (Express)", normalized_country)
+        result = await create_connect_account(
+            partner_email=partner_email,
+            partner_company=partner_company,
+            partner_country=normalized_country,
+        )
+        if result.get("success"):
+            result["api_version"] = "v1"
+        return result

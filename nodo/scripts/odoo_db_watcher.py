@@ -1,10 +1,17 @@
 #!/usr/bin/env python3
 """
-Odoo Database Watcher
-Monitorea PostgreSQL y detecta nuevas bases de datos
-Crea automáticamente registros DNS en Cloudflare para cada BD nueva
+Odoo Database Watcher — MODO AUDITOR (read-only)
+Monitorea PostgreSQL y detecta nuevas bases de datos.
+Ya NO crea registros DNS en Cloudflare automáticamente.
+Solo loguea las detecciones para auditoría.
 
-Ejecutarse como servicio systemd en el servidor Odoo
+El provisioning de DNS se maneja programáticamente desde SAJET
+(provision_tenant → create_cloudflare_dns).
+
+Ejecutarse como servicio systemd en el servidor Odoo.
+
+Changelog:
+- 2026-04-04: Convertido a auditor read-only. Ya no crea CNAMEs.
 """
 
 import subprocess
@@ -12,7 +19,6 @@ import time
 import json
 import os
 import logging
-import requests
 from datetime import datetime
 
 logging.basicConfig(
@@ -23,23 +29,24 @@ logger = logging.getLogger(__name__)
 
 # Configuración
 DB_WATCHER_STATE_FILE = "/var/lib/odoo/db_watcher_state.json"
-DOMAINS_CONFIG_FILE = "/opt/odoo/config/domains.json"
 DOMAIN = os.getenv("ODOO_DOMAIN", "sajet.us")
-CF_API_TOKEN = os.getenv("CLOUDFLARE_API_TOKEN", "")
-CF_ZONES = {}
-CF_TUNNEL_ID = os.getenv("CF_TUNNEL_ID", "")
-CHECK_INTERVAL = int(os.getenv("DB_WATCHER_INTERVAL", "10"))
+CHECK_INTERVAL = int(os.getenv("DB_WATCHER_INTERVAL", "30"))  # Aumentado a 30s (era 10s)
 
-# Cargar configuración de dominios
-if os.path.exists(DOMAINS_CONFIG_FILE):
-    try:
-        with open(DOMAINS_CONFIG_FILE, 'r') as f:
-            config = json.load(f)
-            CF_ZONES = config.get("zones", {})
-            CF_TUNNEL_ID = config.get("tunnel_id", CF_TUNNEL_ID)
-            logger.info(f"Dominios cargados: {list(CF_ZONES.keys())}")
-    except Exception as e:
-        logger.error(f"Error cargando {DOMAINS_CONFIG_FILE}: {e}")
+# BDs del sistema que se ignoran completamente
+EXCLUDED_DBS = {
+    'postgres', 'template0', 'template1',
+    'template_tenant', 'erp_core_db', 'root',
+    # Infraestructura — no son tenants Odoo
+    'n8n', 'n8n_queue',
+    'segrd', 'segrd_forensics',
+    'glitchtip', 'sentry',
+    'grafana', 'prometheus',
+    'redis', 'minio',
+    'wazuh', 'thehive', 'cortex', 'cassandra',
+    'pentagi', 'ollama',
+    'keycloak', 'auth0',
+    'nextcloud', 'gitea',
+}
 
 
 def load_state():
@@ -48,7 +55,7 @@ def load_state():
         try:
             with open(DB_WATCHER_STATE_FILE, 'r') as f:
                 return json.load(f)
-        except:
+        except Exception:
             pass
     return {"databases": {}}
 
@@ -78,103 +85,78 @@ def get_databases():
         return []
 
 
-def create_cloudflare_dns(subdomain, domain):
-    """Crea registro CNAME en Cloudflare"""
-    if not CF_API_TOKEN or not CF_ZONES:
-        logger.warning(f"Cloudflare no configurado, no se crea DNS para {subdomain}")
-        return False
-    
-    zone_id = CF_ZONES.get(domain)
-    if not zone_id:
-        logger.error(f"Zone ID no encontrado para {domain}")
-        return False
-    
-    url = f"https://api.cloudflare.com/client/v4/zones/{zone_id}/dns_records"
-    headers = {
-        "Authorization": f"Bearer {CF_API_TOKEN}",
-        "Content-Type": "application/json"
-    }
-    
+def is_valid_odoo_database(db_name: str) -> bool:
+    """Verifica que una BD sea realmente una instancia Odoo (tiene ir_module_module)."""
     try:
-        # Verificar si ya existe
-        resp = requests.get(
-            url, headers=headers,
-            params={"type": "CNAME", "name": f"{subdomain}.{domain}"},
-            timeout=10
+        result = subprocess.run(
+            ['sudo', '-u', 'postgres', 'psql', '-t', '-d', db_name, '-c',
+             "SELECT 1 FROM ir_module_module WHERE name='base' AND state='installed' LIMIT 1;"],
+            capture_output=True, text=True, timeout=5
         )
-        if resp.status_code == 200 and resp.json().get("result"):
-            logger.info(f"DNS ya existe: {subdomain}.{domain}")
-            return True
-        
-        # Crear nuevo
-        data = {
-            "type": "CNAME",
-            "name": subdomain,
-            "content": f"{CF_TUNNEL_ID}.cfargotunnel.com",
-            "ttl": 1,
-            "proxied": True,
-            "comment": f"Auto-provisioned {subdomain} ({datetime.now().isoformat()})"
-        }
-        
-        resp = requests.post(url, headers=headers, json=data, timeout=10)
-        success = resp.json().get("success", False)
-        
-        if success:
-            logger.info(f"✓ DNS creado: {subdomain}.{domain}")
-            return True
-        else:
-            logger.error(f"Error Cloudflare: {resp.json().get('errors')}")
-            return False
-    except Exception as e:
-        logger.error(f"Error creando DNS: {e}")
+        return '1' in (result.stdout or '')
+    except Exception:
         return False
 
 
 def watch_databases():
-    """Loop principal que monitorea BDs"""
-    logger.info(f"DB Watcher iniciado (intervalo: {CHECK_INTERVAL}s)")
+    """Loop principal que monitorea BDs — MODO AUDITOR (solo reporta, no crea DNS)"""
+    logger.info(f"DB Watcher iniciado en MODO AUDITOR (intervalo: {CHECK_INTERVAL}s)")
     logger.info(f"Dominio: {DOMAIN}")
-    logger.info(f"Túnel Cloudflare: {CF_TUNNEL_ID}")
-    
+    logger.info(f"⚠️  MODO READ-ONLY: No se crearán registros DNS automáticamente")
+    logger.info(f"    DNS se gestiona desde SAJET provision_tenant()")
+
     state = load_state()
     known_dbs = set(state.get("databases", {}).keys())
-    
+
     try:
         while True:
             try:
                 current_dbs = set(get_databases())
+
+                # Filtrar BDs excluidas
+                current_dbs = {db for db in current_dbs if db not in EXCLUDED_DBS}
+
                 new_dbs = current_dbs - known_dbs
                 deleted_dbs = known_dbs - current_dbs
-                
-                # Procesar BDs nuevas
+
+                # Reportar BDs nuevas (solo log, NO crear DNS)
                 if new_dbs:
-                    logger.info(f"Nuevas BDs detectadas: {new_dbs}")
+                    logger.info(f"📋 Nuevas BDs detectadas: {new_dbs}")
                     for db in new_dbs:
-                        # Usar el nombre de BD como subdomain
-                        dns_created = create_cloudflare_dns(db, DOMAIN)
+                        is_odoo = is_valid_odoo_database(db)
                         state["databases"][db] = {
-                            "created_at": datetime.now().isoformat(),
-                            "dns_created": dns_created,
-                            "status": "active"
+                            "detected_at": datetime.now().isoformat(),
+                            "is_odoo": is_odoo,
+                            "dns_created": False,
+                            "status": "detected",
                         }
-                
-                # Procesar BDs eliminadas
+                        if is_odoo:
+                            logger.info(
+                                f"  ✅ '{db}' es una BD Odoo válida. "
+                                f"DNS debe crearse via SAJET provision_tenant() si no existe."
+                            )
+                        else:
+                            logger.info(
+                                f"  ⚠️  '{db}' NO es una BD Odoo válida. No se requiere DNS."
+                            )
+
+                # Reportar BDs eliminadas
                 if deleted_dbs:
-                    logger.info(f"BDs eliminadas detectadas: {deleted_dbs}")
+                    logger.info(f"🗑️  BDs eliminadas detectadas: {deleted_dbs}")
                     for db in deleted_dbs:
                         state["databases"].pop(db, None)
-                
+
                 # Actualizar estado conocido
                 if new_dbs or deleted_dbs:
                     save_state(state)
                     known_dbs = current_dbs
-                
+
                 time.sleep(CHECK_INTERVAL)
-            
+
             except Exception as e:
                 logger.error(f"Error en loop: {e}")
                 time.sleep(CHECK_INTERVAL)
-    
+
     except KeyboardInterrupt:
         logger.info("DB Watcher detenido por usuario")
     except Exception as e:

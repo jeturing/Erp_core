@@ -1,3 +1,23 @@
+"""
+⚠️  DEPRECADO — Este módulo está deprecado desde 2026-04-XX.
+
+Usar en su lugar:
+  - app.services.odoo_database_manager.create_tenant_from_template()  (SQL fast-path)
+  - app.services.odoo_database_manager.provision_tenant()             (HTTP fallback)
+  - app.routes.onboarding._provision_tenant_from_checkout()           (orquestador completo)
+
+Las funciones provision_tenant() y create_odoo_database() de este módulo
+ya no se invocan desde onboarding.py. La función repair_missing_deployments()
+sigue en uso temporal desde provisioning.py y se migrará en una fase posterior.
+"""
+import warnings
+warnings.warn(
+    "odoo_provisioner está deprecado. "
+    "Usar odoo_database_manager.create_tenant_from_template() en su lugar.",
+    DeprecationWarning,
+    stacklevel=2,
+)
+
 import subprocess
 import logging
 import os
