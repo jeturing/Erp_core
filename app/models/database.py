@@ -2459,3 +2459,123 @@ class TenantSessionConfig(Base):
 
     created_at = Column(DateTime, default=datetime.utcnow)
     updated_at = Column(DateTime, onupdate=datetime.utcnow)
+
+
+# ═══════════════════════════════════════════════════════
+# ÉPICA 10: Payments & Treasury — Payouts, KYC, Events
+# ═══════════════════════════════════════════════════════
+
+class PayoutStatus(enum.Enum):
+    pending = "pending"
+    authorized = "authorized"
+    processing = "processing"
+    completed = "completed"
+    failed = "failed"
+    canceled = "canceled"
+    rejected = "rejected"
+
+
+class KYCStatus(enum.Enum):
+    pending = "pending"
+    approved = "approved"
+    rejected = "rejected"
+    expired = "expired"
+
+
+class PayoutRequest(Base):
+    """
+    Solicitud de dispersión a proveedor vía Mercury.
+    Flujo: pending → authorized → processing → completed/failed
+    """
+    __tablename__ = "payout_requests"
+
+    id = Column(Integer, primary_key=True, index=True)
+    partner_id = Column(Integer, ForeignKey("partners.id"), nullable=False, index=True)
+    invoice_id = Column(Integer, ForeignKey("invoices.id"), nullable=True)
+    provider_account_id = Column(Integer, ForeignKey("provider_accounts.id"), nullable=True)
+
+    # Montos
+    gross_amount = Column(Float, nullable=False)
+    jeturing_commission_pct = Column(Float, default=15.0)
+    jeturing_commission = Column(Float, default=0)
+    mercury_fee = Column(Float, default=0)
+    net_amount = Column(Float, nullable=False)
+    currency = Column(String(3), default="USD")
+
+    # Transferencia Mercury
+    transfer_type = Column(String(10), default="ach")  # ach | wire
+    mercury_transfer_id = Column(String(100), nullable=True, index=True)
+    estimated_delivery = Column(DateTime, nullable=True)
+
+    # Estado y auditoría
+    status = Column(Enum(PayoutStatus), default=PayoutStatus.pending, index=True)
+    notes = Column(Text, nullable=True)
+    authorized_by = Column(String(150), nullable=True)
+    authorized_at = Column(DateTime, nullable=True)
+    executed_at = Column(DateTime, nullable=True)
+    completed_at = Column(DateTime, nullable=True)
+    failed_reason = Column(Text, nullable=True)
+
+    created_at = Column(DateTime, default=datetime.utcnow, index=True)
+    updated_at = Column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
+
+    __table_args__ = (
+        Index("ix_payout_partner_status", "partner_id", "status"),
+        Index("ix_payout_created", "created_at"),
+    )
+
+    # Relaciones
+    partner = relationship("Partner")
+    invoice = relationship("Invoice")
+
+
+class ProviderAccount(Base):
+    """
+    Cuenta bancaria registrada para un proveedor (partner).
+    Los datos sensibles se almacenan cifrados.
+    """
+    __tablename__ = "provider_accounts"
+
+    id = Column(Integer, primary_key=True, index=True)
+    partner_id = Column(Integer, ForeignKey("partners.id"), nullable=False, index=True)
+
+    account_holder_name = Column(String(200), nullable=False)
+    account_number_masked = Column(String(20), nullable=False)   # ****5678
+    account_number_enc = Column(Text, nullable=True)              # encrypted full number
+    routing_number = Column(String(20), nullable=False)
+    account_type = Column(String(10), default="checking")         # checking | savings
+    bank_name = Column(String(200), nullable=True)
+
+    # KYC
+    kyc_status = Column(Enum(KYCStatus), default=KYCStatus.pending, index=True)
+    kyc_verified_at = Column(DateTime, nullable=True)
+    kyc_notes = Column(Text, nullable=True)
+
+    is_active = Column(Boolean, default=True)
+    created_at = Column(DateTime, default=datetime.utcnow)
+    updated_at = Column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
+
+    # Relaciones
+    partner = relationship("Partner")
+
+
+class PaymentEvent(Base):
+    """
+    Log de auditoría de eventos de pago (pagos recibidos, payouts, transferencias).
+    Inmutable — solo INSERT, nunca UPDATE/DELETE.
+    """
+    __tablename__ = "payment_events"
+
+    id = Column(Integer, primary_key=True, index=True)
+    event_type = Column(String(50), nullable=False, index=True)  # invoice_paid, payout_requested, etc.
+    invoice_id = Column(Integer, ForeignKey("invoices.id"), nullable=True)
+    payout_id = Column(Integer, ForeignKey("payout_requests.id"), nullable=True)
+    amount = Column(Float, nullable=True)
+    metadata_json = Column(JSON, default=dict)
+    actor = Column(String(150), nullable=True)  # email del admin que ejecutó la acción
+
+    created_at = Column(DateTime, default=datetime.utcnow, index=True)
+
+    __table_args__ = (
+        Index("ix_payment_events_type_time", "event_type", "created_at"),
+    )

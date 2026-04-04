@@ -17,6 +17,11 @@ from enum import Enum
 from sqlalchemy.orm import Session
 from sqlalchemy import func
 
+from ..models.database import (
+    PayoutRequest, PayoutStatus, Invoice, InvoiceStatus,
+    PaymentEvent, Partner,
+)
+
 logger = logging.getLogger(__name__)
 
 
@@ -87,6 +92,35 @@ class TreasuryManager:
             # - Sumar payouts completados en período
             # - Sumar fees Mercury en período
             # - Calcular saldo de apertura/cierre
+
+            # Inflows: invoices pagadas en período
+            inflow_result = self.db.query(
+                func.coalesce(func.sum(Invoice.total), 0),
+                func.count(Invoice.id),
+            ).filter(
+                Invoice.status == InvoiceStatus.paid,
+                Invoice.paid_at >= start_date,
+                Invoice.paid_at <= end_date,
+            ).first()
+            inflow_total = float(inflow_result[0]) if inflow_result else 0
+            inflow_count = inflow_result[1] if inflow_result else 0
+
+            # Outflows: payouts completados en período
+            outflow_result = self.db.query(
+                func.coalesce(func.sum(PayoutRequest.net_amount), 0),
+                func.coalesce(func.sum(PayoutRequest.mercury_fee), 0),
+                func.count(PayoutRequest.id),
+            ).filter(
+                PayoutRequest.status == PayoutStatus.completed,
+                PayoutRequest.completed_at >= start_date,
+                PayoutRequest.completed_at <= end_date,
+            ).first()
+            outflow_providers = float(outflow_result[0]) if outflow_result else 0
+            outflow_fees = float(outflow_result[1]) if outflow_result else 0
+            outflow_count = outflow_result[2] if outflow_result else 0
+            outflow_total = outflow_providers + outflow_fees
+
+            net = inflow_total - outflow_total
             
             return {
                 "period": {
@@ -94,22 +128,22 @@ class TreasuryManager:
                     "end": end_date.isoformat(),
                 },
                 "inflows": {
-                    "total": 50000.00,
-                    "from_customers": 50000.00,
+                    "total": round(inflow_total, 2),
+                    "from_customers": round(inflow_total, 2),
                     "from_interest": 0,
-                    "transactions_count": 12,
+                    "transactions_count": inflow_count,
                 },
                 "outflows": {
-                    "total": 12000.00,
-                    "to_providers": 10000.00,
-                    "bank_fees": 500.00,
-                    "other": 1500.00,
-                    "transactions_count": 8,
+                    "total": round(outflow_total, 2),
+                    "to_providers": round(outflow_providers, 2),
+                    "bank_fees": round(outflow_fees, 2),
+                    "other": 0,
+                    "transactions_count": outflow_count,
                 },
-                "net": 38000.00,
+                "net": round(net, 2),
                 "balance": {
-                    "opening": 25000.00,
-                    "closing": 63000.00,
+                    "opening": 0,
+                    "closing": round(net, 2),
                 },
             }
         
@@ -147,32 +181,59 @@ class TreasuryManager:
             }
         """
         try:
-            # TODO: Llamar APIs de Stripe y Mercury
-            stripe_balance = 15000.00
-            mercury_balance = 25000.00
-            
-            # TODO: Calcular reservas de payouts pendientes
-            reserved = 5000.00
-            
-            total = stripe_balance + mercury_balance
+            from ..services.mercury_account_manager import get_account_manager
+            from ..services.mercury_client import get_mercury_client
+            import stripe
+
+            # Mercury balances (real API)
+            try:
+                account_manager = get_account_manager()
+                mercury_balances = account_manager.get_both_balances()
+                mercury_savings = mercury_balances.get("savings", {}).get("balance", 0)
+                mercury_checking = mercury_balances.get("checking", {}).get("balance", 0)
+                mercury_total = mercury_savings + mercury_checking
+            except Exception as e:
+                logger.warning(f"Mercury balance unavailable: {e}")
+                mercury_total = 0
+                mercury_savings = 0
+                mercury_checking = 0
+
+            # Stripe balance (real API)
+            try:
+                stripe_bal = stripe.Balance.retrieve()
+                stripe_available = sum(b.get("amount", 0) for b in stripe_bal.get("available", [])) / 100
+                stripe_pending = sum(b.get("amount", 0) for b in stripe_bal.get("pending", [])) / 100
+            except Exception as e:
+                logger.warning(f"Stripe balance unavailable: {e}")
+                stripe_available = 0
+                stripe_pending = 0
+
+            # Reservas: payouts pendientes en BD
+            reserved_result = self.db.query(
+                func.coalesce(func.sum(PayoutRequest.net_amount), 0)
+            ).filter(
+                PayoutRequest.status.in_([PayoutStatus.pending, PayoutStatus.authorized, PayoutStatus.processing])
+            ).scalar()
+            reserved = float(reserved_result) if reserved_result else 0
+
+            total = stripe_available + mercury_total
             available = total - reserved
             
             return {
                 "timestamp": datetime.now(timezone.utc).isoformat(),
                 "stripe": {
-                    "balance": stripe_balance,
-                    "pending": 2500.00,
-                    "connected_accounts": 3,
+                    "balance": round(stripe_available, 2),
+                    "pending": round(stripe_pending, 2),
                 },
                 "mercury": {
-                    "balance": mercury_balance,
-                    "available": mercury_balance,
-                    "pending": 0,
-                    "account_name": "Jeturing Labs",
+                    "savings": round(mercury_savings, 2),
+                    "checking": round(mercury_checking, 2),
+                    "balance": round(mercury_total, 2),
+                    "available": round(mercury_total, 2),
                 },
-                "total": total,
-                "reserved": reserved,
-                "available": available,
+                "total": round(total, 2),
+                "reserved": round(reserved, 2),
+                "available": round(available, 2),
             }
         
         except Exception as e:
@@ -221,36 +282,35 @@ class TreasuryManager:
             }
         """
         try:
-            # TODO: Query BD para payout_requests
-            # - Filter por status si se proporciona
-            # - Order por requested_at DESC
-            # - Join con partners para obtener nombre
-            # - Paginate con limit/offset
-            
+            query = self.db.query(PayoutRequest)
+            if status:
+                try:
+                    status_enum = PayoutStatus(status)
+                    query = query.filter(PayoutRequest.status == status_enum)
+                except ValueError:
+                    pass  # Ignorar filtro inválido
+
+            total = query.count()
+            payouts = query.order_by(PayoutRequest.created_at.desc()).offset(offset).limit(limit).all()
+
             return {
                 "payouts": [
                     {
-                        "id": 123,
-                        "provider": "Acme Corp",
-                        "amount": 4250.00,
-                        "status": "authorized",
-                        "transfer_type": "ach",
-                        "requested_at": "2026-02-24T10:00:00Z",
-                        "authorized_at": "2026-02-24T12:00:00Z",
-                        "estimated_delivery": "2026-02-26T00:00:00Z",
-                    },
-                    {
-                        "id": 124,
-                        "provider": "Tech Solutions",
-                        "amount": 2150.00,
-                        "status": "pending",
-                        "transfer_type": "ach",
-                        "requested_at": "2026-02-24T14:00:00Z",
-                        "authorized_at": None,
-                        "estimated_delivery": None,
-                    },
+                        "id": p.id,
+                        "provider": (
+                            self.db.query(Partner.company_name)
+                            .filter(Partner.id == p.partner_id).scalar() or "—"
+                        ),
+                        "amount": p.net_amount,
+                        "status": p.status.value if p.status else "pending",
+                        "transfer_type": p.transfer_type or "ach",
+                        "requested_at": p.created_at.isoformat() if p.created_at else None,
+                        "authorized_at": p.authorized_at.isoformat() if p.authorized_at else None,
+                        "estimated_delivery": p.estimated_delivery.isoformat() if p.estimated_delivery else None,
+                    }
+                    for p in payouts
                 ],
-                "total": 15,
+                "total": total,
                 "limit": limit,
                 "offset": offset,
             }
@@ -270,8 +330,12 @@ class TreasuryManager:
         Returns: Monto en USD
         """
         try:
-            # TODO: Query BD para SUM(amount) WHERE status != 'completed' AND status != 'failed'
-            return 6400.00  # Placeholder
+            result = self.db.query(
+                func.coalesce(func.sum(PayoutRequest.net_amount), 0)
+            ).filter(
+                PayoutRequest.status.in_([PayoutStatus.pending, PayoutStatus.authorized, PayoutStatus.processing])
+            ).scalar()
+            return float(result) if result else 0
         
         except Exception as e:
             logger.error(f"Error calculating pending payouts: {e}")
@@ -324,10 +388,28 @@ class TreasuryManager:
             now = datetime.now(timezone.utc)
             end_date = now + timedelta(days=days_ahead)
             
-            # TODO: Query BD para:
-            # - Payouts scheduled en período
-            # - Agrupar por fecha
-            # - Calcular balance proyectado día a día
+            # Payouts pendientes y autorizados (próximas obligaciones)
+            pending_payouts = self.db.query(
+                func.coalesce(func.sum(PayoutRequest.net_amount), 0),
+                func.count(PayoutRequest.id),
+            ).filter(
+                PayoutRequest.status.in_([PayoutStatus.pending, PayoutStatus.authorized]),
+            ).first()
+            projected_outflows = float(pending_payouts[0]) if pending_payouts else 0
+            payout_count = pending_payouts[1] if pending_payouts else 0
+
+            # Balance actual
+            balance = self.get_balance_snapshot()
+            current_balance = balance.get("available", 0)
+            projected_balance = current_balance - projected_outflows
+            buffer = 10000.00
+
+            if projected_balance < 0:
+                recommendation = "stop"
+            elif projected_balance < buffer:
+                recommendation = "caution"
+            else:
+                recommendation = "proceed"
             
             return {
                 "forecast_period": {
@@ -336,18 +418,12 @@ class TreasuryManager:
                     "days": days_ahead,
                 },
                 "projected_inflows": 0,
-                "projected_outflows": 15000.00,
-                "projected_balance": 25000.00,
-                "buffer": 10000.00,
-                "recommendation": "proceed",
-                "timeline": [
-                    {
-                        "date": "2026-02-26",
-                        "payout_count": 3,
-                        "payout_total": 10000.00,
-                        "balance_after": 15000.00,
-                    },
-                ],
+                "projected_outflows": round(projected_outflows, 2),
+                "pending_payout_count": payout_count,
+                "current_balance": round(current_balance, 2),
+                "projected_balance": round(projected_balance, 2),
+                "buffer": buffer,
+                "recommendation": recommendation,
             }
         
         except Exception as e:
@@ -400,36 +476,40 @@ class TreasuryManager:
             }
         """
         try:
-            # TODO: Query mercury_transactions + payout_requests
-            # - Combinar ambas tablas
-            # - Filter por type, date range
-            # - Order by timestamp DESC
-            # - Paginate
-            
+            query = self.db.query(PaymentEvent)
+            if transaction_type:
+                type_map = {
+                    "inflow": ["invoice_paid", "direct_payment_reconciled"],
+                    "outflow": ["payout_executed", "payout_completed"],
+                    "fee": ["fee"],
+                    "interest": ["interest"],
+                }
+                types = type_map.get(transaction_type, [transaction_type])
+                query = query.filter(PaymentEvent.event_type.in_(types))
+
+            if start_date:
+                query = query.filter(PaymentEvent.created_at >= start_date)
+            if end_date:
+                query = query.filter(PaymentEvent.created_at <= end_date)
+
+            total = query.count()
+            events = query.order_by(PaymentEvent.created_at.desc()).offset(offset).limit(limit).all()
+
             return {
                 "transactions": [
                     {
-                        "id": "txn_abc123",
-                        "type": "inflow",
-                        "amount": 5000.00,
-                        "source": "Stripe payment",
-                        "destination": "Mercury account",
-                        "status": "completed",
-                        "timestamp": "2026-02-24T15:30:00Z",
-                        "reference": "INV-2026-0001",
-                    },
-                    {
-                        "id": "xfr_def456",
-                        "type": "outflow",
-                        "amount": 2150.00,
-                        "source": "Mercury account",
-                        "destination": "Acme Corp (ACH)",
-                        "status": "processing",
-                        "timestamp": "2026-02-24T14:00:00Z",
-                        "reference": "PAYOUT-2026-0012",
-                    },
+                        "id": e.id,
+                        "type": e.event_type,
+                        "amount": e.amount,
+                        "invoice_id": e.invoice_id,
+                        "payout_id": e.payout_id,
+                        "actor": e.actor,
+                        "metadata": e.metadata_json or {},
+                        "timestamp": e.created_at.isoformat() if e.created_at else None,
+                    }
+                    for e in events
                 ],
-                "total": 250,
+                "total": total,
                 "limit": limit,
                 "offset": offset,
             }
@@ -470,24 +550,32 @@ class TreasuryManager:
             }
         """
         try:
-            # TODO: Query payout_requests WHERE provider_id = ?
-            # - Order by completed_at DESC
-            # - Calculate total_paid
-            
+            partner = self.db.query(Partner).filter(Partner.id == provider_id).first()
+            partner_name = partner.company_name if partner else "—"
+
+            payouts = self.db.query(PayoutRequest).filter(
+                PayoutRequest.partner_id == provider_id
+            ).order_by(PayoutRequest.created_at.desc()).limit(limit).all()
+
+            total_paid = sum(p.net_amount or 0 for p in payouts if p.status == PayoutStatus.completed)
+
             return {
                 "provider_id": provider_id,
-                "provider_name": "Acme Corp",
-                "total_paid": 25000.00,
+                "provider_name": partner_name,
+                "total_paid": round(total_paid, 2),
                 "payments": [
                     {
-                        "id": 123,
-                        "amount": 4250.00,
-                        "status": "completed",
-                        "transfer_type": "ach",
-                        "mercury_transfer_id": "xfr_abc123",
-                        "completed_at": "2026-02-20T12:00:00Z",
-                        "invoice_ref": "INV-2026-0001",
-                    },
+                        "id": p.id,
+                        "amount": p.net_amount,
+                        "gross_amount": p.gross_amount,
+                        "commission": p.jeturing_commission,
+                        "status": p.status.value if p.status else "pending",
+                        "transfer_type": p.transfer_type,
+                        "mercury_transfer_id": p.mercury_transfer_id,
+                        "completed_at": p.completed_at.isoformat() if p.completed_at else None,
+                        "created_at": p.created_at.isoformat() if p.created_at else None,
+                    }
+                    for p in payouts
                 ],
             }
         
@@ -528,12 +616,33 @@ class TreasuryManager:
                 "info": [],
             }
             
-            # TODO: Implementar checks:
-            # 1. Mercury balance < threshold
-            # 2. Payouts vencidos sin autorizar
-            # 3. Daily limit approaching
-            # 4. Reconciliation discrepancies
-            # 5. Failed transfers en retry
+            # 1. Payouts pendientes de autorización
+            pending_count = self.db.query(func.count(PayoutRequest.id)).filter(
+                PayoutRequest.status == PayoutStatus.pending
+            ).scalar() or 0
+            if pending_count > 0:
+                alerts["warnings"].append(f"{pending_count} payouts pending authorization")
+
+            # 2. Payouts fallidos recientes
+            failed_count = self.db.query(func.count(PayoutRequest.id)).filter(
+                PayoutRequest.status == PayoutStatus.failed,
+                PayoutRequest.updated_at >= datetime.now(timezone.utc) - timedelta(days=7),
+            ).scalar() or 0
+            if failed_count > 0:
+                alerts["critical"].append(f"{failed_count} failed payouts in last 7 days")
+
+            # 3. Mercury balance check (si disponible)
+            try:
+                from ..services.mercury_account_manager import get_account_manager
+                manager = get_account_manager()
+                balances = manager.get_both_balances()
+                checking_balance = balances.get("checking", {}).get("balance", 0)
+                if checking_balance < 5000:
+                    alerts["critical"].append(f"Mercury CHECKING balance ${checking_balance:.2f} below $5000 threshold")
+                elif checking_balance < 10000:
+                    alerts["warnings"].append(f"Mercury CHECKING balance ${checking_balance:.2f} approaching minimum")
+            except Exception:
+                alerts["info"].append("Mercury balance check unavailable")
             
             return alerts
         

@@ -17,15 +17,21 @@ Endpoints:
 
 import logging
 from typing import Optional
-from fastapi import APIRouter, HTTPException, Depends
+from fastapi import APIRouter, Cookie, HTTPException, Depends, Request
 from pydantic import BaseModel, Field
 from sqlalchemy.orm import Session
-from datetime import datetime
+from sqlalchemy import func as sa_func
+from datetime import datetime, timezone
 
-from ..models.database import get_db
+from ..models.database import (
+    get_db, PayoutRequest as PayoutRequestModel, ProviderAccount,
+    PaymentEvent, PayoutStatus as PayoutStatusEnum, KYCStatus,
+    Partner, Invoice, InvoiceStatus,
+)
 from ..services.mercury_client import get_mercury_client, MercuryAPIException, BankAccount
 from ..services.payment_processor import PaymentProcessor, PaymentEventType
 from ..services.treasury_manager import TreasuryManager
+from ..routes.roles import _require_admin
 
 router = APIRouter(prefix="/api", tags=["Payments"])
 logger = logging.getLogger(__name__)
@@ -89,8 +95,11 @@ class DirectPaymentInstructionsRequest(BaseModel):
 @router.post("/payments/process-invoice")
 def process_invoice_payment(
     payload: ProcessInvoicePaymentRequest,
+    request: Request,
     db: Session = Depends(get_db),
+    access_token: Optional[str] = Cookie(None),
 ):
+    _require_admin(request, access_token)
     """
     Procesar pago de cliente desde Stripe.
     
@@ -136,8 +145,11 @@ def process_invoice_payment(
 @router.post("/payments/direct/instructions")
 def get_direct_payment_instructions(
     payload: DirectPaymentInstructionsRequest,
+    request: Request,
     db: Session = Depends(get_db),
+    access_token: Optional[str] = Cookie(None),
 ):
+    _require_admin(request, access_token)
     """
     Generar instrucciones de pago directo a Mercury (ACH/Wire).
 
@@ -181,7 +193,12 @@ def get_direct_payment_instructions(
 
 
 @router.get("/payments/balance")
-def get_payment_balance(db: Session = Depends(get_db)):
+def get_payment_balance(
+    request: Request,
+    db: Session = Depends(get_db),
+    access_token: Optional[str] = Cookie(None),
+):
+    _require_admin(request, access_token)
     """
     Obtener balance actual de pagos (Stripe + Mercury).
     
@@ -213,8 +230,11 @@ def get_payment_balance(db: Session = Depends(get_db)):
 @router.get("/payments/summary")
 def get_payment_summary(
     days: int = 30,
+    request: Request = None,
     db: Session = Depends(get_db),
+    access_token: Optional[str] = Cookie(None),
 ):
+    _require_admin(request, access_token)
     """
     Obtener resumen de cash flow en período.
     
@@ -256,31 +276,15 @@ def get_payment_summary(
 @router.post("/payouts/create")
 def create_payout(
     payload: CreatePayoutRequest,
+    request: Request,
     db: Session = Depends(get_db),
+    access_token: Optional[str] = Cookie(None),
 ):
     """
     Crear solicitud de pago a proveedor.
-    
-    Pasos:
-    1. Calcular monto neto (comisión Jeturing, fees Mercury)
-    2. Validar KYC del proveedor
-    3. Crear payout_request en BD
-    4. Requiere aprobación admin antes de ejecutar
-    
-    Response:
-    ```json
-    {
-        "payout_id": 123,
-        "provider_id": 42,
-        "gross_amount": 5000.00,
-        "jeturing_commission": 750.00,
-        "mercury_fee": 0,
-        "net_amount": 4250.00,
-        "status": "pending",
-        "created_at": "2026-02-24T15:30:00Z"
-    }
-    ```
+    Requiere aprobación admin antes de ejecutar.
     """
+    admin = _require_admin(request, access_token)
     try:
         processor = PaymentProcessor(db)
         
@@ -297,33 +301,51 @@ def create_payout(
                 detail=f"Payout calculation failed: {', '.join(calc.get('messages', []))}",
             )
         
-        # TODO: Crear payout_request en BD
-        # payout_req = PayoutRequest(
-        #     provider_id=payload.provider_id,
-        #     invoice_id=payload.invoice_id,
-        #     amount=payload.gross_amount,
-        #     status="pending",
-        #     commission=calc["jeturing_commission"],
-        #     net_amount=calc["net_amount"],
-        #     notes=payload.notes,
-        # )
-        # db.add(payout_req)
-        # db.commit()
+        # Persistir payout_request en BD
+        payout_req = PayoutRequestModel(
+            partner_id=payload.provider_id,
+            invoice_id=payload.invoice_id,
+            gross_amount=payload.gross_amount,
+            jeturing_commission_pct=calc["jeturing_commission_pct"],
+            jeturing_commission=calc["jeturing_commission"],
+            mercury_fee=calc["mercury_fee"],
+            net_amount=calc["net_amount"],
+            transfer_type=calc.get("transfer_type", "ach"),
+            status=PayoutStatusEnum.pending,
+            notes=payload.notes,
+        )
+        db.add(payout_req)
+        db.flush()
+
+        # Log evento
+        db.add(PaymentEvent(
+            event_type=PaymentEventType.PAYOUT_REQUESTED.value,
+            invoice_id=payload.invoice_id,
+            payout_id=payout_req.id,
+            amount=payout_req.net_amount,
+            actor=admin.get("sub", "admin"),
+            metadata_json={
+                "gross": payload.gross_amount,
+                "commission": calc["jeturing_commission"],
+            },
+        ))
+        db.commit()
         
         return {
-            "payout_id": 123,  # payout_req.id (placeholder)
+            "payout_id": payout_req.id,
             "provider_id": payload.provider_id,
             "gross_amount": payload.gross_amount,
             "jeturing_commission": calc["jeturing_commission"],
             "mercury_fee": calc["mercury_fee"],
             "net_amount": calc["net_amount"],
             "status": "pending",
-            "created_at": datetime.now().isoformat(),
+            "created_at": payout_req.created_at.isoformat() if payout_req.created_at else datetime.now(timezone.utc).isoformat(),
         }
     
     except HTTPException:
         raise
     except Exception as e:
+        db.rollback()
         logger.error(f"Error creating payout: {e}")
         raise HTTPException(status_code=500, detail=str(e))
 
@@ -333,24 +355,52 @@ def list_payouts(
     status: Optional[str] = None,
     limit: int = 50,
     offset: int = 0,
+    request: Request = None,
     db: Session = Depends(get_db),
+    access_token: Optional[str] = Cookie(None),
 ):
     """
     Listar payouts con opción de filtrado.
-    
-    Query params:
-    - status: pending | authorized | processing | completed | failed
-    - limit: Default 50
-    - offset: Default 0
     """
+    _require_admin(request, access_token)
     try:
-        treasury = TreasuryManager(db)
-        return treasury.get_pending_payouts(
-            status=status,
-            limit=limit,
-            offset=offset,
+        query = db.query(PayoutRequestModel).join(
+            Partner, PayoutRequestModel.partner_id == Partner.id
         )
-    
+        if status:
+            try:
+                status_enum = PayoutStatusEnum(status)
+                query = query.filter(PayoutRequestModel.status == status_enum)
+            except ValueError:
+                raise HTTPException(status_code=400, detail=f"Invalid status: {status}")
+
+        total = query.count()
+        payouts = query.order_by(PayoutRequestModel.created_at.desc()).offset(offset).limit(limit).all()
+
+        return {
+            "payouts": [
+                {
+                    "id": p.id,
+                    "provider": p.partner.company_name if p.partner else "—",
+                    "amount": p.net_amount,
+                    "gross_amount": p.gross_amount,
+                    "commission": p.jeturing_commission,
+                    "status": p.status.value if p.status else "pending",
+                    "transfer_type": p.transfer_type or "ach",
+                    "mercury_transfer_id": p.mercury_transfer_id,
+                    "requested_at": p.created_at.isoformat() if p.created_at else None,
+                    "authorized_at": p.authorized_at.isoformat() if p.authorized_at else None,
+                    "completed_at": p.completed_at.isoformat() if p.completed_at else None,
+                    "estimated_delivery": p.estimated_delivery.isoformat() if p.estimated_delivery else None,
+                }
+                for p in payouts
+            ],
+            "total": total,
+            "limit": limit,
+            "offset": offset,
+        }
+    except HTTPException:
+        raise
     except Exception as e:
         logger.error(f"Error listing payouts: {e}")
         raise HTTPException(status_code=500, detail=str(e))
@@ -359,42 +409,48 @@ def list_payouts(
 @router.get("/payouts/{payout_id}")
 def get_payout_status(
     payout_id: int,
+    request: Request,
     db: Session = Depends(get_db),
+    access_token: Optional[str] = Cookie(None),
 ):
-    """
-    Obtener estado detallado de un payout.
-    
-    Response:
-    ```json
-    {
-        "id": 123,
-        "provider": "Acme Corp",
-        "amount": 4250.00,
-        "status": "processing",
-        "mercury_transfer_id": "xfr_abc123",
-        "created_at": "2026-02-24T10:00:00Z",
-        "authorized_at": "2026-02-24T12:00:00Z",
-        "completed_at": null,
-        "estimated_delivery": "2026-02-26T00:00:00Z"
-    }
-    ```
-    """
+    """Obtener estado detallado de un payout."""
+    _require_admin(request, access_token)
     try:
-        # TODO: Query payout_request WHERE id = payout_id
-        # TODO: Si mercury_transfer_id, consultar estado en Mercury
-        
+        payout = db.query(PayoutRequestModel).filter(PayoutRequestModel.id == payout_id).first()
+        if not payout:
+            raise HTTPException(status_code=404, detail=f"Payout {payout_id} not found")
+
+        partner = db.query(Partner).filter(Partner.id == payout.partner_id).first()
+
+        # Si hay mercury_transfer_id, intentar consultar estado live
+        mercury_status = None
+        if payout.mercury_transfer_id:
+            try:
+                mercury = get_mercury_client()
+                mercury_status = mercury.get_transfer_status(payout.mercury_transfer_id)
+            except Exception:
+                pass  # Graceful fallback
+
         return {
-            "id": payout_id,
-            "provider": "Acme Corp",
-            "amount": 4250.00,
-            "status": "processing",
-            "mercury_transfer_id": "xfr_abc123",
-            "created_at": "2026-02-24T10:00:00Z",
-            "authorized_at": "2026-02-24T12:00:00Z",
-            "completed_at": None,
-            "estimated_delivery": "2026-02-26T00:00:00Z",
+            "id": payout.id,
+            "provider": partner.company_name if partner else "—",
+            "partner_id": payout.partner_id,
+            "gross_amount": payout.gross_amount,
+            "amount": payout.net_amount,
+            "commission": payout.jeturing_commission,
+            "status": payout.status.value if payout.status else "pending",
+            "transfer_type": payout.transfer_type,
+            "mercury_transfer_id": payout.mercury_transfer_id,
+            "mercury_live_status": mercury_status,
+            "created_at": payout.created_at.isoformat() if payout.created_at else None,
+            "authorized_at": payout.authorized_at.isoformat() if payout.authorized_at else None,
+            "executed_at": payout.executed_at.isoformat() if payout.executed_at else None,
+            "completed_at": payout.completed_at.isoformat() if payout.completed_at else None,
+            "estimated_delivery": payout.estimated_delivery.isoformat() if payout.estimated_delivery else None,
+            "notes": payout.notes,
         }
-    
+    except HTTPException:
+        raise
     except Exception as e:
         logger.error(f"Error getting payout status: {e}")
         raise HTTPException(status_code=500, detail=str(e))
@@ -404,46 +460,67 @@ def get_payout_status(
 def authorize_payout(
     payout_id: int,
     payload: AuthorizePayoutRequest,
+    request: Request,
     db: Session = Depends(get_db),
+    access_token: Optional[str] = Cookie(None),
 ):
-    """
-    Autorizar o rechazar un payout (admin only).
-    
-    Validaciones:
-    1. KYC del proveedor aprobado
-    2. Balance en Mercury suficiente
-    3. Límites diarios OK
-    
-    Response:
-    ```json
-    {
-        "authorized": true,
-        "payout_id": 123,
-        "status": "authorized",
-        "authorized_at": "2026-02-24T12:00:00Z",
-        "ready_to_execute": true
-    }
-    ```
-    """
+    """Autorizar o rechazar un payout (admin only)."""
+    admin = _require_admin(request, access_token)
+    admin_email = admin.get("sub", "admin")
     try:
+        payout = db.query(PayoutRequestModel).filter(PayoutRequestModel.id == payout_id).first()
+        if not payout:
+            raise HTTPException(status_code=404, detail=f"Payout {payout_id} not found")
+
+        if payout.status != PayoutStatusEnum.pending:
+            raise HTTPException(status_code=400, detail=f"Payout status is {payout.status.value}, expected pending")
+
+        now = datetime.now(timezone.utc)
+
         if not payload.approved:
-            # TODO: Marcar como rechazado
+            payout.status = PayoutStatusEnum.rejected
+            payout.notes = payload.notes or "Rejected by admin"
+            payout.authorized_by = admin_email
+            payout.authorized_at = now
+            db.add(PaymentEvent(
+                event_type="payout_rejected",
+                payout_id=payout.id,
+                amount=payout.net_amount,
+                actor=admin_email,
+                metadata_json={"reason": payout.notes},
+            ))
+            db.commit()
             return {
                 "authorized": False,
                 "payout_id": payout_id,
                 "status": "rejected",
-                "reason": payload.notes or "Rejected by admin",
+                "reason": payout.notes,
             }
-        
-        processor = PaymentProcessor(db)
-        result = processor.authorize_payout(
-            payout_request_id=payout_id,
-            authorized_by="admin@sajet.us",  # TODO: Obtener del usuario autenticado
-        )
-        
-        return result
-    
+
+        payout.status = PayoutStatusEnum.authorized
+        payout.authorized_by = admin_email
+        payout.authorized_at = now
+        db.add(PaymentEvent(
+            event_type=PaymentEventType.PAYOUT_AUTHORIZED.value,
+            payout_id=payout.id,
+            amount=payout.net_amount,
+            actor=admin_email,
+        ))
+        db.commit()
+
+        return {
+            "authorized": True,
+            "payout_id": payout_id,
+            "amount": payout.net_amount,
+            "provider_id": payout.partner_id,
+            "status": "authorized",
+            "authorized_at": now.isoformat(),
+            "authorized_by": admin_email,
+        }
+    except HTTPException:
+        raise
     except Exception as e:
+        db.rollback()
         logger.error(f"Error authorizing payout: {e}")
         raise HTTPException(status_code=500, detail=str(e))
 
@@ -451,8 +528,11 @@ def authorize_payout(
 @router.post("/payouts/{payout_id}/execute")
 def execute_payout(
     payout_id: int,
+    request: Request,
     db: Session = Depends(get_db),
+    access_token: Optional[str] = Cookie(None),
 ):
+    _require_admin(request, access_token)
     """
     Ejecutar transferencia vía Mercury (admin only).
     
@@ -498,8 +578,11 @@ def execute_payout(
 @router.post("/providers/accounts")
 def register_provider_account(
     payload: RegisterProviderAccountRequest,
+    request: Request,
     db: Session = Depends(get_db),
+    access_token: Optional[str] = Cookie(None),
 ):
+    _require_admin(request, access_token)
     """
     Registrar cuenta bancaria para proveedor.
     
@@ -538,24 +621,24 @@ def register_provider_account(
                 detail=f"Invalid bank account: {validation['message']}",
             )
         
-        # TODO: Guardar en BD provider_accounts
-        # provider_acc = ProviderAccount(
-        #     provider_id=payload.provider_id,
-        #     account_holder_name=payload.account_holder_name,
-        #     account_number=encrypt(payload.account_number),
-        #     routing_number=payload.routing_number,
-        #     bank_name=validation.get("bank_name"),
-        #     account_type=payload.account_type,
-        #     kyc_status="pending",
-        # )
-        # db.add(provider_acc)
-        # db.commit()
+        # Persistir en BD
+        provider_acc = ProviderAccount(
+            partner_id=payload.provider_id,
+            account_holder_name=payload.account_holder_name,
+            account_number_masked=f"****{payload.account_number[-4:]}",
+            routing_number=payload.routing_number,
+            account_type=payload.account_type,
+            bank_name=validation.get("bank_name", payload.bank_name),
+            kyc_status=KYCStatus.pending,
+        )
+        db.add(provider_acc)
+        db.commit()
         
         return {
-            "account_id": 456,
+            "account_id": provider_acc.id,
             "provider_id": payload.provider_id,
-            "account_number": f"****{payload.account_number[-4:]}",
-            "bank_name": validation.get("bank_name", payload.bank_name),
+            "account_number": provider_acc.account_number_masked,
+            "bank_name": provider_acc.bank_name,
             "kyc_status": "pending",
             "message": "Account registered successfully. Awaiting KYC verification.",
         }
@@ -564,11 +647,22 @@ def register_provider_account(
         raise
     except MercuryAPIException as e:
         logger.warning(f"Mercury validation unavailable: {e}")
-        # Permitir registro pero marcar como no verificado
+        # Persistir de todas formas, marcar como no verificado
+        provider_acc = ProviderAccount(
+            partner_id=payload.provider_id,
+            account_holder_name=payload.account_holder_name,
+            account_number_masked=f"****{payload.account_number[-4:]}",
+            routing_number=payload.routing_number,
+            account_type=payload.account_type,
+            bank_name=payload.bank_name,
+            kyc_status=KYCStatus.pending,
+        )
+        db.add(provider_acc)
+        db.commit()
         return {
-            "account_id": 456,
+            "account_id": provider_acc.id,
             "provider_id": payload.provider_id,
-            "account_number": f"****{payload.account_number[-4:]}",
+            "account_number": provider_acc.account_number_masked,
             "bank_name": payload.bank_name,
             "kyc_status": "pending",
             "message": "Account registered. Automatic verification unavailable; manual review pending.",
@@ -582,36 +676,52 @@ def register_provider_account(
 @router.post("/providers/kyc-check")
 def verify_provider_kyc(
     provider_id: int,
+    request: Request,
     db: Session = Depends(get_db),
+    access_token: Optional[str] = Cookie(None),
 ):
-    """
-    Verificar/aprobar KYC de proveedor (admin only).
-    
-    TODO: Implementar lógica de verificación (manual o automática).
-    
-    Response:
-    ```json
-    {
-        "provider_id": 42,
-        "kyc_status": "approved",
-        "verified_at": "2026-02-24T15:30:00Z",
-        "account_verified": true
-    }
-    ```
-    """
+    """Verificar/aprobar KYC de proveedor (admin only)."""
+    admin = _require_admin(request, access_token)
     try:
-        # TODO: Obtener provider_accounts del proveedor
-        # TODO: Marcar como kyc_status="approved"
-        # TODO: Log evento
-        
+        accounts = db.query(ProviderAccount).filter(
+            ProviderAccount.partner_id == provider_id,
+            ProviderAccount.is_active == True,
+        ).all()
+
+        if not accounts:
+            raise HTTPException(
+                status_code=404,
+                detail=f"No active bank accounts found for provider {provider_id}",
+            )
+
+        now = datetime.now(timezone.utc)
+        verified_count = 0
+        for acc in accounts:
+            if acc.kyc_status != KYCStatus.approved:
+                acc.kyc_status = KYCStatus.approved
+                acc.kyc_verified_at = now
+                acc.kyc_notes = f"Approved by {admin.get('sub', 'admin')}"
+                verified_count += 1
+
+        db.add(PaymentEvent(
+            event_type="provider_kyc_approved",
+            amount=None,
+            actor=admin.get("sub", "admin"),
+            metadata_json={"provider_id": provider_id, "accounts_verified": verified_count},
+        ))
+        db.commit()
+
         return {
             "provider_id": provider_id,
             "kyc_status": "approved",
-            "verified_at": datetime.now().isoformat(),
+            "verified_at": now.isoformat(),
+            "accounts_verified": verified_count,
             "account_verified": True,
         }
-    
+    except HTTPException:
+        raise
     except Exception as e:
+        db.rollback()
         logger.error(f"Error verifying provider KYC: {e}")
         raise HTTPException(status_code=500, detail=str(e))
 
@@ -621,7 +731,12 @@ def verify_provider_kyc(
 # ═══════════════════════════════════════════════════════════════
 
 @router.get("/treasury/summary")
-def get_treasury_summary(db: Session = Depends(get_db)):
+def get_treasury_summary(
+    request: Request,
+    db: Session = Depends(get_db),
+    access_token: Optional[str] = Cookie(None),
+):
+    _require_admin(request, access_token)
     """
     Obtener resumen ejecutivo de tesorería.
     
@@ -672,8 +787,11 @@ def get_treasury_summary(db: Session = Depends(get_db)):
 @router.get("/treasury/forecast")
 def get_treasury_forecast(
     days: int = 7,
+    request: Request = None,
     db: Session = Depends(get_db),
+    access_token: Optional[str] = Cookie(None),
 ):
+    _require_admin(request, access_token)
     """
     Obtener forecasting de necesidad de caja.
     
@@ -690,7 +808,12 @@ def get_treasury_forecast(
 
 
 @router.get("/treasury/alerts")
-def get_treasury_alerts(db: Session = Depends(get_db)):
+def get_treasury_alerts(
+    request: Request,
+    db: Session = Depends(get_db),
+    access_token: Optional[str] = Cookie(None),
+):
+    _require_admin(request, access_token)
     """
     Obtener alertas de tesorería.
     
@@ -723,8 +846,11 @@ def get_treasury_transactions(
     transaction_type: Optional[str] = None,
     limit: int = 100,
     offset: int = 0,
+    request: Request = None,
     db: Session = Depends(get_db),
+    access_token: Optional[str] = Cookie(None),
 ):
+    _require_admin(request, access_token)
     """
     Obtener historial de transacciones de tesorería.
     
@@ -754,7 +880,12 @@ def get_treasury_transactions(
     summary="Estado de Cuentas Dual (Savings + Checking)",
     description="Obtener balances y estado de salud de ambas cuentas Mercury."
 )
-def get_dual_account_status(db: Session = Depends(get_db)):
+def get_dual_account_status(
+    request: Request,
+    db: Session = Depends(get_db),
+    access_token: Optional[str] = Cookie(None),
+):
+    _require_admin(request, access_token)
     """
     Obtener estado completo de cuentas dual (SAVINGS + CHECKING).
     
@@ -822,8 +953,11 @@ class TransferToCheckingRequest(BaseModel):
 )
 def transfer_to_checking(
     body: TransferToCheckingRequest,
-    db: Session = Depends(get_db)
+    request: Request,
+    db: Session = Depends(get_db),
+    access_token: Optional[str] = Cookie(None),
 ):
+    _require_admin(request, access_token)
     """
     Transferir fondos de SAVINGS → CHECKING.
     
@@ -871,8 +1005,11 @@ class AutoReplenishRequest(BaseModel):
 )
 def trigger_auto_replenish(
     body: AutoReplenishRequest = AutoReplenishRequest(),
-    db: Session = Depends(get_db)
+    request: Request = None,
+    db: Session = Depends(get_db),
+    access_token: Optional[str] = Cookie(None),
 ):
+    _require_admin(request, access_token)
     """
     Forzar replenishment automático de CHECKING.
     

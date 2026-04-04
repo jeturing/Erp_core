@@ -12,6 +12,7 @@ import base64
 import hashlib
 import logging
 import os
+from datetime import datetime, timezone
 
 # Config loads the correct .env file based on ERP_ENV
 from .config import validate_required, ENVIRONMENT, FORCE_HTTPS, ENABLE_WAF, APP_URL, get_env_info, ACTIVE_ENV_FILE
@@ -299,10 +300,19 @@ async def env_info(request: Request, access_token: str = Cookie(None)):
 async def health_check():
     """Public health check endpoint with no infrastructure disclosure."""
     return {
-        "sentry_test": 1/0 if os.getenv("SENTRY_DSN") else "no-dsn", "status": "healthy",
+        "status": "healthy",
         "version": "2.0.0",
-        "sentry_test": 1/0 if os.getenv("SENTRY_DSN") else "no-dsn",
+        "timestamp": datetime.now(timezone.utc).isoformat(),
     }
+
+
+@app.get("/debug-sentry")
+async def debug_sentry(request: Request, access_token: str = Cookie(None)):
+    """Trigger a Sentry test error (admin only). Protected endpoint."""
+    _require_admin_base(request, access_token)
+    if os.getenv("SENTRY_DSN"):
+        raise ZeroDivisionError("Sentry debug test — this error is intentional")
+    return {"sentry": "no DSN configured"}
 
 
 # ── SPA Catch-All (SvelteKit file-based routing) ──
