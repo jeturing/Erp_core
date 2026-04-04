@@ -341,7 +341,7 @@ _SPA_ROUTES = {
     "/migrations", "/accountants", "/partner-signup", "/onboarding-access",
     "/developer-portal", "/api-keys", "/stripe-connect", "/quotas",
     "/recover-account", "/about", "/privacy", "/terms", "/data-processing",
-    "/security", "/sla", "/login", "/signup", "/pricing",
+    "/security", "/sla", "/login", "/login/admin", "/signup", "/pricing",
     "/session-monitoring", "/neural-users",
 }
 

@@ -39,6 +39,10 @@
 		"src/routes/(admin)/+layout.ts",
 		"src/routes/+layout.ts"
 	],
+	"/(admin)/api-keys": [
+		"src/routes/(admin)/+layout.ts",
+		"src/routes/+layout.ts"
+	],
 	"/(admin)/audit": [
 		"src/routes/(admin)/+layout.ts",
 		"src/routes/+layout.ts"
@@ -83,6 +87,10 @@
 		"src/routes/(public)/+layout.ts",
 		"src/routes/+layout.ts"
 	],
+	"/(admin)/developer-portal": [
+		"src/routes/(admin)/+layout.ts",
+		"src/routes/+layout.ts"
+	],
 	"/(admin)/dispersion": [
 		"src/routes/(admin)/+layout.ts",
 		"src/routes/+layout.ts"
@@ -108,6 +116,10 @@
 		"src/routes/+layout.ts"
 	],
 	"/(public)/login": [
+		"src/routes/(public)/+layout.ts",
+		"src/routes/+layout.ts"
+	],
+	"/(public)/login/admin": [
 		"src/routes/(public)/+layout.ts",
 		"src/routes/+layout.ts"
 	],
@@ -167,6 +179,10 @@
 		"src/routes/(public)/+layout.ts",
 		"src/routes/+layout.ts"
 	],
+	"/(admin)/quotas": [
+		"src/routes/(admin)/+layout.ts",
+		"src/routes/+layout.ts"
+	],
 	"/(admin)/quotations": [
 		"src/routes/(admin)/+layout.ts",
 		"src/routes/+layout.ts"
@@ -217,6 +233,10 @@
 	],
 	"/(public)/sla": [
 		"src/routes/(public)/+layout.ts",
+		"src/routes/+layout.ts"
+	],
+	"/(admin)/stripe-connect": [
+		"src/routes/(admin)/+layout.ts",
 		"src/routes/+layout.ts"
 	],
 	"/(admin)/tenants": [
