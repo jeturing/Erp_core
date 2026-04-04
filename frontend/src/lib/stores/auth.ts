@@ -8,6 +8,15 @@ interface AuthState {
   error: string | null;
 }
 
+// Shared promise that resolves once auth.init() has completed.
+// Layout load() functions await this before checking isAuthenticated,
+// preventing the race condition where load() runs before onMount.
+let _authReadyResolve: () => void;
+let _authInitialized = false;
+export const authReady: Promise<void> = new Promise((resolve) => {
+  _authReadyResolve = resolve;
+});
+
 function createAuthStore() {
   const { subscribe, set, update } = writable<AuthState>({
     user: null,
@@ -24,6 +33,11 @@ function createAuthStore() {
         update((state) => ({ ...state, user, isLoading: false, error: null }));
       } catch {
         update((state) => ({ ...state, user: null, isLoading: false }));
+      } finally {
+        if (!_authInitialized) {
+          _authInitialized = true;
+          _authReadyResolve();
+        }
       }
     },
 

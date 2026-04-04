@@ -1,6 +1,6 @@
 import { h as sanitize_props, i as spread_props, j as slot, s as store_get, d as escape_html, e as ensure_array_like, u as unsubscribe_stores, o as bind_props, k as attr_class, b as stringify, c as attr, w as head } from "./index2.js";
 import { a8 as fallback } from "./utils2.js";
-import { $ as $format, g as $locale } from "./darkMode.js";
+import { $ as $format, j as $locale } from "./darkMode.js";
 import { N as NavBar, F as Footer } from "./Footer.js";
 import { A as Arrow_right } from "./arrow-right.js";
 import { C as Calculator } from "./calculator.js";

@@ -1,6 +1,6 @@
 import "clsx";
 import { h as sanitize_props, i as spread_props, j as slot, d as escape_html, s as store_get, e as ensure_array_like, k as attr_class, l as clsx, c as attr, b as stringify, u as unsubscribe_stores } from "../../../../chunks/index2.js";
-import { b as domainsStore, e as domainStats } from "../../../../chunks/darkMode.js";
+import { e as domainsStore, f as domainStats } from "../../../../chunks/darkMode.js";
 import "../../../../chunks/toast.js";
 import "../../../../chunks/client.js";
 import { a as formatDate } from "../../../../chunks/formatters.js";

@@ -1,10 +1,15 @@
 import { redirect } from '@sveltejs/kit'
 import { get } from 'svelte/store'
-import { isAuthenticated, currentUser } from '$lib/stores'
+import { isAuthenticated, currentUser, authReady } from '$lib/stores'
 
 export const ssr = false
 
-export function load() {
+export async function load() {
+  // Wait for auth bootstrap to complete before checking state.
+  // This prevents a race condition where load() runs before
+  // auth.init() has finished fetching /api/auth/me.
+  await authReady
+
   const authed = get(isAuthenticated)
   const user = get(currentUser)
 

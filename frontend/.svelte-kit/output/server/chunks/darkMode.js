@@ -13,6 +13,11 @@ const dashboardApi = {
     return api.get("/api/reports/overview");
   }
 };
+let _authReadyResolve;
+let _authInitialized = false;
+const authReady = new Promise((resolve) => {
+  _authReadyResolve = resolve;
+});
 function createAuthStore() {
   const { subscribe, set: set2, update } = writable({
     user: null,
@@ -27,6 +32,11 @@ function createAuthStore() {
         update((state) => ({ ...state, user, isLoading: false, error: null }));
       } catch {
         update((state) => ({ ...state, user: null, isLoading: false }));
+      } finally {
+        if (!_authInitialized) {
+          _authInitialized = true;
+          _authReadyResolve();
+        }
       }
     },
     login: async (usernameOrEmail, password) => {
@@ -616,6 +626,11 @@ const set = (newLocale) => {
 const $locale = __spreadProps(__spreadValues$1({}, internalLocale), {
   set
 });
+const getLocaleFromNavigator = () => {
+  if (typeof window === "undefined")
+    return null;
+  return window.navigator.language || window.navigator.languages[0];
+};
 const monadicMemoize = (fn) => {
   const cache = /* @__PURE__ */ Object.create(null);
   const memoizedFn = (arg) => {
@@ -874,12 +889,14 @@ const darkMode = createDarkMode();
 export {
   $format as $,
   auth as a,
-  domainsStore as b,
+  authReady as b,
   currentUser as c,
   dashboard as d,
-  domainStats as e,
-  darkMode as f,
-  $locale as g,
+  domainsStore as e,
+  domainStats as f,
+  getLocaleFromNavigator as g,
+  darkMode as h,
   isAuthenticated as i,
+  $locale as j,
   localeStore as l
 };

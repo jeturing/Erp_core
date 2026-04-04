@@ -2,21 +2,19 @@
   import '../app.css'
   import Toast from '$lib/components/Toast.svelte'
   import OfflineBanner from '$lib/components/OfflineBanner.svelte'
-  import { auth } from '$lib/stores'
-  import { onMount } from 'svelte'
-  import { getInitialLocale } from '$lib/i18n'
-  import { localeStore } from '$lib/stores/locale'
+  import { authReady } from '$lib/stores'
   import { Spinner } from '$lib/components'
 
   let { children } = $props()
 
+  // auth.init() is called in +layout.ts load(), authReady resolves when done.
+  // We use this to show a spinner until auth is bootstrapped.
   let authBootstrapped = $state(false)
 
-  onMount(async () => {
-    const initialLocale = getInitialLocale()
-    localeStore.set(initialLocale as any)
-    await auth.init()
-    authBootstrapped = true
+  $effect(() => {
+    authReady.then(() => {
+      authBootstrapped = true
+    })
   })
 </script>
 
