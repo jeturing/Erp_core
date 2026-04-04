@@ -9,6 +9,7 @@ import re
 from ..models.database import Customer, Subscription, SubscriptionStatus, SessionLocal, Partner, Plan, BillingMode, PayerType, CollectorType, InvoiceIssuer
 from ..models.database import CustomDomain, DomainVerificationStatus, TenantDeployment
 from ..models.database import ProxmoxNode as _ProxmoxNode, MigrationState as _MigrationState, TenantMigrationJob as _TenantMigrationJob
+from ..models.database import ReservedSubdomain, InfraTunnel
 from ..services.odoo_database_manager import (
     get_available_servers,
     get_servers_status,
@@ -57,7 +58,94 @@ _SYSTEM_DBS: set = {
     'template_tenant',
     _get_own_db_name(),   # BD interna del ERP (erp_core_db o la que configure DATABASE_URL)
     'root',               # BD de postgres generada al instalar
+    # ── BDs de infraestructura — NUNCA son tenants ──
+    'n8n', 'n8n_queue',
+    'segrd', 'segrd_forensics',
+    'glitchtip', 'sentry',
+    'grafana', 'prometheus',
+    'redis', 'minio',
+    'wazuh', 'thehive', 'cortex', 'cassandra',
+    'pentagi', 'ollama',
+    'keycloak', 'auth0',
+    'nextcloud', 'gitea',
 }
+
+
+def _get_reserved_subdomains() -> set:
+    """Obtiene subdominios reservados desde la tabla reserved_subdomains (cache 60s)."""
+    if not hasattr(_get_reserved_subdomains, '_cache_ts'):
+        _get_reserved_subdomains._cache_ts = 0
+        _get_reserved_subdomains._cache_val = set()
+    
+    import time
+    now = time.time()
+    if now - _get_reserved_subdomains._cache_ts < 60:
+        return _get_reserved_subdomains._cache_val
+    
+    db = SessionLocal()
+    try:
+        rows = db.query(ReservedSubdomain.subdomain).filter(
+            ReservedSubdomain.is_active == True
+        ).all()
+        result = {r[0] for r in rows}
+        _get_reserved_subdomains._cache_ts = now
+        _get_reserved_subdomains._cache_val = result
+        return result
+    except Exception as e:
+        logger.warning(f"No se pudo cargar reserved_subdomains: {e}")
+        return _get_reserved_subdomains._cache_val
+    finally:
+        db.close()
+
+
+def _is_excluded_db(db_name: str) -> bool:
+    """Verifica si una BD está excluida del auto-registro de tenants.
+    
+    Combina:
+    1. _SYSTEM_DBS (hardcoded)
+    2. reserved_subdomains (dinámico, desde BD)
+    """
+    if db_name in _SYSTEM_DBS:
+        return True
+    reserved = _get_reserved_subdomains()
+    if db_name in reserved:
+        return True
+    return False
+
+
+def _is_valid_odoo_database(db_name: str) -> bool:
+    """Verifica que una BD sea realmente una instancia Odoo válida.
+    
+    Conecta a PostgreSQL y verifica que la BD tenga la tabla ir_module_module
+    con el módulo 'base' instalado. Si no tiene esto, NO es un Odoo real.
+    """
+    try:
+        with psycopg.connect(
+            host=ODOO_DB_HOST,
+            port=int(os.getenv("ODOO_DB_PORT", "5432")),
+            dbname=db_name,
+            user=ODOO_DB_USER,
+            password=ODOO_DB_PASSWORD,
+            connect_timeout=5,
+        ) as conn:
+            with conn.cursor() as cur:
+                # Verificar que exista ir_module_module con base instalado
+                cur.execute("""
+                    SELECT 1 FROM information_schema.tables 
+                    WHERE table_name = 'ir_module_module' 
+                    LIMIT 1
+                """)
+                if not cur.fetchone():
+                    return False
+                cur.execute("""
+                    SELECT 1 FROM ir_module_module 
+                    WHERE name = 'base' AND state = 'installed' 
+                    LIMIT 1
+                """)
+                return cur.fetchone() is not None
+    except Exception as e:
+        logger.debug(f"No se pudo validar BD '{db_name}' como Odoo: {e}")
+        return False
 
 router = APIRouter(prefix="/api/tenants", tags=["Tenants"])
 logger = logging.getLogger(__name__)
@@ -285,8 +373,8 @@ async def get_all_tenants_from_servers():
         db_port = int(os.getenv("ODOO_DB_PORT", "5432"))
         
         for db_name in databases:
-            # Saltar BDs del sistema (incluyendo la BD interna del ERP)
-            if db_name in _SYSTEM_DBS:
+            # Saltar BDs del sistema (incluyendo la BD interna del ERP) y reservadas
+            if _is_excluded_db(db_name):
                 continue
             
             # Consultar login real desde Odoo PostgreSQL
@@ -353,7 +441,12 @@ async def get_all_tenants_from_servers():
                         "deployment": _dep_info.get("deployment"),
                     })
                 else:
-                    # Tenant existe en Odoo pero no en BD local — auto-registrar
+                    # Tenant existe en Odoo pero no en BD local — validar primero
+                    # Solo auto-registrar si es una BD Odoo real (tiene ir_module_module + base instalado)
+                    if not _is_valid_odoo_database(db_name):
+                        logger.info(f"Skipping auto-registro de '{db_name}': no es una BD Odoo válida")
+                        continue
+                    
                     email_to_show = real_login or DEFAULT_ADMIN_LOGIN
                     try:
                         new_customer = Customer(
@@ -466,7 +559,7 @@ def _list_databases_via_postgres(server_id: Optional[str]) -> List[str]:
                     """
                 )
                 rows = cur.fetchall()
-                dbs = [row[0] for row in rows if row and row[0] and row[0] not in _SYSTEM_DBS]
+                dbs = [row[0] for row in rows if row and row[0] and not _is_excluded_db(row[0])]
                 logger.info(
                     f"PostgreSQL fallback: {len(dbs)} BDs detectadas via {db_host}:{db_port} (server={server.id})"
                 )
@@ -1496,3 +1589,336 @@ async def install_modules_on_tenant(
     except Exception as e:
         logger.error(f"Error instalando módulos en '{subdomain}': {e}")
         raise HTTPException(500, f"Error instalando módulos: {str(e)}")
+
+
+# ═══════════════════════════════════════════════════════
+# PHANTOM TENANTS — Detección y limpieza
+# ═══════════════════════════════════════════════════════
+
+@router.get("/phantoms/detect")
+async def detect_phantom_tenants(
+    request: Request,
+    access_token: str = Cookie(None),
+):
+    """
+    Detecta tenants fantasma: registros en BD local que NO corresponden a una BD Odoo real.
+
+    Un tenant es fantasma si:
+    1. Existe como Customer + Subscription en BD local (erp_core_db)
+    2. Pero NO existe como BD en PostgreSQL (PCT 137) — fue creado por auto-registro erróneo
+    
+    O si es un subdomain reservado/infraestructura que se auto-registró como tenant.
+    """
+    _require_admin_base(request, access_token)
+
+    db = SessionLocal()
+    phantoms = []
+    try:
+        customers = db.query(Customer).all()
+        reserved = _get_reserved_subdomains()
+
+        for customer in customers:
+            subdomain = customer.subdomain
+            if not subdomain:
+                continue
+
+            is_phantom = False
+            reason = ""
+
+            # Check 1: ¿Es un subdomain reservado/infraestructura?
+            if subdomain in _SYSTEM_DBS or subdomain in reserved:
+                is_phantom = True
+                reason = "Subdomain reservado o de infraestructura"
+
+            # Check 2: ¿Existe la BD en PostgreSQL?
+            if not is_phantom:
+                try:
+                    with psycopg.connect(
+                        host=ODOO_DB_HOST,
+                        port=int(os.getenv("ODOO_DB_PORT", "5432")),
+                        dbname="postgres",
+                        user=ODOO_DB_USER,
+                        password=ODOO_DB_PASSWORD,
+                        connect_timeout=5,
+                    ) as conn:
+                        with conn.cursor() as cur:
+                            cur.execute(
+                                "SELECT 1 FROM pg_database WHERE datname = %s LIMIT 1",
+                                (subdomain,),
+                            )
+                            if not cur.fetchone():
+                                is_phantom = True
+                                reason = "BD no existe en PostgreSQL"
+                except Exception as e:
+                    logger.warning(f"Error verificando BD '{subdomain}': {e}")
+
+            # Check 3: Si la BD existe, ¿es realmente Odoo?
+            if not is_phantom and not _is_valid_odoo_database(subdomain):
+                # Solo marcar si la BD existe pero no es Odoo
+                try:
+                    with psycopg.connect(
+                        host=ODOO_DB_HOST,
+                        port=int(os.getenv("ODOO_DB_PORT", "5432")),
+                        dbname="postgres",
+                        user=ODOO_DB_USER,
+                        password=ODOO_DB_PASSWORD,
+                        connect_timeout=5,
+                    ) as conn:
+                        with conn.cursor() as cur:
+                            cur.execute(
+                                "SELECT 1 FROM pg_database WHERE datname = %s LIMIT 1",
+                                (subdomain,),
+                            )
+                            if cur.fetchone():
+                                is_phantom = True
+                                reason = "BD existe pero no es una instancia Odoo válida"
+                except Exception:
+                    pass
+
+            if is_phantom:
+                sub = db.query(Subscription).filter(
+                    Subscription.customer_id == customer.id
+                ).first()
+                phantoms.append({
+                    "customer_id": customer.id,
+                    "subdomain": subdomain,
+                    "company_name": customer.company_name,
+                    "email": customer.email,
+                    "reason": reason,
+                    "created_at": customer.created_at.isoformat() + "Z" if customer.created_at else None,
+                    "has_subscription": sub is not None,
+                    "subscription_id": sub.id if sub else None,
+                })
+
+    except Exception as e:
+        logger.error(f"Error detectando phantoms: {e}")
+        raise HTTPException(500, f"Error: {e}")
+    finally:
+        db.close()
+
+    return {
+        "success": True,
+        "phantoms": phantoms,
+        "total": len(phantoms),
+    }
+
+
+@router.delete("/{subdomain}/purge-phantom")
+async def purge_phantom_tenant(
+    subdomain: str,
+    request: Request,
+    access_token: str = Cookie(None),
+    cleanup_dns: bool = Query(True, description="También eliminar CNAME de Cloudflare"),
+):
+    """
+    Elimina un tenant fantasma: solo borra el registro local (Customer + Subscription).
+    
+    NO elimina ninguna BD de PostgreSQL — solo limpia el registro erróneo en erp_core_db.
+    Opcionalmente limpia el CNAME de Cloudflare.
+    """
+    _require_admin_base(request, access_token)
+
+    db = SessionLocal()
+    try:
+        customer = db.query(Customer).filter(Customer.subdomain == subdomain).first()
+        if not customer:
+            raise HTTPException(404, f"No existe registro local para '{subdomain}'")
+
+        # Eliminar subscriptions
+        deleted_subs = db.query(Subscription).filter(
+            Subscription.customer_id == customer.id
+        ).delete()
+
+        # Eliminar TenantDeployment si existe
+        deleted_deps = db.query(TenantDeployment).filter(
+            TenantDeployment.subdomain == subdomain
+        ).delete()
+
+        # Eliminar customer
+        db.delete(customer)
+        db.commit()
+
+        result = {
+            "success": True,
+            "message": f"Registro fantasma '{subdomain}' eliminado",
+            "deleted_subscriptions": deleted_subs,
+            "deleted_deployments": deleted_deps,
+        }
+
+        # Limpiar DNS de Cloudflare
+        if cleanup_dns:
+            try:
+                cf_result = await CloudflareManager.delete_subdomain_dns(
+                    subdomain=subdomain,
+                    domain="sajet.us",
+                )
+                result["cloudflare_dns_deleted"] = cf_result.get("deleted", 0)
+            except Exception as cf_err:
+                logger.warning(f"No se pudo limpiar DNS para {subdomain}: {cf_err}")
+                result["cloudflare_dns_error"] = str(cf_err)
+
+        _log_tenant_audit(
+            request,
+            event_type="PHANTOM_TENANT_PURGED",
+            resource=f"tenant:{subdomain}",
+            action="purge_phantom",
+            status="success",
+            details=result,
+        )
+
+        return result
+
+    except HTTPException:
+        raise
+    except Exception as e:
+        db.rollback()
+        logger.error(f"Error purgando phantom '{subdomain}': {e}")
+        raise HTTPException(500, str(e))
+    finally:
+        db.close()
+
+
+@router.post("/phantoms/purge-all")
+async def purge_all_phantom_tenants(
+    request: Request,
+    access_token: str = Cookie(None),
+    cleanup_dns: bool = Query(True, description="También eliminar CNAMEs de Cloudflare"),
+):
+    """
+    Detecta y elimina TODOS los tenants fantasma de una vez.
+    Requiere rol admin.
+    """
+    _require_admin_base(request, access_token)
+
+    # Primero detectar
+    detect_result = await detect_phantom_tenants(request, access_token)
+    phantoms = detect_result.get("phantoms", [])
+
+    if not phantoms:
+        return {"success": True, "message": "No se encontraron tenants fantasma", "purged": 0}
+
+    purged = []
+    errors = []
+
+    for phantom in phantoms:
+        subdomain = phantom["subdomain"]
+        try:
+            result = await purge_phantom_tenant(subdomain, request, access_token, cleanup_dns)
+            purged.append({"subdomain": subdomain, "result": result})
+        except Exception as e:
+            errors.append({"subdomain": subdomain, "error": str(e)})
+
+    return {
+        "success": True,
+        "message": f"{len(purged)} fantasmas eliminados, {len(errors)} errores",
+        "purged": len(purged),
+        "purged_details": purged,
+        "errors": errors,
+    }
+
+
+# ═══════════════════════════════════════════════════════
+# RESERVED SUBDOMAINS — Gestión dinámica
+# ═══════════════════════════════════════════════════════
+
+@router.get("/reserved-subdomains")
+async def list_reserved_subdomains(
+    request: Request,
+    access_token: str = Cookie(None),
+):
+    """Lista todos los subdominios reservados."""
+    _require_admin_base(request, access_token)
+    db = SessionLocal()
+    try:
+        rows = db.query(ReservedSubdomain).order_by(ReservedSubdomain.subdomain).all()
+        return {
+            "items": [
+                {
+                    "id": r.id,
+                    "subdomain": r.subdomain,
+                    "reason": r.reason,
+                    "category": r.category,
+                    "is_active": r.is_active,
+                    "created_at": r.created_at.isoformat() + "Z" if r.created_at else None,
+                }
+                for r in rows
+            ],
+            "total": len(rows),
+        }
+    finally:
+        db.close()
+
+
+class ReservedSubdomainRequest(BaseModel):
+    subdomain: str = Field(..., min_length=1, max_length=100)
+    reason: Optional[str] = None
+    category: str = Field(default="infrastructure")
+
+
+@router.post("/reserved-subdomains")
+async def add_reserved_subdomain(
+    payload: ReservedSubdomainRequest,
+    request: Request,
+    access_token: str = Cookie(None),
+):
+    """Agrega un subdomain a la lista de reservados."""
+    _require_admin_base(request, access_token)
+    db = SessionLocal()
+    try:
+        existing = db.query(ReservedSubdomain).filter(
+            ReservedSubdomain.subdomain == payload.subdomain.lower()
+        ).first()
+        if existing:
+            raise HTTPException(409, f"'{payload.subdomain}' ya está reservado")
+
+        row = ReservedSubdomain(
+            subdomain=payload.subdomain.lower(),
+            reason=payload.reason,
+            category=payload.category,
+        )
+        db.add(row)
+        db.commit()
+        db.refresh(row)
+
+        # Invalidar cache
+        _get_reserved_subdomains._cache_ts = 0
+
+        return {"success": True, "id": row.id, "subdomain": row.subdomain}
+    except HTTPException:
+        raise
+    except Exception as e:
+        db.rollback()
+        raise HTTPException(500, str(e))
+    finally:
+        db.close()
+
+
+@router.delete("/reserved-subdomains/{subdomain}")
+async def remove_reserved_subdomain(
+    subdomain: str,
+    request: Request,
+    access_token: str = Cookie(None),
+):
+    """Elimina un subdomain de la lista de reservados."""
+    _require_admin_base(request, access_token)
+    db = SessionLocal()
+    try:
+        row = db.query(ReservedSubdomain).filter(
+            ReservedSubdomain.subdomain == subdomain.lower()
+        ).first()
+        if not row:
+            raise HTTPException(404, f"'{subdomain}' no está en la lista de reservados")
+        db.delete(row)
+        db.commit()
+
+        # Invalidar cache
+        _get_reserved_subdomains._cache_ts = 0
+
+        return {"success": True, "message": f"'{subdomain}' removido de reservados"}
+    except HTTPException:
+        raise
+    except Exception as e:
+        db.rollback()
+        raise HTTPException(500, str(e))
+    finally:
+        db.close()

@@ -1103,6 +1103,66 @@ class TenantDeployment(Base):
     desired_node = relationship("ProxmoxNode", foreign_keys=[desired_node_id])
 
 
+# ═══════════════════════════════════════════════════════
+# INFRA TUNNELS — Túneles de infraestructura (separados de tenants)
+# ═══════════════════════════════════════════════════════
+
+class InfraTunnel(Base):
+    """
+    Túneles de infraestructura Cloudflare compartidos.
+    
+    Estos son los túneles que conectan PCTs con el exterior a través de Cloudflare.
+    NO son tenants — son infraestructura compartida que puede servir a múltiples tenants.
+    
+    Separados de TenantDeployment para evitar confusión semántica:
+    - InfraTunnel = infraestructura compartida (1 tunnel → N tenants)
+    - TenantDeployment.tunnel_* = routing del tenant individual
+    """
+    __tablename__ = "infra_tunnels"
+
+    id = Column(Integer, primary_key=True, index=True)
+    name = Column(String(100), nullable=False, unique=True)              # ej: "sajet-pct105", "segrd-pct154"
+    cloudflare_tunnel_id = Column(String(100), nullable=True)            # UUID del tunnel en CF
+    cloudflare_zone_id = Column(String(100), nullable=True)              # Zone ID en CF
+    domain = Column(String(200), nullable=False)                         # ej: "sajet.us", "segrd.com"
+    hostname_pattern = Column(String(200), nullable=True)                # ej: "*.sajet.us" o "segrd.com"
+    target_pct = Column(Integer, nullable=True)                          # PCT destino (ej: 105, 154, 160)
+    target_url = Column(String(300), nullable=True)                      # ej: "http://localhost:8069"
+    is_active = Column(Boolean, default=True, nullable=False)
+    description = Column(Text, nullable=True)
+    created_at = Column(DateTime, default=datetime.utcnow)
+    updated_at = Column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
+
+    def __repr__(self):
+        return f"<InfraTunnel {self.name}: {self.domain} → PCT {self.target_pct}>"
+
+
+class ReservedSubdomain(Base):
+    """
+    Subdominios reservados que NO deben auto-registrarse como tenants.
+    
+    Incluye subdominios de infraestructura, servicios internos, 
+    y cualquier nombre que no corresponda a una instancia Odoo real.
+    
+    Consultada por:
+    - odoo_db_watcher (antes de crear CNAME)
+    - get_all_tenants_from_servers() (antes de auto-registrar Customer)
+    - provision_tenant() (antes de crear nuevo tenant)
+    """
+    __tablename__ = "reserved_subdomains"
+
+    id = Column(Integer, primary_key=True, index=True)
+    subdomain = Column(String(100), nullable=False, unique=True, index=True)  # ej: "api", "admin", "n8n"
+    reason = Column(String(300), nullable=True)                               # ej: "Tunnel infraestructura PCT 154"
+    category = Column(String(50), nullable=False, default="infrastructure")   # infrastructure, service, reserved, system
+    is_active = Column(Boolean, default=True, nullable=False)
+    created_at = Column(DateTime, default=datetime.utcnow)
+    updated_at = Column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
+
+    def __repr__(self):
+        return f"<ReservedSubdomain {self.subdomain} ({self.category})>"
+
+
 class TenantMigrationJob(Base):
     """
     Job de migración de un tenant entre nodos.
