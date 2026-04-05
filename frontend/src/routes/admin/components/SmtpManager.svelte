@@ -157,7 +157,7 @@
 
 	{#if loading}
 		<div class="loading">
-			<div class="spinner" />
+			<div class="spinner"></div>
 			<p>Cargando configuración SMTP...</p>
 		</div>
 	{:else}
@@ -312,7 +312,7 @@
 <style>
 	.smtp-container {
 		padding: 20px;
-		background: white;
+		background: #0d1e35;
 		border-radius: 8px;
 	}
 
@@ -323,7 +323,7 @@
 
 	.spinner {
 		border: 4px solid #e5e7eb;
-		border-top-color: #667eea;
+		border-top-color: #00FF9F;
 		border-radius: 50%;
 		width: 40px;
 		height: 40px;
@@ -347,19 +347,19 @@
 
 	.alert-success {
 		background: #dcfce7;
-		color: #166534;
+		color: #00FF9F;
 		border-left: 4px solid #22c55e;
 	}
 
 	.alert-error {
 		background: #fee2e2;
-		color: #991b1b;
+		color: #f87171;
 		border-left: 4px solid #ef4444;
 	}
 
 	.alert-info {
 		background: #dbeafe;
-		color: #1e40af;
+		color: #93c5fd;
 		border-left: 4px solid #3b82f6;
 	}
 
@@ -368,11 +368,12 @@
 	}
 
 	.status-card {
-		background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+		background: linear-gradient(135deg, #0a1e38 0%, #003B73 100%);
 		color: white;
 		padding: 20px;
 		border-radius: 8px;
 		margin-bottom: 15px;
+		border: 1px solid rgba(0, 255, 159, 0.12);
 	}
 
 	.status-card h4 {
@@ -437,32 +438,35 @@
 	}
 
 	.btn-primary {
-		background: #667eea;
-		color: white;
+		background: #003B73;
+		color: #00FF9F;
+		border: 1px solid rgba(0, 255, 159, 0.25);
 	}
 
 	.btn-primary:hover:not(:disabled) {
-		background: #5568d3;
-		box-shadow: 0 4px 12px rgba(102, 126, 234, 0.4);
+		background: #004d99;
+		box-shadow: 0 4px 16px rgba(0, 255, 159, 0.2);
 	}
 
 	.btn-secondary {
-		background: #e5e7eb;
-		color: #374151;
+		background: rgba(255,255,255,0.06);
+		color: #a0b0c8;
+		border: 1px solid rgba(255,255,255,0.1);
 	}
 
 	.btn-secondary:hover:not(:disabled) {
-		background: #d1d5db;
+		background: rgba(255,255,255,0.1);
 	}
 
 	.btn-success {
-		background: #10b981;
-		color: white;
+		background: rgba(0, 255, 159, 0.1);
+		color: #00FF9F;
+		border: 1px solid rgba(0, 255, 159, 0.2);
 	}
 
 	.btn-success:hover:not(:disabled) {
-		background: #059669;
-		box-shadow: 0 4px 12px rgba(16, 185, 129, 0.4);
+		background: rgba(0, 255, 159, 0.2);
+		box-shadow: 0 4px 12px rgba(0, 255, 159, 0.2);
 	}
 
 	.edit-form {
@@ -475,7 +479,7 @@
 
 	.edit-form h4 {
 		margin: 0 0 15px 0;
-		color: #1f2937;
+		color: #c8d3e8;
 	}
 
 	.form-group {
@@ -487,7 +491,7 @@
 		margin-bottom: 6px;
 		font-size: 14px;
 		font-weight: 600;
-		color: #374151;
+		color: #a0b0c8;
 	}
 
 	.form-group input {
@@ -501,7 +505,7 @@
 
 	.form-group input:focus {
 		outline: none;
-		border-color: #667eea;
+		border-color: #00FF9F;
 		box-shadow: 0 0 0 3px rgba(102, 126, 234, 0.1);
 	}
 
@@ -523,16 +527,15 @@
 	}
 
 	.help-section {
-		background: #fef3c7;
-		border: 1px solid #fcd34d;
-		border-radius: 8px;
+		background: rgba(251, 191, 36, 0.06);
+		border: 1px solid rgba(251, 191, 36, 0.2);
 		padding: 15px;
 		margin-top: 20px;
 	}
 
 	.help-section h4 {
 		margin: 0 0 10px 0;
-		color: #92400e;
+		color: #fbbf24;
 		font-size: 14px;
 	}
 
@@ -540,7 +543,7 @@
 		margin: 0;
 		padding-left: 20px;
 		font-size: 13px;
-		color: #78350f;
+		color: #f59e0b;
 	}
 
 	.help-section li {

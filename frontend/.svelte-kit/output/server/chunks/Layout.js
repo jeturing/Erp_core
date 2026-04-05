@@ -18,7 +18,7 @@ import { F as File_spreadsheet } from "./file-spreadsheet.js";
 import { S as Shopping_bag } from "./shopping-bag.js";
 import { C as Credit_card } from "./credit-card.js";
 import { P as Package } from "./package.js";
-import { R as Receipt, a as Rocket } from "./rocket.js";
+import { R as Receipt } from "./receipt.js";
 import { S as Scale } from "./scale.js";
 import { G as Git_compare_arrows, C as Clipboard_list } from "./git-compare-arrows.js";
 import { G as Gauge } from "./gauge.js";
@@ -39,6 +39,7 @@ import { K as Key } from "./key.js";
 import { E as External_link } from "./external-link.js";
 import { C as Chevron_down } from "./chevron-down.js";
 import { L as Log_out } from "./log-out.js";
+import { M as Menu } from "./menu.js";
 function File_type($$renderer, $$props) {
   const $$sanitized_props = sanitize_props($$props);
   const iconNode = [
@@ -126,38 +127,6 @@ function Layout_dashboard($$renderer, $$props) {
     }
   ]));
 }
-function Menu($$renderer, $$props) {
-  const $$sanitized_props = sanitize_props($$props);
-  const iconNode = [
-    ["path", { "d": "M4 5h16" }],
-    ["path", { "d": "M4 12h16" }],
-    ["path", { "d": "M4 19h16" }]
-  ];
-  Icon($$renderer, spread_props([
-    { name: "menu" },
-    $$sanitized_props,
-    {
-      /**
-       * @component @name Menu
-       * @description Lucide SVG icon component, renders SVG Element with children.
-       *
-       * @preview ![img](data:image/svg+xml;base64,PHN2ZyAgeG1sbnM9Imh0dHA6Ly93d3cudzMub3JnLzIwMDAvc3ZnIgogIHdpZHRoPSIyNCIKICBoZWlnaHQ9IjI0IgogIHZpZXdCb3g9IjAgMCAyNCAyNCIKICBmaWxsPSJub25lIgogIHN0cm9rZT0iIzAwMCIgc3R5bGU9ImJhY2tncm91bmQtY29sb3I6ICNmZmY7IGJvcmRlci1yYWRpdXM6IDJweCIKICBzdHJva2Utd2lkdGg9IjIiCiAgc3Ryb2tlLWxpbmVjYXA9InJvdW5kIgogIHN0cm9rZS1saW5lam9pbj0icm91bmQiCj4KICA8cGF0aCBkPSJNNCA1aDE2IiAvPgogIDxwYXRoIGQ9Ik00IDEyaDE2IiAvPgogIDxwYXRoIGQ9Ik00IDE5aDE2IiAvPgo8L3N2Zz4K) - https://lucide.dev/icons/menu
-       * @see https://lucide.dev/guide/packages/lucide-svelte - Documentation
-       *
-       * @param {Object} props - Lucide icons props and any valid SVG attribute
-       * @returns {FunctionalComponent} Svelte component
-       *
-       */
-      iconNode,
-      children: ($$renderer2) => {
-        $$renderer2.push(`<!--[-->`);
-        slot($$renderer2, $$props, "default", {});
-        $$renderer2.push(`<!--]-->`);
-      },
-      $$slots: { default: true }
-    }
-  ]));
-}
 function Moon($$renderer, $$props) {
   const $$sanitized_props = sanitize_props($$props);
   const iconNode = [
@@ -177,6 +146,49 @@ function Moon($$renderer, $$props) {
        * @description Lucide SVG icon component, renders SVG Element with children.
        *
        * @preview ![img](data:image/svg+xml;base64,PHN2ZyAgeG1sbnM9Imh0dHA6Ly93d3cudzMub3JnLzIwMDAvc3ZnIgogIHdpZHRoPSIyNCIKICBoZWlnaHQ9IjI0IgogIHZpZXdCb3g9IjAgMCAyNCAyNCIKICBmaWxsPSJub25lIgogIHN0cm9rZT0iIzAwMCIgc3R5bGU9ImJhY2tncm91bmQtY29sb3I6ICNmZmY7IGJvcmRlci1yYWRpdXM6IDJweCIKICBzdHJva2Utd2lkdGg9IjIiCiAgc3Ryb2tlLWxpbmVjYXA9InJvdW5kIgogIHN0cm9rZS1saW5lam9pbj0icm91bmQiCj4KICA8cGF0aCBkPSJNMjAuOTg1IDEyLjQ4NmE5IDkgMCAxIDEtOS40NzMtOS40NzJjLjQwNS0uMDIyLjYxNy40Ni40MDIuODAzYTYgNiAwIDAgMCA4LjI2OCA4LjI2OGMuMzQ0LS4yMTUuODI1LS4wMDQuODAzLjQwMSIgLz4KPC9zdmc+Cg==) - https://lucide.dev/icons/moon
+       * @see https://lucide.dev/guide/packages/lucide-svelte - Documentation
+       *
+       * @param {Object} props - Lucide icons props and any valid SVG attribute
+       * @returns {FunctionalComponent} Svelte component
+       *
+       */
+      iconNode,
+      children: ($$renderer2) => {
+        $$renderer2.push(`<!--[-->`);
+        slot($$renderer2, $$props, "default", {});
+        $$renderer2.push(`<!--]-->`);
+      },
+      $$slots: { default: true }
+    }
+  ]));
+}
+function Rocket($$renderer, $$props) {
+  const $$sanitized_props = sanitize_props($$props);
+  const iconNode = [
+    [
+      "path",
+      {
+        "d": "M4.5 16.5c-1.5 1.26-2 5-2 5s3.74-.5 5-2c.71-.84.7-2.13-.09-2.91a2.18 2.18 0 0 0-2.91-.09z"
+      }
+    ],
+    [
+      "path",
+      {
+        "d": "m12 15-3-3a22 22 0 0 1 2-3.95A12.88 12.88 0 0 1 22 2c0 2.72-.78 7.5-6 11a22.35 22.35 0 0 1-4 2z"
+      }
+    ],
+    ["path", { "d": "M9 12H4s.55-3.03 2-4c1.62-1.08 5 0 5 0" }],
+    ["path", { "d": "M12 15v5s3.03-.55 4-2c1.08-1.62 0-5 0-5" }]
+  ];
+  Icon($$renderer, spread_props([
+    { name: "rocket" },
+    $$sanitized_props,
+    {
+      /**
+       * @component @name Rocket
+       * @description Lucide SVG icon component, renders SVG Element with children.
+       *
+       * @preview ![img](data:image/svg+xml;base64,PHN2ZyAgeG1sbnM9Imh0dHA6Ly93d3cudzMub3JnLzIwMDAvc3ZnIgogIHdpZHRoPSIyNCIKICBoZWlnaHQ9IjI0IgogIHZpZXdCb3g9IjAgMCAyNCAyNCIKICBmaWxsPSJub25lIgogIHN0cm9rZT0iIzAwMCIgc3R5bGU9ImJhY2tncm91bmQtY29sb3I6ICNmZmY7IGJvcmRlci1yYWRpdXM6IDJweCIKICBzdHJva2Utd2lkdGg9IjIiCiAgc3Ryb2tlLWxpbmVjYXA9InJvdW5kIgogIHN0cm9rZS1saW5lam9pbj0icm91bmQiCj4KICA8cGF0aCBkPSJNNC41IDE2LjVjLTEuNSAxLjI2LTIgNS0yIDVzMy43NC0uNSA1LTJjLjcxLS44NC43LTIuMTMtLjA5LTIuOTFhMi4xOCAyLjE4IDAgMCAwLTIuOTEtLjA5eiIgLz4KICA8cGF0aCBkPSJtMTIgMTUtMy0zYTIyIDIyIDAgMCAxIDItMy45NUExMi44OCAxMi44OCAwIDAgMSAyMiAyYzAgMi43Mi0uNzggNy41LTYgMTFhMjIuMzUgMjIuMzUgMCAwIDEtNCAyeiIgLz4KICA8cGF0aCBkPSJNOSAxMkg0cy41NS0zLjAzIDItNGMxLjYyLTEuMDggNSAwIDUgMCIgLz4KICA8cGF0aCBkPSJNMTIgMTV2NXMzLjAzLS41NSA0LTJjMS4wOC0xLjYyIDAtNSAwLTUiIC8+Cjwvc3ZnPgo=) - https://lucide.dev/icons/rocket
        * @see https://lucide.dev/guide/packages/lucide-svelte - Documentation
        *
        * @param {Object} props - Lucide icons props and any valid SVG attribute

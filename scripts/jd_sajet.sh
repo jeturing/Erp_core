@@ -139,6 +139,7 @@ import email_validator
 import fastapi
 import pytest
 import sqlalchemy
+import redis
 try:
     import psycopg2  # noqa: F401
 except ModuleNotFoundError:

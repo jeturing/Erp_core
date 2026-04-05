@@ -59,11 +59,12 @@
 
 <style>
 	.header {
-		background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+		background: linear-gradient(135deg, #020e1f 0%, #003B73 60%, #0a2540 100%);
 		color: white;
 		padding: 30px;
 		border-radius: 12px 12px 0 0;
 		margin: -20px -20px 0 -20px;
+		border-bottom: 1px solid rgba(0, 255, 159, 0.12);
 	}
 
 	.header-content {
@@ -76,8 +77,8 @@
 
 	.logo-section h1 {
 		margin: 0;
-		font-size: 28px;
-		font-weight: 700;
+		font-size: 24px;
+		font-weight: 600;
 		letter-spacing: -0.5px;
 	}
 
@@ -145,8 +146,8 @@
 	}
 
 	.status-ok {
-		background: rgba(34, 197, 94, 0.2);
-		color: #86efac;
+		background: rgba(0, 255, 159, 0.12);
+		color: #00FF9F;
 	}
 
 	.status-time {
@@ -169,13 +170,13 @@
 	}
 
 	.btn-success {
-		background: rgba(34, 197, 94, 0.2);
-		color: #86efac;
-		border: 1px solid rgba(34, 197, 94, 0.3);
+		background: rgba(0, 255, 159, 0.12);
+		color: #00FF9F;
+		border: 1px solid rgba(0, 255, 159, 0.25);
 	}
 
 	.btn-success:hover {
-		background: rgba(34, 197, 94, 0.3);
+		background: rgba(0, 255, 159, 0.22);
 	}
 
 	.btn-secondary {

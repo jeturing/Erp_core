@@ -40,6 +40,10 @@ export const partnersApi = {
     return api.delete(`/api/partners/${id}`);
   },
 
+  async hardDeletePartner(id: number): Promise<{ success: boolean; message: string }> {
+    return api.delete(`/api/partners/${id}/permanent`);
+  },
+
   async activatePartner(id: number): Promise<{ message: string; partner: PartnerItem }> {
     return api.post(`/api/partners/${id}/activate`);
   },

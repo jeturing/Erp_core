@@ -23,7 +23,8 @@
       "_root.js",
       "_state.svelte.js",
       "_globe.js",
-      "_Icon.js"
+      "_arrow-right.js",
+      "_menu.js"
     ]
   },
   "_Icon.js": {
@@ -46,20 +47,15 @@
       "_calculator.js",
       "_building-2.js",
       "_handshake.js",
-      "_Icon.js",
-      "_rocket.js",
+      "_receipt.js",
       "_eye.js",
       "_package.js",
       "_users.js",
       "_zap.js",
-      "_user-plus.js",
-      "_server.js",
-      "_mail.js",
       "_dollar-sign.js",
       "_palette.js",
+      "_Icon.js",
       "_refresh-cw.js",
-      "_star.js",
-      "_chevron-down.js",
       "_exports.js",
       "_utils.js",
       "_root.js",
@@ -93,7 +89,7 @@
       "_shopping-bag.js",
       "_credit-card.js",
       "_package.js",
-      "_rocket.js",
+      "_receipt.js",
       "_scale.js",
       "_git-compare-arrows.js",
       "_gauge.js",
@@ -113,7 +109,8 @@
       "_key.js",
       "_external-link.js",
       "_chevron-down.js",
-      "_log-out.js"
+      "_log-out.js",
+      "_menu.js"
     ],
     "css": [
       "_app/immutable/assets/Layout.0ImtVnPi.css"
@@ -463,6 +460,14 @@
       "_Icon.js"
     ]
   },
+  "_menu.js": {
+    "file": "chunks/menu.js",
+    "name": "menu",
+    "imports": [
+      "_index2.js",
+      "_Icon.js"
+    ]
+  },
   "_message-circle.js": {
     "file": "chunks/message-circle.js",
     "name": "message-circle",
@@ -511,17 +516,17 @@
       "_Icon.js"
     ]
   },
-  "_refresh-cw.js": {
-    "file": "chunks/refresh-cw.js",
-    "name": "refresh-cw",
+  "_receipt.js": {
+    "file": "chunks/receipt.js",
+    "name": "receipt",
     "imports": [
       "_index2.js",
       "_Icon.js"
     ]
   },
-  "_rocket.js": {
-    "file": "chunks/rocket.js",
-    "name": "rocket",
+  "_refresh-cw.js": {
+    "file": "chunks/refresh-cw.js",
+    "name": "refresh-cw",
     "imports": [
       "_index2.js",
       "_Icon.js"
@@ -598,14 +603,6 @@
       "_Icon.js"
     ]
   },
-  "_star.js": {
-    "file": "chunks/star.js",
-    "name": "star",
-    "imports": [
-      "_index2.js",
-      "_Icon.js"
-    ]
-  },
   "_state.svelte.js": {
     "file": "chunks/state.svelte.js",
     "name": "state.svelte",
@@ -652,14 +649,6 @@
   "_triangle-alert.js": {
     "file": "chunks/triangle-alert.js",
     "name": "triangle-alert",
-    "imports": [
-      "_index2.js",
-      "_Icon.js"
-    ]
-  },
-  "_user-plus.js": {
-    "file": "chunks/user-plus.js",
-    "name": "user-plus",
     "imports": [
       "_index2.js",
       "_Icon.js"
@@ -1442,7 +1431,8 @@
       "_utils.js",
       "_root.js",
       "_state.svelte.js",
-      "_user-plus.js"
+      "_index2.js",
+      "_Icon.js"
     ]
   },
   "src/routes/(portal)/customer-onboarding/+page.svelte": {
@@ -1693,7 +1683,7 @@
       "_utils.js",
       "_root.js",
       "_state.svelte.js",
-      "_star.js",
+      "_Icon.js",
       "_arrow-right.js",
       "_calculator.js",
       "_circle-check-big.js",
@@ -1738,7 +1728,7 @@
       "_darkMode.js"
     ],
     "css": [
-      "_app/immutable/assets/_layout.BYEtsX3m.css"
+      "_app/immutable/assets/_layout.C8t3rmy_.css"
     ]
   },
   "src/routes/+layout.ts": {
@@ -1761,7 +1751,7 @@
       "_utils2.js"
     ],
     "css": [
-      "_app/immutable/assets/_page.BvpvLSft.css"
+      "_app/immutable/assets/_page.B2h0OugC.css"
     ]
   }
 }

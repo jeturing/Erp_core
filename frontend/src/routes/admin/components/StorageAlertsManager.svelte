@@ -214,7 +214,7 @@
 
 	{#if loading}
 		<div class="loading">
-			<div class="spinner" />
+			<div class="spinner" ></div>
 			<p>Cargando alertas de almacenamiento...</p>
 		</div>
 	{:else}
@@ -338,7 +338,7 @@
 									<div
 										class="usage-fill"
 										style="width: {alert.storage_usage_percent}%"
-									/>
+									></div>
 								</div>
 								<span class="usage-text">{alert.storage_usage_percent.toFixed(1)}% utilizado</span>
 							</div>
@@ -436,7 +436,7 @@
 <style>
 	.storage-container {
 		padding: 20px;
-		background: white;
+		background: #0d1e35;
 		border-radius: 8px;
 	}
 
@@ -447,7 +447,7 @@
 
 	.spinner {
 		border: 4px solid #e5e7eb;
-		border-top-color: #667eea;
+		border-top-color: #00FF9F;
 		border-radius: 50%;
 		width: 40px;
 		height: 40px;
@@ -471,13 +471,13 @@
 
 	.alert-success {
 		background: #dcfce7;
-		color: #166534;
+		color: #00FF9F;
 		border-left: 4px solid #22c55e;
 	}
 
 	.alert-error {
 		background: #fee2e2;
-		color: #991b1b;
+		color: #f87171;
 		border-left: 4px solid #ef4444;
 	}
 
@@ -501,12 +501,12 @@
 	.section-header h4 {
 		margin: 0;
 		font-size: 16px;
-		color: #1f2937;
+		color: #c8d3e8;
 	}
 
 	.badge {
 		background: #dbeafe;
-		color: #1e40af;
+		color: #93c5fd;
 		padding: 4px 8px;
 		border-radius: 12px;
 		font-size: 12px;
@@ -571,7 +571,7 @@
 		margin-bottom: 8px;
 		font-size: 14px;
 		font-weight: 600;
-		color: #374151;
+		color: #a0b0c8;
 	}
 
 	.form-group input[type='text'],
@@ -586,7 +586,7 @@
 
 	.form-group input:focus {
 		outline: none;
-		border-color: #667eea;
+		border-color: #00FF9F;
 		box-shadow: 0 0 0 3px rgba(102, 126, 234, 0.1);
 	}
 
@@ -612,7 +612,7 @@
 		width: 20px;
 		height: 20px;
 		border-radius: 50%;
-		background: #667eea;
+		background: #00FF9F;
 		cursor: pointer;
 	}
 
@@ -620,7 +620,7 @@
 		width: 20px;
 		height: 20px;
 		border-radius: 50%;
-		background: #667eea;
+		background: #00FF9F;
 		cursor: pointer;
 		border: none;
 	}
@@ -629,7 +629,7 @@
 		min-width: 50px;
 		text-align: center;
 		font-weight: 600;
-		color: #667eea;
+		color: #00FF9F;
 	}
 
 	.form-actions {
@@ -654,7 +654,7 @@
 
 	.empty-state p {
 		margin: 0;
-		color: #166534;
+		color: #00FF9F;
 		font-size: 14px;
 	}
 
@@ -667,7 +667,7 @@
 	.alert-card {
 		border-radius: 8px;
 		padding: 15px;
-		background: white;
+		background: #0d1e35;
 		border: 2px solid;
 	}
 
@@ -703,7 +703,7 @@
 
 	.customer-name {
 		font-weight: 600;
-		color: #1f2937;
+		color: #c8d3e8;
 		flex: 1;
 	}
 
@@ -721,13 +721,13 @@
 
 	.usage-fill {
 		height: 100%;
-		background: linear-gradient(90deg, #667eea, #764ba2);
+		background: linear-gradient(90deg, #00FF9F, #003B73);
 		transition: width 0.3s;
 	}
 
 	.usage-text {
 		font-size: 12px;
-		color: #6b7280;
+		color: #7a8fa6;
 		font-weight: 500;
 	}
 
@@ -749,7 +749,7 @@
 	}
 
 	.stat-card {
-		background: linear-gradient(135deg, #667eea, #764ba2);
+		background: linear-gradient(135deg, #00FF9F, #003B73);
 		color: white;
 		padding: 20px;
 		border-radius: 8px;
@@ -787,14 +787,14 @@
 		display: flex;
 		align-items: center;
 		font-weight: 500;
-		color: #374151;
+		color: #a0b0c8;
 		cursor: pointer;
 	}
 
 	.slack-form small {
 		display: block;
 		margin-top: 5px;
-		color: #6b7280;
+		color: #7a8fa6;
 		font-size: 12px;
 	}
 
@@ -808,7 +808,7 @@
 
 	.help-section h4 {
 		margin: 0 0 10px 0;
-		color: #92400e;
+		color: #fbbf24;
 		font-size: 14px;
 	}
 
@@ -816,7 +816,7 @@
 		margin: 0;
 		padding-left: 20px;
 		font-size: 13px;
-		color: #78350f;
+		color: #f59e0b;
 	}
 
 	.help-section li {
@@ -839,7 +839,7 @@
 	}
 
 	.btn-primary {
-		background: #667eea;
+		background: #00FF9F;
 		color: white;
 	}
 
@@ -849,7 +849,7 @@
 
 	.btn-secondary {
 		background: #e5e7eb;
-		color: #374151;
+		color: #a0b0c8;
 	}
 
 	.btn-secondary:hover {

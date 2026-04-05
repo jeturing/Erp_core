@@ -1,88 +1,54 @@
-<script lang="ts">
-  import { t } from 'svelte-i18n';
-  import { Linkedin, Youtube } from 'lucide-svelte';
+<!-- Stripe dark brand footer: #1c1e54 background -->
+<footer style="
+  background: #020e1f;
+  border-top: 1px solid rgba(0,255,159,0.08);
+  padding: 64px 24px 40px;
+">
+  <div style="max-width:1080px; margin:0 auto;">
+    <!-- Main grid -->
+    <div style="display:grid; grid-template-columns:2fr 1fr 1fr 1fr; gap:48px; margin-bottom:56px;">
 
-  const year = new Date().getFullYear();
-
-  const columns = [
-    {
-      title: $t('footer.product'),
-      links: [
-        { label: $t('footer.features'), href: '#features' },
-        { label: $t('footer.pricing'), href: '#pricing' },
-        { label: $t('footer.modules'), href: '#features' },
-        { label: $t('footer.integrations'), href: '#faq' },
-        { label: $t('footer.api_docs'), href: '/docs' },
-      ],
-    },
-    {
-      title: $t('footer.company'),
-      links: [
-        { label: $t('footer.about'), href: '/about' },
-        { label: $t('nav.partners'), href: '#partners' },
-        { label: $t('nav.for_accountants'), href: '/accountants' },
-        { label: $t('footer.contact'), href: 'https://wa.me/4012001999' },
-      ],
-    },
-    {
-      title: $t('footer.legal'),
-      links: [
-        { label: $t('footer.privacy'), href: '/privacy' },
-        { label: $t('footer.terms'), href: '/terms' },
-        { label: $t('footer.data_processing'), href: '/data-processing' },
-        { label: $t('footer.security'), href: '/security' },
-        { label: $t('footer.sla'), href: '/sla' },
-      ],
-    },
-  ];
-</script>
-
-<footer class="bg-[#0F172A] pt-16 pb-8">
-  <div class="max-w-6xl mx-auto px-6">
-    <div class="grid grid-cols-2 md:grid-cols-4 gap-10 mb-14">
       <!-- Brand column -->
-      <div class="col-span-2 md:col-span-1">
-        <a href="/" class="inline-block mb-4">
-          <span class="text-xl font-jakarta font-extrabold text-white">
-            Sajet<span class="text-secondary">.</span>us
-          </span>
-        </a>
-        <p class="text-sm font-inter text-slate-400 leading-relaxed mb-6">
-          {$t('footer.brand_description')}
+      <div>
+        <div style="display:flex; align-items:center; gap:10px; margin-bottom:20px;">
+          <div style="
+            width:32px; height:32px; background:linear-gradient(135deg,#003B73,#00569e);
+            border-radius:6px; display:flex; align-items:center; justify-content:center;
+            box-shadow:0 0 0 1px rgba(0,255,159,0.2);
+          ">
+            <span style="color:#00FF9F; font-weight:800; font-size:14px; font-family:'Plus Jakarta Sans',system-ui;">S</span>
+          </div>
+          <span style="font-family:'Plus Jakarta Sans',system-ui; font-weight:700; font-size:17px; color:#f0f4ff; letter-spacing:-0.02em;">SAJET</span>
+        </div>
+        <p style="font-size:14px; line-height:1.65; color:#7a8fa6; font-weight:300; max-width:260px; margin:0 0 24px;">
+          ERP multi-tenant para empresas que exigen confiabilidad, escala y control real de sus datos.
         </p>
-        <div class="flex items-center gap-3">
-          <!-- LinkedIn -->
-          <a href="https://www.linkedin.com/in/jeturing/" target="_blank" rel="noopener" class="w-8 h-8 rounded-lg bg-white/10 flex items-center justify-center text-slate-400 hover:bg-primary hover:text-white transition-all" aria-label="LinkedIn">
-            <Linkedin class="w-4 h-4" />
-          </a>
-          <!-- WhatsApp -->
-          <a href="https://wa.me/4012001999" target="_blank" rel="noopener" class="w-8 h-8 rounded-lg bg-white/10 flex items-center justify-center text-slate-400 hover:bg-emerald-500 hover:text-white transition-all" aria-label="WhatsApp">
-            <svg class="w-4 h-4" fill="currentColor" viewBox="0 0 24 24" aria-hidden="true">
-              <path d="M17.472 14.382c-.297-.149-1.758-.867-2.03-.967-.273-.099-.471-.148-.67.15-.197.297-.767.966-.94 1.164-.173.199-.347.223-.644.075-.297-.15-1.255-.463-2.39-1.475-.883-.788-1.48-1.761-1.653-2.059-.173-.297-.018-.458.13-.606.134-.133.298-.347.446-.52.149-.174.198-.298.298-.497.099-.198.05-.371-.025-.52-.075-.149-.669-1.612-.916-2.207-.242-.579-.487-.5-.669-.51-.173-.008-.371-.01-.57-.01-.198 0-.52.074-.792.372-.272.297-1.04 1.016-1.04 2.479 0 1.462 1.065 2.875 1.213 3.074.149.198 2.096 3.2 5.077 4.487.709.306 1.262.489 1.694.625.712.227 1.36.195 1.871.118.571-.085 1.758-.719 2.006-1.413.248-.694.248-1.289.173-1.413-.074-.124-.272-.198-.57-.347z"/>
-              <path d="M12 0C5.373 0 0 5.373 0 12c0 2.123.558 4.115 1.535 5.836L.057 23.944l6.264-1.449A11.94 11.94 0 0012 24c6.627 0 12-5.373 12-12S18.627 0 12 0zm0 21.818a9.818 9.818 0 01-5.013-1.373l-.359-.214-3.724.861.882-3.624-.234-.373A9.818 9.818 0 012.182 12C2.182 6.567 6.567 2.182 12 2.182S21.818 6.567 21.818 12 17.433 21.818 12 21.818z"/>
-            </svg>
-          </a>
-          <!-- YouTube -->
-          <a href="https://youtube.com/@jeturing" target="_blank" rel="noopener" class="w-8 h-8 rounded-lg bg-white/10 flex items-center justify-center text-slate-400 hover:bg-red-600 hover:text-white transition-all" aria-label="YouTube">
-            <Youtube class="w-4 h-4" />
-          </a>
+        <div style="display:flex; gap:16px;">
+          {#each ['segrd.com', 'jeturing.com'] as link}
+            <a href="https://{link}" target="_blank" rel="noopener"
+              style="font-size:12px; color:#7a8fa6; text-decoration:none; transition:color 0.2s;"
+              on:mouseenter={e=>e.currentTarget.style.color='#00FF9F'}
+              on:mouseleave={e=>e.currentTarget.style.color='#7a8fa6'}
+            >{link}</a>
+          {/each}
         </div>
       </div>
 
-      <!-- Link columns -->
-      {#each columns as col}
+      <!-- Links columns -->
+      {#each [
+        { title:'Producto', links:['Características', 'Precios', 'Seguridad', 'API', 'Changelog'] },
+        { title:'Empresa', links:['Nosotros', 'Blog', 'Careers', 'Prensa', 'Contacto'] },
+        { title:'Legal', links:['Privacidad', 'Términos', 'SLA', 'Cookies', 'GDPR'] },
+      ] as col}
         <div>
-          <h4 class="text-sm font-jakarta font-semibold text-white mb-4">{col.title}</h4>
-          <ul class="space-y-2.5">
+          <h4 style="font-size:11px; font-weight:700; letter-spacing:0.1em; text-transform:uppercase; color:#f0f4ff; margin:0 0 20px;">{col.title}</h4>
+          <ul style="list-style:none; margin:0; padding:0; display:flex; flex-direction:column; gap:12px;">
             {#each col.links as link}
               <li>
-                <a
-                  href={link.href}
-                  class="text-sm font-inter text-slate-400 hover:text-white transition-colors"
-                  {...link.href.startsWith('http') ? { target: '_blank', rel: 'noopener noreferrer' } : {}}
-                >
-                  {link.label}
-                </a>
+                <a href="#" style="font-size:13px; color:#7a8fa6; text-decoration:none; transition:color 0.2s; font-weight:300;"
+                  on:mouseenter={e=>e.currentTarget.style.color='#c8d3e8'}
+                  on:mouseleave={e=>e.currentTarget.style.color='#7a8fa6'}
+                >{link}</a>
               </li>
             {/each}
           </ul>
@@ -91,13 +57,17 @@
     </div>
 
     <!-- Bottom bar -->
-    <div class="border-t border-white/10 pt-6 flex flex-col md:flex-row items-center justify-between gap-3">
-      <p class="text-xs font-inter text-slate-500">
-        {$t('footer.copyright')}
+    <div style="
+      display:flex; justify-content:space-between; align-items:center; flex-wrap:wrap; gap:16px;
+      padding-top:32px; border-top:1px solid rgba(255,255,255,0.06);
+    ">
+      <p style="font-size:12px; color:#7a8fa6; margin:0; font-weight:300;">
+        © {new Date().getFullYear()} Jeturing. Todos los derechos reservados.
       </p>
-      <p class="text-xs font-inter text-slate-600">
-        {$t('footer.powered_by')} {$t('footer.company_name')}
-      </p>
+      <div style="display:flex; align-items:center; gap:6px;">
+        <div style="width:6px; height:6px; border-radius:50%; background:#00FF9F; box-shadow:0 0 6px rgba(0,255,159,0.6);"></div>
+        <span style="font-size:12px; color:#7a8fa6; font-weight:300;">Todos los sistemas operativos</span>
+      </div>
     </div>
   </div>
 </footer>

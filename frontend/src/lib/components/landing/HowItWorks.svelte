@@ -1,59 +1,73 @@
-<script lang="ts">
-  import { t } from 'svelte-i18n';
-  import { UserPlus, Server, Mail, Rocket } from 'lucide-svelte';
+<script>
+  import { onMount } from 'svelte';
+  let visible = false;
+
+  onMount(() => {
+    const observer = new IntersectionObserver(
+      ([entry]) => { if (entry.isIntersecting) { visible = true; observer.disconnect(); } },
+      { threshold: 0.12 }
+    );
+    const el = document.getElementById('howitworks-section');
+    if (el) observer.observe(el);
+  });
 
   const steps = [
-    { num: 1, icon: UserPlus, title: $t('how_it_works.step1_title'), desc: $t('how_it_works.step1_desc') },
-    { num: 2, icon: Server,   title: $t('how_it_works.step2_title'), desc: $t('how_it_works.step2_desc') },
-    { num: 3, icon: Mail,     title: $t('how_it_works.step3_title'), desc: $t('how_it_works.step3_desc') },
-    { num: 4, icon: Rocket,   title: $t('how_it_works.step4_title'), desc: $t('how_it_works.step4_desc') },
+    { num:'01', title:'Crea tu cuenta', desc:'Regístrate en minutos. Sin tarjeta, sin contratos. Solo tus datos.', color:'rgba(0,59,115,0.08)' },
+    { num:'02', title:'Configura tu espacio', desc:'Personaliza módulos, usuarios y permisos según tu estructura.', color:'rgba(0,255,159,0.06)' },
+    { num:'03', title:'Conecta tus sistemas', desc:'APIs abiertas para integrarse con lo que ya usas: bancos, facturación, CRM.', color:'rgba(0,59,115,0.08)' },
+    { num:'04', title:'Opera y crece', desc:'Dashboards en tiempo real, reportes automáticos, alertas inteligentes.', color:'rgba(0,255,159,0.06)' },
   ];
 </script>
 
-<section id="how-it-works" class="bg-white py-24">
-  <div class="max-w-5xl mx-auto px-6">
-    <div class="text-center mb-16">
-      <span class="inline-flex items-center gap-2 rounded-full bg-primary-light text-primary text-[13px] font-inter font-medium tracking-[0.08em] uppercase px-4 py-1.5 mb-4">
-        {$t('how_it_works.title')}
-      </span>
-      <h2 class="text-4xl font-jakarta font-bold text-slate-dark mb-4">
-        {$t('how_it_works.subtitle')}
-      </h2>
+<!-- Apple: dark cinematic section -->
+<section id="howitworks-section" style="
+  background: #000000;
+  padding: clamp(80px, 10vw, 140px) 24px;
+  position:relative; overflow:hidden;
+">
+  <!-- Ambient glow top-left -->
+  <div style="position:absolute;top:-120px;left:-80px;width:500px;height:500px;border-radius:50%;background:radial-gradient(circle,rgba(0,59,115,0.3) 0%,transparent 70%);pointer-events:none;"></div>
+  <!-- Ambient glow right -->
+  <div style="position:absolute;bottom:-80px;right:-60px;width:400px;height:400px;border-radius:50%;background:radial-gradient(circle,rgba(0,255,159,0.08) 0%,transparent 70%);pointer-events:none;"></div>
+
+  <div style="max-width:960px; margin:0 auto; position:relative; z-index:1;">
+
+    <div style="text-align:center; margin-bottom:72px;">
+      <p style="
+        font-size:13px; font-weight:600; letter-spacing:0.12em; text-transform:uppercase;
+        color:#00FF9F; margin-bottom:16px;
+        opacity:{visible?1:0}; transform:translateY({visible?'0px':'12px'});
+        transition:opacity 0.5s cubic-bezier(.16,1,.3,1), transform 0.5s cubic-bezier(.16,1,.3,1);
+      ">Cómo funciona</p>
+      <h2 style="
+        font-family:'Plus Jakarta Sans','Inter',system-ui,sans-serif;
+        font-size:clamp(2rem,5vw,3rem); font-weight:700;
+        letter-spacing:-0.035em; line-height:1.07;
+        color:#f5f5f7; margin:0;
+        opacity:{visible?1:0}; transform:translateY({visible?'0px':'20px'});
+        transition:opacity 0.6s 0.08s cubic-bezier(.16,1,.3,1), transform 0.6s 0.08s cubic-bezier(.16,1,.3,1);
+      ">De cero a operando<br/>en cuatro pasos.</h2>
     </div>
 
-    <div class="relative">
-      <!-- Línea conectora vertical (desktop) -->
-      <div class="hidden md:block absolute left-1/2 top-8 bottom-8 w-px bg-gradient-to-b from-primary/30 via-primary/10 to-transparent -translate-x-1/2" aria-hidden="true"></div>
-
-      <div class="grid grid-cols-1 md:grid-cols-2 gap-8 md:gap-y-16">
-        {#each steps as step, i}
-          <div
-            class="relative flex items-start gap-5 {i % 2 === 1 ? 'md:col-start-2' : 'md:col-start-1'}"
-          >
-            <!-- Número + ícono -->
-            <div class="flex-shrink-0 relative">
-              <div class="w-14 h-14 rounded-2xl bg-primary-light flex items-center justify-center shadow-soft">
-                <svelte:component this={step.icon} class="w-6 h-6 text-primary" strokeWidth={1.5} />
-              </div>
-              <span class="absolute -top-2 -right-2 w-6 h-6 rounded-full bg-primary text-white text-xs font-jakarta font-bold flex items-center justify-center shadow-md">
-                {step.num}
-              </span>
-            </div>
-
-            <!-- Texto -->
-            <div>
-              <h3 class="text-lg font-jakarta font-semibold text-slate-dark mb-1">{step.title}</h3>
-              <p class="text-sm font-inter text-slate leading-relaxed">{step.desc}</p>
-            </div>
-          </div>
-        {/each}
-      </div>
+    <div style="display:grid; grid-template-columns:repeat(auto-fit,minmax(200px,1fr)); gap:2px; background:rgba(255,255,255,0.04); border-radius:12px; overflow:hidden;">
+      {#each steps as step, i}
+        <div style="
+          background:#111111;
+          padding:40px 28px;
+          border-right: {i<steps.length-1 ? '1px solid rgba(255,255,255,0.06)' : 'none'};
+          opacity:{visible?1:0}; transform:translateY({visible?'0px':'28px'});
+          transition:opacity 0.65s {0.15+i*0.09}s cubic-bezier(.16,1,.3,1), transform 0.65s {0.15+i*0.09}s cubic-bezier(.16,1,.3,1), background 0.2s;
+        "
+          on:mouseenter={e => e.currentTarget.style.background='#1a1a1a'}
+          on:mouseleave={e => e.currentTarget.style.background='#111111'}
+          role="article"
+        >
+          <div style="font-size:11px; font-weight:700; letter-spacing:0.15em; color:#00FF9F; margin-bottom:20px; font-variant-numeric:tabular-nums;">{step.num}</div>
+          <h3 style="font-size:18px; font-weight:600; color:#f5f5f7; margin:0 0 12px; letter-spacing:-0.02em;">{step.title}</h3>
+          <p style="font-size:14px; line-height:1.65; color:rgba(245,245,247,0.55); margin:0; font-weight:300;">{step.desc}</p>
+        </div>
+      {/each}
     </div>
 
-    <div class="text-center mt-16">
-      <a href="/signup" class="inline-flex items-center gap-2 bg-primary hover:bg-navy text-white font-jakarta font-semibold text-sm px-6 py-3 rounded-btn shadow-soft hover:shadow-medium transition-all">
-        {$t('how_it_works.cta')}
-      </a>
-    </div>
   </div>
 </section>

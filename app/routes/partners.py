@@ -297,6 +297,57 @@ async def delete_partner(
         db.close()
 
 
+@router.delete("/{partner_id}/permanent")
+async def hard_delete_partner(
+    partner_id: int,
+    request: Request,
+    access_token: Optional[str] = Cookie(None),
+):
+    """Elimina permanentemente un partner. Solo permitido si status=terminated y sin clientes/leads activos."""
+    _require_admin(request, access_token)
+    db = SessionLocal()
+    try:
+        partner = db.query(Partner).filter(Partner.id == partner_id).first()
+        if not partner:
+            raise HTTPException(status_code=404, detail="Partner no encontrado")
+
+        if partner.status != PartnerStatus.terminated:
+            raise HTTPException(
+                status_code=400,
+                detail="Solo se pueden eliminar permanentemente partners con status 'terminated'. Desactívalo primero."
+            )
+
+        # Verificar que no tenga clientes vinculados
+        linked_customers = db.query(Customer).filter(Customer.partner_id == partner_id).count()
+        if linked_customers > 0:
+            raise HTTPException(
+                status_code=400,
+                detail=f"El partner tiene {linked_customers} cliente(s) vinculado(s). Desvincúlalos antes de eliminar."
+            )
+
+        # Verificar que no tenga leads activos
+        from ..models.database import Lead
+        active_leads = db.query(Lead).filter(Lead.partner_id == partner_id).count()
+        if active_leads > 0:
+            raise HTTPException(
+                status_code=400,
+                detail=f"El partner tiene {active_leads} lead(s). Elimínalos antes de eliminar el partner."
+            )
+
+        # Eliminar pricing overrides primero (FK)
+        db.query(PartnerPricingOverride).filter(PartnerPricingOverride.partner_id == partner_id).delete()
+
+        company_name = partner.company_name
+        partner_code = partner.partner_code
+        db.delete(partner)
+        db.commit()
+
+        logger.info(f"Partner eliminado permanentemente: {company_name} ({partner_code})")
+        return {"success": True, "message": f"Partner '{company_name}' ({partner_code}) eliminado permanentemente", "data": {}, "meta": {}}
+    finally:
+        db.close()
+
+
 @router.post("/{partner_id}/activate")
 async def activate_partner(
     partner_id: int,

@@ -1,12 +1,12 @@
 import "clsx";
-import { e as ensure_array_like, d as escape_html, k as attr_class } from "../../../../chunks/index2.js";
+import { h as sanitize_props, i as spread_props, j as slot, e as ensure_array_like, d as escape_html, k as attr_class } from "../../../../chunks/index2.js";
 import "@sveltejs/kit/internal";
 import "../../../../chunks/exports.js";
 import "../../../../chunks/utils.js";
 import "@sveltejs/kit/internal/server";
 import "../../../../chunks/root.js";
 import "../../../../chunks/state.svelte.js";
-import { S as Star } from "../../../../chunks/star.js";
+import { I as Icon } from "../../../../chunks/Icon.js";
 import { A as Arrow_right } from "../../../../chunks/arrow-right.js";
 import { C as Calculator } from "../../../../chunks/calculator.js";
 import { C as Circle_check_big } from "../../../../chunks/circle-check-big.js";
@@ -17,6 +17,41 @@ import { S as Shield_check } from "../../../../chunks/shield-check.js";
 import { Z as Zap } from "../../../../chunks/zap.js";
 import { B as Building_2 } from "../../../../chunks/building-2.js";
 import { H as Handshake } from "../../../../chunks/handshake.js";
+function Star($$renderer, $$props) {
+  const $$sanitized_props = sanitize_props($$props);
+  const iconNode = [
+    [
+      "path",
+      {
+        "d": "M11.525 2.295a.53.53 0 0 1 .95 0l2.31 4.679a2.123 2.123 0 0 0 1.595 1.16l5.166.756a.53.53 0 0 1 .294.904l-3.736 3.638a2.123 2.123 0 0 0-.611 1.878l.882 5.14a.53.53 0 0 1-.771.56l-4.618-2.428a2.122 2.122 0 0 0-1.973 0L6.396 21.01a.53.53 0 0 1-.77-.56l.881-5.139a2.122 2.122 0 0 0-.611-1.879L2.16 9.795a.53.53 0 0 1 .294-.906l5.165-.755a2.122 2.122 0 0 0 1.597-1.16z"
+      }
+    ]
+  ];
+  Icon($$renderer, spread_props([
+    { name: "star" },
+    $$sanitized_props,
+    {
+      /**
+       * @component @name Star
+       * @description Lucide SVG icon component, renders SVG Element with children.
+       *
+       * @preview ![img](data:image/svg+xml;base64,PHN2ZyAgeG1sbnM9Imh0dHA6Ly93d3cudzMub3JnLzIwMDAvc3ZnIgogIHdpZHRoPSIyNCIKICBoZWlnaHQ9IjI0IgogIHZpZXdCb3g9IjAgMCAyNCAyNCIKICBmaWxsPSJub25lIgogIHN0cm9rZT0iIzAwMCIgc3R5bGU9ImJhY2tncm91bmQtY29sb3I6ICNmZmY7IGJvcmRlci1yYWRpdXM6IDJweCIKICBzdHJva2Utd2lkdGg9IjIiCiAgc3Ryb2tlLWxpbmVjYXA9InJvdW5kIgogIHN0cm9rZS1saW5lam9pbj0icm91bmQiCj4KICA8cGF0aCBkPSJNMTEuNTI1IDIuMjk1YS41My41MyAwIDAgMSAuOTUgMGwyLjMxIDQuNjc5YTIuMTIzIDIuMTIzIDAgMCAwIDEuNTk1IDEuMTZsNS4xNjYuNzU2YS41My41MyAwIDAgMSAuMjk0LjkwNGwtMy43MzYgMy42MzhhMi4xMjMgMi4xMjMgMCAwIDAtLjYxMSAxLjg3OGwuODgyIDUuMTRhLjUzLjUzIDAgMCAxLS43NzEuNTZsLTQuNjE4LTIuNDI4YTIuMTIyIDIuMTIyIDAgMCAwLTEuOTczIDBMNi4zOTYgMjEuMDFhLjUzLjUzIDAgMCAxLS43Ny0uNTZsLjg4MS01LjEzOWEyLjEyMiAyLjEyMiAwIDAgMC0uNjExLTEuODc5TDIuMTYgOS43OTVhLjUzLjUzIDAgMCAxIC4yOTQtLjkwNmw1LjE2NS0uNzU1YTIuMTIyIDIuMTIyIDAgMCAwIDEuNTk3LTEuMTZ6IiAvPgo8L3N2Zz4K) - https://lucide.dev/icons/star
+       * @see https://lucide.dev/guide/packages/lucide-svelte - Documentation
+       *
+       * @param {Object} props - Lucide icons props and any valid SVG attribute
+       * @returns {FunctionalComponent} Svelte component
+       *
+       */
+      iconNode,
+      children: ($$renderer2) => {
+        $$renderer2.push(`<!--[-->`);
+        slot($$renderer2, $$props, "default", {});
+        $$renderer2.push(`<!--]-->`);
+      },
+      $$slots: { default: true }
+    }
+  ]));
+}
 function Signup($$renderer, $$props) {
   $$renderer.component(($$renderer2) => {
     let openFaq = null;

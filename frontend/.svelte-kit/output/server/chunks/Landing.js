@@ -1,4 +1,4 @@
-import { h as sanitize_props, i as spread_props, j as slot, s as store_get, d as escape_html, e as ensure_array_like, u as unsubscribe_stores, o as bind_props, k as attr_class, b as stringify, c as attr, w as head } from "./index2.js";
+import { h as sanitize_props, i as spread_props, j as slot, s as store_get, a as attr_style, d as escape_html, e as ensure_array_like, c as attr, b as stringify, u as unsubscribe_stores, o as bind_props, w as head } from "./index2.js";
 import { a8 as fallback } from "./utils2.js";
 import { $ as $format, j as $locale } from "./darkMode.js";
 import { N as NavBar, F as Footer } from "./Footer.js";
@@ -6,20 +6,15 @@ import { A as Arrow_right } from "./arrow-right.js";
 import { C as Calculator } from "./calculator.js";
 import { B as Building_2 } from "./building-2.js";
 import { H as Handshake } from "./handshake.js";
-import { I as Icon } from "./Icon.js";
-import { R as Receipt, a as Rocket } from "./rocket.js";
+import { R as Receipt } from "./receipt.js";
 import { C as Chart_column, E as Eye } from "./eye.js";
 import { P as Package } from "./package.js";
 import { U as Users } from "./users.js";
 import { Z as Zap } from "./zap.js";
-import { U as User_plus } from "./user-plus.js";
-import { S as Server } from "./server.js";
-import { M as Mail } from "./mail.js";
 import { D as Dollar_sign } from "./dollar-sign.js";
 import { P as Palette } from "./palette.js";
+import { I as Icon } from "./Icon.js";
 import { R as Refresh_cw } from "./refresh-cw.js";
-import { S as Star } from "./star.js";
-import { C as Chevron_down } from "./chevron-down.js";
 import "@sveltejs/kit/internal";
 import "./exports.js";
 import "./utils.js";
@@ -31,71 +26,6 @@ function html(value) {
   var html2 = String(value ?? "");
   var open = "<!---->";
   return open + html2 + "<!---->";
-}
-function Cloud($$renderer, $$props) {
-  const $$sanitized_props = sanitize_props($$props);
-  const iconNode = [
-    [
-      "path",
-      { "d": "M17.5 19H9a7 7 0 1 1 6.71-9h1.79a4.5 4.5 0 1 1 0 9Z" }
-    ]
-  ];
-  Icon($$renderer, spread_props([
-    { name: "cloud" },
-    $$sanitized_props,
-    {
-      /**
-       * @component @name Cloud
-       * @description Lucide SVG icon component, renders SVG Element with children.
-       *
-       * @preview ![img](data:image/svg+xml;base64,PHN2ZyAgeG1sbnM9Imh0dHA6Ly93d3cudzMub3JnLzIwMDAvc3ZnIgogIHdpZHRoPSIyNCIKICBoZWlnaHQ9IjI0IgogIHZpZXdCb3g9IjAgMCAyNCAyNCIKICBmaWxsPSJub25lIgogIHN0cm9rZT0iIzAwMCIgc3R5bGU9ImJhY2tncm91bmQtY29sb3I6ICNmZmY7IGJvcmRlci1yYWRpdXM6IDJweCIKICBzdHJva2Utd2lkdGg9IjIiCiAgc3Ryb2tlLWxpbmVjYXA9InJvdW5kIgogIHN0cm9rZS1saW5lam9pbj0icm91bmQiCj4KICA8cGF0aCBkPSJNMTcuNSAxOUg5YTcgNyAwIDEgMSA2LjcxLTloMS43OWE0LjUgNC41IDAgMSAxIDAgOVoiIC8+Cjwvc3ZnPgo=) - https://lucide.dev/icons/cloud
-       * @see https://lucide.dev/guide/packages/lucide-svelte - Documentation
-       *
-       * @param {Object} props - Lucide icons props and any valid SVG attribute
-       * @returns {FunctionalComponent} Svelte component
-       *
-       */
-      iconNode,
-      children: ($$renderer2) => {
-        $$renderer2.push(`<!--[-->`);
-        slot($$renderer2, $$props, "default", {});
-        $$renderer2.push(`<!--]-->`);
-      },
-      $$slots: { default: true }
-    }
-  ]));
-}
-function Git_merge($$renderer, $$props) {
-  const $$sanitized_props = sanitize_props($$props);
-  const iconNode = [
-    ["circle", { "cx": "18", "cy": "18", "r": "3" }],
-    ["circle", { "cx": "6", "cy": "6", "r": "3" }],
-    ["path", { "d": "M6 21V9a9 9 0 0 0 9 9" }]
-  ];
-  Icon($$renderer, spread_props([
-    { name: "git-merge" },
-    $$sanitized_props,
-    {
-      /**
-       * @component @name GitMerge
-       * @description Lucide SVG icon component, renders SVG Element with children.
-       *
-       * @preview ![img](data:image/svg+xml;base64,PHN2ZyAgeG1sbnM9Imh0dHA6Ly93d3cudzMub3JnLzIwMDAvc3ZnIgogIHdpZHRoPSIyNCIKICBoZWlnaHQ9IjI0IgogIHZpZXdCb3g9IjAgMCAyNCAyNCIKICBmaWxsPSJub25lIgogIHN0cm9rZT0iIzAwMCIgc3R5bGU9ImJhY2tncm91bmQtY29sb3I6ICNmZmY7IGJvcmRlci1yYWRpdXM6IDJweCIKICBzdHJva2Utd2lkdGg9IjIiCiAgc3Ryb2tlLWxpbmVjYXA9InJvdW5kIgogIHN0cm9rZS1saW5lam9pbj0icm91bmQiCj4KICA8Y2lyY2xlIGN4PSIxOCIgY3k9IjE4IiByPSIzIiAvPgogIDxjaXJjbGUgY3g9IjYiIGN5PSI2IiByPSIzIiAvPgogIDxwYXRoIGQ9Ik02IDIxVjlhOSA5IDAgMCAwIDkgOSIgLz4KPC9zdmc+Cg==) - https://lucide.dev/icons/git-merge
-       * @see https://lucide.dev/guide/packages/lucide-svelte - Documentation
-       *
-       * @param {Object} props - Lucide icons props and any valid SVG attribute
-       * @returns {FunctionalComponent} Svelte component
-       *
-       */
-      iconNode,
-      children: ($$renderer2) => {
-        $$renderer2.push(`<!--[-->`);
-        slot($$renderer2, $$props, "default", {});
-        $$renderer2.push(`<!--]-->`);
-      },
-      $$slots: { default: true }
-    }
-  ]));
 }
 function Headphones($$renderer, $$props) {
   const $$sanitized_props = sanitize_props($$props);
@@ -175,7 +105,33 @@ function Hero($$renderer, $$props) {
     var $$store_subs;
     let displayStats;
     let stats = fallback($$props["stats"], () => [], true);
-    let partnerBranding = fallback($$props["partnerBranding"], null);
+    const partnerBranding = null;
+    const metrics = [
+      {
+        label: "Ingresos",
+        value: "$84,290",
+        delta: "+12.4%",
+        color: "#00FF9F"
+      },
+      {
+        label: "Clientes",
+        value: "1,847",
+        delta: "+8.1%",
+        color: "#0EA5E9"
+      },
+      {
+        label: "Facturas",
+        value: "342",
+        delta: "+5.3%",
+        color: "#a78bfa"
+      },
+      {
+        label: "Pendiente",
+        value: "$9,140",
+        delta: "-2.1%",
+        color: "#f59e0b"
+      }
+    ];
     displayStats = stats.length > 0 ? stats : [
       {
         value: "500+",
@@ -194,87 +150,126 @@ function Hero($$renderer, $$props) {
         label: store_get($$store_subs ??= {}, "$t", $format)("hero.stat_partners")
       }
     ];
-    partnerBranding?.primary_color || "#1B4FD8";
-    $$renderer2.push(`<section class="relative min-h-screen flex items-center justify-center overflow-hidden pt-20"><div class="absolute inset-0 bg-gradient-hero pointer-events-none"></div> <div class="absolute top-1/3 left-1/2 -translate-x-1/2 -translate-y-1/2 w-[700px] h-[700px] rounded-full bg-secondary/10 blur-3xl pointer-events-none"></div> <div class="relative z-10 max-w-4xl mx-auto px-6 text-center"><div class="inline-flex items-center gap-2 rounded-full border border-white/20 bg-white/10 px-5 py-2 mb-8 backdrop-blur-sm"><span class="text-xs font-inter font-medium text-white/90 tracking-[0.08em] uppercase">✦ ${escape_html(store_get($$store_subs ??= {}, "$t", $format)("hero.badge"))}</span></div> <h1 class="text-5xl sm:text-6xl lg:text-7xl font-jakarta font-extrabold text-white leading-[1.1] mb-6">${escape_html(store_get($$store_subs ??= {}, "$t", $format)("hero.headline"))}<br/> <span class="bg-clip-text text-transparent bg-gradient-to-r from-white via-blue-200 to-secondary">${escape_html(store_get($$store_subs ??= {}, "$t", $format)("hero.headline_highlight"))}</span></h1> <p class="text-lg font-inter text-blue-100/80 max-w-2xl mx-auto mb-10 leading-relaxed">${escape_html(store_get($$store_subs ??= {}, "$t", $format)("hero.subheading"))}</p> <div class="flex flex-col sm:flex-row items-center justify-center gap-4 mb-5"><a href="/signup" class="flex items-center gap-2 text-navy font-inter font-semibold text-[15px] px-8 py-4 rounded-btn transition-all hover:-translate-y-px hover:shadow-elevated w-full sm:w-auto" style="background: white">${escape_html(store_get($$store_subs ??= {}, "$t", $format)("common.get_started"))} `);
+    $$renderer2.push(`<section class="relative min-h-screen flex items-center justify-center overflow-hidden pt-20" style="background: #020e1f;"><div class="absolute inset-0 pointer-events-none" style="background: radial-gradient(ellipse 80% 55% at 50% 0%, rgba(0,59,115,0.65) 0%, transparent 70%);"></div> <div class="absolute pointer-events-none" style="top:-80px;left:50%;transform:translateX(-50%);width:640px;height:420px; background:radial-gradient(ellipse at 50% 0%, rgba(0,255,159,0.11) 0%, transparent 65%); filter:blur(48px);"></div> <div class="absolute pointer-events-none" style="top:20%;left:-5%;width:500px;height:500px; background:radial-gradient(circle, rgba(0,59,115,0.28) 0%, transparent 70%); filter:blur(90px);"></div> <div class="absolute pointer-events-none" style="top:30%;right:-5%;width:400px;height:400px; background:radial-gradient(circle, rgba(6,182,212,0.10) 0%, transparent 70%); filter:blur(70px);"></div> <div class="absolute bottom-0 left-0 right-0 h-48 pointer-events-none" style="background:linear-gradient(to bottom, transparent, #020e1f);"></div> <div class="absolute inset-0 pointer-events-none" style="opacity:0.022; background-image:linear-gradient(rgba(255,255,255,0.6) 1px, transparent 1px), linear-gradient(90deg,rgba(255,255,255,0.6) 1px, transparent 1px); background-size:60px 60px;"></div> <div class="relative z-10 max-w-4xl mx-auto px-6 text-center"${attr_style(`opacity:${stringify(0)}; transform:translateY(${stringify(18)}px); transition:opacity 0.65s ease, transform 0.65s ease;`)}><div class="inline-flex items-center gap-2 rounded-full px-4 py-1.5 mb-8 text-[11px] font-inter font-semibold tracking-[0.10em] uppercase" style="background:rgba(0,255,159,0.09); border:1px solid rgba(0,255,159,0.28); color:#00FF9F;"><span class="w-1.5 h-1.5 rounded-full" style="background:#00FF9F; box-shadow:0 0 6px #00FF9F;"></span> ${escape_html(store_get($$store_subs ??= {}, "$t", $format)("hero.badge"))}</div> <h1 class="font-jakarta font-extrabold text-[#f0f4ff] mb-6 leading-[1.06]" style="font-size: clamp(2.4rem, 6vw, 3.9rem); letter-spacing: -1.8px;">${escape_html(store_get($$store_subs ??= {}, "$t", $format)("hero.headline"))}<br/> <span style="color:#00FF9F; text-shadow:0 0 36px rgba(0,255,159,0.35);">${escape_html(store_get($$store_subs ??= {}, "$t", $format)("hero.headline_highlight"))}</span></h1> <p class="font-inter text-[#c8d3e8] max-w-2xl mx-auto mb-10 leading-relaxed" style="font-size:1.1rem; letter-spacing:-0.2px;">${escape_html(store_get($$store_subs ??= {}, "$t", $format)("hero.subheading"))}</p> <div class="flex flex-col sm:flex-row items-center justify-center gap-3 mb-5"><a href="/signup" class="flex items-center gap-2 font-inter font-semibold text-[14px] px-7 py-3.5 rounded-lg w-full sm:w-auto justify-center transition-all duration-150 hover:-translate-y-px" style="background:#00FF9F; color:#020e1f; box-shadow:0 4px 18px rgba(0,255,159,0.30);">${escape_html(store_get($$store_subs ??= {}, "$t", $format)("common.get_started"))} `);
     Arrow_right($$renderer2, { class: "w-4 h-4" });
-    $$renderer2.push(`<!----></a> <a href="/accountants" class="flex items-center gap-2 border border-white/30 text-white hover:bg-white/10 font-inter font-medium text-[15px] px-8 py-4 rounded-btn transition-all w-full sm:w-auto">`);
-    Calculator($$renderer2, { class: "w-4 h-4" });
-    $$renderer2.push(`<!----> ${escape_html(store_get($$store_subs ??= {}, "$t", $format)("common.join_accountant"))}</a></div> <div class="flex flex-wrap items-center justify-center gap-3 mb-10"><a href="/signup?mode=tenant" class="inline-flex items-center gap-2 rounded-full border border-white/20 bg-white/10 px-4 py-2 text-sm font-inter text-white/85 transition-all hover:bg-white/15">`);
-    Building_2($$renderer2, { class: "w-4 h-4" });
-    $$renderer2.push(`<!----> Crear mi empresa</a> <a href="/signup?mode=accountant" class="inline-flex items-center gap-2 rounded-full border border-white/20 bg-white/10 px-4 py-2 text-sm font-inter text-white/85 transition-all hover:bg-white/15">`);
-    Calculator($$renderer2, { class: "w-4 h-4" });
-    $$renderer2.push(`<!----> Soy contador</a> <a href="/partner-signup" class="inline-flex items-center gap-2 rounded-full border border-white/20 bg-white/10 px-4 py-2 text-sm font-inter text-white/85 transition-all hover:bg-white/15">`);
-    Handshake($$renderer2, { class: "w-4 h-4" });
-    $$renderer2.push(`<!----> Quiero ser socio</a></div> <p class="text-sm font-inter text-blue-200/60 mb-12">${escape_html(store_get($$store_subs ??= {}, "$t", $format)("hero.trust_line"))} · Cliente, contador o socio: cada ruta tiene su propio onboarding.</p> <div class="flex flex-wrap justify-center gap-4 mb-14"><!--[-->`);
-    const each_array = ensure_array_like(displayStats);
+    $$renderer2.push(`<!----></a> <a href="/accountants" class="flex items-center gap-2 font-inter font-medium text-[14px] text-[#c8d3e8] px-7 py-3.5 rounded-lg w-full sm:w-auto justify-center transition-all hover:-translate-y-px" style="border:1px solid rgba(255,255,255,0.12); background:rgba(255,255,255,0.04);">`);
+    Calculator($$renderer2, { class: "w-4 h-4 text-[#7a8fa6]" });
+    $$renderer2.push(`<!----> ${escape_html(store_get($$store_subs ??= {}, "$t", $format)("common.join_accountant"))}</a></div> <div class="flex flex-wrap items-center justify-center gap-2.5 mb-8"><!--[-->`);
+    const each_array = ensure_array_like([
+      {
+        icon: Building_2,
+        label: "Crear mi empresa",
+        href: "/signup?mode=tenant"
+      },
+      {
+        icon: Calculator,
+        label: "Soy contador",
+        href: "/signup?mode=accountant"
+      },
+      {
+        icon: Handshake,
+        label: "Quiero ser socio",
+        href: "/partner-signup"
+      }
+    ]);
     for (let $$index = 0, $$length = each_array.length; $$index < $$length; $$index++) {
-      let stat = each_array[$$index];
-      $$renderer2.push(`<div class="flex items-center gap-2 rounded-full border border-white/15 bg-white/5 backdrop-blur-sm px-5 py-2.5"><span class="text-base font-jakarta font-bold text-white">${escape_html(stat.value)}</span> <span class="text-xs font-inter text-blue-200/70">${escape_html(stat.label)}</span></div>`);
+      let item = each_array[$$index];
+      $$renderer2.push(`<a${attr("href", item.href)} class="inline-flex items-center gap-1.5 rounded-full px-4 py-1.5 text-[12px] font-inter text-[#7a8fa6] transition-all hover:text-[#f0f4ff]" style="border:1px solid rgba(255,255,255,0.08); background:rgba(255,255,255,0.03);">`);
+      if (item.icon) {
+        $$renderer2.push("<!--[-->");
+        item.icon($$renderer2, { class: "w-3.5 h-3.5" });
+        $$renderer2.push("<!--]-->");
+      } else {
+        $$renderer2.push("<!--[!-->");
+        $$renderer2.push("<!--]-->");
+      }
+      $$renderer2.push(` ${escape_html(item.label)}</a>`);
     }
-    $$renderer2.push(`<!--]--></div> <div class="max-w-3xl mx-auto"><div class="rounded-xl border border-white/15 bg-white/5 backdrop-blur-md shadow-elevated overflow-hidden"><div class="flex items-center gap-2 px-4 py-2.5 bg-white/10 border-b border-white/10"><span class="w-3 h-3 rounded-full bg-red-400/80"></span> <span class="w-3 h-3 rounded-full bg-yellow-400/80"></span> <span class="w-3 h-3 rounded-full bg-green-400/80"></span> <span class="flex-1 mx-4 rounded-md bg-white/10 h-5 flex items-center px-3"><span class="text-[10px] text-blue-200/50 font-mono">app.sajet.us/dashboard</span></span></div> <div class="p-6 space-y-4"><div class="flex items-center justify-between"><div class="h-4 w-32 rounded bg-white/10"></div> <div class="flex gap-2"><div class="h-4 w-16 rounded bg-white/10"></div> <div class="h-4 w-16 rounded bg-secondary/30"></div></div></div> <div class="grid grid-cols-4 gap-3"><div class="rounded-lg bg-white/10 p-4 space-y-2"><div class="h-3 w-14 rounded bg-white/15"></div> <div class="h-6 w-20 rounded bg-secondary/25"></div></div> <div class="rounded-lg bg-white/10 p-4 space-y-2"><div class="h-3 w-14 rounded bg-white/15"></div> <div class="h-6 w-16 rounded bg-emerald-400/25"></div></div> <div class="rounded-lg bg-white/10 p-4 space-y-2"><div class="h-3 w-14 rounded bg-white/15"></div> <div class="h-6 w-18 rounded bg-amber-400/25"></div></div> <div class="rounded-lg bg-white/10 p-4 space-y-2"><div class="h-3 w-14 rounded bg-white/15"></div> <div class="h-6 w-14 rounded bg-violet-400/25"></div></div></div> <div class="rounded-lg bg-white/10 h-32 flex items-end px-4 pb-3 gap-2"><div class="w-8 bg-secondary/30 rounded-t" style="height: 40%"></div> <div class="w-8 bg-secondary/30 rounded-t" style="height: 65%"></div> <div class="w-8 bg-secondary/30 rounded-t" style="height: 50%"></div> <div class="w-8 bg-secondary/30 rounded-t" style="height: 80%"></div> <div class="w-8 bg-secondary/30 rounded-t" style="height: 55%"></div> <div class="w-8 bg-secondary/30 rounded-t" style="height: 90%"></div> <div class="w-8 bg-secondary/30 rounded-t" style="height: 70%"></div> <div class="w-8 bg-secondary/40 rounded-t" style="height: 95%"></div></div> <div class="space-y-2"><div class="flex gap-3 items-center"><div class="h-3 w-24 rounded bg-white/10"></div> <div class="h-3 flex-1 rounded bg-white/5"></div> <div class="h-3 w-16 rounded bg-emerald-400/20"></div></div> <div class="flex gap-3 items-center"><div class="h-3 w-20 rounded bg-white/10"></div> <div class="h-3 flex-1 rounded bg-white/5"></div> <div class="h-3 w-16 rounded bg-amber-400/20"></div></div></div></div></div></div></div></section>`);
+    $$renderer2.push(`<!--]--></div> <p class="text-[12px] font-inter text-[#4a6080] mb-10">${escape_html(store_get($$store_subs ??= {}, "$t", $format)("hero.trust_line"))} · Sin tarjeta de crédito · Cancela cuando quieras</p> <div class="flex flex-wrap justify-center gap-3 mb-14"><!--[-->`);
+    const each_array_1 = ensure_array_like(displayStats);
+    for (let $$index_1 = 0, $$length = each_array_1.length; $$index_1 < $$length; $$index_1++) {
+      let stat = each_array_1[$$index_1];
+      $$renderer2.push(`<div class="flex items-center gap-2 rounded-full px-5 py-2" style="border:1px solid rgba(255,255,255,0.08); background:rgba(255,255,255,0.04); backdrop-filter:blur(8px);"><span class="text-[15px] font-jakarta font-bold text-[#f0f4ff]">${escape_html(stat.value)}</span> <span class="text-[11px] font-inter text-[#7a8fa6]">${escape_html(stat.label)}</span></div>`);
+    }
+    $$renderer2.push(`<!--]--></div> <div class="max-w-3xl mx-auto rounded-xl overflow-hidden" style="border:1px solid rgba(255,255,255,0.10); background:rgba(255,255,255,0.025); backdrop-filter:blur(20px); box-shadow:0 24px 80px rgba(0,0,0,0.60), 0 0 0 1px rgba(0,255,159,0.04);"><div class="flex items-center gap-2 px-4 py-3" style="background:rgba(255,255,255,0.04); border-bottom:1px solid rgba(255,255,255,0.08);"><span class="w-2.5 h-2.5 rounded-full" style="background:#ff5f56;"></span> <span class="w-2.5 h-2.5 rounded-full" style="background:#ffbd2e;"></span> <span class="w-2.5 h-2.5 rounded-full" style="background:#27c93f;"></span> <div class="flex-1 mx-4 rounded-md h-5 flex items-center px-3 gap-1.5" style="background:rgba(255,255,255,0.06);"><span class="w-2 h-2 rounded-full" style="background:rgba(0,255,159,0.5);"></span> <span class="text-[10px] font-mono" style="color:#4a6080;">app.sajet.us/dashboard</span></div> <div class="flex gap-1.5"><div class="h-4 w-14 rounded text-[8px] flex items-center justify-center font-mono" style="background:rgba(0,255,159,0.14); color:#00FF9F;">● Live</div></div></div> <div class="p-5 space-y-4"><div class="flex items-center justify-between"><div class="flex items-center gap-2"><div class="h-3 w-28 rounded" style="background:rgba(255,255,255,0.12);"></div> <div class="h-3 w-14 rounded" style="background:rgba(255,255,255,0.06);"></div></div> <div class="h-6 w-20 rounded-lg text-[9px] font-inter flex items-center justify-center" style="background:rgba(0,255,159,0.14); color:#00FF9F; border:1px solid rgba(0,255,159,0.20);">+ Nueva factura</div></div> <div class="grid grid-cols-4 gap-3"><!--[-->`);
+    const each_array_2 = ensure_array_like(metrics);
+    for (let $$index_2 = 0, $$length = each_array_2.length; $$index_2 < $$length; $$index_2++) {
+      let m = each_array_2[$$index_2];
+      $$renderer2.push(`<div class="rounded-xl p-3.5 space-y-1.5" style="background:rgba(255,255,255,0.04); border:1px solid rgba(255,255,255,0.07);"><div class="text-[8px] font-inter uppercase tracking-widest" style="color:#4a6080;">${escape_html(m.label)}</div> <div class="text-[13px] font-mono font-semibold"${attr_style(`color:${stringify(m.color)};`)}>${escape_html(m.value)}</div> <div class="text-[8px] font-inter px-1.5 py-0.5 rounded-full w-fit"${attr_style(`background:rgba(0,255,159,0.08); color:${stringify(m.color)};`)}>${escape_html(m.delta)}</div></div>`);
+    }
+    $$renderer2.push(`<!--]--></div> <div class="rounded-xl flex items-end px-3 pb-3 gap-1 pt-4" style="background:rgba(255,255,255,0.025); border:1px solid rgba(255,255,255,0.06); height:90px;"><!--[-->`);
+    const each_array_3 = ensure_array_like([38, 55, 42, 70, 52, 88, 65, 95, 72, 85, 60, 78]);
+    for (let i = 0, $$length = each_array_3.length; i < $$length; i++) {
+      let h = each_array_3[i];
+      $$renderer2.push(`<div class="flex-1 rounded-t"${attr_style(`height:${stringify(h)}%; background:${stringify(i === 7 || i === 11 ? "linear-gradient(to top,rgba(0,255,159,0.65),rgba(0,255,159,0.22))" : "linear-gradient(to top,rgba(14,165,233,0.30),rgba(14,165,233,0.08))")};`)}></div>`);
+    }
+    $$renderer2.push(`<!--]--></div> <div class="space-y-1.5 pb-1"><!--[-->`);
+    const each_array_4 = ensure_array_like([
+      {
+        name: "Distribuidora Nova",
+        amount: "$3,200",
+        status: "Pagado",
+        color: "#00FF9F"
+      },
+      {
+        name: "Constructora Sur",
+        amount: "$1,850",
+        status: "Pendiente",
+        color: "#f59e0b"
+      },
+      {
+        name: "Grupo Meridian LLC",
+        amount: "$5,400",
+        status: "Pagado",
+        color: "#00FF9F"
+      }
+    ]);
+    for (let $$index_4 = 0, $$length = each_array_4.length; $$index_4 < $$length; $$index_4++) {
+      let row = each_array_4[$$index_4];
+      $$renderer2.push(`<div class="flex gap-3 items-center px-3 py-2 rounded-lg" style="background:rgba(255,255,255,0.02); border:1px solid rgba(255,255,255,0.05);"><div class="h-1.5 w-1.5 rounded-full"${attr_style(`background:${stringify(row.color)};`)}></div> <div class="text-[10px] font-inter flex-1" style="color:#c8d3e8;">${escape_html(row.name)}</div> <div class="text-[10px] font-mono" style="color:#f0f4ff;">${escape_html(row.amount)}</div> <div class="text-[8px] font-inter px-2 py-0.5 rounded-full"${attr_style(`color:${stringify(row.color)}; border:1px solid rgba(0,255,159,0.18); background:rgba(0,255,159,0.07);`)}>${escape_html(row.status)}</div></div>`);
+    }
+    $$renderer2.push(`<!--]--></div></div></div></div></section>`);
     if ($$store_subs) unsubscribe_stores($$store_subs);
     bind_props($$props, { stats, partnerBranding });
   });
 }
 function SocialProof($$renderer, $$props) {
   $$renderer.component(($$renderer2) => {
-    var $$store_subs;
-    const industryKeys = [
-      "industry_retail",
-      "industry_manufacturing",
-      "industry_services",
-      "industry_healthcare",
-      "industry_distribution",
-      "industry_consulting"
-    ];
-    const industryIcons = ["🛒", "🏭", "💼", "🏥", "🚚", "📋"];
-    $$renderer2.push(`<section class="bg-cloud py-16 border-y border-border"><div class="max-w-6xl mx-auto px-6"><p class="text-center text-sm font-inter text-slate tracking-wide mb-8">${escape_html(store_get($$store_subs ??= {}, "$t", $format)("social_proof.trusted_by"))}</p> <div class="flex flex-wrap justify-center items-center gap-8"><!--[-->`);
-    const each_array = ensure_array_like(industryKeys);
+    const logos = ["TecHeels", "AgroLife", "Esecure", "Partner+", "Socios +"];
+    $$renderer2.push(`<section id="socialproof-section" style="background:#ffffff; border-top:1px solid #e5edf5; border-bottom:1px solid #e5edf5; padding:56px 24px;"><div style="max-width:960px; margin:0 auto; text-align:center;"><p${attr_style(` font-size:12px; font-weight:600; letter-spacing:0.12em; text-transform:uppercase; color:#64748d; margin-bottom:40px; opacity:${stringify(0)}; transform:translateY(${stringify("10px")}); transition:opacity 0.5s cubic-bezier(.16,1,.3,1), transform 0.5s cubic-bezier(.16,1,.3,1); `)}>Empresas que confían en SAJET</p> <div style="display:flex; gap:48px; justify-content:center; flex-wrap:wrap; align-items:center;"><!--[-->`);
+    const each_array = ensure_array_like(logos);
     for (let i = 0, $$length = each_array.length; i < $$length; i++) {
-      let key = each_array[i];
-      $$renderer2.push(`<div class="flex items-center gap-2 text-slate/60"><div class="w-8 h-8 rounded-card-sm bg-primary-light flex items-center justify-center"><span class="text-xs">${escape_html(industryIcons[i])}</span></div> <span class="text-sm font-inter font-medium text-slate">${escape_html(store_get($$store_subs ??= {}, "$t", $format)(`social_proof.${key}`))}</span></div>`);
+      let logo = each_array[i];
+      $$renderer2.push(`<div${attr_style(` font-family:'Plus Jakarta Sans',system-ui,sans-serif; font-size:15px; font-weight:700; letter-spacing:-0.02em; color:#273951; opacity:${stringify(0)}; transform:translateY(${stringify("8px")}); transition:opacity 0.5s ${stringify(0.1 + i * 0.06)}s cubic-bezier(.16,1,.3,1), transform 0.5s ${stringify(0.1 + i * 0.06)}s cubic-bezier(.16,1,.3,1); `)}>${escape_html(logo)}</div>`);
+    }
+    $$renderer2.push(`<!--]--></div> <div style="display:flex; gap:48px; justify-content:center; flex-wrap:wrap; margin-top:56px; padding-top:40px; border-top:1px solid #e5edf5;"><!--[-->`);
+    const each_array_1 = ensure_array_like([
+      { num: "150+", label: "Tenants activos" },
+      { num: "99.8%", label: "Uptime 2025" },
+      { num: "4.9★", label: "Satisfacción media" }
+    ]);
+    for (let i = 0, $$length = each_array_1.length; i < $$length; i++) {
+      let stat = each_array_1[i];
+      $$renderer2.push(`<div${attr_style(` text-align:center; opacity:${stringify(0)}; transform:translateY(${stringify("12px")}); transition:opacity 0.6s ${stringify(0.3 + i * 0.08)}s cubic-bezier(.16,1,.3,1), transform 0.6s ${stringify(0.3 + i * 0.08)}s cubic-bezier(.16,1,.3,1); `)}><div style="font-size:2.2rem; font-weight:700; color:#003B73; letter-spacing:-0.04em; font-variant-numeric:tabular-nums;">${escape_html(stat.num)}</div> <div style="font-size:13px; color:#64748d; margin-top:4px;">${escape_html(stat.label)}</div></div>`);
     }
     $$renderer2.push(`<!--]--></div></div></section>`);
-    if ($$store_subs) unsubscribe_stores($$store_subs);
   });
 }
 function ValueProp($$renderer, $$props) {
   $$renderer.component(($$renderer2) => {
-    var $$store_subs;
-    const pillars = [
-      {
-        icon: Git_merge,
-        title: store_get($$store_subs ??= {}, "$t", $format)("value_prop.one_source"),
-        desc: store_get($$store_subs ??= {}, "$t", $format)("value_prop.one_source_desc")
-      },
-      {
-        icon: Cloud,
-        title: store_get($$store_subs ??= {}, "$t", $format)("value_prop.managed_cloud"),
-        desc: store_get($$store_subs ??= {}, "$t", $format)("value_prop.managed_cloud_desc")
-      },
-      {
-        icon: Building_2,
-        title: store_get($$store_subs ??= {}, "$t", $format)("value_prop.multi_company"),
-        desc: store_get($$store_subs ??= {}, "$t", $format)("value_prop.multi_company_desc")
-      }
-    ];
-    $$renderer2.push(`<section class="bg-white py-24"><div class="max-w-6xl mx-auto px-6"><div class="text-center mb-16"><span class="inline-flex items-center gap-2 rounded-full bg-primary-light text-primary text-[13px] font-inter font-medium tracking-[0.08em] uppercase px-4 py-1.5 mb-4">${escape_html(store_get($$store_subs ??= {}, "$t", $format)("value_prop.badge"))}</span> <h2 class="text-4xl font-jakarta font-bold text-slate-dark mb-4 whitespace-pre-line">${escape_html(store_get($$store_subs ??= {}, "$t", $format)("value_prop.headline"))}</h2> <p class="text-lg font-inter text-slate max-w-xl mx-auto leading-relaxed">${escape_html(store_get($$store_subs ??= {}, "$t", $format)("value_prop.subheading"))}</p></div> <div class="grid grid-cols-1 md:grid-cols-3 gap-8"><!--[-->`);
-    const each_array = ensure_array_like(pillars);
-    for (let $$index = 0, $$length = each_array.length; $$index < $$length; $$index++) {
-      let pillar = each_array[$$index];
-      $$renderer2.push(`<div class="rounded-card-lg border border-border bg-white p-8 hover:shadow-medium transition-all group"><div class="w-12 h-12 rounded-card-sm bg-primary-light flex items-center justify-center mb-5 group-hover:bg-primary/10 transition-colors">`);
-      if (pillar.icon) {
-        $$renderer2.push("<!--[-->");
-        pillar.icon($$renderer2, { class: "w-6 h-6 text-primary", strokeWidth: 1.5 });
-        $$renderer2.push("<!--]-->");
-      } else {
-        $$renderer2.push("<!--[!-->");
-        $$renderer2.push("<!--]-->");
-      }
-      $$renderer2.push(`</div> <h3 class="text-xl font-jakarta font-semibold text-slate-dark mb-3">${escape_html(pillar.title)}</h3> <p class="text-base font-inter text-slate leading-relaxed">${escape_html(pillar.desc)}</p></div>`);
+    $$renderer2.push(`<section id="valueprop-section" style="background: #f5f5f7; padding: clamp(80px, 10vw, 140px) 24px;"><div style="max-width:960px; margin:0 auto; text-align:center;"><p${attr_style(` font-size:13px; font-weight:600; letter-spacing:0.12em; text-transform:uppercase; color:#003B73; margin-bottom:20px; opacity:${stringify(0)}; transform:translateY(${stringify("12px")}); transition:opacity 0.55s cubic-bezier(.16,1,.3,1), transform 0.55s cubic-bezier(.16,1,.3,1); `)}>Por qué SAJET</p> <h2${attr_style(` font-family:'Plus Jakarta Sans','Inter',system-ui,sans-serif; font-size:clamp(2rem,5vw,3rem); font-weight:700; letter-spacing:-0.03em; line-height:1.08; color:#061b31; margin:0 0 24px; opacity:${stringify(0)}; transform:translateY(${stringify("20px")}); transition:opacity 0.65s 0.1s cubic-bezier(.16,1,.3,1), transform 0.65s 0.1s cubic-bezier(.16,1,.3,1); `)}>Un ERP diseñado para<br/>la forma en que trabajas hoy.</h2> <p${attr_style(` font-size:18px; line-height:1.6; color:#64748d; max-width:560px; margin:0 auto 64px; font-weight:300; opacity:${stringify(0)}; transform:translateY(${stringify("16px")}); transition:opacity 0.65s 0.18s cubic-bezier(.16,1,.3,1), transform 0.65s 0.18s cubic-bezier(.16,1,.3,1); `)}>Sin instalaciones complicadas, sin curvas de aprendizaje interminables.
+    Operativo desde el primer día.</p> <div style="display:grid; grid-template-columns:repeat(auto-fit,minmax(200px,1fr)); gap:24px;"><!--[-->`);
+    const each_array = ensure_array_like([
+      { num: "98%", label: "Uptime garantizado", icon: "⚡" },
+      { num: "<2h", label: "Tiempo de onboarding", icon: "🚀" },
+      { num: "40+", label: "Módulos activos", icon: "🧩" },
+      { num: "100%", label: "Datos en tu control", icon: "🔒" }
+    ]);
+    for (let i = 0, $$length = each_array.length; i < $$length; i++) {
+      let item = each_array[i];
+      $$renderer2.push(`<div${attr_style(` background:#ffffff; border:1px solid #e5edf5; border-radius:8px; padding:32px 24px; box-shadow:rgba(50,50,93,0.25) 0px 30px 45px -30px, rgba(0,0,0,0.1) 0px 18px 36px -18px; opacity:${stringify(0)}; transform:translateY(${stringify("24px")}); transition:opacity 0.65s ${stringify(0.22 + i * 0.07)}s cubic-bezier(.16,1,.3,1), transform 0.65s ${stringify(0.22 + i * 0.07)}s cubic-bezier(.16,1,.3,1), box-shadow 0.25s, translate 0.25s; `)} role="article"><div style="font-size:28px; margin-bottom:12px;">${escape_html(item.icon)}</div> <div style="font-size:clamp(2rem,4vw,2.8rem); font-weight:700; color:#003B73; letter-spacing:-0.04em; font-variant-numeric:tabular-nums;">${escape_html(item.num)}</div> <div style="font-size:13px; color:#64748d; margin-top:6px; font-weight:400;">${escape_html(item.label)}</div></div>`);
     }
     $$renderer2.push(`<!--]--></div></div></section>`);
-    if ($$store_subs) unsubscribe_stores($$store_subs);
   });
 }
 function FeaturesGrid($$renderer, $$props) {
@@ -315,16 +310,16 @@ function FeaturesGrid($$renderer, $$props) {
     ];
     let features = fallback($$props["features"], () => [], true);
     displayFeatures = features.length > 0 ? features : defaultFeatures;
-    $$renderer2.push(`<section id="features" class="bg-gradient-subtle py-24"><div class="max-w-6xl mx-auto px-6"><div class="text-center mb-16"><span class="inline-flex items-center gap-2 rounded-full bg-primary-light text-primary text-[13px] font-inter font-medium tracking-[0.08em] uppercase px-4 py-1.5 mb-4">${escape_html(store_get($$store_subs ??= {}, "$t", $format)("features.title"))}</span> <h2 class="text-4xl font-jakarta font-bold text-slate-dark mb-4">${escape_html(store_get($$store_subs ??= {}, "$t", $format)("features.subtitle"))}</h2></div> <div class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-6"><!--[-->`);
+    $$renderer2.push(`<section id="features" class="py-28" style="background:#020e1f; border-top:1px solid rgba(255,255,255,0.05);"><div class="relative max-w-6xl mx-auto px-6"><div class="absolute -top-16 left-1/2 -translate-x-1/2 w-[500px] h-[200px] pointer-events-none" style="background:radial-gradient(ellipse, rgba(0,59,115,0.30) 0%, transparent 70%); filter:blur(60px);"></div> <div class="text-center mb-16"><span class="inline-flex items-center gap-1.5 rounded-full px-4 py-1.5 mb-5 text-[11px] font-inter font-semibold tracking-[0.10em] uppercase" style="background:rgba(0,255,159,0.09); border:1px solid rgba(0,255,159,0.25); color:#00FF9F;"><span class="w-1 h-1 rounded-full" style="background:#00FF9F;"></span> ${escape_html(store_get($$store_subs ??= {}, "$t", $format)("features.title"))}</span> <h2 class="font-jakarta font-bold text-[#f0f4ff] mb-4" style="font-size:clamp(1.75rem, 4vw, 2.4rem); letter-spacing:-0.8px;">${escape_html(store_get($$store_subs ??= {}, "$t", $format)("features.subtitle"))}</h2> <p class="font-inter text-[#7a8fa6] max-w-xl mx-auto leading-relaxed text-[15px]">Todo lo que tu empresa necesita, en una sola plataforma.</p></div> <div class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4"><!--[-->`);
     const each_array = ensure_array_like(displayFeatures);
     for (let $$index = 0, $$length = each_array.length; $$index < $$length; $$index++) {
       let feature = each_array[$$index];
-      $$renderer2.push(`<div class="rounded-card-sm border border-border bg-white p-6 hover:shadow-medium hover:border-primary/20 transition-all group"><div class="w-10 h-10 rounded-lg bg-primary-light flex items-center justify-center mb-4 group-hover:bg-primary/10 transition-colors">`);
+      $$renderer2.push(`<div role="article" class="rounded-xl p-6 transition-all duration-200 cursor-default" style="background:rgba(255,255,255,0.025); border:1px solid rgba(255,255,255,0.07);"><div class="w-9 h-9 rounded-lg flex items-center justify-center mb-4" style="background:rgba(0,255,159,0.10); border:1px solid rgba(0,255,159,0.18);">`);
       if (feature.icon) {
         $$renderer2.push("<!--[-->");
         if (feature.icon) {
           $$renderer2.push("<!--[-->");
-          feature.icon($$renderer2, { class: "w-5 h-5 text-primary", strokeWidth: 1.5 });
+          feature.icon($$renderer2, { class: "w-4 h-4", strokeWidth: 1.5, style: "color:#00FF9F;" });
           $$renderer2.push("<!--]-->");
         } else {
           $$renderer2.push("<!--[!-->");
@@ -333,59 +328,48 @@ function FeaturesGrid($$renderer, $$props) {
       } else {
         $$renderer2.push("<!--[!-->");
       }
-      $$renderer2.push(`<!--]--></div> <h3 class="text-base font-jakarta font-semibold text-slate-dark mb-2">${escape_html(feature.title)}</h3> <p class="text-sm font-inter text-slate leading-relaxed">${escape_html(feature.desc)}</p></div>`);
+      $$renderer2.push(`<!--]--></div> <h3 class="font-jakarta font-semibold text-[#f0f4ff] mb-2 text-[15px]" style="letter-spacing:-0.2px;">${escape_html(feature.title)}</h3> <p class="font-inter text-[#7a8fa6] text-[13px] leading-relaxed">${escape_html(feature.desc)}</p></div>`);
     }
-    $$renderer2.push(`<!--]--></div></div></section>`);
+    $$renderer2.push(`<!--]--></div> <div class="absolute -bottom-16 left-1/2 -translate-x-1/2 w-[600px] h-[180px] pointer-events-none" style="background:radial-gradient(ellipse, rgba(0,59,115,0.18) 0%, transparent 70%); filter:blur(60px);"></div></div></section>`);
     if ($$store_subs) unsubscribe_stores($$store_subs);
     bind_props($$props, { features });
   });
 }
 function HowItWorks($$renderer, $$props) {
   $$renderer.component(($$renderer2) => {
-    var $$store_subs;
     const steps = [
       {
-        num: 1,
-        icon: User_plus,
-        title: store_get($$store_subs ??= {}, "$t", $format)("how_it_works.step1_title"),
-        desc: store_get($$store_subs ??= {}, "$t", $format)("how_it_works.step1_desc")
+        num: "01",
+        title: "Crea tu cuenta",
+        desc: "Regístrate en minutos. Sin tarjeta, sin contratos. Solo tus datos.",
+        color: "rgba(0,59,115,0.08)"
       },
       {
-        num: 2,
-        icon: Server,
-        title: store_get($$store_subs ??= {}, "$t", $format)("how_it_works.step2_title"),
-        desc: store_get($$store_subs ??= {}, "$t", $format)("how_it_works.step2_desc")
+        num: "02",
+        title: "Configura tu espacio",
+        desc: "Personaliza módulos, usuarios y permisos según tu estructura.",
+        color: "rgba(0,255,159,0.06)"
       },
       {
-        num: 3,
-        icon: Mail,
-        title: store_get($$store_subs ??= {}, "$t", $format)("how_it_works.step3_title"),
-        desc: store_get($$store_subs ??= {}, "$t", $format)("how_it_works.step3_desc")
+        num: "03",
+        title: "Conecta tus sistemas",
+        desc: "APIs abiertas para integrarse con lo que ya usas: bancos, facturación, CRM.",
+        color: "rgba(0,59,115,0.08)"
       },
       {
-        num: 4,
-        icon: Rocket,
-        title: store_get($$store_subs ??= {}, "$t", $format)("how_it_works.step4_title"),
-        desc: store_get($$store_subs ??= {}, "$t", $format)("how_it_works.step4_desc")
+        num: "04",
+        title: "Opera y crece",
+        desc: "Dashboards en tiempo real, reportes automáticos, alertas inteligentes.",
+        color: "rgba(0,255,159,0.06)"
       }
     ];
-    $$renderer2.push(`<section id="how-it-works" class="bg-white py-24"><div class="max-w-5xl mx-auto px-6"><div class="text-center mb-16"><span class="inline-flex items-center gap-2 rounded-full bg-primary-light text-primary text-[13px] font-inter font-medium tracking-[0.08em] uppercase px-4 py-1.5 mb-4">${escape_html(store_get($$store_subs ??= {}, "$t", $format)("how_it_works.title"))}</span> <h2 class="text-4xl font-jakarta font-bold text-slate-dark mb-4">${escape_html(store_get($$store_subs ??= {}, "$t", $format)("how_it_works.subtitle"))}</h2></div> <div class="relative"><div class="hidden md:block absolute left-1/2 top-8 bottom-8 w-px bg-gradient-to-b from-primary/30 via-primary/10 to-transparent -translate-x-1/2" aria-hidden="true"></div> <div class="grid grid-cols-1 md:grid-cols-2 gap-8 md:gap-y-16"><!--[-->`);
+    $$renderer2.push(`<section id="howitworks-section" style="background: #000000; padding: clamp(80px, 10vw, 140px) 24px; position:relative; overflow:hidden;"><div style="position:absolute;top:-120px;left:-80px;width:500px;height:500px;border-radius:50%;background:radial-gradient(circle,rgba(0,59,115,0.3) 0%,transparent 70%);pointer-events:none;"></div> <div style="position:absolute;bottom:-80px;right:-60px;width:400px;height:400px;border-radius:50%;background:radial-gradient(circle,rgba(0,255,159,0.08) 0%,transparent 70%);pointer-events:none;"></div> <div style="max-width:960px; margin:0 auto; position:relative; z-index:1;"><div style="text-align:center; margin-bottom:72px;"><p${attr_style(` font-size:13px; font-weight:600; letter-spacing:0.12em; text-transform:uppercase; color:#00FF9F; margin-bottom:16px; opacity:${stringify(0)}; transform:translateY(${stringify("12px")}); transition:opacity 0.5s cubic-bezier(.16,1,.3,1), transform 0.5s cubic-bezier(.16,1,.3,1); `)}>Cómo funciona</p> <h2${attr_style(` font-family:'Plus Jakarta Sans','Inter',system-ui,sans-serif; font-size:clamp(2rem,5vw,3rem); font-weight:700; letter-spacing:-0.035em; line-height:1.07; color:#f5f5f7; margin:0; opacity:${stringify(0)}; transform:translateY(${stringify("20px")}); transition:opacity 0.6s 0.08s cubic-bezier(.16,1,.3,1), transform 0.6s 0.08s cubic-bezier(.16,1,.3,1); `)}>De cero a operando<br/>en cuatro pasos.</h2></div> <div style="display:grid; grid-template-columns:repeat(auto-fit,minmax(200px,1fr)); gap:2px; background:rgba(255,255,255,0.04); border-radius:12px; overflow:hidden;"><!--[-->`);
     const each_array = ensure_array_like(steps);
     for (let i = 0, $$length = each_array.length; i < $$length; i++) {
       let step = each_array[i];
-      $$renderer2.push(`<div${attr_class(`relative flex items-start gap-5 ${stringify(i % 2 === 1 ? "md:col-start-2" : "md:col-start-1")}`)}><div class="flex-shrink-0 relative"><div class="w-14 h-14 rounded-2xl bg-primary-light flex items-center justify-center shadow-soft">`);
-      if (step.icon) {
-        $$renderer2.push("<!--[-->");
-        step.icon($$renderer2, { class: "w-6 h-6 text-primary", strokeWidth: 1.5 });
-        $$renderer2.push("<!--]-->");
-      } else {
-        $$renderer2.push("<!--[!-->");
-        $$renderer2.push("<!--]-->");
-      }
-      $$renderer2.push(`</div> <span class="absolute -top-2 -right-2 w-6 h-6 rounded-full bg-primary text-white text-xs font-jakarta font-bold flex items-center justify-center shadow-md">${escape_html(step.num)}</span></div> <div><h3 class="text-lg font-jakarta font-semibold text-slate-dark mb-1">${escape_html(step.title)}</h3> <p class="text-sm font-inter text-slate leading-relaxed">${escape_html(step.desc)}</p></div></div>`);
+      $$renderer2.push(`<div${attr_style(` background:#111111; padding:40px 28px; border-right: ${stringify(i < steps.length - 1 ? "1px solid rgba(255,255,255,0.06)" : "none")}; opacity:${stringify(0)}; transform:translateY(${stringify("28px")}); transition:opacity 0.65s ${stringify(0.15 + i * 0.09)}s cubic-bezier(.16,1,.3,1), transform 0.65s ${stringify(0.15 + i * 0.09)}s cubic-bezier(.16,1,.3,1), background 0.2s; `)} role="article"><div style="font-size:11px; font-weight:700; letter-spacing:0.15em; color:#00FF9F; margin-bottom:20px; font-variant-numeric:tabular-nums;">${escape_html(step.num)}</div> <h3 style="font-size:18px; font-weight:600; color:#f5f5f7; margin:0 0 12px; letter-spacing:-0.02em;">${escape_html(step.title)}</h3> <p style="font-size:14px; line-height:1.65; color:rgba(245,245,247,0.55); margin:0; font-weight:300;">${escape_html(step.desc)}</p></div>`);
     }
-    $$renderer2.push(`<!--]--></div></div> <div class="text-center mt-16"><a href="/signup" class="inline-flex items-center gap-2 bg-primary hover:bg-navy text-white font-jakarta font-semibold text-sm px-6 py-3 rounded-btn shadow-soft hover:shadow-medium transition-all">${escape_html(store_get($$store_subs ??= {}, "$t", $format)("how_it_works.cta"))}</a></div></div></section>`);
-    if ($$store_subs) unsubscribe_stores($$store_subs);
+    $$renderer2.push(`<!--]--></div></div></section>`);
   });
 }
 function ForPartners($$renderer, $$props) {
@@ -472,107 +456,75 @@ function AccountantsSummary($$renderer, $$props) {
 }
 function Testimonials($$renderer, $$props) {
   $$renderer.component(($$renderer2) => {
-    var $$store_subs;
-    let displayTestimonials;
-    let testimonials = fallback($$props["testimonials"], () => [], true);
-    const fallback$1 = [
+    const testimonials = [
       {
-        name: store_get($$store_subs ??= {}, "$t", $format)("testimonials.t1_author"),
-        role: "",
-        company: store_get($$store_subs ??= {}, "$t", $format)("testimonials.t1_company"),
-        text: store_get($$store_subs ??= {}, "$t", $format)("testimonials.t1_quote"),
-        stars: 5,
-        avatar_url: ""
+        quote: "SAJET redujo nuestro tiempo de cierre mensual de 3 días a menos de 4 horas. La integración con facturación electrónica fue transparente.",
+        name: "María González",
+        role: "CFO, TecHeels",
+        initials: "MG"
       },
       {
-        name: store_get($$store_subs ??= {}, "$t", $format)("testimonials.t2_author"),
-        role: "",
-        company: store_get($$store_subs ??= {}, "$t", $format)("testimonials.t2_company"),
-        text: store_get($$store_subs ??= {}, "$t", $format)("testimonials.t2_quote"),
-        stars: 5,
-        avatar_url: ""
+        quote: "El soporte de Jeturing es excepcionalmente rápido. Tuvimos una integración bancaria corriendo en menos de una semana.",
+        name: "Carlos Reyes",
+        role: "Director TI, AgroLife",
+        initials: "CR"
       },
       {
-        name: store_get($$store_subs ??= {}, "$t", $format)("testimonials.t3_author"),
-        role: "",
-        company: store_get($$store_subs ??= {}, "$t", $format)("testimonials.t3_company"),
-        text: store_get($$store_subs ??= {}, "$t", $format)("testimonials.t3_quote"),
-        stars: 5,
-        avatar_url: ""
+        quote: "Multi-tenancy real, no simulado. Cada cliente tiene su espacio aislado y eso nos dio la confianza para escalar.",
+        name: "Laura Méndez",
+        role: "CTO, Esecure",
+        initials: "LM"
       }
     ];
-    displayTestimonials = testimonials.length > 0 ? testimonials : fallback$1;
-    $$renderer2.push(`<section id="testimonials" class="bg-white py-24"><div class="max-w-6xl mx-auto px-6"><div class="text-center mb-14"><span class="inline-flex items-center gap-2 rounded-full bg-primary-light text-primary text-[13px] font-inter font-medium tracking-[0.08em] uppercase px-4 py-1.5 mb-4">${escape_html(store_get($$store_subs ??= {}, "$t", $format)("testimonials.title"))}</span> <h2 class="text-4xl font-jakarta font-bold text-slate-dark mb-4">${escape_html(store_get($$store_subs ??= {}, "$t", $format)("testimonials.subtitle"))}</h2></div> <div class="grid grid-cols-1 md:grid-cols-3 gap-6"><!--[-->`);
-    const each_array = ensure_array_like(displayTestimonials);
-    for (let $$index_1 = 0, $$length = each_array.length; $$index_1 < $$length; $$index_1++) {
-      let t = each_array[$$index_1];
-      $$renderer2.push(`<div class="rounded-card-lg border border-border bg-cloud p-6 flex flex-col"><div class="flex items-center gap-0.5 mb-4"><!--[-->`);
-      const each_array_1 = ensure_array_like(Array(t.stars || 5));
-      for (let $$index = 0, $$length2 = each_array_1.length; $$index < $$length2; $$index++) {
-        each_array_1[$$index];
-        Star($$renderer2, { class: "w-4 h-4 text-amber-400 fill-amber-400" });
-      }
-      $$renderer2.push(`<!--]--></div> <p class="text-sm font-inter text-slate-dark leading-relaxed flex-1 mb-6">"${escape_html(t.text)}"</p> <div class="flex items-center gap-3">`);
-      if (t.avatar_url) {
-        $$renderer2.push("<!--[-->");
-        $$renderer2.push(`<img${attr("src", t.avatar_url)}${attr("alt", t.name)} class="w-10 h-10 rounded-full object-cover"/>`);
-      } else {
-        $$renderer2.push("<!--[!-->");
-        $$renderer2.push(`<div class="w-10 h-10 rounded-full bg-primary-light text-primary font-jakarta font-bold text-sm flex items-center justify-center">${escape_html(t.name?.charAt(0) || "?")}</div>`);
-      }
-      $$renderer2.push(`<!--]--> <div><p class="text-sm font-jakarta font-semibold text-slate-dark">${escape_html(t.name)}</p> <p class="text-xs font-inter text-slate">${escape_html(t.role)}, ${escape_html(t.company)}</p></div></div></div>`);
+    $$renderer2.push(`<section id="testimonials-section" style="background:#f5f5f7; padding: clamp(80px,10vw,140px) 24px;"><div style="max-width:1080px; margin:0 auto;"><div style="text-align:center; margin-bottom:72px;"><p${attr_style(` font-size:13px; font-weight:600; letter-spacing:0.12em; text-transform:uppercase; color:#003B73; margin-bottom:16px; opacity:${stringify(0)}; transform:translateY(${stringify("10px")}); transition:opacity 0.5s cubic-bezier(.16,1,.3,1), transform 0.5s cubic-bezier(.16,1,.3,1); `)}>Testimonios</p> <h2${attr_style(` font-family:'Plus Jakarta Sans','Inter',system-ui,sans-serif; font-size:clamp(1.8rem,4.5vw,2.8rem); font-weight:700; letter-spacing:-0.035em; line-height:1.08; color:#061b31; margin:0; opacity:${stringify(0)}; transform:translateY(${stringify("18px")}); transition:opacity 0.6s 0.08s cubic-bezier(.16,1,.3,1), transform 0.6s 0.08s cubic-bezier(.16,1,.3,1); `)}>Lo que dicen nuestros clientes.</h2></div> <div style="display:grid; grid-template-columns:repeat(auto-fit,minmax(280px,1fr)); gap:24px;"><!--[-->`);
+    const each_array = ensure_array_like(testimonials);
+    for (let i = 0, $$length = each_array.length; i < $$length; i++) {
+      let t = each_array[i];
+      $$renderer2.push(`<div${attr_style(` background:#ffffff; border:1px solid #e5edf5; border-radius:8px; padding:36px 32px; box-shadow:rgba(50,50,93,0.25) 0px 30px 45px -30px, rgba(0,0,0,0.1) 0px 18px 36px -18px; display:flex; flex-direction:column; justify-content:space-between; opacity:${stringify(0)}; transform:translateY(${stringify("24px")}); transition:opacity 0.65s ${stringify(0.12 + i * 0.1)}s cubic-bezier(.16,1,.3,1), transform 0.65s ${stringify(0.12 + i * 0.1)}s cubic-bezier(.16,1,.3,1), box-shadow 0.25s; `)} role="article"><div style="font-size:48px; color:#003B73; opacity:0.15; line-height:1; margin-bottom:16px; font-family:Georgia,serif;">"</div> <p style="font-size:16px; line-height:1.65; color:#273951; font-weight:300; margin:0 0 32px; flex:1;">${escape_html(t.quote)}</p> <div style="display:flex; align-items:center; gap:12px;"><div style="width:40px; height:40px; border-radius:50%; background:linear-gradient(135deg,#003B73,#00569e); display:flex; align-items:center; justify-content:center; font-size:13px; font-weight:700; color:#00FF9F; flex-shrink:0;">${escape_html(t.initials)}</div> <div><div style="font-size:14px; font-weight:600; color:#061b31;">${escape_html(t.name)}</div> <div style="font-size:12px; color:#64748d; margin-top:1px;">${escape_html(t.role)}</div></div></div></div>`);
     }
     $$renderer2.push(`<!--]--></div></div></section>`);
-    if ($$store_subs) unsubscribe_stores($$store_subs);
-    bind_props($$props, { testimonials });
   });
 }
-function FAQ($$renderer) {
-  const faqs = [
-    {
-      q: "¿Necesito una tarjeta de crédito para el período de prueba?",
-      a: "No. Los 14 días de prueba son completamente gratis, sin necesidad de tarjeta de crédito ni compromiso. Solo te pedimos tu correo electrónico."
-    },
-    {
-      q: "¿Puedo cambiar de plan en cualquier momento?",
-      a: "Sí, puedes subir o bajar de plan en cualquier momento. Los ajustes se prorratean automáticamente en tu próxima factura."
-    },
-    {
-      q: "¿Sajet funciona para empresas en República Dominicana?",
-      a: "Absolutamente. Sajet fue diseñado desde cero para el mercado dominicano: soporte para NCF, e-CF / facturación electrónica ante la DGII (vía República FEL), DOP y USD, e integraciones locales."
-    },
-    {
-      q: "¿Qué incluye la integración de facturación electrónica (e-CF)?",
-      a: "Sajet se integra nativamente con República FEL, proveedor certificado por la DGII. La generación, firma y envío de comprobantes fiscales electrónicos se gestiona directamente desde Sajet. El servicio FEL se contrata por separado (desde $50/mes según volumen)."
-    },
-    {
-      q: "¿Cuántos usuarios puedo agregar a mi plan?",
-      a: "Depende del plan: Básico admite hasta 10 usuarios, Profesional hasta 50, y Empresarial es ilimitado. Puedes usar la calculadora de precios para ver el costo exacto según la cantidad de usuarios que necesitas."
-    },
-    {
-      q: "¿Cómo funciona el soporte?",
-      a: "Todos los planes incluyen soporte por correo y chat. El plan Profesional incluye soporte prioritario con respuesta en 4 horas. El plan Empresarial incluye un gerente de cuenta dedicado y soporte 24/7."
+function FAQ($$renderer, $$props) {
+  $$renderer.component(($$renderer2) => {
+    let open = null;
+    const faqs = [
+      {
+        q: "¿Cuánto tiempo toma implementar SAJET?",
+        a: "La mayoría de tenants están operativos en menos de 2 horas. Incluye onboarding asistido, migración de datos básica y configuración inicial de módulos."
+      },
+      {
+        q: "¿Puedo migrar mis datos desde otro ERP?",
+        a: "Sí. Ofrecemos conectores para los principales ERPs del mercado y servicio de migración asistida para datos históricos."
+      },
+      {
+        q: "¿Cómo funciona la facturación electrónica?",
+        a: "SAJET integra nativamente con los servicios de la DGII (República Dominicana) y otros sistemas fiscales latinoamericanos. El módulo e-CF está incluido en todos los planes."
+      },
+      {
+        q: "¿Mis datos están seguros?",
+        a: "Infraestructura propia en servidores dedicados, cifrado AES-256 en reposo y TLS 1.3 en tránsito, backups diarios con retención de 30 días, y aislamiento total por tenant."
+      },
+      {
+        q: "¿Tienen soporte en español?",
+        a: "Todo nuestro equipo de soporte opera en español, con horario extendido y SLA de respuesta < 4 horas en planes Professional y Enterprise."
+      }
+    ];
+    $$renderer2.push(`<section id="faq-section" style="background:#000000; padding: clamp(80px,10vw,140px) 24px;"><div style="max-width:720px; margin:0 auto;"><div style="text-align:center; margin-bottom:64px;"><p${attr_style(` font-size:13px; font-weight:600; letter-spacing:0.12em; text-transform:uppercase; color:#00FF9F; margin-bottom:16px; opacity:${stringify(0)}; transform:translateY(${stringify("10px")}); transition:opacity 0.5s cubic-bezier(.16,1,.3,1), transform 0.5s cubic-bezier(.16,1,.3,1); `)}>Preguntas frecuentes</p> <h2${attr_style(` font-family:'Plus Jakarta Sans','Inter',system-ui,sans-serif; font-size:clamp(1.8rem,4.5vw,2.8rem); font-weight:700; letter-spacing:-0.035em; line-height:1.08; color:#f5f5f7; margin:0; opacity:${stringify(0)}; transform:translateY(${stringify("18px")}); transition:opacity 0.6s 0.08s cubic-bezier(.16,1,.3,1), transform 0.6s 0.08s cubic-bezier(.16,1,.3,1); `)}>Todo lo que necesitas saber.</h2></div> <div style="display:flex; flex-direction:column; gap:2px;"><!--[-->`);
+    const each_array = ensure_array_like(faqs);
+    for (let i = 0, $$length = each_array.length; i < $$length; i++) {
+      let faq = each_array[i];
+      $$renderer2.push(`<div${attr_style(` border-bottom:1px solid rgba(255,255,255,0.08); opacity:${stringify(0)}; transform:translateY(${stringify("16px")}); transition:opacity 0.6s ${stringify(0.1 + i * 0.07)}s cubic-bezier(.16,1,.3,1), transform 0.6s ${stringify(0.1 + i * 0.07)}s cubic-bezier(.16,1,.3,1); `)}><button style="width:100%; text-align:left; padding:24px 0; background:none; border:none; cursor:pointer; display:flex; justify-content:space-between; align-items:center; gap:16px;"><span${attr_style(`font-size:17px; font-weight:500; color:${stringify(open === i ? "#00FF9F" : "#f5f5f7")}; line-height:1.4; letter-spacing:-0.01em; transition:color 0.2s;`)}>${escape_html(faq.q)}</span> <span${attr_style(` color:${stringify(open === i ? "#00FF9F" : "rgba(245,245,247,0.4)")}; font-size:20px; flex-shrink:0; transform:rotate(${stringify(open === i ? 45 : 0)}deg); transition:transform 0.25s cubic-bezier(.16,1,.3,1), color 0.2s; `)}>+</span></button> `);
+      if (open === i) {
+        $$renderer2.push("<!--[-->");
+        $$renderer2.push(`<div style="padding:0 0 24px; font-size:15px; line-height:1.7; color:rgba(245,245,247,0.6); font-weight:300;">${escape_html(faq.a)}</div>`);
+      } else {
+        $$renderer2.push("<!--[!-->");
+      }
+      $$renderer2.push(`<!--]--></div>`);
     }
-  ];
-  let openIndex = null;
-  $$renderer.push(`<section id="faq" class="bg-white py-24"><div class="max-w-2xl mx-auto px-6"><div class="text-center mb-12"><span class="inline-flex items-center gap-2 rounded-full bg-primary-light text-primary text-[13px] font-inter font-medium tracking-[0.08em] uppercase px-4 py-1.5 mb-4">FAQ</span> <h2 class="text-4xl font-jakarta font-bold text-slate-dark">Preguntas frecuentes</h2> <p class="text-base font-inter text-slate mt-3 max-w-md mx-auto">¿Algo que no encontraste aquí? Escríbenos por WhatsApp o correo y te respondemos en minutos.</p></div> <div class="divide-y divide-border"><!--[-->`);
-  const each_array = ensure_array_like(faqs);
-  for (let i = 0, $$length = each_array.length; i < $$length; i++) {
-    let faq = each_array[i];
-    $$renderer.push(`<div><button type="button" class="w-full flex items-center justify-between gap-4 py-5 text-left focus:outline-none group"${attr("aria-expanded", openIndex === i)}><span class="text-base font-jakarta font-semibold text-slate-dark group-hover:text-primary transition-colors">${escape_html(faq.q)}</span> `);
-    Chevron_down($$renderer, {
-      class: `w-5 h-5 text-slate flex-shrink-0 transition-transform duration-200 ${stringify(openIndex === i ? "rotate-180 text-primary" : "")}`
-    });
-    $$renderer.push(`<!----></button> `);
-    if (openIndex === i) {
-      $$renderer.push("<!--[-->");
-      $$renderer.push(`<div class="pb-5"><p class="text-sm font-inter text-slate leading-relaxed">${escape_html(faq.a)}</p></div>`);
-    } else {
-      $$renderer.push("<!--[!-->");
-    }
-    $$renderer.push(`<!--]--></div>`);
-  }
-  $$renderer.push(`<!--]--></div> <div class="mt-10 text-center"><p class="text-sm font-inter text-slate mb-3">¿Más preguntas?</p> <a href="https://wa.me/4012001999" target="_blank" rel="noopener noreferrer" class="inline-flex items-center gap-2 bg-emerald-500 hover:bg-emerald-600 text-white text-sm font-jakarta font-semibold px-5 py-2.5 rounded-btn transition-colors shadow-soft"><svg class="w-4 h-4" fill="currentColor" viewBox="0 0 24 24" aria-hidden="true"><path d="M17.472 14.382c-.297-.149-1.758-.867-2.03-.967-.273-.099-.471-.148-.67.15-.197.297-.767.966-.94 1.164-.173.199-.347.223-.644.075-.297-.15-1.255-.463-2.39-1.475-.883-.788-1.48-1.761-1.653-2.059-.173-.297-.018-.458.13-.606.134-.133.298-.347.446-.52.149-.174.198-.298.298-.497.099-.198.05-.371-.025-.52-.075-.149-.669-1.612-.916-2.207-.242-.579-.487-.5-.669-.51-.173-.008-.371-.01-.57-.01-.198 0-.52.074-.792.372-.272.297-1.04 1.016-1.04 2.479 0 1.462 1.065 2.875 1.213 3.074.149.198 2.096 3.2 5.077 4.487.709.306 1.262.489 1.694.625.712.227 1.36.195 1.871.118.571-.085 1.758-.719 2.006-1.413.248-.694.248-1.289.173-1.413-.074-.124-.272-.198-.57-.347z"></path><path d="M12 0C5.373 0 0 5.373 0 12c0 2.123.558 4.115 1.535 5.836L.057 23.944l6.264-1.449A11.94 11.94 0 0012 24c6.627 0 12-5.373 12-12S18.627 0 12 0zm0 21.818a9.818 9.818 0 01-5.013-1.373l-.359-.214-3.724.861.882-3.624-.234-.373A9.818 9.818 0 012.182 12C2.182 6.567 6.567 2.182 12 2.182S21.818 6.567 21.818 12 17.433 21.818 12 21.818z"></path></svg> Chatear en WhatsApp</a></div></div></section>`);
+    $$renderer2.push(`<!--]--></div></div></section>`);
+  });
 }
 function PricingPreview($$renderer, $$props) {
   $$renderer.component(($$renderer2) => {
@@ -670,33 +622,31 @@ function PricingPreview($$renderer, $$props) {
       lastPriceKey = priceKey;
       updatePrices();
     }
-    $$renderer2.push(`<section id="pricing" class="bg-gradient-subtle py-24"><div class="max-w-6xl mx-auto px-6"><div class="text-center mb-12"><span class="inline-flex items-center gap-2 rounded-full bg-primary-light text-primary text-[13px] font-inter font-medium tracking-[0.08em] uppercase px-4 py-1.5 mb-4">${escape_html(store_get($$store_subs ??= {}, "$t", $format)("pricing.title"))}</span> <h2 class="text-4xl font-jakarta font-bold text-slate-dark mb-4 whitespace-pre-line">${escape_html(store_get($$store_subs ??= {}, "$t", $format)("pricing.headline"))}</h2> <p class="text-base font-inter text-slate max-w-lg mx-auto">${escape_html(store_get($$store_subs ??= {}, "$t", $format)("pricing.subtitle"))}</p></div> <div class="flex flex-col sm:flex-row items-center justify-center gap-6 mb-12"><div class="flex items-center gap-3 bg-white rounded-full border border-border px-1.5 py-1 shadow-soft"><button${attr_class(`text-sm font-inter font-medium px-4 py-1.5 rounded-full transition-all ${stringify(
-      "bg-primary text-white shadow-sm"
-    )}`)}>${escape_html(store_get($$store_subs ??= {}, "$t", $format)("pricing.monthly"))}</button> <button${attr_class(`text-sm font-inter font-medium px-4 py-1.5 rounded-full transition-all ${stringify("text-slate hover:text-slate-dark")}`)}>${escape_html(store_get($$store_subs ??= {}, "$t", $format)("pricing.annual"))} <span class="text-xs text-emerald-600 font-semibold ml-1">${escape_html(store_get($$store_subs ??= {}, "$t", $format)("pricing.save"))}</span></button></div> <div class="flex items-center gap-3 bg-white rounded-full border border-border px-4 py-2 shadow-soft"><label class="text-sm font-inter text-slate">${escape_html(store_get($$store_subs ??= {}, "$t", $format)("pricing.users"))}:</label> <button class="w-7 h-7 rounded-full bg-cloud text-slate-dark font-bold text-lg flex items-center justify-center hover:bg-primary-light transition-colors disabled:opacity-40"${attr("disabled", userCount <= 1, true)}>−</button> <span class="w-8 text-center text-sm font-jakarta font-bold text-slate-dark">${escape_html(userCount)}</span> <button class="w-7 h-7 rounded-full bg-cloud text-slate-dark font-bold text-lg flex items-center justify-center hover:bg-primary-light transition-colors">+</button></div></div> <div class="grid grid-cols-1 md:grid-cols-3 gap-6 items-start"><!--[-->`);
+    $$renderer2.push(`<section id="pricing" style="background:#f5f5f7; padding:clamp(80px,10vw,140px) 24px;"><div class="max-w-6xl mx-auto px-6"><div class="text-center mb-12"><span style="display:inline-flex;align-items:center;gap:6px;border-radius:4px;background:rgba(0,59,115,0.08);color:#003B73;font-size:12px;font-weight:600;letter-spacing:0.1em;text-transform:uppercase;padding:5px 14px;margin-bottom:16px;">${escape_html(store_get($$store_subs ??= {}, "$t", $format)("pricing.title"))}</span> <h2 style="font-family:'Plus Jakarta Sans','Inter',system-ui;font-size:clamp(1.8rem,4.5vw,2.8rem);font-weight:700;letter-spacing:-0.035em;line-height:1.08;color:#061b31;margin:0 0 16px;">${escape_html(store_get($$store_subs ??= {}, "$t", $format)("pricing.headline"))}</h2> <p style="font-size:17px;font-weight:300;color:#64748d;max-width:480px;margin:0 auto;">${escape_html(store_get($$store_subs ??= {}, "$t", $format)("pricing.subtitle"))}</p></div> <div class="flex flex-col sm:flex-row items-center justify-center gap-6 mb-12"><div style="display:flex;align-items:center;gap:4px;background:#ffffff;border:1px solid #e5edf5;border-radius:8px;padding:4px;box-shadow:rgba(50,50,93,0.12) 0px 4px 12px -4px,rgba(0,0,0,0.06) 0px 2px 6px -2px;"><button${attr_style(`font-size:13px;font-weight:500;padding:6px 16px;border-radius:6px;border:none;cursor:pointer;transition:all 0.2s;background:${stringify("#003B73")};color:${stringify("#ffffff")};`)}>${escape_html(store_get($$store_subs ??= {}, "$t", $format)("pricing.monthly"))}</button> <button${attr_style(`font-size:13px;font-weight:500;padding:6px 16px;border-radius:6px;border:none;cursor:pointer;transition:all 0.2s;background:${stringify("transparent")};color:${stringify("#64748d")};`)}>${escape_html(store_get($$store_subs ??= {}, "$t", $format)("pricing.annual"))} <span style="font-size:11px;color:#00a36e;font-weight:600;margin-left:4px;">${escape_html(store_get($$store_subs ??= {}, "$t", $format)("pricing.save"))}</span></button></div> <div style="display:flex;align-items:center;gap:10px;background:#ffffff;border:1px solid #e5edf5;border-radius:8px;padding:8px 16px;box-shadow:rgba(50,50,93,0.12) 0px 4px 12px -4px,rgba(0,0,0,0.06) 0px 2px 6px -2px;"><span style="font-size:13px;color:#64748d;">${escape_html(store_get($$store_subs ??= {}, "$t", $format)("pricing.users"))}:</span> <button style="width:28px;height:28px;border-radius:50%;background:#f0f7ff;color:#003B73;font-weight:700;font-size:18px;display:flex;align-items:center;justify-content:center;border:none;cursor:pointer;transition:background 0.2s;"${attr("disabled", userCount <= 1, true)} aria-label="Reducir usuarios">−</button> <span style="width:32px;text-align:center;font-size:14px;font-weight:700;color:#061b31;font-variant-numeric:tabular-nums;">${escape_html(userCount)}</span> <button style="width:28px;height:28px;border-radius:50%;background:#f0f7ff;color:#003B73;font-weight:700;font-size:18px;display:flex;align-items:center;justify-content:center;border:none;cursor:pointer;transition:background 0.2s;" aria-label="Aumentar usuarios">+</button></div></div> <div class="grid grid-cols-1 md:grid-cols-3 gap-6 items-start"><!--[-->`);
     const each_array = ensure_array_like(displayPlans);
-    for (let $$index_1 = 0, $$length = each_array.length; $$index_1 < $$length; $$index_1++) {
-      let plan = each_array[$$index_1];
-      $$renderer2.push(`<div${attr_class(`relative rounded-card-lg border bg-white p-6 flex flex-col ${stringify(plan.is_highlighted ? "border-primary shadow-elevated ring-2 ring-primary/20" : "border-border shadow-soft")}`)}>`);
+    for (let $$index_2 = 0, $$length = each_array.length; $$index_2 < $$length; $$index_2++) {
+      let plan = each_array[$$index_2];
+      $$renderer2.push(`<div${attr_style(` position:relative; border-radius:8px; background:#ffffff; border:${stringify(plan.is_highlighted ? "2px solid #003B73" : "1px solid #e5edf5")}; padding:${stringify(plan.is_highlighted ? "28px 28px" : "24px 24px")}; display:flex; flex-direction:column; box-shadow:${stringify(plan.is_highlighted ? "rgba(50,50,93,0.35) 0px 30px 60px -12px, rgba(0,0,0,0.2) 0px 18px 36px -18px" : "rgba(50,50,93,0.18) 0px 20px 40px -20px, rgba(0,0,0,0.08) 0px 10px 24px -12px")}; transform:${stringify(plan.is_highlighted ? "translateY(-4px)" : "none")}; `)}>`);
       if (plan.is_highlighted) {
         $$renderer2.push("<!--[-->");
-        $$renderer2.push(`<div class="absolute -top-3 left-1/2 -translate-x-1/2"><span class="inline-flex items-center gap-1 bg-primary text-white text-xs font-inter font-semibold px-3 py-1 rounded-full shadow-md">`);
+        $$renderer2.push(`<div style="position:absolute;top:-12px;left:50%;transform:translateX(-50%);"><span style="display:inline-flex;align-items:center;gap:4px;background:#003B73;color:#00FF9F;font-size:11px;font-weight:600;padding:4px 12px;border-radius:4px;letter-spacing:0.04em;text-transform:uppercase;">`);
         Sparkles($$renderer2, { class: "w-3 h-3" });
         $$renderer2.push(`<!----> ${escape_html(store_get($$store_subs ??= {}, "$t", $format)("pricing.most_popular"))}</span></div>`);
       } else {
         $$renderer2.push("<!--[!-->");
       }
-      $$renderer2.push(`<!--]--> <h3 class="text-lg font-jakarta font-bold text-slate-dark mb-1">${escape_html(plan.display_name || plan.name)}</h3> <div class="flex items-baseline gap-1 mb-2">`);
+      $$renderer2.push(`<!--]--> <h3 style="font-size:16px;font-weight:700;color:#061b31;margin:0 0 4px;letter-spacing:-0.02em;">${escape_html(plan.display_name || plan.name)}</h3> <div style="display:flex;align-items:baseline;gap:4px;margin-bottom:8px;">`);
       if (pricingLoading) {
         $$renderer2.push("<!--[-->");
-        $$renderer2.push(`<span class="text-3xl font-jakarta font-bold text-slate animate-pulse">…</span>`);
+        $$renderer2.push(`<span style="font-size:2rem;font-weight:700;color:#64748d;">…</span>`);
       } else {
         $$renderer2.push("<!--[!-->");
-        $$renderer2.push(`<span class="text-4xl font-jakarta font-extrabold text-slate-dark">${escape_html(displayTotal(plan))}</span> <span class="text-sm font-inter text-slate">/mes</span>`);
+        $$renderer2.push(`<span style="font-size:2.5rem;font-weight:800;color:#061b31;letter-spacing:-0.04em;font-variant-numeric:tabular-nums;">${escape_html(displayTotal(plan))}</span> <span style="font-size:13px;color:#64748d;">/mes</span>`);
       }
-      $$renderer2.push(`<!--]--></div> <div class="text-xs font-inter text-slate mb-3 bg-cloud rounded-lg px-3 py-2 space-y-0.5"><p class="font-semibold text-slate-dark">Base: $${escape_html(plan.base_price)}/mes</p> <p>+$${escape_html(plan.price_per_user)}/usuario adicional</p> <p class="text-slate-400">${escape_html(plan.included_users)} usuario${escape_html(plan.included_users > 1 ? "s" : "")} incluido${escape_html(plan.included_users > 1 ? "s" : "")} · Hasta ${escape_html(maxUsersLabel(plan))}</p> `);
+      $$renderer2.push(`<!--]--></div> <div style="font-size:11px;color:#64748d;margin-bottom:12px;background:#f8fafc;border-radius:6px;padding:10px 12px;line-height:1.8;border:1px solid #e5edf5;"><p style="font-weight:600;color:#273951;margin:0;">Base: $${escape_html(plan.base_price)}/mes</p> <p style="margin:0;">+$${escape_html(plan.price_per_user)}/usuario adicional</p> <p style="margin:0;color:#94a3b8;">${escape_html(plan.included_users)} usuario${escape_html(plan.included_users > 1 ? "s" : "")} incluido${escape_html(plan.included_users > 1 ? "s" : "")} · Hasta ${escape_html(maxUsersLabel(plan))}</p> `);
       if (!pricingLoading && extraUsersLine(plan)) {
         $$renderer2.push("<!--[-->");
-        $$renderer2.push(`<p class="text-primary font-medium pt-1 border-t border-border">${escape_html(extraUsersLine(plan))}</p>`);
+        $$renderer2.push(`<p style="color:#003B73;font-weight:500;margin:4px 0 0;padding-top:4px;border-top:1px solid #e5edf5;">${escape_html(extraUsersLine(plan))}</p>`);
       } else {
         $$renderer2.push("<!--[!-->");
       }
@@ -704,10 +654,21 @@ function PricingPreview($$renderer, $$props) {
       {
         $$renderer2.push("<!--[!-->");
       }
-      $$renderer2.push(`<!--]--></div> <div class="flex flex-wrap gap-1.5 mb-4"><span class="inline-flex items-center gap-1 text-[11px] font-inter font-medium bg-cloud text-slate-dark rounded-full px-2.5 py-1">💾 ${escape_html(storageLabel(plan.max_storage_mb))}</span> <span class="inline-flex items-center gap-1 text-[11px] font-inter font-medium bg-cloud text-slate-dark rounded-full px-2.5 py-1">🔒 Backups ∞</span> <span class="inline-flex items-center gap-1 text-[11px] font-inter font-medium bg-cloud text-slate-dark rounded-full px-2.5 py-1">⚡ ${escape_html(apiLabel(plan))}</span> <span class="inline-flex items-center gap-1 text-[11px] font-inter font-medium bg-cloud text-slate-dark rounded-full px-2.5 py-1">💬 ${escape_html(supportLabel(plan))}</span></div> <p class="text-xs font-inter text-primary font-semibold mb-4">✓ ${escape_html(plan.trial_days)} días de prueba gratis · Sin tarjeta</p> <ul class="space-y-2.5 mb-6 flex-1"><!--[-->`);
-      const each_array_1 = ensure_array_like(plan.features || []);
+      $$renderer2.push(`<!--]--></div> <div style="display:flex;flex-wrap:wrap;gap:6px;margin-bottom:16px;"><!--[-->`);
+      const each_array_1 = ensure_array_like([
+        `💾 ${storageLabel(plan.max_storage_mb)}`,
+        "🔒 Backups ∞",
+        `⚡ ${apiLabel(plan)}`,
+        `💬 ${supportLabel(plan)}`
+      ]);
       for (let $$index = 0, $$length2 = each_array_1.length; $$index < $$length2; $$index++) {
-        let feat = each_array_1[$$index];
+        let chip = each_array_1[$$index];
+        $$renderer2.push(`<span style="font-size:11px;font-weight:500;background:#f0f7ff;color:#273951;border-radius:4px;padding:3px 8px;border:1px solid #e5edf5;">${escape_html(chip)}</span>`);
+      }
+      $$renderer2.push(`<!--]--></div> <p class="text-xs font-inter text-primary font-semibold mb-4">✓ ${escape_html(plan.trial_days)} días de prueba gratis · Sin tarjeta</p> <ul class="space-y-2.5 mb-6 flex-1"><!--[-->`);
+      const each_array_2 = ensure_array_like(plan.features || []);
+      for (let $$index_1 = 0, $$length2 = each_array_2.length; $$index_1 < $$length2; $$index_1++) {
+        let feat = each_array_2[$$index_1];
         $$renderer2.push(`<li class="flex items-start gap-2 text-sm font-inter text-slate-dark">`);
         Check($$renderer2, {
           class: "w-4 h-4 text-emerald-500 flex-shrink-0 mt-0.5",
@@ -715,7 +676,7 @@ function PricingPreview($$renderer, $$props) {
         });
         $$renderer2.push(`<!----> <span>${escape_html(feat)}</span></li>`);
       }
-      $$renderer2.push(`<!--]--></ul> <button${attr_class(`w-full text-center text-sm font-jakarta font-semibold py-2.5 rounded-btn transition-all ${stringify(plan.is_highlighted ? "bg-primary hover:bg-navy text-white shadow-soft hover:shadow-medium" : "border border-primary text-primary hover:bg-primary hover:text-white")}`)}>${escape_html(store_get($$store_subs ??= {}, "$t", $format)("pricing.start_trial"))}</button></div>`);
+      $$renderer2.push(`<!--]--></ul> <button${attr_style(` width:100%; text-align:center; font-size:14px; font-weight:600; padding:12px 24px; border-radius:6px; cursor:pointer; transition:all 0.2s; margin-top:auto; background:${stringify(plan.is_highlighted ? "#003B73" : "transparent")}; color:${stringify(plan.is_highlighted ? "#00FF9F" : "#003B73")}; border:${stringify(plan.is_highlighted ? "none" : "2px solid #003B73")}; box-shadow:${stringify(plan.is_highlighted ? "rgba(50,50,93,0.25) 0px 6px 16px -4px" : "none")}; `)}>${escape_html(store_get($$store_subs ??= {}, "$t", $format)("pricing.start_trial"))}</button></div>`);
     }
     $$renderer2.push(`<!--]--></div> `);
     if (pricingError) {
@@ -736,9 +697,9 @@ function PricingPreview($$renderer, $$props) {
 function FinalCTA($$renderer, $$props) {
   $$renderer.component(($$renderer2) => {
     var $$store_subs;
-    $$renderer2.push(`<section id="cta-final" class="bg-gradient-hero py-24"><div class="max-w-3xl mx-auto px-6 text-center"><h2 class="text-4xl md:text-5xl font-jakarta font-extrabold text-white mb-6 leading-tight">${escape_html(store_get($$store_subs ??= {}, "$t", $format)("final_cta.headline"))}<br/> ${escape_html(store_get($$store_subs ??= {}, "$t", $format)("final_cta.headline_highlight"))}</h2> <p class="text-lg font-inter text-white/80 mb-10 max-w-xl mx-auto">${escape_html(store_get($$store_subs ??= {}, "$t", $format)("final_cta.subheading"))}</p> <div class="flex flex-col sm:flex-row items-center justify-center gap-4"><a href="/signup" class="inline-flex items-center gap-2 bg-white text-primary font-jakarta font-semibold text-sm px-8 py-3.5 rounded-btn shadow-medium hover:shadow-elevated hover:bg-cloud transition-all">${escape_html(store_get($$store_subs ??= {}, "$t", $format)("final_cta.cta_primary"))} `);
+    $$renderer2.push(`<section id="cta-final" class="py-28 relative overflow-hidden" style="background:#020e1f; border-top:1px solid rgba(255,255,255,0.05);"><div class="absolute top-0 left-1/2 -translate-x-1/2 pointer-events-none" style="width:700px; height:300px; background:radial-gradient(ellipse at 50% 0%, rgba(0,255,159,0.12) 0%, transparent 65%); filter:blur(50px);"></div> <div class="absolute bottom-0 left-1/2 -translate-x-1/2 pointer-events-none" style="width:500px; height:200px; background:radial-gradient(ellipse, rgba(0,59,115,0.35) 0%, transparent 70%); filter:blur(60px);"></div> <div class="relative max-w-2xl mx-auto px-6 text-center"><div class="inline-flex items-center gap-1.5 rounded-full px-4 py-1.5 mb-8 text-[11px] font-inter font-semibold tracking-[0.10em] uppercase" style="background:rgba(0,255,159,0.09); border:1px solid rgba(0,255,159,0.28); color:#00FF9F;"><span class="w-1.5 h-1.5 rounded-full" style="background:#00FF9F; box-shadow:0 0 6px #00FF9F;"></span> Empieza hoy</div> <h2 class="font-jakarta font-extrabold text-[#f0f4ff] mb-5 leading-[1.08]" style="font-size:clamp(2rem, 5vw, 3.2rem); letter-spacing:-1.4px;">${escape_html(store_get($$store_subs ??= {}, "$t", $format)("final_cta.headline"))}<br/> <span style="color:#00FF9F; text-shadow:0 0 32px rgba(0,255,159,0.30);">${escape_html(store_get($$store_subs ??= {}, "$t", $format)("final_cta.headline_highlight"))}</span></h2> <p class="font-inter text-[#7a8fa6] mb-10 max-w-lg mx-auto leading-relaxed text-[16px]">${escape_html(store_get($$store_subs ??= {}, "$t", $format)("final_cta.subheading"))}</p> <div class="flex flex-col sm:flex-row items-center justify-center gap-3"><a href="/signup" class="inline-flex items-center gap-2 font-inter font-semibold text-[14px] px-8 py-3.5 rounded-lg transition-all duration-150 hover:-translate-y-px w-full sm:w-auto justify-center" style="background:#00FF9F; color:#020e1f; box-shadow:0 4px 20px rgba(0,255,159,0.30);">${escape_html(store_get($$store_subs ??= {}, "$t", $format)("final_cta.cta_primary"))} `);
     Arrow_right($$renderer2, { class: "w-4 h-4" });
-    $$renderer2.push(`<!----></a> <a href="mailto:ventas@sajet.us?subject=Quiero%20hablar%20con%20SAJET" class="inline-flex items-center gap-2 border border-white/40 text-white font-jakarta font-semibold text-sm px-8 py-3.5 rounded-btn hover:bg-white/10 transition-all">${escape_html(store_get($$store_subs ??= {}, "$t", $format)("final_cta.cta_secondary"))}</a></div></div></section>`);
+    $$renderer2.push(`<!----></a> <a href="mailto:ventas@sajet.us?subject=Quiero%20hablar%20con%20SAJET" class="inline-flex items-center gap-2 font-inter font-medium text-[14px] text-[#c8d3e8] px-8 py-3.5 rounded-lg transition-all hover:-translate-y-px w-full sm:w-auto justify-center" style="border:1px solid rgba(255,255,255,0.12); background:rgba(255,255,255,0.04);">${escape_html(store_get($$store_subs ??= {}, "$t", $format)("final_cta.cta_secondary"))}</a></div> <p class="text-[11px] font-inter text-[#4a6080] mt-8">Sin tarjeta de crédito · 14 días gratis · Cancela cuando quieras</p></div></section>`);
     if ($$store_subs) unsubscribe_stores($$store_subs);
   });
 }
@@ -750,7 +711,6 @@ function Landing($$renderer, $$props) {
     let stats = {};
     let plans = [];
     let features = [];
-    let testimonials = [];
     head("1egott1", $$renderer2, ($$renderer3) => {
       $$renderer3.title(($$renderer4) => {
         $$renderer4.push(`<title>${escape_html(store_get($$store_subs ??= {}, "$t", $format)("seo.title"))}</title>`);
@@ -795,7 +755,7 @@ function Landing($$renderer, $$props) {
     $$renderer2.push(`<!----> `);
     AccountantsSummary($$renderer2);
     $$renderer2.push(`<!----> `);
-    Testimonials($$renderer2, { testimonials });
+    Testimonials($$renderer2);
     $$renderer2.push(`<!----> `);
     FAQ($$renderer2);
     $$renderer2.push(`<!----> `);

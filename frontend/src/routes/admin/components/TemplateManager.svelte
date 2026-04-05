@@ -416,7 +416,7 @@
 	.manager-header h2 {
 		margin: 0;
 		font-size: 22px;
-		color: #1f2937;
+		color: #c8d3e8;
 	}
 
 	.templates-grid {
@@ -430,7 +430,7 @@
 	}
 
 	.template-card {
-		background: white;
+		background: #0d1e35;
 		border: 1px solid #e5e7eb;
 		border-radius: 8px;
 		padding: 16px;
@@ -440,12 +440,12 @@
 	}
 
 	.template-card:hover {
-		border-color: #667eea;
+		border-color: #00FF9F;
 		box-shadow: 0 4px 12px rgba(102, 126, 234, 0.1);
 	}
 
 	.template-card.active {
-		border-color: #667eea;
+		border-color: #00FF9F;
 		background: #f3f4f6;
 	}
 
@@ -459,7 +459,7 @@
 	.card-header h3 {
 		margin: 0;
 		font-size: 16px;
-		color: #111827;
+		color: #f0f4ff;
 		flex: 1;
 	}
 
@@ -472,12 +472,12 @@
 
 	.badge.active {
 		background: #d1fae5;
-		color: #065f46;
+		color: #00FF9F;
 	}
 
 	.badge.inactive {
 		background: #fee2e2;
-		color: #991b1b;
+		color: #f87171;
 	}
 
 	.card-body {
@@ -488,7 +488,7 @@
 	.version-label {
 		margin: 4px 0;
 		font-size: 12px;
-		color: #6b7280;
+		color: #7a8fa6;
 	}
 
 	.card-footer {
@@ -497,7 +497,7 @@
 	}
 
 	.form-container {
-		background: linear-gradient(135deg, #f5f7fa 0%, #c3cfe2 100%);
+		background: #091525;
 		border-radius: 12px;
 		padding: 30px;
 		margin-top: 30px;
@@ -516,7 +516,7 @@
 	.form-header h3 {
 		margin: 0;
 		font-size: 20px;
-		color: #1f2937;
+		color: #c8d3e8;
 	}
 
 	.btn-close {
@@ -524,7 +524,7 @@
 		border: none;
 		font-size: 24px;
 		cursor: pointer;
-		color: #6b7280;
+		color: #7a8fa6;
 		padding: 0;
 		width: 30px;
 		height: 30px;
@@ -537,11 +537,11 @@
 
 	.btn-close:hover {
 		background: rgba(0, 0, 0, 0.1);
-		color: #111827;
+		color: #f0f4ff;
 	}
 
 	.form-content {
-		background: white;
+		background: #0d1e35;
 		padding: 25px;
 		border-radius: 8px;
 		margin-bottom: 20px;
@@ -561,14 +561,14 @@
 
 	.form-group label {
 		font-weight: 600;
-		color: #1f2937;
+		color: #c8d3e8;
 		margin-bottom: 8px;
 		font-size: 14px;
 	}
 
 	.form-group small {
 		font-size: 12px;
-		color: #6b7280;
+		color: #7a8fa6;
 		margin-top: 4px;
 	}
 
@@ -586,7 +586,7 @@
 	.input-field:focus,
 	.textarea-field:focus {
 		outline: none;
-		border-color: #667eea;
+		border-color: #00FF9F;
 		box-shadow: 0 0 0 3px rgba(102, 126, 234, 0.1);
 	}
 
@@ -618,7 +618,7 @@
 
 	.tag {
 		background: #dbeafe;
-		color: #1e40af;
+		color: #93c5fd;
 		padding: 4px 8px;
 		border-radius: 4px;
 		font-size: 12px;
@@ -664,7 +664,7 @@
 
 	.variable {
 		background: #fef08a;
-		color: #78350f;
+		color: #f59e0b;
 		padding: 4px 8px;
 		border-radius: 4px;
 		font-size: 12px;
@@ -696,7 +696,7 @@
 	}
 
 	.preview-section {
-		background: white;
+		background: #0d1e35;
 		padding: 20px;
 		border-radius: 8px;
 		margin-top: 20px;
@@ -705,7 +705,7 @@
 	.preview-section h4 {
 		margin-top: 0;
 		font-size: 16px;
-		color: #1f2937;
+		color: #c8d3e8;
 	}
 
 	.alert {
@@ -717,26 +717,26 @@
 
 	.alert-error {
 		background: #fee2e2;
-		color: #991b1b;
+		color: #f87171;
 		border: 1px solid #fecaca;
 	}
 
 	.alert-success {
 		background: #d1fae5;
-		color: #065f46;
+		color: #00FF9F;
 		border: 1px solid #a7f3d0;
 	}
 
 	.empty-state {
 		text-align: center;
 		padding: 40px;
-		color: #6b7280;
+		color: #7a8fa6;
 	}
 
 	.loading {
 		text-align: center;
 		padding: 40px;
-		color: #6b7280;
+		color: #7a8fa6;
 	}
 
 	.btn {
@@ -755,7 +755,7 @@
 	}
 
 	.btn-primary {
-		background: #667eea;
+		background: #00FF9F;
 		color: white;
 	}
 
@@ -766,7 +766,7 @@
 
 	.btn-secondary {
 		background: #e5e7eb;
-		color: #1f2937;
+		color: #c8d3e8;
 	}
 
 	.btn-secondary:hover:not(:disabled) {
@@ -775,7 +775,7 @@
 
 	.btn-warning {
 		background: #fbbf24;
-		color: #78350f;
+		color: #f59e0b;
 	}
 
 	.btn-warning:hover:not(:disabled) {

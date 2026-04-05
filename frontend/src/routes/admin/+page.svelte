@@ -52,11 +52,11 @@
 
 	<div class="content-area">
 		{#if activeTab === 'smtp'}
-			<SmtpManager {baseUrl} {getHeaders} />
+			<SmtpManager />
 		{:else if activeTab === 'templates'}
-			<TemplateManager {baseUrl} {getHeaders} />
+			<TemplateManager />
 		{:else if activeTab === 'storage'}
-			<StorageAlertsManager {baseUrl} {getHeaders} />
+			<StorageAlertsManager />
 		{/if}
 	</div>
 </div>
@@ -65,9 +65,11 @@
 	:global(body) {
 		margin: 0;
 		padding: 0;
-		font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, 'Helvetica Neue', Arial,
-			sans-serif;
-		background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+		font-family: 'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
+		background: #020e1f;
+		background-image:
+			radial-gradient(ellipse 80% 50% at 20% 10%, rgba(0, 59, 115, 0.35) 0%, transparent 60%),
+			radial-gradient(ellipse 60% 40% at 80% 80%, rgba(0, 59, 115, 0.2) 0%, transparent 60%);
 		min-height: 100vh;
 	}
 
@@ -75,15 +77,16 @@
 		max-width: 1400px;
 		margin: 0 auto;
 		padding: 20px;
-		background: white;
+		background: #0a1628;
+		border: 1px solid rgba(0, 255, 159, 0.08);
 		border-radius: 12px;
-		box-shadow: 0 20px 60px rgba(0, 0, 0, 0.3);
+		box-shadow: rgba(50,50,93,0.25) 0px 30px 60px -12px, rgba(0,0,0,0.3) 0px 18px 36px -18px;
 		margin-top: 20px;
 		margin-bottom: 20px;
 	}
 
 	.tabs-container {
-		border-bottom: 2px solid #e5e7eb;
+		border-bottom: 1px solid rgba(0, 255, 159, 0.12);
 		margin: 30px 0 0 0;
 	}
 
@@ -98,23 +101,24 @@
 		border: none;
 		background: transparent;
 		cursor: pointer;
-		font-size: 14px;
+		font-size: 13px;
 		font-weight: 500;
-		color: #6b7280;
-		border-bottom: 3px solid transparent;
-		transition: all 0.3s ease;
+		color: rgba(200, 211, 232, 0.55);
+		border-bottom: 2px solid transparent;
+		transition: all 0.2s ease;
 		position: relative;
-		bottom: -2px;
+		bottom: -1px;
+		letter-spacing: 0.01em;
 	}
 
 	.tab-button:hover {
-		color: #111827;
-		border-bottom-color: #e5e7eb;
+		color: #c8d3e8;
+		border-bottom-color: rgba(0, 255, 159, 0.25);
 	}
 
 	.tab-button.active {
-		color: #667eea;
-		border-bottom-color: #667eea;
+		color: #00FF9F;
+		border-bottom-color: #00FF9F;
 	}
 
 	.content-area {

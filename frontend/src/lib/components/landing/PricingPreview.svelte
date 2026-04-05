@@ -126,50 +126,52 @@
   }
 </script>
 
-<section id="pricing" class="bg-gradient-subtle py-24">
+<section id="pricing" style="background:#f5f5f7; padding:clamp(80px,10vw,140px) 24px;">
   <div class="max-w-6xl mx-auto px-6">
     <div class="text-center mb-12">
-      <span class="inline-flex items-center gap-2 rounded-full bg-primary-light text-primary text-[13px] font-inter font-medium tracking-[0.08em] uppercase px-4 py-1.5 mb-4">
+      <span style="display:inline-flex;align-items:center;gap:6px;border-radius:4px;background:rgba(0,59,115,0.08);color:#003B73;font-size:12px;font-weight:600;letter-spacing:0.1em;text-transform:uppercase;padding:5px 14px;margin-bottom:16px;">
         {$t('pricing.title')}
       </span>
-      <h2 class="text-4xl font-jakarta font-bold text-slate-dark mb-4 whitespace-pre-line">
+      <h2 style="font-family:'Plus Jakarta Sans','Inter',system-ui;font-size:clamp(1.8rem,4.5vw,2.8rem);font-weight:700;letter-spacing:-0.035em;line-height:1.08;color:#061b31;margin:0 0 16px;">
         {$t('pricing.headline')}
       </h2>
-      <p class="text-base font-inter text-slate max-w-lg mx-auto">
+      <p style="font-size:17px;font-weight:300;color:#64748d;max-width:480px;margin:0 auto;">
         {$t('pricing.subtitle')}
       </p>
     </div>
 
-    <!-- Controls -->
-    <div class="flex flex-col sm:flex-row items-center justify-center gap-6 mb-12">
-      <!-- Billing toggle -->
-      <div class="flex items-center gap-3 bg-white rounded-full border border-border px-1.5 py-1 shadow-soft">
-        <button
-          class="text-sm font-inter font-medium px-4 py-1.5 rounded-full transition-all {!annual ? 'bg-primary text-white shadow-sm' : 'text-slate hover:text-slate-dark'}"
-          on:click={() => annual = false}
-        >
-          {$t('pricing.monthly')}
-        </button>
-        <button
-          class="text-sm font-inter font-medium px-4 py-1.5 rounded-full transition-all {annual ? 'bg-primary text-white shadow-sm' : 'text-slate hover:text-slate-dark'}"
-          on:click={() => annual = true}
-        >
-          {$t('pricing.annual')} <span class="text-xs text-emerald-600 font-semibold ml-1">{$t('pricing.save')}</span>
-        </button>
-      </div>
+      <!-- Controls -->
+      <div class="flex flex-col sm:flex-row items-center justify-center gap-6 mb-12">
+        <!-- Billing toggle -->
+        <div style="display:flex;align-items:center;gap:4px;background:#ffffff;border:1px solid #e5edf5;border-radius:8px;padding:4px;box-shadow:rgba(50,50,93,0.12) 0px 4px 12px -4px,rgba(0,0,0,0.06) 0px 2px 6px -2px;">
+          <button
+            style="font-size:13px;font-weight:500;padding:6px 16px;border-radius:6px;border:none;cursor:pointer;transition:all 0.2s;background:{!annual?'#003B73':'transparent'};color:{!annual?'#ffffff':'#64748d'};"
+            on:click={() => annual = false}
+          >
+            {$t('pricing.monthly')}
+          </button>
+          <button
+            style="font-size:13px;font-weight:500;padding:6px 16px;border-radius:6px;border:none;cursor:pointer;transition:all 0.2s;background:{annual?'#003B73':'transparent'};color:{annual?'#ffffff':'#64748d'};"
+            on:click={() => annual = true}
+          >
+            {$t('pricing.annual')} <span style="font-size:11px;color:#00a36e;font-weight:600;margin-left:4px;">{$t('pricing.save')}</span>
+          </button>
+        </div>
 
       <!-- User count selector -->
-      <div class="flex items-center gap-3 bg-white rounded-full border border-border px-4 py-2 shadow-soft">
-        <label class="text-sm font-inter text-slate">{$t('pricing.users')}:</label>
+      <div style="display:flex;align-items:center;gap:10px;background:#ffffff;border:1px solid #e5edf5;border-radius:8px;padding:8px 16px;box-shadow:rgba(50,50,93,0.12) 0px 4px 12px -4px,rgba(0,0,0,0.06) 0px 2px 6px -2px;">
+        <span style="font-size:13px;color:#64748d;">{$t('pricing.users')}:</span>
         <button
-          class="w-7 h-7 rounded-full bg-cloud text-slate-dark font-bold text-lg flex items-center justify-center hover:bg-primary-light transition-colors disabled:opacity-40"
+          style="width:28px;height:28px;border-radius:50%;background:#f0f7ff;color:#003B73;font-weight:700;font-size:18px;display:flex;align-items:center;justify-content:center;border:none;cursor:pointer;transition:background 0.2s;"
           on:click={() => userCount = Math.max(1, userCount - 1)}
           disabled={userCount <= 1}
+          aria-label="Reducir usuarios"
         >−</button>
-        <span class="w-8 text-center text-sm font-jakarta font-bold text-slate-dark">{userCount}</span>
+        <span style="width:32px;text-align:center;font-size:14px;font-weight:700;color:#061b31;font-variant-numeric:tabular-nums;">{userCount}</span>
         <button
-          class="w-7 h-7 rounded-full bg-cloud text-slate-dark font-bold text-lg flex items-center justify-center hover:bg-primary-light transition-colors"
+          style="width:28px;height:28px;border-radius:50%;background:#f0f7ff;color:#003B73;font-weight:700;font-size:18px;display:flex;align-items:center;justify-content:center;border:none;cursor:pointer;transition:background 0.2s;"
           on:click={() => userCount += 1}
+          aria-label="Aumentar usuarios"
         >+</button>
       </div>
     </div>
@@ -177,57 +179,59 @@
     <!-- Plan Cards -->
     <div class="grid grid-cols-1 md:grid-cols-3 gap-6 items-start">
       {#each displayPlans as plan}
-        <div class="relative rounded-card-lg border bg-white p-6 flex flex-col {plan.is_highlighted ? 'border-primary shadow-elevated ring-2 ring-primary/20' : 'border-border shadow-soft'}">
+        <div style="
+          position:relative; border-radius:8px; background:#ffffff;
+          border:{plan.is_highlighted?'2px solid #003B73':'1px solid #e5edf5'};
+          padding:{plan.is_highlighted?'28px 28px':'24px 24px'}; display:flex; flex-direction:column;
+          box-shadow:{plan.is_highlighted?'rgba(50,50,93,0.35) 0px 30px 60px -12px, rgba(0,0,0,0.2) 0px 18px 36px -18px':'rgba(50,50,93,0.18) 0px 20px 40px -20px, rgba(0,0,0,0.08) 0px 10px 24px -12px'};
+          transform:{plan.is_highlighted?'translateY(-4px)':'none'};
+        ">
           {#if plan.is_highlighted}
-            <div class="absolute -top-3 left-1/2 -translate-x-1/2">
-              <span class="inline-flex items-center gap-1 bg-primary text-white text-xs font-inter font-semibold px-3 py-1 rounded-full shadow-md">
+            <div style="position:absolute;top:-12px;left:50%;transform:translateX(-50%);">
+              <span style="display:inline-flex;align-items:center;gap:4px;background:#003B73;color:#00FF9F;font-size:11px;font-weight:600;padding:4px 12px;border-radius:4px;letter-spacing:0.04em;text-transform:uppercase;">
                 <Sparkles class="w-3 h-3" />
                 {$t('pricing.most_popular')}
               </span>
             </div>
           {/if}
 
-          <h3 class="text-lg font-jakarta font-bold text-slate-dark mb-1">{plan.display_name || plan.name}</h3>
+          <h3 style="font-size:16px;font-weight:700;color:#061b31;margin:0 0 4px;letter-spacing:-0.02em;">{plan.display_name || plan.name}</h3>
 
           <!-- Total price -->
-          <div class="flex items-baseline gap-1 mb-2">
+          <div style="display:flex;align-items:baseline;gap:4px;margin-bottom:8px;">
             {#if pricingLoading}
-              <span class="text-3xl font-jakarta font-bold text-slate animate-pulse">…</span>
+              <span style="font-size:2rem;font-weight:700;color:#64748d;">…</span>
             {:else}
-              <span class="text-4xl font-jakarta font-extrabold text-slate-dark">
+              <span style="font-size:2.5rem;font-weight:800;color:#061b31;letter-spacing:-0.04em;font-variant-numeric:tabular-nums;">
                 {displayTotal(plan)}
               </span>
-              <span class="text-sm font-inter text-slate">/mes</span>
+              <span style="font-size:13px;color:#64748d;">/mes</span>
             {/if}
           </div>
 
           <!-- Price breakdown -->
-          <div class="text-xs font-inter text-slate mb-3 bg-cloud rounded-lg px-3 py-2 space-y-0.5">
-            <p class="font-semibold text-slate-dark">Base: ${plan.base_price}/mes</p>
-            <p>+${plan.price_per_user}/usuario adicional</p>
-            <p class="text-slate-400">{plan.included_users} usuario{plan.included_users > 1 ? 's' : ''} incluido{plan.included_users > 1 ? 's' : ''} · Hasta {maxUsersLabel(plan)}</p>
+          <div style="font-size:11px;color:#64748d;margin-bottom:12px;background:#f8fafc;border-radius:6px;padding:10px 12px;line-height:1.8;border:1px solid #e5edf5;">
+            <p style="font-weight:600;color:#273951;margin:0;">Base: ${plan.base_price}/mes</p>
+            <p style="margin:0;">+${plan.price_per_user}/usuario adicional</p>
+            <p style="margin:0;color:#94a3b8;">{plan.included_users} usuario{plan.included_users > 1 ? 's' : ''} incluido{plan.included_users > 1 ? 's' : ''} · Hasta {maxUsersLabel(plan)}</p>
             {#if !pricingLoading && extraUsersLine(plan)}
-              <p class="text-primary font-medium pt-1 border-t border-border">{extraUsersLine(plan)}</p>
+              <p style="color:#003B73;font-weight:500;margin:4px 0 0;padding-top:4px;border-top:1px solid #e5edf5;">{extraUsersLine(plan)}</p>
             {/if}
             {#if annual}
-              <p class="text-emerald-600 font-medium pt-1 border-t border-border">{plan.annual_discount_percent}% descuento anual</p>
+              <p style="color:#00a36e;font-weight:500;margin:4px 0 0;padding-top:4px;border-top:1px solid #e5edf5;">{plan.annual_discount_percent}% descuento anual</p>
             {/if}
           </div>
 
           <!-- Specs chips -->
-          <div class="flex flex-wrap gap-1.5 mb-4">
-            <span class="inline-flex items-center gap-1 text-[11px] font-inter font-medium bg-cloud text-slate-dark rounded-full px-2.5 py-1">
-              💾 {storageLabel(plan.max_storage_mb)}
-            </span>
-            <span class="inline-flex items-center gap-1 text-[11px] font-inter font-medium bg-cloud text-slate-dark rounded-full px-2.5 py-1">
-              🔒 Backups ∞
-            </span>
-            <span class="inline-flex items-center gap-1 text-[11px] font-inter font-medium bg-cloud text-slate-dark rounded-full px-2.5 py-1">
-              ⚡ {apiLabel(plan)}
-            </span>
-            <span class="inline-flex items-center gap-1 text-[11px] font-inter font-medium bg-cloud text-slate-dark rounded-full px-2.5 py-1">
-              💬 {supportLabel(plan)}
-            </span>
+          <div style="display:flex;flex-wrap:wrap;gap:6px;margin-bottom:16px;">
+            {#each [
+              `💾 ${storageLabel(plan.max_storage_mb)}`,
+              '🔒 Backups ∞',
+              `⚡ ${apiLabel(plan)}`,
+              `💬 ${supportLabel(plan)}`
+            ] as chip}
+              <span style="font-size:11px;font-weight:500;background:#f0f7ff;color:#273951;border-radius:4px;padding:3px 8px;border:1px solid #e5edf5;">{chip}</span>
+            {/each}
           </div>
 
           <!-- Trial badge -->
@@ -246,9 +250,22 @@
 
           <button
             on:click={() => goCheckout(plan)}
-            class="w-full text-center text-sm font-jakarta font-semibold py-2.5 rounded-btn transition-all {plan.is_highlighted
-              ? 'bg-primary hover:bg-navy text-white shadow-soft hover:shadow-medium'
-              : 'border border-primary text-primary hover:bg-primary hover:text-white'}"
+            style="
+              width:100%; text-align:center; font-size:14px; font-weight:600; padding:12px 24px;
+              border-radius:6px; cursor:pointer; transition:all 0.2s; margin-top:auto;
+              background:{plan.is_highlighted?'#003B73':'transparent'};
+              color:{plan.is_highlighted?'#00FF9F':'#003B73'};
+              border:{plan.is_highlighted?'none':'2px solid #003B73'};
+              box-shadow:{plan.is_highlighted?'rgba(50,50,93,0.25) 0px 6px 16px -4px':'none'};
+            "
+            on:mouseenter={e => {
+              if (plan.is_highlighted) { e.currentTarget.style.background='#004d99'; e.currentTarget.style.boxShadow='rgba(50,50,93,0.35) 0px 10px 24px -4px'; }
+              else { e.currentTarget.style.background='#003B73'; e.currentTarget.style.color='#00FF9F'; }
+            }}
+            on:mouseleave={e => {
+              if (plan.is_highlighted) { e.currentTarget.style.background='#003B73'; e.currentTarget.style.boxShadow='rgba(50,50,93,0.25) 0px 6px 16px -4px'; }
+              else { e.currentTarget.style.background='transparent'; e.currentTarget.style.color='#003B73'; }
+            }}
           >
             {$t('pricing.start_trial')}
           </button>

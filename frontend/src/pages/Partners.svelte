@@ -395,6 +395,17 @@
     }
   }
 
+  async function hardDeletePartner(id: number, name: string, code: string) {
+    if (!confirm(`⚠️ ELIMINAR PERMANENTEMENTE\n\n"${name}" (${code})\n\nEsta acción no se puede deshacer. ¿Continuar?`)) return;
+    try {
+      const res = await partnersApi.hardDeletePartner(id);
+      toasts.success(res.message || 'Partner eliminado permanentemente');
+      await loadPartners();
+    } catch (e: any) {
+      toasts.error(e.message || 'Error al eliminar partner');
+    }
+  }
+
   $: filtered = partners.filter(p =>
     p.company_name.toLowerCase().includes(search.toLowerCase()) ||
     p.contact_email.toLowerCase().includes(search.toLowerCase()) ||
@@ -591,6 +602,11 @@
                   {/if}
                   {#if p.status !== 'terminated'}
                     <button class="btn-sm btn-danger" title="Desactivar" on:click={() => deactivatePartner(p.id)}><Trash2 size={14} /></button>
+                  {/if}
+                  {#if p.status === 'terminated'}
+                    <button class="btn-sm btn-danger" title="Eliminar permanentemente" on:click={() => hardDeletePartner(p.id, p.company_name, p.partner_code || '')}>
+                      <Trash2 size={14} />
+                    </button>
                   {/if}
                 </div>
               </td>
