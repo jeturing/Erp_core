@@ -992,6 +992,32 @@ class ProxmoxNode(Base):
     # Puerto Odoo del nodo (para multi-nodo, cada nodo puede correr en puerto distinto)
     odoo_port = Column(Integer, default=8069, nullable=True)  # ej: 8069 (CT105), 8089 (PCT161)
 
+    # ── Capacity thresholds ───────────────────────────────────────────────
+    cpu_threshold_warning = Column(Float, default=70, server_default="70")
+    cpu_threshold_critical = Column(Float, default=90, server_default="90")
+    ram_threshold_warning = Column(Float, default=75, server_default="75")
+    ram_threshold_critical = Column(Float, default=90, server_default="90")
+    storage_threshold_warning = Column(Float, default=70, server_default="70")
+    storage_threshold_critical = Column(Float, default=85, server_default="85")
+
+    # ── Odoo tenant capacity policy ───────────────────────────────────────
+    tenant_ram_mb = Column(Integer, default=800, server_default="800",
+                           comment="RAM estimada por tenant Odoo (MB)")
+    system_overhead_mb = Column(Integer, default=1200, server_default="1200",
+                                 comment="RAM reservada para sistema (MB)")
+    max_tenants_override = Column(Integer, nullable=True,
+                                   comment="Límite fijo de tenants (override)")
+    storage_type = Column(String(20), default="loop", server_default="loop",
+                           comment="loop, zfs, lvm, dir")
+    io_max_tenants = Column(Integer, default=8, server_default="8",
+                             comment="Máx tenants por límite I/O del storage")
+    auto_drain = Column(Boolean, default=False, server_default="false",
+                         comment="Excluir de provisioning al superar umbral crítico")
+    capacity_score = Column(Float, default=0, server_default="0",
+                             comment="Score calculado: 0-100")
+    stagger_delay_sec = Column(Integer, default=12, server_default="12",
+                                comment="Delay entre arranques de tenants (seg)")
+
     # Metadatos
     created_at = Column(DateTime, default=datetime.utcnow)
     updated_at = Column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)

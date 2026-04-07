@@ -359,10 +359,10 @@
           class="flex items-center gap-1.5 px-4 py-2.5 text-[11px] font-semibold tracking-[0.08em] transition-colors border-b-2
             {activeTab === tab.id
               ? 'text-white border-[#C05A3C]'
-              : 'text-gray-500 border-transparent hover:text-gray-300 hover:border-gray-600'}"
+              : 'text-gray-400 border-transparent hover:text-gray-300 hover:border-gray-500'}"
           on:click={() => switchTab(tab.id as Tab)}
         >
-          <svelte:component this={tab.icon} class="w-3.5 h-3.5" />
+          {#if true}{@const C = tab.icon as any}<C class="w-3.5 h-3.5" />{/if}
           {tab.label}
         </button>
       {/each}
@@ -495,7 +495,7 @@
         <div class="grid grid-cols-3 sm:grid-cols-6 gap-4">
           {#each installedApps as app}
             <div class="flex flex-col items-center gap-2 p-3 rounded border border-border-light bg-bg-page hover:border-[#C05A3C] transition-colors cursor-default">
-              <svelte:component this={app.icon} class="w-6 h-6 {app.color}" />
+              {#if true}{@const C = app.icon as any}<C class="w-6 h-6 {app.color}" />{/if}
               <span class="text-[10px] font-semibold text-text-secondary text-center uppercase tracking-[0.06em]">{app.label}</span>
             </div>
           {/each}
@@ -534,12 +534,11 @@
             {#each domains as domain}
               <div class="flex items-center justify-between p-4 rounded border border-border-light bg-bg-page">
                 <div class="flex items-center gap-3">
-                  <svelte:component
-                    this={domainStatusIcon(domain.verification_status)}
+                  {#if true}{@const C = domainStatusIcon(domain.verification_status) as any}<C
                     class="w-4 h-4 {domain.verification_status === 'verified' || domain.verification_status === 'active'
                       ? 'text-emerald-500'
                       : domain.verification_status === 'pending' ? 'text-amber-500' : 'text-red-500'}"
-                  />
+                  />{/if}
                   <div>
                     <p class="text-sm font-semibold text-text-primary font-mono">{domain.external_domain}</p>
                     {#if domain.sajet_full_domain}
@@ -915,7 +914,7 @@
                 placeholder="••••••••" class="input input-bordered w-full pr-10" />
               <button type="button" class="absolute right-3 top-1/2 -translate-y-1/2 text-gray-400 hover:text-gray-600"
                 on:click={() => showCurrent = !showCurrent}>
-                <svelte:component this={showCurrent ? EyeOff : Eye} class="w-4 h-4" />
+                {#if true}{@const C = showCurrent ? EyeOff : Eye as any}<C class="w-4 h-4" />{/if}
               </button>
             </div>
           </div>
@@ -927,7 +926,7 @@
                 placeholder="Mínimo 8 caracteres" class="input input-bordered w-full pr-10" />
               <button type="button" class="absolute right-3 top-1/2 -translate-y-1/2 text-gray-400 hover:text-gray-600"
                 on:click={() => showNew = !showNew}>
-                <svelte:component this={showNew ? EyeOff : Eye} class="w-4 h-4" />
+                {#if true}{@const C = showNew ? EyeOff : Eye as any}<C class="w-4 h-4" />{/if}
               </button>
             </div>
           </div>
@@ -939,7 +938,7 @@
                 placeholder="Repite la nueva contraseña" class="input input-bordered w-full pr-10" />
               <button type="button" class="absolute right-3 top-1/2 -translate-y-1/2 text-gray-400 hover:text-gray-600"
                 on:click={() => showConfirm = !showConfirm}>
-                <svelte:component this={showConfirm ? EyeOff : Eye} class="w-4 h-4" />
+                {#if true}{@const C = showConfirm ? EyeOff : Eye as any}<C class="w-4 h-4" />{/if}
               </button>
             </div>
           </div>

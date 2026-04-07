@@ -39,7 +39,7 @@
       {#each benefits as benefit}
         <div class="rounded-card-sm border border-white/10 bg-white/5 backdrop-blur-sm p-6 hover:border-emerald-400/30 hover:bg-white/[0.07] transition-all group">
           <div class="w-10 h-10 rounded-lg bg-emerald-500/15 flex items-center justify-center mb-4">
-            <svelte:component this={benefit.icon} class="w-5 h-5 text-emerald-400" strokeWidth={1.5} />
+            {#if true}{@const C = benefit.icon as any}<C class="w-5 h-5 text-emerald-400" strokeWidth={1.5} />{/if}
           </div>
           <h3 class="text-base font-jakarta font-semibold text-white mb-2">{benefit.title}</h3>
           <p class="text-sm font-inter text-slate-400 leading-relaxed">{benefit.desc}</p>

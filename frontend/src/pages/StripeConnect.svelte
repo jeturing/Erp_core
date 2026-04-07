@@ -37,8 +37,8 @@
   async function loadPartners() {
     loading = true;
     try {
-      const res = await partnersApi.list();
-      const list = res?.data ?? res?.partners ?? res ?? [];
+      const res = await partnersApi.getPartners();
+      const list = (res as any)?.data ?? (res as any)?.partners ?? res ?? [];
       partners = (Array.isArray(list) ? list : []).map((p: any) => ({
         id: p.id,
         company_name: p.company_name ?? p.name ?? `Partner #${p.id}`,

@@ -364,7 +364,7 @@
             <div class="flex items-center justify-between px-6 py-3">
               <span class="text-sm font-body text-text-secondary">{item.name}</span>
               <div class="flex items-center gap-2">
-                <svelte:component this={si.icon} size={14} class={si.color} />
+                {#if true}{@const C = si.icon as any}<C size={14} class={si.color} />{/if}
                 <span class="text-[11px] font-semibold uppercase tracking-widest {si.color} font-sans">{item.detail}</span>
               </div>
             </div>

@@ -1,7 +1,7 @@
 """028: add payout_requests, provider_accounts, payment_events tables
 
-Revision ID: a9c4d7e0f567
-Revises: z8b3c6d9e456
+Revision ID: c3e7f0a1b234
+Revises: i6j4k9l0m789
 Create Date: 2026-04-03
 
 Treasury & Payments persistence:
@@ -14,8 +14,8 @@ from alembic import op
 import sqlalchemy as sa
 from sqlalchemy.dialects import postgresql
 
-revision = "a9c4d7e0f567"
-down_revision = "z8b3c6d9e456"
+revision = "c3e7f0a1b234"
+down_revision = "i6j4k9l0m789"
 branch_labels = None
 depends_on = None
 

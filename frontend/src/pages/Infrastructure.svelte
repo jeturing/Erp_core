@@ -297,9 +297,9 @@
               </div>
 
               <!-- Dominios Cloudflare vinculados al nodo -->
-              {#if node.domains?.length}
+              {#if (node as any).domains?.length}
                 <div class="flex flex-wrap gap-1 mt-1 px-1">
-                  {#each node.domains as d}
+                  {#each (node as any).domains as d}
                     <span class="text-[10px] bg-orange-50 text-orange-700 border border-orange-200 rounded-full px-2 py-0.5 flex items-center gap-1" title="{d.ssl_status || 'sin SSL'} · {d.verification_status}">
                       {#if d.cloudflare_configured}
                         <span class="text-orange-500">☁</span>

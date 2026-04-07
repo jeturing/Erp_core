@@ -336,6 +336,18 @@ async def get_required_agreements(target_type: str, request: Request, access_tok
             AgreementTemplate.is_required == True,
         ).order_by(AgreementTemplate.sort_order).all()
 
+        # Filtrar condicionalmente:
+        if target_type == "partner" and user_id:
+            from app.models.database import Partner
+            partner = db.query(Partner).filter(Partner.id == user_id).first()
+            if partner:
+                country = (partner.country or "").lower().strip()
+                is_us = country in ["us", "usa", "united states", "estados unidos"]
+                # Si ES de USA, quizá no exijamos el W-8BEN-E, si NO es de USA sí lo exijimos.
+                # Filtramos el título si consideramos que solo aplica fuera de USA.
+                if is_us:
+                    templates = [t for t in templates if "W-8" not in t.title and "W-9" not in t.title]
+
         # Check which are already signed
         result = []
         for t in templates:

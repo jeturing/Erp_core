@@ -543,7 +543,7 @@
 {:else if currentPage === 'onboarding-access'}
   <OnboardingAccess />
 {:else if ['about', 'privacy', 'terms', 'data-processing', 'security', 'sla'].includes(currentPage)}
-  <PublicInfoPage slug={currentPage} />
+  <PublicInfoPage slug={currentPage as any} />
 {:else if currentPage === 'portal'}
   <TenantPortal />
 {:else if currentPage === 'partner-portal'}

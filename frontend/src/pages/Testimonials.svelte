@@ -2,7 +2,18 @@
   import { onMount } from 'svelte';
   import { MessageCircle, Plus, Edit3, Trash2, Globe, Star, Check, X } from 'lucide-svelte';
   import { api } from '../lib/api/client';
-  import type { LandingSection, Testimonial } from '../lib/types';
+
+  interface Testimonial {
+    id: number;
+    name: string;
+    role: string | null;
+    company: string | null;
+    text: string;
+    avatar_url: string | null;
+    locale: string;
+    featured: boolean;
+    sort_order: number;
+  }
 
   let testimonials: Testimonial[] = $state([]);
   let loading = $state(true);

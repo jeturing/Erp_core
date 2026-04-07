@@ -164,30 +164,38 @@ function Signup($$renderer, $$props) {
       for (let $$index_1 = 0, $$length = each_array_1.length; $$index_1 < $$length; $$index_1++) {
         let b = each_array_1[$$index_1];
         $$renderer2.push(`<div class="bg-white border border-[#D1CCC4] p-6"><div class="w-10 h-10 bg-[#003B73]/10 flex items-center justify-center mb-4">`);
-        if (b.icon) {
+        {
           $$renderer2.push("<!--[-->");
-          b.icon($$renderer2, { size: 20, class: "text-[#003B73]" });
-          $$renderer2.push("<!--]-->");
-        } else {
-          $$renderer2.push("<!--[!-->");
-          $$renderer2.push("<!--]-->");
+          const C = b.icon;
+          if (C) {
+            $$renderer2.push("<!--[-->");
+            C($$renderer2, { size: 20, class: "text-[#003B73]" });
+            $$renderer2.push("<!--]-->");
+          } else {
+            $$renderer2.push("<!--[!-->");
+            $$renderer2.push("<!--]-->");
+          }
         }
-        $$renderer2.push(`</div> <h3 class="font-bold text-sm text-[#1a1a1a] mb-1">${escape_html(b.title)}</h3> <p class="text-xs text-gray-500 leading-relaxed">${escape_html(b.desc)}</p></div>`);
+        $$renderer2.push(`<!--]--></div> <h3 class="font-bold text-sm text-[#1a1a1a] mb-1">${escape_html(b.title)}</h3> <p class="text-xs text-gray-500 leading-relaxed">${escape_html(b.desc)}</p></div>`);
       }
       $$renderer2.push(`<!--]--></div></section> <section class="max-w-6xl mx-auto px-6 pb-20"><h2 class="text-2xl font-bold text-center text-[#1a1a1a] mb-3">Como quieres empezar?</h2> <p class="text-center text-sm text-gray-500 mb-10">Elige el camino que mejor se adapta a tu caso</p> <div class="grid lg:grid-cols-3 gap-6"><!--[-->`);
       const each_array_2 = ensure_array_like(launchPaths);
       for (let $$index_3 = 0, $$length = each_array_2.length; $$index_3 < $$length; $$index_3++) {
         let path = each_array_2[$$index_3];
         $$renderer2.push(`<div${attr_class(`${path.featured ? "bg-white border-2 border-[#003B73]" : "bg-white border border-[#D1CCC4]"} p-8`)}><p class="text-[11px] font-bold uppercase tracking-[0.22em] text-gray-400 mb-4">${escape_html(path.kicker)}</p> <div${attr_class(`w-12 h-12 flex items-center justify-center mb-5 ${path.featured ? "bg-[#003B73]/10" : "bg-[#E8E4DC]"}`)}>`);
-        if (path.icon) {
+        {
           $$renderer2.push("<!--[-->");
-          path.icon($$renderer2, { size: 24, class: "text-[#003B73]" });
-          $$renderer2.push("<!--]-->");
-        } else {
-          $$renderer2.push("<!--[!-->");
-          $$renderer2.push("<!--]-->");
+          const C = path.icon;
+          if (C) {
+            $$renderer2.push("<!--[-->");
+            C($$renderer2, { size: 24, class: "text-[#003B73]" });
+            $$renderer2.push("<!--]-->");
+          } else {
+            $$renderer2.push("<!--[!-->");
+            $$renderer2.push("<!--]-->");
+          }
         }
-        $$renderer2.push(`</div> <h3 class="text-xl font-bold text-[#1a1a1a] mb-2">${escape_html(path.title)}</h3> <p class="text-sm text-gray-500 mb-5 leading-relaxed">${escape_html(path.desc)}</p> <ul class="space-y-2 mb-6"><!--[-->`);
+        $$renderer2.push(`<!--]--></div> <h3 class="text-xl font-bold text-[#1a1a1a] mb-2">${escape_html(path.title)}</h3> <p class="text-sm text-gray-500 mb-5 leading-relaxed">${escape_html(path.desc)}</p> <ul class="space-y-2 mb-6"><!--[-->`);
         const each_array_3 = ensure_array_like(path.points);
         for (let $$index_2 = 0, $$length2 = each_array_3.length; $$index_2 < $$length2; $$index_2++) {
           let item = each_array_3[$$index_2];

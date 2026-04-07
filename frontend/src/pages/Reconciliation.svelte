@@ -154,10 +154,11 @@
     <div class="space-y-3">
       {#each runs as r}
         {@const si = statusIcon(r.status)}
-        <div class="card p-0 overflow-hidden">
-          <button class="w-full px-6 py-4 flex items-center justify-between hover:bg-bg-page/50 transition-colors" type="button" on:click={() => toggleDetail(r.id)}>
-            <div class="flex items-center gap-4">
-              <svelte:component this={si.icon} size={20} class={si.color} />
+          {@const SiIcon = si.icon as any}
+          <div class="card p-0 overflow-hidden">
+            <button class="w-full px-6 py-4 flex items-center justify-between hover:bg-bg-page/50 transition-colors" type="button" on:click={() => toggleDetail(r.id)}>
+              <div class="flex items-center gap-4">
+                <SiIcon size={20} class={si.color} />
               <div class="text-left">
                 <div class="font-semibold text-text-primary">Ejecución #{r.id}</div>
                 <div class="text-[11px] text-gray-500">{formatDate(r.period_start)} — {formatDate(r.period_end)}</div>

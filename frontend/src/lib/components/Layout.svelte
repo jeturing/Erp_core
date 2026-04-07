@@ -13,10 +13,11 @@
   import { goto } from '$app/navigation';
   import { darkMode } from '../stores/darkMode';
   import { onMount } from 'svelte';
+  import type { Snippet } from 'svelte';
 
   onMount(() => darkMode.init());
 
-  const { currentRoute = 'dashboard' }: { currentRoute?: string } = $props();
+  const { currentRoute = 'dashboard', children }: { currentRoute?: string; children?: Snippet } = $props();
 
   let mobileOpen = $state(false);
 
@@ -196,6 +197,7 @@
     <nav class="flex-1 px-3 pt-2 overflow-y-auto sidebar-nav">
       {#each navStructure as entry}
         {#if isGroup(entry)}
+          {@const GroupIcon = entry.icon}
           <!-- Group header -->
           <button
             type="button"
@@ -204,7 +206,7 @@
             aria-expanded={expandedGroups.has(entry.id)}
           >
             <div class="flex items-center gap-2.5 min-w-0">
-              <svelte:component this={entry.icon} size={16} class="shrink-0 opacity-60" />
+              <GroupIcon size={16} class="shrink-0 opacity-60" />
               <span class="truncate">{entry.label}</span>
             </div>
             <div class="flex items-center gap-1.5">
@@ -222,25 +224,27 @@
           {#if expandedGroups.has(entry.id)}
             <div class="sidebar-group-children">
               {#each entry.children as item}
+                {@const ItemIcon = item.icon}
                 <a
                   href={item.href}
                   class={currentRoute === item.id ? 'sidebar-child-active' : 'sidebar-child'}
                   onclick={() => (mobileOpen = false)}
                 >
-                  <svelte:component this={item.icon} size={15} />
+                  <ItemIcon size={15} />
                   <span>{item.label}</span>
                 </a>
               {/each}
             </div>
           {/if}
         {:else}
+          {@const DirectIcon = entry.icon}
           <!-- Direct link (Dashboard) -->
           <a
             href={entry.href}
             class="sidebar-direct-link {currentRoute === entry.id ? 'sidebar-direct-active' : ''}"
             onclick={() => (mobileOpen = false)}
           >
-            <svelte:component this={entry.icon} size={18} />
+            <DirectIcon size={18} />
             <span>{entry.label}</span>
           </a>
         {/if}
@@ -303,7 +307,7 @@
     </header>
 
     <main class="flex-1 overflow-auto bg-bg-page">
-      <slot />
+      {@render children?.()}
     </main>
   </div>
 </div>

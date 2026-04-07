@@ -49,7 +49,7 @@
     company_name: string;
     tenant_url?: string;
   } | null>(null);
-  let lastCreatedCustomerId: string | null = $state(null);
+  let lastCreatedCustomerId: number | null = $state(null);
 
   async function openNewClient() {
     ncStep = 1; ncToast = '';
@@ -127,7 +127,7 @@
   // Edit modal
   let showEdit = $state(false);
   let editCustomer: CustomerItem | null = $state(null);
-  let editForm = $state({ user_count: 1, plan_name: '', is_admin_account: false, company_name: '', stripe_customer_id: '' });
+  let editForm = $state({ user_count: 1, plan_name: '', is_admin_account: false, company_name: '', stripe_customer_id: '', email: '', stripe_action: '' });
   let saving = $state(false);
 
   let filtered = $derived(
@@ -184,6 +184,7 @@
       is_admin_account: customer.is_admin_account,
       company_name: customer.company_name,
       email: customer.email,
+      stripe_action: '',
       stripe_customer_id: customer.stripe_customer_id || '',
     };
     showEdit = true;

@@ -300,8 +300,9 @@
         <h2 class="text-sm font-semibold mb-3 flex items-center gap-2"><Activity size={15} /> System Health</h2>
         <div class="grid grid-cols-2 sm:grid-cols-4 gap-3">
           {#each data.system_health as item}
+            {@const IconComp = healthIcon(item.status)}
             <div class="flex items-start gap-2">
-              <svelte:component this={healthIcon(item.status)} size={14} class="{healthColor(item.status)} mt-0.5 flex-shrink-0" />
+              <IconComp size={14} class="{healthColor(item.status)} mt-0.5 flex-shrink-0" />
               <div>
                 <p class="text-sm font-medium">{item.name}</p>
                 <p class="text-[11px] text-gray-500">{item.detail}</p>

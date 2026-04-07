@@ -115,7 +115,7 @@
   <PricingPreview {plans} {partnerCode} />
   <ForPartners />
   <AccountantsSummary />
-  <Testimonials {testimonials} />
+  <Testimonials />
   <FAQ />
   <FinalCTA />
   <Footer />

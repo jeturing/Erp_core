@@ -129,7 +129,7 @@
         reference:        createForm.reference || undefined,
         notes:            createForm.notes || undefined,
       });
-      toasts.success(`Solicitud #${res.payout_id} creada. Pendiente de autorización.`);
+      toasts.success(`Solicitud #${(res as any).payout_id} creada. Pendiente de autorización.`);
       showCreateModal = false;
       createForm = { provider_name: '', provider_account: '', provider_routing: '', amount_usd: 0, payment_method: 'ach', concept: '', reference: '', notes: '' };
       await loadAll();

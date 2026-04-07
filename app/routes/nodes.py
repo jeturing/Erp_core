@@ -229,6 +229,85 @@ async def create_node(payload: NodeCreateRequest, access_token: str = Cookie(Non
         db.close()
 
 
+# ===== CAPACITY MANAGEMENT ENDPOINTS (before /{node_id} to avoid path conflicts) =====
+
+@router.get("/capacity")
+async def get_cluster_capacity(access_token: str = Cookie(None)):
+    """
+    Evaluación completa de capacidad del cluster.
+    Score dinámico 0-100 por nodo, alertas, slots disponibles y recomendaciones.
+    """
+    verify_admin(access_token)
+    from ..services.node_capacity_service import NodeCapacityService
+    return NodeCapacityService.evaluate_all_nodes()
+
+
+@router.post("/evaluate-capacity")
+async def evaluate_and_alert(access_token: str = Cookie(None)):
+    """
+    Fuerza re-evaluación de capacidad, persiste alertas y aplica auto-drain.
+    Usar después de un health-check o cambio de recursos.
+    """
+    verify_admin(access_token)
+    from ..services.node_capacity_service import NodeCapacityService
+    result = NodeCapacityService.evaluate_all_nodes()
+    return {
+        "success": True,
+        "data": result,
+        "meta": {
+            "alerts_generated": len(result.get("alerts", [])),
+            "cluster_action": result.get("cluster", {}).get("action", "OK"),
+        }
+    }
+
+
+@router.get("/capacity/best-node")
+async def get_best_node_for_provisioning(access_token: str = Cookie(None)):
+    """
+    Devuelve el mejor nodo disponible para provisionar un nuevo tenant,
+    usando scoring dinámico en vez de prioridad estática.
+    """
+    verify_admin(access_token)
+    from ..services.node_capacity_service import NodeCapacityService
+
+    result = NodeCapacityService.get_best_node()
+    if not result:
+        raise HTTPException(
+            status_code=503,
+            detail="No hay nodos con capacidad disponible. SCALE_OUT requerido."
+        )
+
+    node = result["node"]
+    return {
+        "node_id": node.id,
+        "name": node.name,
+        "hostname": node.hostname,
+        "vmid": getattr(node, "vmid", None),
+        "capacity_score": result["score"],
+        "active_tenants": result["active_tenants"],
+        "available_slots": result["available_slots"],
+    }
+
+
+@router.get("/capacity/rebalance")
+async def get_rebalance_recommendations(access_token: str = Cookie(None)):
+    """
+    Recomendaciones de rebalanceo: qué tenants mover y a dónde
+    para equilibrar la carga del cluster.
+    """
+    verify_admin(access_token)
+    from ..services.node_capacity_service import NodeCapacityService
+
+    recommendations = NodeCapacityService.get_rebalance_recommendations()
+    return {
+        "recommendations": recommendations,
+        "total": len(recommendations),
+        "has_action_required": any(
+            r.get("action") == "scale_out" for r in recommendations
+        ),
+    }
+
+
 @router.get("/{node_id}")
 async def get_node(node_id: int, access_token: str = Cookie(None)):
     """Obtiene detalle de un nodo específico"""
@@ -754,5 +833,105 @@ async def list_all_containers(access_token: str = Cookie(None)):
             ],
             "total": len(containers)
         }
+    finally:
+        db.close()
+
+
+# ===== PER-NODE CAPACITY ENDPOINTS =====
+
+@router.get("/{node_id}/capacity")
+async def get_node_capacity(node_id: int, access_token: str = Cookie(None)):
+    """Score y detalle de capacidad de un nodo específico."""
+    verify_admin(access_token)
+    from ..services.node_capacity_service import NodeCapacityService
+    from sqlalchemy import func
+
+    db = SessionLocal()
+    try:
+        node = db.query(ProxmoxNode).filter_by(id=node_id).first()
+        if not node:
+            raise HTTPException(status_code=404, detail="Nodo no encontrado")
+
+        active = db.query(func.count(TenantDeployment.id)).filter(
+            TenantDeployment.active_node_id == node_id
+        ).scalar() or 0
+
+        score = NodeCapacityService.compute_score(node, active)
+        max_t = NodeCapacityService.effective_max_tenants(node)
+        alerts = NodeCapacityService.evaluate_thresholds(node, active)
+
+        return {
+            "node_id": node_id,
+            "name": node.name,
+            "capacity_score": score,
+            "tenants": {
+                "active": active,
+                "max": max_t,
+                "max_by_ram": NodeCapacityService.max_tenants_by_ram(node),
+                "max_by_io": NodeCapacityService.max_tenants_by_io(node),
+                "available_slots": NodeCapacityService.available_slots(node, active),
+            },
+            "policy": {
+                "tenant_ram_mb": int(getattr(node, "tenant_ram_mb", 800) or 800),
+                "system_overhead_mb": int(getattr(node, "system_overhead_mb", 1200) or 1200),
+                "storage_type": getattr(node, "storage_type", "loop"),
+                "io_max_tenants": int(getattr(node, "io_max_tenants", 8) or 8),
+                "stagger_delay_sec": int(getattr(node, "stagger_delay_sec", 12) or 12),
+                "auto_drain": bool(getattr(node, "auto_drain", False)),
+            },
+            "thresholds": {
+                "cpu": {"warning": getattr(node, "cpu_threshold_warning", 70),
+                        "critical": getattr(node, "cpu_threshold_critical", 90)},
+                "ram": {"warning": getattr(node, "ram_threshold_warning", 75),
+                        "critical": getattr(node, "ram_threshold_critical", 90)},
+                "storage": {"warning": getattr(node, "storage_threshold_warning", 70),
+                            "critical": getattr(node, "storage_threshold_critical", 85)},
+            },
+            "alerts": alerts,
+        }
+    finally:
+        db.close()
+
+
+class NodeCapacityUpdateRequest(BaseModel):
+    """Actualizar política de capacidad de un nodo."""
+    cpu_threshold_warning: Optional[float] = None
+    cpu_threshold_critical: Optional[float] = None
+    ram_threshold_warning: Optional[float] = None
+    ram_threshold_critical: Optional[float] = None
+    storage_threshold_warning: Optional[float] = None
+    storage_threshold_critical: Optional[float] = None
+    tenant_ram_mb: Optional[int] = None
+    system_overhead_mb: Optional[int] = None
+    max_tenants_override: Optional[int] = None
+    storage_type: Optional[str] = None
+    io_max_tenants: Optional[int] = None
+    auto_drain: Optional[bool] = None
+    stagger_delay_sec: Optional[int] = None
+
+
+@router.put("/{node_id}/capacity")
+async def update_node_capacity_policy(
+    node_id: int, payload: NodeCapacityUpdateRequest, access_token: str = Cookie(None)
+):
+    """Actualizar umbrales y política de capacidad de un nodo."""
+    verify_admin(access_token)
+
+    db = SessionLocal()
+    try:
+        node = db.query(ProxmoxNode).filter_by(id=node_id).first()
+        if not node:
+            raise HTTPException(status_code=404, detail="Nodo no encontrado")
+
+        update_data = {
+            k: v for k, v in payload.dict().items() if v is not None
+        }
+        if not update_data:
+            raise HTTPException(status_code=400, detail="Sin datos para actualizar")
+
+        db.query(ProxmoxNode).filter_by(id=node_id).update(update_data)
+        db.commit()
+
+        return {"success": True, "updated": list(update_data.keys())}
     finally:
         db.close()

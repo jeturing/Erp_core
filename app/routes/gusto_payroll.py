@@ -881,15 +881,62 @@ async def gusto_webhook_receiver(
     x_gusto_signature: str = Header(default=""),
 ):
     body = await request.body()
+
+    # --- Gusto webhook verification flow ---
+    # When a subscription is created, Gusto POSTs {"verification_token": "xxx"}
+    # without HMAC signature. We must accept it and auto-verify via API.
+    try:
+        raw_payload = json.loads(body)
+    except Exception as exc:
+        raise HTTPException(status_code=400, detail="Invalid JSON") from exc
+
+    verification_token = raw_payload.get("verification_token")
+    if verification_token:
+        logger.info(
+            "Gusto webhook verification token received: %s",
+            verification_token[:8] + "***",
+        )
+        # Attempt auto-verification via Gusto API
+        subscription_uuid = raw_payload.get("uuid") or raw_payload.get("webhook_subscription_uuid") or ""
+        try:
+            if subscription_uuid:
+                system_token = await _request_system_access_token()
+                async with httpx.AsyncClient(timeout=30.0) as client:
+                    verify_resp = await client.put(
+                        f"{_gusto_base_url()}/v1/webhook_subscriptions/{subscription_uuid}/verify",
+                        json={"verification_token": verification_token},
+                        headers=_gusto_api_headers(system_token),
+                    )
+                logger.info(
+                    "Gusto auto-verify result: %s %s",
+                    verify_resp.status_code,
+                    verify_resp.text[:200] if verify_resp.text else "",
+                )
+            else:
+                logger.info(
+                    "Gusto verification_token received but no subscription UUID in payload. "
+                    "Use PUT /api/v1/gusto/admin/webhook-subscriptions/{uuid}/verify with token: %s",
+                    verification_token,
+                )
+        except Exception as exc:
+            logger.warning("Gusto auto-verify failed (non-blocking): %s", exc)
+
+        return {
+            "success": True,
+            "data": {
+                "verification_token_received": True,
+                "auto_verified": bool(subscription_uuid),
+                "token_preview": verification_token[:8] + "***",
+            },
+            "meta": {},
+        }
+
+    # --- Normal webhook event processing (HMAC validated) ---
     if _gusto_webhook_secret() and not _verify_gusto_signature(body, x_gusto_signature):
         logger.warning("Gusto webhook rechazado por firma inválida")
         raise HTTPException(status_code=401, detail="Invalid signature")
 
-    try:
-        payload = json.loads(body)
-    except Exception as exc:
-        raise HTTPException(status_code=400, detail="Invalid JSON") from exc
-
+    payload = raw_payload
     event_type = payload.get("event_type") or payload.get("type") or "unknown"
     company_uuid = (
         payload.get("company_uuid")

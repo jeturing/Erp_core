@@ -117,7 +117,7 @@
         <a href={item.href}
            class="inline-flex items-center gap-1.5 rounded-full px-4 py-1.5 text-[12px] font-inter text-[#7a8fa6] transition-all hover:text-[#f0f4ff]"
            style="border:1px solid rgba(255,255,255,0.08); background:rgba(255,255,255,0.03);">
-          <svelte:component this={item.icon} class="w-3.5 h-3.5" />
+          {#if true}{@const C = item.icon as any}<C class="w-3.5 h-3.5" />{/if}
           {item.label}
         </a>
       {/each}

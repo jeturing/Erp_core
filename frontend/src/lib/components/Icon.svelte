@@ -8,9 +8,11 @@
   export let className: string = '';
 </script>
 
-<svelte:component 
-  this={icon} 
-  {size} 
-  {strokeWidth}
-  class={className}
-/>
+{#if icon}
+  {@const IconComp = icon as any}
+  <IconComp 
+    {size} 
+    {strokeWidth}
+    class={className}
+  />
+{/if}

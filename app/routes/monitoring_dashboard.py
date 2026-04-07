@@ -22,6 +22,38 @@ def _require_api_key(x_api_key: Optional[str]) -> None:
         raise HTTPException(status_code=401, detail="API key inválida")
 
 
+def _get_infrastructure_capacity() -> dict:
+    """Capacidad de infraestructura para el dashboard de monitoreo."""
+    try:
+        from ..services.node_capacity_service import NodeCapacityService
+        report = NodeCapacityService.evaluate_all_nodes()
+        cluster = report.get("cluster", {})
+        nodes = report.get("nodes", [])
+        return {
+            "total_nodes": cluster.get("total_nodes", 0),
+            "total_tenants": cluster.get("total_tenants", 0),
+            "total_available_slots": cluster.get("total_available_slots", 0),
+            "cluster_action": cluster.get("action", "OK"),
+            "nodes": [
+                {
+                    "name": n.get("name"),
+                    "score": n.get("capacity_score"),
+                    "tenants": n.get("tenants", {}).get("active", 0),
+                    "max_tenants": n.get("tenants", {}).get("max", 0),
+                    "slots": n.get("tenants", {}).get("available_slots", 0),
+                    "alerts_count": len(n.get("alerts", [])),
+                }
+                for n in nodes
+            ],
+            "infra_alerts": [
+                a for n in nodes for a in n.get("alerts", [])
+            ],
+        }
+    except Exception as e:
+        logger.warning(f"Could not load infrastructure capacity: {e}")
+        return {"error": str(e)}
+
+
 @router.get("/dashboard", response_model=dict)
 async def get_monitoring_dashboard(
     x_api_key: str = Header(None)
@@ -86,6 +118,7 @@ async def get_monitoring_dashboard(
                 "total_critical": migration_summary.get("critical", 0),
                 "total_exceeded": migration_summary.get("exceeded", 0),
             },
+            "infrastructure": _get_infrastructure_capacity(),
             "alerts": active_alerts,
             "tenants_requiring_attention": [
                 t for t in migration_summary.get("tenants_by_status", {}).get("critical", []) +

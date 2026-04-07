@@ -300,9 +300,10 @@
           </h2>
         </div>
         {#if flowStatusConfig[selectedFlow.status]}
-          {@const cfg = flowStatusConfig[selectedFlow.status]}
+          {@const cfg = flowStatusConfig[selectedFlow.status] as any}
+          {@const CfgIcon = cfg.icon as any}
           <span class="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-xs font-medium {cfg.bg} {cfg.color}">
-            <svelte:component this={cfg.icon} class="w-3.5 h-3.5" />
+            <CfgIcon class="w-3.5 h-3.5" />
             {cfg.label}
           </span>
         {/if}
@@ -388,7 +389,8 @@
                   {#if done}
                     <CheckCircle class="w-5 h-5" />
                   {:else}
-                    <svelte:component this={step.icon} class="w-5 h-5" />
+                    {@const StepIcon = step.icon}
+                    <StepIcon class="w-5 h-5" />
                   {/if}
                 </div>
                 <span class="text-[10px] mt-1.5 text-center max-w-[90px] {done ? 'text-green-700 font-semibold' : 'text-gray-400'}">
@@ -439,12 +441,13 @@
           <div class="divide-y divide-gray-100">
             {#each selectedApp.agreements as agreement}
               {@const cfg = flowStatusConfig[agreement.status]}
+              {@const CfgIcon2 = cfg.icon}
               <div class="px-6 py-4 flex items-center justify-between hover:bg-gray-50 transition-colors">
                 <div class="flex items-center gap-4">
                   <!-- Status icon with line -->
                   <div class="flex flex-col items-center">
                     <div class="w-8 h-8 rounded-full flex items-center justify-center {cfg.bg} {cfg.color}">
-                      <svelte:component this={cfg.icon} class="w-4 h-4" />
+                      <CfgIcon2 class="w-4 h-4" />
                     </div>
                   </div>
                   <div>

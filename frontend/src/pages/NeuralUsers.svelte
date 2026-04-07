@@ -24,12 +24,10 @@
     if (!searchQuery.trim()) return;
     loadingSearch = true;
     try {
-      const res = await neuralUsersApi.search(searchQuery);
-      if (res.success) {
-        users = res.data;
-        if (users.length === 0) {
-          toasts.info('No se encontraron usuarios matching');
-        }
+      const usersList = await neuralUsersApi.search(searchQuery);
+      users = usersList;
+      if (users.length === 0) {
+        toasts.info('No se encontraron usuarios matching');
       }
     } catch (e: any) {
       toasts.error(e?.message ?? 'Error en la búsqueda');
@@ -48,10 +46,8 @@
     if (!selectedUser) return;
     loadingTokens = true;
     try {
-      const res = await neuralUsersApi.getTokens(selectedUser.type, selectedUser.id);
-      if (res.success) {
-        tokens = res.data;
-      }
+      const tokensList = await neuralUsersApi.getTokens(selectedUser.type, selectedUser.id);
+      tokens = tokensList;
     } catch (e: any) {
       toasts.error('Error cargando tokens');
     } finally {
@@ -163,10 +159,11 @@
       </div>
     {:else if users.length > 0}
       {#each users as user}
+        {@const IconComp = typeLabels[user.type].icon}
         <div class="card p-6 flex flex-col lg:flex-row items-start lg:items-center justify-between gap-6 border-l-4 {user.is_active ? 'border-l-accent' : 'border-l-gray-600'} hover:border-l-terracotta transition-all">
           <div class="flex items-center gap-4">
             <div class="w-12 h-12 rounded-xl flex items-center justify-center {typeLabels[user.type].color}">
-              <svelte:component this={typeLabels[user.type].icon} size={24} />
+              <IconComp size={24} />
             </div>
             <div>
               <div class="flex items-center gap-2">

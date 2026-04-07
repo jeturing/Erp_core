@@ -49,12 +49,12 @@ export const neuralUsersApi = {
       user_id: userId,
       token_type: tokenType
     });
-    return res.data;
+    return res;
   },
 
   revokeToken: async (tokenId: number) => {
     const res = await api.post<{ success: boolean }>(`/api/neural-users/tokens/revoke/${tokenId}`, {});
-    return res.data;
+    return res;
   },
 
   toggleBypassMfa: async (userType: string, userId: string | number) => {
@@ -62,6 +62,6 @@ export const neuralUsersApi = {
       user_type: userType,
       user_id: userId
     });
-    return res.data;
+    return res;
   }
 };

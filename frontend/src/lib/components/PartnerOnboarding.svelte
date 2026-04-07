@@ -297,7 +297,8 @@
               {#if currentStep > s.step}
                 <CheckCircle class="w-5 h-5" />
               {:else}
-                <svelte:component this={s.icon} class="w-4 h-4" />
+                {@const IconComp = s.icon as any}
+                <IconComp class="w-4 h-4" />
               {/if}
             </button>
             <span class="text-[10px] font-semibold uppercase tracking-wider mt-1.5

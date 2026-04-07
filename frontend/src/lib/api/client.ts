@@ -116,8 +116,8 @@ class ApiClient {
     return response.json() as Promise<T>;
   }
 
-  async get<T>(endpoint: string): Promise<T> {
-    return this.request<T>(endpoint, { method: 'GET' });
+  async get<T>(endpoint: string, headers?: HeadersInit): Promise<T> {
+    return this.request<T>(endpoint, { method: 'GET', headers });
   }
 
   async post<T>(endpoint: string, data?: unknown, headers?: HeadersInit): Promise<T> {

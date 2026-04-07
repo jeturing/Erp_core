@@ -37,10 +37,11 @@ function SessionMonitoring($$renderer, $$props) {
     ]);
     for (let $$index = 0, $$length = each_array.length; $$index < $$length; $$index++) {
       let tab = each_array[$$index];
+      const IconComp = tab.icon;
       $$renderer2.push(`<button${attr_class("dsam-tab svelte-1ii1qns", void 0, { "active": activeTab === tab.key })}>`);
-      if (tab.icon) {
+      if (IconComp) {
         $$renderer2.push("<!--[-->");
-        tab.icon($$renderer2, { class: "w-4 h-4" });
+        IconComp($$renderer2, { class: "w-4 h-4" });
         $$renderer2.push("<!--]-->");
       } else {
         $$renderer2.push("<!--[!-->");

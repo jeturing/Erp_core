@@ -333,12 +333,13 @@
       { key: 'playbook', label: 'Playbook', icon: AlertTriangle },
       { key: 'audit', label: 'Auditoría', icon: Search },
     ] as tab}
+      {@const IconComp = tab.icon}
       <button
         class="dsam-tab"
         class:active={activeTab === tab.key}
         onclick={() => switchTab(tab.key as typeof activeTab)}
       >
-        <svelte:component this={tab.icon} class="w-4 h-4" />
+        <IconComp class="w-4 h-4" />
         {tab.label}
       </button>
     {/each}

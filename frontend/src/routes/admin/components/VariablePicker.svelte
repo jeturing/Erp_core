@@ -4,9 +4,11 @@
 	const dispatch = createEventDispatcher();
 
 	export let variables = {};
+        /** @type {((v: string) => void) | null} */
+
 	export let onSelect = null;
 
-	let searchTerm = '';
+        let searchTerm = '';
 	let filteredVariables = [];
 	let showList = false;
 
@@ -28,7 +30,7 @@
 		const variable = `{{${variableName}}}`;
 		dispatch('select', variable);
 
-		if (onSelect) {
+if (typeof onSelect === 'function') {
 			onSelect(variable);
 		}
 

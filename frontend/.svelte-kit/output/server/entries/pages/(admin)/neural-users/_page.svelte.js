@@ -223,10 +223,11 @@ function NeuralUsers($$renderer, $$props) {
       const each_array = ensure_array_like(users);
       for (let $$index = 0, $$length = each_array.length; $$index < $$length; $$index++) {
         let user = each_array[$$index];
+        const IconComp = typeLabels[user.type].icon;
         $$renderer2.push(`<div${attr_class(`card p-6 flex flex-col lg:flex-row items-start lg:items-center justify-between gap-6 border-l-4 ${stringify(user.is_active ? "border-l-accent" : "border-l-gray-600")} hover:border-l-terracotta transition-all`, "svelte-jo84z5")}><div class="flex items-center gap-4"><div${attr_class(`w-12 h-12 rounded-xl flex items-center justify-center ${stringify(typeLabels[user.type].color)}`, "svelte-jo84z5")}>`);
-        if (typeLabels[user.type].icon) {
+        if (IconComp) {
           $$renderer2.push("<!--[-->");
-          typeLabels[user.type].icon($$renderer2, { size: 24 });
+          IconComp($$renderer2, { size: 24 });
           $$renderer2.push("<!--]-->");
         } else {
           $$renderer2.push("<!--[!-->");

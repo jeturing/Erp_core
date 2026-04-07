@@ -175,15 +175,12 @@ function Hero($$renderer, $$props) {
     for (let $$index = 0, $$length = each_array.length; $$index < $$length; $$index++) {
       let item = each_array[$$index];
       $$renderer2.push(`<a${attr("href", item.href)} class="inline-flex items-center gap-1.5 rounded-full px-4 py-1.5 text-[12px] font-inter text-[#7a8fa6] transition-all hover:text-[#f0f4ff]" style="border:1px solid rgba(255,255,255,0.08); background:rgba(255,255,255,0.03);">`);
-      if (item.icon) {
+      {
         $$renderer2.push("<!--[-->");
-        item.icon($$renderer2, { class: "w-3.5 h-3.5" });
-        $$renderer2.push("<!--]-->");
-      } else {
-        $$renderer2.push("<!--[!-->");
-        $$renderer2.push("<!--]-->");
+        const C = item.icon;
+        C($$renderer2, { class: "w-3.5 h-3.5" });
       }
-      $$renderer2.push(` ${escape_html(item.label)}</a>`);
+      $$renderer2.push(`<!--]--> ${escape_html(item.label)}</a>`);
     }
     $$renderer2.push(`<!--]--></div> <p class="text-[12px] font-inter text-[#4a6080] mb-10">${escape_html(store_get($$store_subs ??= {}, "$t", $format)("hero.trust_line"))} · Sin tarjeta de crédito · Cancela cuando quieras</p> <div class="flex flex-wrap justify-center gap-3 mb-14"><!--[-->`);
     const each_array_1 = ensure_array_like(displayStats);
@@ -317,14 +314,12 @@ function FeaturesGrid($$renderer, $$props) {
       $$renderer2.push(`<div role="article" class="rounded-xl p-6 transition-all duration-200 cursor-default" style="background:rgba(255,255,255,0.025); border:1px solid rgba(255,255,255,0.07);"><div class="w-9 h-9 rounded-lg flex items-center justify-center mb-4" style="background:rgba(0,255,159,0.10); border:1px solid rgba(0,255,159,0.18);">`);
       if (feature.icon) {
         $$renderer2.push("<!--[-->");
-        if (feature.icon) {
+        {
           $$renderer2.push("<!--[-->");
-          feature.icon($$renderer2, { class: "w-4 h-4", strokeWidth: 1.5, style: "color:#00FF9F;" });
-          $$renderer2.push("<!--]-->");
-        } else {
-          $$renderer2.push("<!--[!-->");
-          $$renderer2.push("<!--]-->");
+          const C = feature.icon;
+          C($$renderer2, { class: "w-4 h-4", strokeWidth: 1.5, style: "color:#00FF9F;" });
         }
+        $$renderer2.push(`<!--]-->`);
       } else {
         $$renderer2.push("<!--[!-->");
       }
@@ -397,15 +392,12 @@ function ForPartners($$renderer, $$props) {
     for (let $$index = 0, $$length = each_array.length; $$index < $$length; $$index++) {
       let benefit = each_array[$$index];
       $$renderer2.push(`<div class="rounded-card-sm border border-white/10 bg-white/5 backdrop-blur-sm p-6 hover:border-emerald-400/30 hover:bg-white/[0.07] transition-all group"><div class="w-10 h-10 rounded-lg bg-emerald-500/15 flex items-center justify-center mb-4">`);
-      if (benefit.icon) {
+      {
         $$renderer2.push("<!--[-->");
-        benefit.icon($$renderer2, { class: "w-5 h-5 text-emerald-400", strokeWidth: 1.5 });
-        $$renderer2.push("<!--]-->");
-      } else {
-        $$renderer2.push("<!--[!-->");
-        $$renderer2.push("<!--]-->");
+        const C = benefit.icon;
+        C($$renderer2, { class: "w-5 h-5 text-emerald-400", strokeWidth: 1.5 });
       }
-      $$renderer2.push(`</div> <h3 class="text-base font-jakarta font-semibold text-white mb-2">${escape_html(benefit.title)}</h3> <p class="text-sm font-inter text-slate-400 leading-relaxed">${escape_html(benefit.desc)}</p></div>`);
+      $$renderer2.push(`<!--]--></div> <h3 class="text-base font-jakarta font-semibold text-white mb-2">${escape_html(benefit.title)}</h3> <p class="text-sm font-inter text-slate-400 leading-relaxed">${escape_html(benefit.desc)}</p></div>`);
     }
     $$renderer2.push(`<!--]--></div> <div class="text-center"><a href="/partner-signup" class="inline-flex items-center gap-2 bg-emerald-500 hover:bg-emerald-600 text-white font-jakarta font-semibold text-sm px-6 py-3 rounded-btn shadow-soft hover:shadow-medium transition-all">${escape_html(store_get($$store_subs ??= {}, "$t", $format)("partners.cta"))}</a></div></div></section>`);
     if ($$store_subs) unsubscribe_stores($$store_subs);
@@ -438,15 +430,12 @@ function AccountantsSummary($$renderer, $$props) {
     for (let $$index = 0, $$length = each_array.length; $$index < $$length; $$index++) {
       let benefit = each_array[$$index];
       $$renderer2.push(`<div class="rounded-card-sm border border-border bg-cloud/50 p-6 hover:shadow-soft transition-all group"><div class="w-10 h-10 rounded-lg bg-primary-light flex items-center justify-center mb-4">`);
-      if (benefit.icon) {
+      {
         $$renderer2.push("<!--[-->");
-        benefit.icon($$renderer2, { class: "w-5 h-5 text-primary", strokeWidth: 1.5 });
-        $$renderer2.push("<!--]-->");
-      } else {
-        $$renderer2.push("<!--[!-->");
-        $$renderer2.push("<!--]-->");
+        const C = benefit.icon;
+        C($$renderer2, { class: "w-5 h-5 text-primary", strokeWidth: 1.5 });
       }
-      $$renderer2.push(`</div> <h3 class="text-base font-jakarta font-semibold text-slate-dark mb-2">${escape_html(benefit.title)}</h3> <p class="text-sm font-inter text-slate leading-relaxed">${escape_html(benefit.desc)}</p></div>`);
+      $$renderer2.push(`<!--]--></div> <h3 class="text-base font-jakarta font-semibold text-slate-dark mb-2">${escape_html(benefit.title)}</h3> <p class="text-sm font-inter text-slate leading-relaxed">${escape_html(benefit.desc)}</p></div>`);
     }
     $$renderer2.push(`<!--]--></div> <div class="text-center"><a href="/accountants" class="inline-flex items-center gap-2 bg-primary hover:bg-navy text-white font-jakarta font-semibold text-sm px-6 py-3 rounded-btn shadow-soft hover:shadow-medium transition-all">${escape_html(store_get($$store_subs ??= {}, "$t", $format)("accountants.cta"))} `);
     Arrow_right($$renderer2, { class: "w-4 h-4" });

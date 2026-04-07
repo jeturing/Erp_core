@@ -58,8 +58,7 @@ function AccountantPortal($$renderer, $$props) {
           $$renderer3.push(`<!----></div>`);
         }
         $$renderer3.push(`<!--]--></div>`);
-      },
-      $$slots: { default: true }
+      }
     });
   });
 }

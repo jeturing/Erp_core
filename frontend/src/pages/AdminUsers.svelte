@@ -207,11 +207,12 @@
         </thead>
         <tbody>
           {#each users as user (user.id)}
+            {@const IconComp = roleIcons[user.role] ?? Shield}
             <tr class={user.is_active ? '' : 'opacity-50'}>
               <td>
                 <div class="flex items-center gap-3">
                   <div class="w-8 h-8 rounded-full flex items-center justify-center flex-shrink-0 {roleColors[user.role] ?? 'bg-gray-500/20'}">
-                    <svelte:component this={roleIcons[user.role] ?? Shield} size={14} />
+                    <IconComp size={14} />
                   </div>
                   <div>
                     <div class="font-medium text-text-primary text-sm">{user.display_name}</div>

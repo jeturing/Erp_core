@@ -172,7 +172,7 @@
                     {@const IconComp = RESOURCE_ICONS[key] ?? Gauge}
                     <div class="bg-dark-subtle rounded-lg p-4">
                       <div class="flex items-center gap-2 mb-2">
-                        <svelte:component this={IconComp} size={14} class="text-gray-400" />
+                        <IconComp size={14} class="text-gray-400" />
                         <span class="text-xs uppercase tracking-wider text-gray-500">{RESOURCE_LABELS[key] ?? key}</span>
                       </div>
                       <div class="flex items-end justify-between mb-2">

@@ -415,7 +415,7 @@
             <span class="text-white font-bold text-sm">S</span>
           </div>
           <span class="text-white font-semibold tracking-[0.05em] text-sm">SAJET</span>
-          <span class="text-gray-500 text-xs">PARTNER PORTAL</span>
+          <span class="text-gray-400 text-xs">PARTNER PORTAL</span>
         </div>
 
         <div class="flex items-center gap-2">
@@ -456,7 +456,7 @@
                 : 'text-gray-500 border-transparent hover:text-gray-700 hover:border-gray-300'}"
             on:click={() => switchTab(tab.key as typeof activeTab)}
           >
-            <svelte:component this={tab.icon} class="w-4 h-4" />
+            {#if true}{@const C = tab.icon as any}<C class="w-4 h-4" />{/if}
             {tab.label}
           </button>
         {/each}

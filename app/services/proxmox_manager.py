@@ -47,40 +47,20 @@ class ProxmoxManager:
     def get_available_node(cls, plan: PlanType = PlanType.basic) -> Optional[ProxmoxNode]:
         """
         Selecciona el mejor nodo disponible para un nuevo tenant.
-        Criterios:
-        1. Estado online
-        2. Capacidad disponible
-        3. Prioridad del nodo
-        4. Menor carga actual
+        Criterios (scoring dinámico):
+        1. Estado online + can_host_tenants = True
+        2. Slots disponibles según NodeCapacityService
+        3. Score dinámico (RAM 40%, CPU 25%, Storage 20%, I/O 15%)
+        4. Fallback a prioridad estática si hay empate
         """
-        db = SessionLocal()
-        try:
-            resources = cls.PLAN_RESOURCES.get(plan, cls.PLAN_RESOURCES[PlanType.basic])
-            
-            # Buscar nodos online con capacidad
-            nodes = db.query(ProxmoxNode).filter(
-                ProxmoxNode.status == NodeStatus.online,
-                ProxmoxNode.is_database_node == False,
-                ProxmoxNode.current_containers < ProxmoxNode.max_containers
-            ).order_by(
-                ProxmoxNode.priority.desc(),
-                ProxmoxNode.used_cpu_percent.asc()
-            ).all()
-            
-            for node in nodes:
-                # Verificar recursos disponibles
-                available_ram = node.total_ram_gb * 1024 - node.used_ram_gb * 1024
-                available_storage = node.total_storage_gb - node.used_storage_gb
-                
-                if (available_ram >= resources["ram_mb"] and 
-                    available_storage >= resources["disk_gb"]):
-                    return node
-            
-            logger.warning("No hay nodos disponibles con capacidad suficiente")
-            return None
-            
-        finally:
-            db.close()
+        from .node_capacity_service import NodeCapacityService
+
+        result = NodeCapacityService.get_best_node()
+        if result:
+            return result["node"]
+
+        logger.warning("No hay nodos disponibles con capacidad suficiente (scoring dinámico)")
+        return None
     
     @classmethod
     def get_next_vmid(cls, node: ProxmoxNode) -> int:

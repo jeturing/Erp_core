@@ -11,8 +11,7 @@ function _layout($$renderer, $$props) {
       children: ($$renderer3) => {
         children($$renderer3);
         $$renderer3.push(`<!---->`);
-      },
-      $$slots: { default: true }
+      }
     });
     if ($$store_subs) unsubscribe_stores($$store_subs);
   });

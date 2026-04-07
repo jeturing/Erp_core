@@ -320,11 +320,12 @@
       { id: 'odoo' as TabId, label: 'Sajet', icon: Database },
       { id: 'environment' as TabId, label: 'Ambiente', icon: Globe },
     ] as tab (tab.id)}
+      {@const IconComp = tab.icon}
       <button
         class="px-4 py-2.5 text-sm font-medium flex items-center gap-2 border-b-2 transition-colors {activeTab === tab.id ? 'border-indigo-600 text-indigo-700' : 'border-transparent text-gray-500 hover:text-gray-700 hover:border-gray-300'}"
         onclick={() => activeTab = tab.id}
       >
-        <svelte:component this={tab.icon} size={14} />
+        <IconComp size={14} />
         {tab.label}
       </button>
     {/each}
@@ -452,6 +453,7 @@
                 class="relative w-14 h-7 rounded-full transition-colors {stripeMode.mode === 'live' ? 'bg-emerald-500' : 'bg-amber-400'} disabled:opacity-50"
                 disabled={stripeToggling}
                 onclick={toggleStripeMode}
+                aria-label="Toggle Stripe Mode"
               >
                 <div class="absolute top-0.5 w-6 h-6 bg-white rounded-full shadow transition-transform {stripeMode.mode === 'live' ? 'translate-x-7' : 'translate-x-0.5'}"></div>
               </button>
@@ -605,8 +607,8 @@
       {/each}
     {/if}
 
-  <!-- ═══════════ TAB: ODOO ═══════════ -->
-  {:else if activeTab === 'odoo'}
+  <!-- ═══════════ TAB: Sajet ═══════════ -->
+  {:else if activeTab === 'Sajet'}
     <div class="card">
       <div class="flex items-center justify-between mb-5">
         <h3 class="section-heading">CONFIGURACIÓN Sajet</h3>
@@ -778,7 +780,7 @@
                   <div class="absolute -top-2 -right-2">
                     <span class="flex h-5 w-5">
                       <span class="animate-ping absolute inline-flex h-full w-full rounded-full {colorClasses.bg} opacity-75"></span>
-                      <CheckCircle size={20} class="{colorClasses.text}" />
+                      <CheckCircle size={20} class={colorClasses.text} />
                     </span>
                   </div>
                 {/if}

@@ -110,7 +110,7 @@
 
 		<div class="toolbar-section">
 			<span class="toolbar-label">Insertar Template:</span>
-			<select class="template-select" on:change={(e) => insertTemplate(e.target.value)}>
+			<select class="template-select" on:change={(e) => insertTemplate(e.currentTarget.value)}>
 				<option value="">Selecciona un template...</option>
 				<option value="header">Encabezado</option>
 				<option value="footer">Pie de página</option>
@@ -142,10 +142,10 @@
 		</div>
 	{/if}
 
-	<div class="quill-container" bind:this={editorContainer} />
+<div class="quill-container" bind:this={editorContainer}></div>
 
-	<div class="editor-info">
-		<small>✓ Soporta HTML enriquecido con variables {{variable_name}}</small>
+        <div class="editor-info">
+                <small>✓ Soporta HTML enriquecido con variables {'{{'}variable_name{'}}'}</small>
 	</div>
 </div>
 

@@ -291,14 +291,14 @@
 
 				<div class="form-group">
 					<label>Asunto del Email *</label>
-					<InlineEdit bind:value={formData.subject} placeholder="Ej: 🟡 Alerta - {{company_name}}" />
-					<small>Puedes usar {{variables}} en el asunto</small>
+					<InlineEdit bind:value={formData.subject} placeholder="Ej: 🟡 Alerta - {'{{'}company_name{'}}'}" />
+					<small>Puedes usar {'{{'}variables{'}}'} en el asunto</small>
 				</div>
 
 				<div class="form-group">
 					<label>Contenido HTML *</label>
 					<RichTextEditor bind:value={formData.html_body} variables={formData.variables} />
-					<small>Editor enriquecido con soporte para {{variables}}</small>
+					<small>Editor enriquecido con soporte para {'{{'}variables{'}}'}</small>
 				</div>
 
 				<div class="form-row">

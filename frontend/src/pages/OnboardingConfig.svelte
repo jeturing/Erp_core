@@ -204,6 +204,7 @@
     <!-- ── TABS ── -->
     <div class="flex flex-wrap gap-1 mb-6 bg-slate-800/50 p-1 rounded-xl">
       {#each TABS as tab}
+          {@const TabIcon = tab.icon as any}
         <button
           on:click={() => activeTab = tab.key}
           class="flex items-center gap-1.5 px-3 py-2 rounded-lg text-sm font-medium transition
@@ -211,7 +212,7 @@
               ? 'bg-blue-600 text-white shadow'
               : 'text-slate-400 hover:text-slate-200 hover:bg-slate-700'}"
         >
-          <svelte:component this={tab.icon} class="w-4 h-4" />
+          <TabIcon class="w-4 h-4" />
           {tab.label}
         </button>
       {/each}
@@ -243,7 +244,7 @@
                 placeholder="Configure su cuenta para comenzar."
                 class="w-full bg-slate-700 border border-slate-600 rounded-lg px-3 py-2
                        text-white placeholder-slate-500 focus:outline-none focus:ring-2 focus:ring-blue-500"
-              />
+              ></textarea>
             </div>
           </div>
         </div>

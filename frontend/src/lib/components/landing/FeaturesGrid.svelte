@@ -71,7 +71,7 @@
           <div class="w-9 h-9 rounded-lg flex items-center justify-center mb-4"
                style="background:rgba(0,255,159,0.10); border:1px solid rgba(0,255,159,0.18);">
             {#if feature.icon}
-              <svelte:component this={feature.icon} class="w-4 h-4" strokeWidth={1.5} style="color:#00FF9F;" />
+              {#if true}{@const C = feature.icon as any}<C class="w-4 h-4" strokeWidth={1.5} style="color:#00FF9F;" />{/if}
             {/if}
           </div>
           <!-- Title -->

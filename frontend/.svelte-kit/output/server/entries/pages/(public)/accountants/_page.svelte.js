@@ -141,15 +141,12 @@ function AccountantsLanding($$renderer) {
   for (let $$index_1 = 0, $$length = each_array_1.length; $$index_1 < $$length; $$index_1++) {
     let cap = each_array_1[$$index_1];
     $$renderer.push(`<div class="rounded-card-sm border border-border bg-white p-6 hover:shadow-medium hover:border-primary/20 transition-all group"><div class="w-10 h-10 rounded-lg bg-primary-light flex items-center justify-center mb-4 group-hover:bg-primary/10 transition-colors">`);
-    if (cap.icon) {
+    {
       $$renderer.push("<!--[-->");
-      cap.icon($$renderer, { class: "w-5 h-5 text-primary", strokeWidth: 1.5 });
-      $$renderer.push("<!--]-->");
-    } else {
-      $$renderer.push("<!--[!-->");
-      $$renderer.push("<!--]-->");
+      const C = cap.icon;
+      C($$renderer, { class: "w-5 h-5 text-primary", strokeWidth: 1.5 });
     }
-    $$renderer.push(`</div> <h3 class="text-base font-jakarta font-semibold text-slate-dark mb-2">${escape_html(cap.title)}</h3> <p class="text-sm font-inter text-slate leading-relaxed">${escape_html(cap.desc)}</p></div>`);
+    $$renderer.push(`<!--]--></div> <h3 class="text-base font-jakarta font-semibold text-slate-dark mb-2">${escape_html(cap.title)}</h3> <p class="text-sm font-inter text-slate leading-relaxed">${escape_html(cap.desc)}</p></div>`);
   }
   $$renderer.push(`<!--]--></div></div></section> <section class="bg-white py-24"><div class="max-w-6xl mx-auto px-6"><div class="text-center mb-14"><span class="inline-flex items-center gap-2 rounded-full bg-primary-light text-primary text-[13px] font-inter font-medium tracking-[0.08em] uppercase px-4 py-1.5 mb-4">Partnership Model</span> <h2 class="text-4xl font-jakarta font-bold text-slate-dark mb-4">Choose how you want to work with us.</h2></div> <div class="grid grid-cols-1 md:grid-cols-3 gap-6 items-start"><!--[-->`);
   const each_array_2 = ensure_array_like(partnerTiers);

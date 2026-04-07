@@ -365,7 +365,7 @@
         {#each benefits as b}
           <div class="bg-white border border-[#D1CCC4] p-6">
             <div class="w-10 h-10 bg-[#003B73]/10 flex items-center justify-center mb-4">
-              <svelte:component this={b.icon} size={20} class="text-[#003B73]" />
+              {#if true}{@const C = b.icon as any}<C size={20} class="text-[#003B73]" />{/if}
             </div>
             <h3 class="font-bold text-sm text-[#1a1a1a] mb-1">{b.title}</h3>
             <p class="text-xs text-gray-500 leading-relaxed">{b.desc}</p>
@@ -382,7 +382,7 @@
           <div class={`${path.featured ? 'bg-white border-2 border-[#003B73]' : 'bg-white border border-[#D1CCC4]'} p-8`}>
             <p class="text-[11px] font-bold uppercase tracking-[0.22em] text-gray-400 mb-4">{path.kicker}</p>
             <div class={`w-12 h-12 flex items-center justify-center mb-5 ${path.featured ? 'bg-[#003B73]/10' : 'bg-[#E8E4DC]'}`}>
-              <svelte:component this={path.icon} size={24} class="text-[#003B73]" />
+              {#if true}{@const C = path.icon as any}<C size={24} class="text-[#003B73]" />{/if}
             </div>
             <h3 class="text-xl font-bold text-[#1a1a1a] mb-2">{path.title}</h3>
             <p class="text-sm text-gray-500 mb-5 leading-relaxed">{path.desc}</p>

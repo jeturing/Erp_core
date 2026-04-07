@@ -137,7 +137,7 @@
         {#each capabilities as cap}
           <div class="rounded-card-sm border border-border bg-white p-6 hover:shadow-medium hover:border-primary/20 transition-all group">
             <div class="w-10 h-10 rounded-lg bg-primary-light flex items-center justify-center mb-4 group-hover:bg-primary/10 transition-colors">
-              <svelte:component this={cap.icon} class="w-5 h-5 text-primary" strokeWidth={1.5} />
+              {#if true}{@const C = cap.icon as any}<C class="w-5 h-5 text-primary" strokeWidth={1.5} />{/if}
             </div>
             <h3 class="text-base font-jakarta font-semibold text-slate-dark mb-2">{cap.title}</h3>
             <p class="text-sm font-inter text-slate leading-relaxed">{cap.desc}</p>

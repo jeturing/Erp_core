@@ -85,16 +85,13 @@ function TenantPortal($$renderer, $$props) {
     ]);
     for (let $$index = 0, $$length = each_array.length; $$index < $$length; $$index++) {
       let tab = each_array[$$index];
-      $$renderer2.push(`<button${attr_class(`flex items-center gap-1.5 px-4 py-2.5 text-[11px] font-semibold tracking-[0.08em] transition-colors border-b-2 ${stringify(activeTab === tab.id ? "text-white border-[#C05A3C]" : "text-gray-500 border-transparent hover:text-gray-300 hover:border-gray-600")}`)}>`);
-      if (tab.icon) {
+      $$renderer2.push(`<button${attr_class(`flex items-center gap-1.5 px-4 py-2.5 text-[11px] font-semibold tracking-[0.08em] transition-colors border-b-2 ${stringify(activeTab === tab.id ? "text-white border-[#C05A3C]" : "text-gray-400 border-transparent hover:text-gray-300 hover:border-gray-500")}`)}>`);
+      {
         $$renderer2.push("<!--[-->");
-        tab.icon($$renderer2, { class: "w-3.5 h-3.5" });
-        $$renderer2.push("<!--]-->");
-      } else {
-        $$renderer2.push("<!--[!-->");
-        $$renderer2.push("<!--]-->");
+        const C = tab.icon;
+        C($$renderer2, { class: "w-3.5 h-3.5" });
       }
-      $$renderer2.push(` ${escape_html(tab.label)}</button>`);
+      $$renderer2.push(`<!--]--> ${escape_html(tab.label)}</button>`);
     }
     $$renderer2.push(`<!--]--></div></header> <main class="max-w-6xl mx-auto px-6 py-8 space-y-6">`);
     {

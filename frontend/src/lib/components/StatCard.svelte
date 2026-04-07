@@ -34,8 +34,9 @@
     </div>
     
     {#if icon}
+      {@const IconComp = icon as any}
       <div class="p-3 rounded-lg {iconBg}">
-        <svelte:component this={icon} size={24} class={iconColor} />
+        <IconComp size={24} class={iconColor} />
       </div>
     {/if}
   </div>

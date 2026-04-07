@@ -69,10 +69,10 @@
         billingApi.getCustomers().catch(() => ({ items: [] })),
         blueprintsApi.getPackages().catch(() => ({ items: [] })),
       ]);
-      customers = (custRes?.items ?? custRes ?? []).map((c: any) => ({
+      customers = ((custRes as any)?.items ?? custRes ?? []).map((c: any) => ({
         id: c.id, name: c.company_name || c.name || `Cliente #${c.id}`, email: c.email
       }));
-      blueprintPackages = (pkgRes?.items ?? pkgRes ?? []).map((p: any) => ({
+      blueprintPackages = ((pkgRes as any)?.items ?? pkgRes ?? []).map((p: any) => ({
         id: p.id, name: p.name, display_name: p.display_name
       }));
     } catch { /* silencioso */ }

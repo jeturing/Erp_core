@@ -354,15 +354,12 @@ function Dashboard($$renderer, $$props) {
         let item = each_array_3[$$index_3];
         const si = statusIcon(item.status);
         $$renderer2.push(`<div class="flex items-center justify-between px-6 py-3"><span class="text-sm font-body text-text-secondary">${escape_html(item.name)}</span> <div class="flex items-center gap-2">`);
-        if (si.icon) {
+        {
           $$renderer2.push("<!--[-->");
-          si.icon($$renderer2, { size: 14, class: si.color });
-          $$renderer2.push("<!--]-->");
-        } else {
-          $$renderer2.push("<!--[!-->");
-          $$renderer2.push("<!--]-->");
+          const C = si.icon;
+          C($$renderer2, { size: 14, class: si.color });
         }
-        $$renderer2.push(` <span${attr_class(`text-[11px] font-semibold uppercase tracking-widest ${stringify(si.color)} font-sans`)}>${escape_html(item.detail)}</span></div></div>`);
+        $$renderer2.push(`<!--]--> <span${attr_class(`text-[11px] font-semibold uppercase tracking-widest ${stringify(si.color)} font-sans`)}>${escape_html(item.detail)}</span></div></div>`);
       }
       $$renderer2.push(`<!--]--></div> `);
       if ((report.recent_stripe_events || []).length > 0) {

@@ -388,7 +388,8 @@
                 {#if i < visibleStep}
                   <CheckCircle size={18} />
                 {:else}
-                  <svelte:component this={step.icon} size={16} />
+                  {@const StepIcon = (step as any).icon}
+                  <StepIcon size={16} />
                 {/if}
               </div>
               <span class="text-[10px] font-medium {i === visibleStep ? 'text-terracotta' : 'text-gray-500'} hidden sm:block">

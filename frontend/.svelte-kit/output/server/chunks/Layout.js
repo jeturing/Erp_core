@@ -383,7 +383,7 @@ function Users_round($$renderer, $$props) {
 function Layout($$renderer, $$props) {
   $$renderer.component(($$renderer2) => {
     var $$store_subs;
-    const { currentRoute = "dashboard" } = $$props;
+    const { currentRoute = "dashboard", children } = $$props;
     function isGroup(entry) {
       return "children" in entry;
     }
@@ -707,10 +707,11 @@ function Layout($$renderer, $$props) {
       let entry = each_array[$$index_1];
       if (isGroup(entry)) {
         $$renderer2.push("<!--[-->");
+        const GroupIcon = entry.icon;
         $$renderer2.push(`<button type="button"${attr_class(`sidebar-group-toggle ${stringify(groupHasActive(entry) ? "sidebar-group-active" : "")}`, "svelte-qgpshq")}${attr("aria-expanded", expandedGroups.has(entry.id))}><div class="flex items-center gap-2.5 min-w-0">`);
-        if (entry.icon) {
+        if (GroupIcon) {
           $$renderer2.push("<!--[-->");
-          entry.icon($$renderer2, { size: 16, class: "shrink-0 opacity-60" });
+          GroupIcon($$renderer2, { size: 16, class: "shrink-0 opacity-60" });
           $$renderer2.push("<!--]-->");
         } else {
           $$renderer2.push("<!--[!-->");
@@ -735,10 +736,11 @@ function Layout($$renderer, $$props) {
           const each_array_1 = ensure_array_like(entry.children);
           for (let $$index = 0, $$length2 = each_array_1.length; $$index < $$length2; $$index++) {
             let item = each_array_1[$$index];
+            const ItemIcon = item.icon;
             $$renderer2.push(`<a${attr("href", item.href)}${attr_class(clsx(currentRoute === item.id ? "sidebar-child-active" : "sidebar-child"), "svelte-qgpshq")}>`);
-            if (item.icon) {
+            if (ItemIcon) {
               $$renderer2.push("<!--[-->");
-              item.icon($$renderer2, { size: 15 });
+              ItemIcon($$renderer2, { size: 15 });
               $$renderer2.push("<!--]-->");
             } else {
               $$renderer2.push("<!--[!-->");
@@ -753,10 +755,11 @@ function Layout($$renderer, $$props) {
         $$renderer2.push(`<!--]-->`);
       } else {
         $$renderer2.push("<!--[!-->");
+        const DirectIcon = entry.icon;
         $$renderer2.push(`<a${attr("href", entry.href)}${attr_class(`sidebar-direct-link ${stringify(currentRoute === entry.id ? "sidebar-direct-active" : "")}`, "svelte-qgpshq")}>`);
-        if (entry.icon) {
+        if (DirectIcon) {
           $$renderer2.push("<!--[-->");
-          entry.icon($$renderer2, { size: 18 });
+          DirectIcon($$renderer2, { size: 18 });
           $$renderer2.push("<!--]-->");
         } else {
           $$renderer2.push("<!--[!-->");
@@ -781,9 +784,9 @@ function Layout($$renderer, $$props) {
       $$renderer2.push("<!--[!-->");
       Moon($$renderer2, { size: 16 });
     }
-    $$renderer2.push(`<!--]--></button> <a href="/portal" class="btn-accent btn-sm">Portal</a></div></header> <main class="flex-1 overflow-auto bg-bg-page"><!--[-->`);
-    slot($$renderer2, $$props, "default", {});
-    $$renderer2.push(`<!--]--></main></div></div>`);
+    $$renderer2.push(`<!--]--></button> <a href="/portal" class="btn-accent btn-sm">Portal</a></div></header> <main class="flex-1 overflow-auto bg-bg-page">`);
+    children?.($$renderer2);
+    $$renderer2.push(`<!----></main></div></div>`);
     if ($$store_subs) unsubscribe_stores($$store_subs);
   });
 }

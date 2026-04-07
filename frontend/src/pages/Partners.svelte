@@ -1,5 +1,6 @@
 <script lang="ts">
   import { onMount } from 'svelte';
+import { fly, fade, slide } from 'svelte/transition';
   import { partnersApi } from '../lib/api/partners';
   import type { PartnerItem } from '../lib/types';
   import { toasts } from '../lib/stores';
@@ -298,7 +299,7 @@
   }
 
   // Form state
-  let form = {
+  let form: any = {
     company_name: '',
     legal_name: '',
     tax_id: '',
@@ -319,7 +320,7 @@
       company_name: '', legal_name: '', tax_id: '', contact_name: '',
       contact_email: '', phone: '', country: '', address: '',
       billing_scenario: 'jeturing_collects', commission_rate: 50, margin_cap: 30,
-      contract_reference: '', notes: '',
+      contract_reference: '', notes: '', status: 'active', portal_access: false,
     };
     editingId = null;
   }
@@ -370,6 +371,8 @@
       margin_cap: p.margin_cap ?? 30,
       contract_reference: p.contract_reference || '',
       notes: p.notes || '',
+      status: p.status || 'active',
+      portal_access: p.portal_access || false,
     };
     showForm = true;
   }
@@ -431,15 +434,15 @@
   <div class="grid grid-cols-1 sm:grid-cols-3 gap-4">
     <div class="stat-card">
       <div class="text-xs font-semibold uppercase text-gray-500 mb-1">Activos</div>
-      <div class="text-2xl font-bold text-emerald-400">{summary.active}</div>
+      <div class="text-2xl font-bold text-success dark:text-emerald-400">{summary.active}</div>
     </div>
     <div class="stat-card">
       <div class="text-xs font-semibold uppercase text-gray-500 mb-1">Pendientes</div>
-      <div class="text-2xl font-bold text-amber-400">{summary.pending}</div>
+      <div class="text-2xl font-bold text-warning dark:text-amber-400">{summary.pending}</div>
     </div>
     <div class="stat-card">
       <div class="text-xs font-semibold uppercase text-gray-500 mb-1">Total Leads</div>
-      <div class="text-2xl font-bold text-blue-400">{summary.total_leads}</div>
+      <div class="text-2xl font-bold text-primary dark:text-blue-400">{summary.total_leads}</div>
     </div>
   </div>
 
@@ -460,7 +463,7 @@
 
   <!-- Form Modal -->
   {#if showForm}
-    <div class="card p-6 border border-border-dark">
+    <div class="card p-6 border border-border-dark" in:fly={{ y: 20, duration: 400 }}>
       <h2 class="section-heading mb-4">{editingId ? 'Editar' : 'Nuevo'} Partner</h2>
       <form on:submit|preventDefault={handleSubmit} class="grid grid-cols-1 md:grid-cols-2 gap-4">
         <div>
@@ -512,7 +515,7 @@
             <input type="number" bind:value={form.margin_cap} min="0" max="100" step="0.5" class="input w-full" />
           </div>
         </div>
-        <div class="md:col-span-2">
+        <div><div class="label">Estado</div><select bind:value={form.status} class="input w-full"><option value="active">Activo</option><option value="pending">Pendiente</option><option value="suspended">Suspendido</option><option value="terminated">Terminado</option></select></div><div><div class="label">Acceso a Portal</div><label class="flex items-center gap-2 mt-2"><input type="checkbox" bind:checked={form.portal_access} class="accent-terracotta" />Habilitado</label></div><div class="md:col-span-2">
           <div class="label">Notas</div>
           <textarea bind:value={form.notes} rows="2" class="input w-full"></textarea>
         </div>
@@ -545,10 +548,10 @@
           </tr>
         </thead>
         <tbody>
-          {#each filtered as p}
-            <tr>
+          {#each filtered as p, i}
+            <tr in:fly={{ y: 15, duration: 400, delay: i * 40 }} class="hover:bg-cloud dark:hover:bg-dark-card transition-colors duration-200">
               <td>
-                <div class="font-semibold text-text-light">{p.company_name}</div>
+                <div class="font-semibold text-text-primary dark:text-text-light">{p.company_name}</div>
                 {#if p.legal_name}<div class="text-xs text-gray-500">{p.legal_name}</div>{/if}
                 {#if p.partner_code}
                   <div class="flex items-center gap-1 mt-1">
@@ -603,7 +606,7 @@
                   {#if p.status !== 'terminated'}
                     <button class="btn-sm btn-danger" title="Desactivar" on:click={() => deactivatePartner(p.id)}><Trash2 size={14} /></button>
                   {/if}
-                  {#if p.status === 'terminated'}
+                  {#if true}
                     <button class="btn-sm btn-danger" title="Eliminar permanentemente" on:click={() => hardDeletePartner(p.id, p.company_name, p.partner_code || '')}>
                       <Trash2 size={14} />
                     </button>
@@ -731,13 +734,13 @@
                           {#each pricingOverrides as po}
                             <tr>
                               <td><span class="badge-{po.plan_name === 'pro' ? 'pro' : po.plan_name === 'enterprise' ? 'enterprise' : 'basic'}">{po.plan_name}</span></td>
-                              <td class="font-mono text-emerald-400">${po.base_price_override ?? '—'}</td>
+                              <td class="font-mono text-success dark:text-emerald-400">${po.base_price_override ?? '—'}</td>
                               <td class="font-mono text-gray-500">${po.global_base_price ?? '—'}</td>
-                              <td class="font-mono text-emerald-400">${po.price_per_user_override ?? '—'}</td>
+                              <td class="font-mono text-success dark:text-emerald-400">${po.price_per_user_override ?? '—'}</td>
                               <td class="font-mono text-gray-500">${po.global_price_per_user ?? '—'}</td>
-                              <td class="font-mono text-text-light">{po.max_users_override ?? po.global_max_users ?? '—'}</td>
-                              <td class="font-mono text-text-light">{po.max_storage_mb_override ?? po.global_max_storage_mb ?? '—'}</td>
-                              <td class="font-mono text-text-light">{po.max_stock_sku_override ?? po.global_max_stock_sku ?? '—'}</td>
+                              <td class="font-mono text-text-primary dark:text-text-light">{po.max_users_override ?? po.global_max_users ?? '—'}</td>
+                              <td class="font-mono text-text-primary dark:text-text-light">{po.max_storage_mb_override ?? po.global_max_storage_mb ?? '—'}</td>
+                              <td class="font-mono text-text-primary dark:text-text-light">{po.max_stock_sku_override ?? po.global_max_stock_sku ?? '—'}</td>
                               <td class="font-mono">${po.setup_fee ?? 0}</td>
                               <td class="font-mono">{po.customization_hourly_rate ? `$${po.customization_hourly_rate}` : '—'}</td>
                               <td>
@@ -767,7 +770,7 @@
                 <td colspan="8" class="bg-bg-page border-t border-border-dark p-4">
                   <div class="space-y-3">
                     <div class="flex items-center justify-between">
-                      <h3 class="text-sm font-bold uppercase tracking-widest text-blue-400 flex items-center gap-2">
+                      <h3 class="text-sm font-bold uppercase tracking-widest text-primary dark:text-blue-400 flex items-center gap-2">
                         <Users size={14} /> Clientes de {p.company_name}
                       </h3>
                       <button
@@ -782,7 +785,7 @@
                     {#if showLinkSearch}
                       <div class="card p-4 border border-blue-500/30 space-y-3">
                         <div class="flex items-center gap-2">
-                          <h4 class="text-xs font-semibold uppercase tracking-widest text-blue-300">Buscar clientes sin partner</h4>
+                          <h4 class="text-xs font-semibold uppercase tracking-widest text-primary dark:text-blue-300">Buscar clientes sin partner</h4>
                         </div>
                         <div class="flex gap-2">
                           <div class="relative flex-1">
@@ -815,7 +818,7 @@
                               <tbody>
                                 {#each availableCustomers as ac}
                                   <tr class="hover:bg-bg-card/50">
-                                    <td class="font-medium text-text-light">{ac.company_name}</td>
+                                    <td class="font-medium text-text-primary dark:text-text-light">{ac.company_name}</td>
                                     <td class="text-xs text-gray-400">{ac.email}</td>
                                     <td>
                                       <span class="badge-{ac.plan_name === 'pro' ? 'pro' : ac.plan_name === 'enterprise' ? 'enterprise' : 'basic'} text-[10px]">
@@ -867,9 +870,9 @@
                         <tbody>
                           {#each partnerClients as c}
                             <tr>
-                              <td class="font-medium text-text-light">{c.company_name}</td>
+                              <td class="font-medium text-text-primary dark:text-text-light">{c.company_name}</td>
                               <td class="text-xs text-gray-400">{c.email}</td>
-                              <td class="font-mono text-xs text-blue-400">{c.subdomain}.sajet.us</td>
+                              <td class="font-mono text-xs text-primary dark:text-blue-400">{c.subdomain}.sajet.us</td>
                               <td>
                                 {#if c.subscription}
                                   <span class="badge-{c.subscription.plan_name === 'pro' ? 'pro' : c.subscription.plan_name === 'enterprise' ? 'enterprise' : 'basic'}">{c.subscription.plan_name}</span>
@@ -878,7 +881,7 @@
                                 {/if}
                               </td>
                               <td class="font-mono text-center">{c.user_count}</td>
-                              <td class="font-mono text-emerald-400">${(c.subscription?.calculated_amount ?? 0).toFixed(2)}</td>
+                              <td class="font-mono text-success dark:text-emerald-400">${(c.subscription?.calculated_amount ?? 0).toFixed(2)}</td>
                               <td>
                                 <button
                                   class="btn-sm btn-danger flex items-center gap-1 text-[11px]"
@@ -910,13 +913,13 @@
     <!-- svelte-ignore a11y-click-events-have-key-events -->
     <!-- svelte-ignore a11y-no-static-element-interactions -->
     <div class="fixed inset-0 bg-black/50 z-50 flex items-center justify-center p-4" on:click|self={() => showCredentialsModal = false}>
-      <div class="bg-bg-card rounded-xl border border-border-dark shadow-2xl w-full max-w-lg p-6 space-y-5">
+      <div class="bg-bg-card rounded-xl border border-border-dark shadow-2xl w-full max-w-lg p-6 space-y-5" in:fly={{ y: 20, duration: 300, delay: 50 }}>
         <div class="flex items-center gap-3">
           <div class="w-10 h-10 rounded-lg bg-terracotta/10 flex items-center justify-center">
             <KeyRound size={20} class="text-terracotta" />
           </div>
           <div>
-            <h2 class="text-lg font-bold text-text-light">Credenciales de Portal</h2>
+            <h2 class="text-lg font-bold text-text-primary dark:text-text-light">Credenciales de Portal</h2>
             <p class="text-xs text-gray-500">{credentialsPartnerName}</p>
           </div>
         </div>
