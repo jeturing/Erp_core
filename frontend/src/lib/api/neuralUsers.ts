@@ -35,12 +35,18 @@ export interface UserTokensResponse {
 export const neuralUsersApi = {
   search: async (q: string) => {
     const res = await api.get<NeuralUsersResponse>(`/api/neural-users/search?q=${encodeURIComponent(q)}`);
-    return res.data;
+    if (Array.isArray(res as unknown)) {
+      return res as unknown as NeuralUserItem[];
+    }
+    return (res as unknown as NeuralUsersResponse).data ?? [];
   },
 
   getTokens: async (userType: string, userId: string | number) => {
     const res = await api.get<UserTokensResponse>(`/api/neural-users/tokens/${userType}/${userId}`);
-    return res.data;
+    if (Array.isArray(res as unknown)) {
+      return res as unknown as UserTokenItem[];
+    }
+    return (res as unknown as UserTokensResponse).data ?? [];
   },
 
   generateToken: async (userType: string, userId: string | number, tokenType: 'verification' | 'refresh' = 'verification') => {

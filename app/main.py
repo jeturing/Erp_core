@@ -48,6 +48,7 @@ from .routes import odoo_webhooks        # 🔄 Webhooks Odoo → Portal (sync b
 from .routes import postal_webhooks      # 📧 Postal Mail webhooks + uso de correo
 from .routes import gusto_payroll        # 💼 Gusto Payroll USA + OAuth + webhooks
 from .routes import doordash_webhooks    # 🚚 DoorDash webhook centralizado (fanout multi-tenant)
+from .routes import meta_webhooks        # 🌐 Meta webhook centralizado (fanout multi-tenant)
 from .routes import migration            # 🚚 Migración live de tenants entre nodos (Fase 2)
 from .routes import session_monitoring   # 🛡️ DSAM — Dynamic Session & Anti-Theft Monitor
 from .routes import developer_portal     # 🔧 Developer Portal — Apps & Agreement Flows
@@ -262,6 +263,7 @@ app.include_router(odoo_webhooks.router)         # 🔄 Webhooks Odoo → Portal
 app.include_router(postal_webhooks.router)       # 📧 Postal Mail webhooks + uso de correo
 app.include_router(gusto_payroll.router)         # 💼 Gusto Payroll USA + OAuth + webhooks
 app.include_router(doordash_webhooks.router)     # 🚚 DoorDash webhook centralizado (fanout multi-tenant)
+app.include_router(meta_webhooks.router)         # 🌐 Meta webhook centralizado (fanout multi-tenant)
 app.include_router(migration.router)             # 🚚 Migración live de tenants entre nodos (Fase 2)
 app.include_router(session_monitoring.router)    # 🛡️ DSAM — Dynamic Session & Anti-Theft Monitor
 app.include_router(developer_portal.router)      # 🔧 Developer Portal — Apps & Agreement Flows

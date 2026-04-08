@@ -604,6 +604,11 @@ class Plan(Base):
     max_backups = Column(Integer, default=0)                     # Backups automáticos retenidos, 0=ilimitado
     max_api_calls_day = Column(Integer, default=0)               # Llamadas API diarias, 0=ilimitado
     max_stock_sku = Column(Integer, default=0)                   # 0 = ilimitado; SKUs únicos con stock real permitidos
+    # Email rate limiting (equivalente a O365/Gmail para proteger reputación IP)
+    max_emails_monthly    = Column(Integer, default=5000)        # Cuota mensual total, 0=ilimitado
+    email_rate_per_minute = Column(Integer, default=20)          # Máx emails/min  (O365=30, Gmail~20)
+    email_rate_per_hour   = Column(Integer, default=500)         # Máx emails/hora (O365~600, Gmail~100)
+    email_rate_per_day    = Column(Integer, default=2000)        # Máx emails/día  (O365=10000, Gmail=2000)
     quota_warning_percent = Column(Integer, default=80)          # Banner amarillo a partir de este %
     quota_recommend_percent = Column(Integer, default=95)        # Recomendación de upgrade a partir de este %
     quota_block_percent = Column(Integer, default=100)           # Fase 2: bloqueo a partir de este %
@@ -813,6 +818,12 @@ class PartnerPricingOverride(Base):
     max_users_override = Column(Integer, nullable=True)               # Override cuota de usuarios
     max_storage_mb_override = Column(Integer, nullable=True)          # Override cuota almacenamiento (MB)
     max_stock_sku_override = Column(Integer, nullable=True)           # Override SKUs con stock real
+
+    # Override de email rate limiting (NULL = usar valor del plan)
+    max_emails_monthly_override    = Column(Integer, nullable=True)   # Cuota mensual, 0=ilimitado
+    email_rate_per_minute_override = Column(Integer, nullable=True)   # Emails/min
+    email_rate_per_hour_override   = Column(Integer, nullable=True)   # Emails/hora
+    email_rate_per_day_override    = Column(Integer, nullable=True)   # Emails/día
 
     # Tarifas adicionales del partner
     setup_fee = Column(Float, default=0)                              # Fee de setup/implementación
@@ -1903,6 +1914,50 @@ class PostalEmailUsage(Base):
 
 
 # ═══════════════════════════════════════════════════════
+# EMAIL RATE LIMIT WINDOWS — Ventanas deslizantes por tenant
+# ═══════════════════════════════════════════════════════
+
+class RateLimitWindowType(enum.Enum):
+    minute = "minute"
+    hour   = "hour"
+    day    = "day"
+
+
+class EmailRateLimitWindow(Base):
+    """
+    Sliding-window counter para rate limiting de email por tenant.
+
+    Cada fila representa una ventana de tiempo (minuto/hora/día) para un tenant.
+    Se actualiza atómicamente al registrar envíos y se purga pasado 48h.
+
+    Garantías:
+      - minute: no superar email_rate_per_minute del Plan
+      - hour:   no superar email_rate_per_hour del Plan
+      - day:    no superar email_rate_per_day del Plan
+
+    Similar al modelo de O365 (30/min, ~600/h, 10K/día) y Gmail (~20/min, ~100/h, 2K/día).
+    """
+    __tablename__ = "email_rate_limit_windows"
+
+    id               = Column(Integer, primary_key=True, index=True)
+    tenant_subdomain = Column(String(100), nullable=False, index=True)
+    window_type      = Column(Enum(RateLimitWindowType), nullable=False)
+    window_start     = Column(DateTime, nullable=False, index=True)   # inicio de la ventana (UTC truncado)
+    window_end       = Column(DateTime, nullable=False)               # inicio + 1min / 1h / 1d
+    emails_count     = Column(Integer, default=0, nullable=False)     # contador acumulado en esta ventana
+    created_at       = Column(DateTime, default=datetime.utcnow)
+    updated_at       = Column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
+
+    __table_args__ = (
+        UniqueConstraint(
+            "tenant_subdomain", "window_type", "window_start",
+            name="uq_ratelimit_window_tenant_type_start",
+        ),
+        Index("ix_email_ratelimit_tenant_type", "tenant_subdomain", "window_type"),
+    )
+
+
+# ═══════════════════════════════════════════════════════
 # TESTIMONIALS — Gestionables desde Admin
 # ═══════════════════════════════════════════════════════
 
@@ -2362,6 +2417,11 @@ class SessionAlertSeverity(enum.Enum):
     CRITICAL = "critical"
 
 
+def _enum_values(enum_cls: type[enum.Enum]) -> list[str]:
+    """Retorna los valores string de un Enum para persistencia en PostgreSQL."""
+    return [member.value for member in enum_cls]
+
+
 class ActiveSession(Base):
     """
     Snapshot de sesión activa capturada desde Redis.
@@ -2415,7 +2475,15 @@ class SessionSecurityRule(Base):
     __tablename__ = "session_security_rules"
 
     id = Column(Integer, primary_key=True, index=True)
-    rule_type = Column(Enum(SessionRuleType), nullable=False)
+    rule_type = Column(
+        Enum(
+            SessionRuleType,
+            name="sessionruletype",
+            values_callable=_enum_values,
+            validate_strings=True,
+        ),
+        nullable=False,
+    )
     tenant_db = Column(String(100), nullable=True, index=True)   # null = global (aplica a todos)
     is_enabled = Column(Boolean, default=True)
 
@@ -2483,8 +2551,24 @@ class AccountSecurityAction(Base):
     __tablename__ = "account_security_actions"
 
     id = Column(Integer, primary_key=True, index=True)
-    action_type = Column(Enum(SessionActionType), nullable=False)
-    severity = Column(Enum(SessionAlertSeverity), default=SessionAlertSeverity.MEDIUM)
+    action_type = Column(
+        Enum(
+            SessionActionType,
+            name="sessionactiontype",
+            values_callable=_enum_values,
+            validate_strings=True,
+        ),
+        nullable=False,
+    )
+    severity = Column(
+        Enum(
+            SessionAlertSeverity,
+            name="sessionalertseverity",
+            values_callable=_enum_values,
+            validate_strings=True,
+        ),
+        default=SessionAlertSeverity.MEDIUM,
+    )
 
     # Target
     tenant_db = Column(String(100), nullable=False, index=True)

@@ -6,14 +6,16 @@
   import { onMount, onDestroy } from 'svelte';
   import { dsamApi } from '$lib/api/dsam';
   import type {
-    DashboardStats, SessionEntry, SecurityAction, SecurityRule,
-    GeoPoint, LiveSession, TenantSessionConfig
+    DashboardStats, GroupedSessionTenant, SecurityAction, SecurityRule,
+    GeoPoint, LiveSession, DsamTenantOption, PlaybookTemplate,
+    SeatAuditEntry, SeatReconciliationReport
   } from '$lib/api/dsam';
   import { toasts } from '$lib/stores/toast';
   import {
     Shield, Globe, Users, AlertTriangle, RefreshCw,
-    MapPin, Lock, Unlock, Eye, Trash2, Plus, Play,
-    Activity, Zap, Search, ChevronDown
+    MapPin, Lock, Trash2, Plus, Play,
+    Activity, Zap, Search, ChevronDown, ChevronRight,
+    Building2, Network, ClipboardList
   } from 'lucide-svelte';
 
   // ── State ──
@@ -26,14 +28,16 @@
   let stats = $state<DashboardStats | null>(null);
 
   // Sessions
-  let sessions = $state<SessionEntry[]>([]);
+  let sessionGroups = $state<GroupedSessionTenant[]>([]);
   let sessionsTotal = $state(0);
-  let sessionsPage = $state(1);
+  let sessionsUsersTotal = $state(0);
   let sessionsTenantFilter = $state('');
+  let expandedTenants = $state<Record<string, boolean>>({});
 
   // Geo
   let livePositions = $state<LiveSession[]>([]);
   let heatmapData = $state<GeoPoint[]>([]);
+  let geoMeta = $state<{ unmapped_active_sessions?: number; mapped_active_sessions?: number }>({});
 
   // Rules
   let rules = $state<SecurityRule[]>([]);
@@ -41,12 +45,18 @@
   let newRuleType = $state('single_session');
   let newRuleTenant = $state('');
   let newRuleDesc = $state('');
+  let tenantOptions = $state<DsamTenantOption[]>([]);
 
   // Playbook (Security Actions)
   let actions = $state<SecurityAction[]>([]);
   let actionsTotal = $state(0);
   let actionsPage = $state(1);
   let actionsFilter = $state<'all' | 'unresolved' | 'critical'>('unresolved');
+  let playbookTemplates = $state<PlaybookTemplate[]>([]);
+
+  // Audit
+  let auditReport = $state<SeatReconciliationReport | null>(null);
+  let lastAuditResult = $state<{ tenants_audited: number; tenants_over_limit: number } | null>(null);
 
   // ── Data Loaders ──
 
@@ -64,14 +74,14 @@
   async function loadSessions() {
     loading = true;
     try {
-      const res = await dsamApi.listSessions({
+      const res = await dsamApi.listGroupedSessions({
         tenant: sessionsTenantFilter || undefined,
-        page: sessionsPage,
-        limit: 50,
       });
       if (res.success) {
-        sessions = res.data;
-        sessionsTotal = res.meta.total || 0;
+        sessionGroups = res.data;
+        sessionsTotal = res.meta.total_sessions || 0;
+        sessionsUsersTotal = res.meta.total_users || 0;
+        expandedTenants = Object.fromEntries(res.data.map((group) => [group.tenant_db, true]));
       }
     } catch (e: any) {
       toasts.error('Error cargando sesiones: ' + (e.message || e));
@@ -86,8 +96,18 @@
         dsamApi.getGeoLive(),
         dsamApi.getGeoHeatmap(30),
       ]);
-      if (liveRes.success) livePositions = liveRes.data;
-      if (heatRes.success) heatmapData = heatRes.data;
+      if (liveRes.success) {
+        livePositions = liveRes.data;
+        geoMeta = { ...geoMeta, unmapped_active_sessions: liveRes.meta.unmapped_active_sessions };
+      }
+      if (heatRes.success) {
+        heatmapData = heatRes.data;
+        geoMeta = {
+          ...geoMeta,
+          mapped_active_sessions: heatRes.meta.mapped_active_sessions,
+          unmapped_active_sessions: heatRes.meta.unmapped_active_sessions,
+        };
+      }
     } catch (e: any) {
       toasts.error('Error cargando datos geo: ' + (e.message || e));
     }
@@ -97,8 +117,12 @@
   async function loadRules() {
     loading = true;
     try {
-      const res = await dsamApi.listRules();
-      if (res.success) rules = res.data;
+      const [rulesRes, tenantsRes] = await Promise.all([
+        dsamApi.listRules(),
+        dsamApi.listTenants(),
+      ]);
+      if (rulesRes.success) rules = rulesRes.data;
+      if (tenantsRes.success) tenantOptions = tenantsRes.data;
     } catch (e: any) {
       toasts.error('Error cargando reglas: ' + (e.message || e));
     }
@@ -111,13 +135,28 @@
       const params: any = { page: actionsPage, limit: 50 };
       if (actionsFilter === 'unresolved') params.resolved = false;
       if (actionsFilter === 'critical') { params.severity = 'critical'; params.resolved = false; }
-      const res = await dsamApi.listActions(params);
-      if (res.success) {
-        actions = res.data;
-        actionsTotal = res.meta.total || 0;
+      const [actionsRes, templatesRes] = await Promise.all([
+        dsamApi.listActions(params),
+        dsamApi.getPlaybookTemplates(),
+      ]);
+      if (actionsRes.success) {
+        actions = actionsRes.data;
+        actionsTotal = actionsRes.meta.total || 0;
       }
+      if (templatesRes.success) playbookTemplates = templatesRes.data;
     } catch (e: any) {
       toasts.error('Error cargando acciones: ' + (e.message || e));
+    }
+    loading = false;
+  }
+
+  async function loadAudit() {
+    loading = true;
+    try {
+      const res = await dsamApi.getSeatReconciliation();
+      if (res.success) auditReport = res.data;
+    } catch (e: any) {
+      toasts.error('Error cargando auditoría: ' + (e.message || e));
     }
     loading = false;
   }
@@ -130,6 +169,8 @@
       if (res.success) {
         toasts.success(`Sync: ${res.data.scanned} escaneadas, ${res.data.created} nuevas, ${res.data.removed} eliminadas`);
         await loadDashboard();
+        if (activeTab === 'sessions') await loadSessions();
+        if (activeTab === 'geo') await loadGeo();
       }
     } catch (e: any) {
       toasts.error('Error sync: ' + (e.message || e));
@@ -142,6 +183,7 @@
       if (res.success) {
         toasts.success(`Scan: ${res.data.violations_found} violaciones, ${res.data.actions_taken} acciones`);
         await loadDashboard();
+        if (activeTab === 'playbook') await loadActions();
       }
     } catch (e: any) {
       toasts.error('Error scan: ' + (e.message || e));
@@ -168,6 +210,7 @@
       if (res.success) {
         toasts.success(`Cuenta ${login} bloqueada, ${res.data.sessions_terminated} sesiones terminadas`);
         await loadSessions();
+        await loadActions();
       }
     } catch (e: any) {
       toasts.error('Error: ' + (e.message || e));
@@ -223,7 +266,12 @@
     try {
       const res = await dsamApi.runSeatAudit();
       if (res.success) {
+        lastAuditResult = {
+          tenants_audited: res.data.tenants_audited,
+          tenants_over_limit: res.data.tenants_over_limit,
+        };
         toasts.success(`Auditoría: ${res.data.tenants_audited} tenants, ${res.data.tenants_over_limit} excedidos`);
+        await loadAudit();
       }
     } catch (e: any) {
       toasts.error('Error: ' + (e.message || e));
@@ -238,6 +286,7 @@
     else if (tab === 'geo') loadGeo();
     else if (tab === 'rules') loadRules();
     else if (tab === 'playbook') loadActions();
+    else if (tab === 'audit') loadAudit();
   }
 
   // ── Auto Refresh ──
@@ -248,6 +297,7 @@
         if (activeTab === 'dashboard') loadDashboard();
         else if (activeTab === 'sessions') loadSessions();
         else if (activeTab === 'geo') loadGeo();
+        else if (activeTab === 'audit') loadAudit();
       }, 15000);
     } else if (refreshInterval) {
       clearInterval(refreshInterval);
@@ -277,6 +327,33 @@
     }
   }
 
+  function accountBadgeClass(type: string): string {
+    switch (type) {
+      case 'billable': return 'badge-success';
+      case 'operational': return 'badge-warning';
+      default: return 'badge-neutral';
+    }
+  }
+
+  function accountLabel(type: string): string {
+    switch (type) {
+      case 'billable': return 'Facturable';
+      case 'operational': return 'Operativa';
+      default: return 'Sin clasificar';
+    }
+  }
+
+  function displayIp(ip: string): string {
+    return ['0.0.0.0', '127.0.0.1', '::1', 'unknown'].includes(ip) ? 'Sin IP real' : ip;
+  }
+
+  function toggleTenantExpanded(tenantDb: string) {
+    expandedTenants = {
+      ...expandedTenants,
+      [tenantDb]: !expandedTenants[tenantDb],
+    };
+  }
+
   const ruleTypes = [
     { value: 'single_session', label: 'Sesión Única' },
     { value: 'max_sessions', label: 'Máx. Sesiones' },
@@ -287,7 +364,11 @@
   ];
 
   // ── Lifecycle ──
-  onMount(() => loadDashboard());
+  onMount(async () => {
+    await Promise.all([loadDashboard(), dsamApi.listTenants().then((res) => {
+      if (res.success) tenantOptions = res.data;
+    }).catch(() => undefined)]);
+  });
   onDestroy(() => {
     if (refreshInterval) clearInterval(refreshInterval);
   });
@@ -442,68 +523,125 @@
       <button class="btn-sm btn-accent" onclick={loadSessions}>
         <Search class="w-4 h-4" /> Buscar
       </button>
-      <span class="text-sm text-gray-400">{sessionsTotal} sesiones</span>
+      <span class="text-sm text-gray-400">{sessionsTotal} sesiones · {sessionsUsersTotal} usuarios</span>
     </div>
 
-    <div class="card">
-      <div class="dsam-table-wrap">
-        <table class="dsam-table">
-          <thead>
-            <tr>
-              <th>Tenant</th>
-              <th>Usuario</th>
-              <th>IP</th>
-              <th>País / Ciudad</th>
-              <th>Última Act.</th>
-              <th>Acciones</th>
-            </tr>
-          </thead>
-          <tbody>
-            {#each sessions as s}
-              <tr>
-                <td><span class="font-mono text-sm">{s.tenant_db}</span></td>
-                <td>{s.odoo_login || '—'}</td>
-                <td><span class="font-mono text-xs">{s.ip_address}</span></td>
-                <td>
-                  {#if s.country}
-                    <MapPin class="inline w-3 h-3" /> {s.country}
-                    {#if s.city}, {s.city}{/if}
-                  {:else}
-                    <span class="text-gray-500">—</span>
-                  {/if}
-                </td>
-                <td class="text-xs">{s.last_activity || '—'}</td>
-                <td>
-                  <button class="btn-sm btn-secondary" onclick={() => terminateSession(s.redis_key)} title="Terminar sesión">
-                    <Zap class="w-3 h-3" />
-                  </button>
-                  {#if s.odoo_login}
-                    <button class="btn-sm btn-secondary" onclick={() => lockAccount(s.tenant_db, s.odoo_login!)} title="Bloquear cuenta">
-                      <Lock class="w-3 h-3" />
-                    </button>
-                  {/if}
-                </td>
-              </tr>
-            {/each}
-          </tbody>
-        </table>
+    {#if sessionGroups.length === 0}
+      <div class="card text-gray-400">No se encontraron sesiones para el filtro actual.</div>
+    {/if}
+
+    {#each sessionGroups as group}
+      <div class="card tenant-group-card">
+        <button class="tenant-group-header" onclick={() => toggleTenantExpanded(group.tenant_db)}>
+          <div>
+            <div class="flex items-center gap-2">
+              {#if expandedTenants[group.tenant_db]}
+                <ChevronDown class="w-4 h-4" />
+              {:else}
+                <ChevronRight class="w-4 h-4" />
+              {/if}
+              <span class="font-mono text-sm text-white">{group.tenant_db}</span>
+              {#if group.customer_name}
+                <span class="text-sm text-gray-400">• {group.customer_name}</span>
+              {/if}
+            </div>
+            <div class="tenant-group-meta">
+              <span><Users class="inline w-3 h-3" /> {group.users.length} usuarios</span>
+              <span><Network class="inline w-3 h-3" /> {group.total_sessions} sesiones</span>
+              <span class="text-emerald-400">Facturables: {group.billable_users}</span>
+              <span class="text-amber-400">Operativas: {group.operational_users}</span>
+            </div>
+          </div>
+        </button>
+
+        {#if expandedTenants[group.tenant_db]}
+          <div class="dsam-table-wrap">
+            <table class="dsam-table">
+              <thead>
+                <tr>
+                  <th>Usuario</th>
+                  <th>Tipo</th>
+                  <th>IPs</th>
+                  <th>País / Ciudad</th>
+                  <th>Sesiones</th>
+                  <th>Última Act.</th>
+                  <th>Acciones</th>
+                </tr>
+              </thead>
+              <tbody>
+                {#each group.users as user}
+                  <tr>
+                    <td>{user.odoo_login || '—'}</td>
+                    <td><span class={accountBadgeClass(user.account_type)}>{accountLabel(user.account_type)}</span></td>
+                    <td>
+                      <div class="ip-chip-wrap">
+                        {#each user.ip_addresses as ip}
+                          <span class="ip-chip">{displayIp(ip)}</span>
+                        {/each}
+                      </div>
+                    </td>
+                    <td>
+                      {#if user.country}
+                        <MapPin class="inline w-3 h-3" /> {user.country}{user.city ? `, ${user.city}` : ''}
+                      {:else}
+                        <span class="text-gray-500">Sin geodatos</span>
+                      {/if}
+                    </td>
+                    <td>{user.session_count}</td>
+                    <td class="text-xs">{user.last_activity || '—'}</td>
+                    <td>
+                      <div class="flex gap-1 flex-wrap">
+                        {#each user.sessions as session}
+                          <button class="btn-sm btn-secondary" onclick={() => terminateSession(session.redis_key)} title="Terminar sesión">
+                            <Zap class="w-3 h-3" />
+                          </button>
+                        {/each}
+                        {#if user.odoo_login}
+                          <button class="btn-sm btn-secondary" onclick={() => lockAccount(group.tenant_db, user.odoo_login!)} title="Bloquear cuenta">
+                            <Lock class="w-3 h-3" />
+                          </button>
+                        {/if}
+                      </div>
+                    </td>
+                  </tr>
+                {/each}
+              </tbody>
+            </table>
+          </div>
+        {/if}
       </div>
-
-      {#if sessionsTotal > 50}
-        <div class="dsam-pagination">
-          <button class="btn-sm btn-secondary" disabled={sessionsPage <= 1} onclick={() => { sessionsPage--; loadSessions(); }}>← Anterior</button>
-          <span class="text-sm">Página {sessionsPage}</span>
-          <button class="btn-sm btn-secondary" onclick={() => { sessionsPage++; loadSessions(); }}>Siguiente →</button>
-        </div>
-      {/if}
-    </div>
+    {/each}
   {/if}
 
   <!-- ═══ GEO TAB ═══ -->
   {#if activeTab === 'geo'}
+    <div class="dsam-grid-4">
+      <div class="stat-card">
+        <div class="stat-value">{livePositions.length}</div>
+        <div class="stat-label">Sesiones Mapeadas</div>
+      </div>
+      <div class="stat-card">
+        <div class="stat-value">{heatmapData.length}</div>
+        <div class="stat-label">Puntos Heatmap</div>
+      </div>
+      <div class="stat-card">
+        <div class="stat-value" style="color: {geoMeta.unmapped_active_sessions ? '#f59e0b' : '#00FF9F'}">{geoMeta.unmapped_active_sessions || 0}</div>
+        <div class="stat-label">Sin Geolocalizar</div>
+      </div>
+      <div class="stat-card">
+        <div class="stat-value">{geoMeta.mapped_active_sessions || 0}</div>
+        <div class="stat-label">Con GeoIP</div>
+      </div>
+    </div>
+
     <div class="dsam-grid-2">
       <div class="card">
         <h3 class="section-heading"><Globe class="inline w-5 h-5" /> Sesiones en Vivo ({livePositions.length})</h3>
+        {#if livePositions.length === 0}
+          <div class="text-sm text-amber-300 mb-3">
+            No hay puntos en vivo. Si ya hiciste sync, falta GeoIP real para mapear IPs o las sesiones no exponen una IP pública utilizable.
+          </div>
+        {/if}
         <div class="dsam-table-wrap" style="max-height: 500px; overflow-y: auto;">
           <table class="dsam-table">
             <thead>
@@ -526,6 +664,21 @@
 
       <div class="card">
         <h3 class="section-heading"><MapPin class="inline w-5 h-5" /> Heatmap — Top Ubicaciones (30 días)</h3>
+        {#if heatmapData.length > 0}
+          <div class="geo-canvas">
+            {#each heatmapData.slice(0, 30) as point}
+              <span
+                class="geo-point"
+                style={`left:${((point.lon + 180) / 360) * 100}%; top:${((90 - point.lat) / 180) * 100}%; width:${Math.min(28, 8 + point.count)}px; height:${Math.min(28, 8 + point.count)}px;`}
+                title={`${point.country} / ${point.city || '—'} · ${point.count}`}
+              ></span>
+            {/each}
+          </div>
+        {:else}
+          <div class="text-sm text-amber-300 mb-3">
+            Sin puntos geográficos disponibles todavía. La ausencia de GeoIP/MMDB o de IP pública en la sesión deja esta vista vacía.
+          </div>
+        {/if}
         <div class="dsam-table-wrap" style="max-height: 500px; overflow-y: auto;">
           <table class="dsam-table">
             <thead>
@@ -562,20 +715,25 @@
         <h3 class="section-heading">Crear Regla de Seguridad</h3>
         <div class="dsam-form-grid">
           <div>
-            <label class="text-sm font-medium">Tipo de Regla</label>
-            <select class="input" bind:value={newRuleType}>
+            <label class="text-sm font-medium" for="dsam-rule-type">Tipo de Regla</label>
+            <select id="dsam-rule-type" class="input" bind:value={newRuleType}>
               {#each ruleTypes as rt}
                 <option value={rt.value}>{rt.label}</option>
               {/each}
             </select>
           </div>
           <div>
-            <label class="text-sm font-medium">Tenant (vacío = global)</label>
-            <input class="input" type="text" bind:value={newRuleTenant} placeholder="ej: smarttoolsrd" />
+            <label class="text-sm font-medium" for="dsam-rule-tenant">Tenant (vacío = global)</label>
+            <select id="dsam-rule-tenant" class="input" bind:value={newRuleTenant}>
+              <option value="">GLOBAL</option>
+              {#each tenantOptions as tenant}
+                <option value={tenant.tenant_db}>{tenant.tenant_db}{tenant.customer_name ? ` — ${tenant.customer_name}` : ''}</option>
+              {/each}
+            </select>
           </div>
           <div style="grid-column: span 2;">
-            <label class="text-sm font-medium">Descripción</label>
-            <input class="input" type="text" bind:value={newRuleDesc} placeholder="Descripción de la regla" />
+            <label class="text-sm font-medium" for="dsam-rule-description">Descripción</label>
+            <input id="dsam-rule-description" class="input" type="text" bind:value={newRuleDesc} placeholder="Descripción de la regla" />
           </div>
         </div>
         <div class="mt-3 flex gap-2">
@@ -622,6 +780,23 @@
 
   <!-- ═══ PLAYBOOK TAB ═══ -->
   {#if activeTab === 'playbook'}
+    <div class="dsam-grid-2">
+      {#each playbookTemplates as template}
+        <div class="card playbook-template-card">
+          <div class="flex items-center justify-between gap-2 mb-2">
+            <h3 class="section-heading mb-0"><ClipboardList class="inline w-4 h-4" /> {template.title}</h3>
+            <span class={severityColor(template.severity)}>{template.severity.toUpperCase()}</span>
+          </div>
+          <p class="text-sm text-gray-300 mb-3">{template.automation}</p>
+          <ol class="playbook-steps">
+            {#each template.steps as step}
+              <li>{step}</li>
+            {/each}
+          </ol>
+        </div>
+      {/each}
+    </div>
+
     <div class="dsam-filter-bar">
       {#each [
         { key: 'unresolved', label: 'Sin Resolver' },
@@ -690,6 +865,9 @@
       <button class="btn-sm btn-accent" onclick={runAudit}>
         <Play class="w-4 h-4" /> Ejecutar Auditoría de Seats
       </button>
+      {#if lastAuditResult}
+        <span class="text-sm text-gray-400">{lastAuditResult.tenants_audited} tenants auditados · {lastAuditResult.tenants_over_limit} excedidos</span>
+      {/if}
     </div>
 
     <div class="card">
@@ -698,6 +876,45 @@
         Compara usuarios únicos activos en Redis contra seats comprados en la suscripción.
         Ejecuta la auditoría para obtener datos actualizados.
       </p>
+
+      {#if auditReport?.tenants?.length}
+        <div class="dsam-table-wrap">
+          <table class="dsam-table">
+            <thead>
+              <tr>
+                <th>Tenant</th>
+                <th>Cliente</th>
+                <th>Plan</th>
+                <th>Seats</th>
+                <th>Facturables</th>
+                <th>Operativas</th>
+                <th>Sesiones</th>
+                <th>HWM</th>
+                <th>Diferencia</th>
+              </tr>
+            </thead>
+            <tbody>
+              {#each auditReport.tenants as tenant}
+                <tr>
+                  <td class="font-mono text-sm">{tenant.tenant_db}</td>
+                  <td>{tenant.customer_name || '—'}</td>
+                  <td>{tenant.plan || '—'} <span class="text-xs text-gray-500">({tenant.subscription_status || '—'})</span></td>
+                  <td>{tenant.seats_purchased}</td>
+                  <td>{tenant.active_users}</td>
+                  <td>{tenant.operational_users}</td>
+                  <td>{tenant.active_sessions}</td>
+                  <td>{tenant.hwm_value ?? '—'}</td>
+                  <td>
+                    <span class={tenant.over_limit ? 'badge-danger' : 'badge-success'}>{tenant.seats_diff}</span>
+                  </td>
+                </tr>
+              {/each}
+            </tbody>
+          </table>
+        </div>
+      {:else}
+        <div class="text-sm text-gray-500">Sin datos de reconciliación todavía.</div>
+      {/if}
     </div>
   {/if}
 </div>
@@ -814,5 +1031,75 @@
     display: grid;
     grid-template-columns: 1fr 1fr;
     gap: 1rem;
+  }
+  .tenant-group-card {
+    margin-bottom: 1rem;
+  }
+  .tenant-group-header {
+    width: 100%;
+    display: flex;
+    justify-content: space-between;
+    align-items: flex-start;
+    text-align: left;
+    background: transparent;
+    border: none;
+    color: inherit;
+    padding: 0 0 0.75rem 0;
+    cursor: pointer;
+  }
+  .tenant-group-meta {
+    display: flex;
+    gap: 0.75rem;
+    flex-wrap: wrap;
+    margin-top: 0.35rem;
+    font-size: 0.75rem;
+    color: rgba(255, 255, 255, 0.6);
+  }
+  .ip-chip-wrap {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 0.35rem;
+  }
+  .ip-chip {
+    display: inline-flex;
+    align-items: center;
+    padding: 0.15rem 0.45rem;
+    border-radius: 999px;
+    background: rgba(255, 255, 255, 0.06);
+    color: rgba(255, 255, 255, 0.78);
+    font-size: 0.7rem;
+    font-family: 'JetBrains Mono', monospace;
+  }
+  .geo-canvas {
+    position: relative;
+    height: 220px;
+    border: 1px solid rgba(255, 255, 255, 0.08);
+    border-radius: 0.75rem;
+    background:
+      linear-gradient(to bottom, rgba(0, 59, 115, 0.18), rgba(0, 0, 0, 0.18)),
+      repeating-linear-gradient(to right, rgba(255,255,255,0.04) 0, rgba(255,255,255,0.04) 1px, transparent 1px, transparent 12.5%),
+      repeating-linear-gradient(to bottom, rgba(255,255,255,0.04) 0, rgba(255,255,255,0.04) 1px, transparent 1px, transparent 25%);
+    overflow: hidden;
+    margin-bottom: 1rem;
+  }
+  .geo-point {
+    position: absolute;
+    transform: translate(-50%, -50%);
+    border-radius: 999px;
+    background: rgba(0, 255, 159, 0.45);
+    border: 1px solid rgba(0, 255, 159, 0.9);
+    box-shadow: 0 0 0 4px rgba(0, 255, 159, 0.08);
+  }
+  .playbook-template-card {
+    margin-bottom: 1rem;
+  }
+  .playbook-steps {
+    margin: 0;
+    padding-left: 1rem;
+    color: rgba(255, 255, 255, 0.76);
+    font-size: 0.875rem;
+  }
+  .playbook-steps li + li {
+    margin-top: 0.4rem;
   }
 </style>

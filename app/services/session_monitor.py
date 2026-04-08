@@ -3,20 +3,24 @@ DSAM — Session Monitor Service
 Escanea Redis (PCT 149) para capturar sesiones activas de Odoo,
 geolocaliza IPs y sincroniza snapshots a la BD de ERP Core.
 """
-import asyncio
 import json
 import logging
 import math
+from dataclasses import dataclass
 from datetime import datetime, timedelta
 from typing import Any, Optional
 
-import redis.asyncio as aioredis
 from sqlalchemy import select, delete, and_
 from sqlalchemy.orm import Session
 
+try:
+    import redis.asyncio as aioredis
+except ModuleNotFoundError:  # pragma: no cover - depende del entorno local
+    aioredis = None
+
 from ..config import (
     REDIS_HOST, REDIS_PORT, REDIS_PASSWORD, REDIS_DB,
-    GEOIP_DB_PATH, DSAM_POLL_INTERVAL_SECONDS,
+    GEOIP_DB_PATH, DSAM_POLL_INTERVAL_SECONDS, DSAM_REDIS_SESSION_SOURCES,
 )
 from ..models.database import (
     ActiveSession, SessionGeoEvent, TenantSessionConfig,
@@ -24,13 +28,26 @@ from ..models.database import (
 
 logger = logging.getLogger(__name__)
 
+_PLACEHOLDER_IPS = {"0.0.0.0", "127.0.0.1", "::1", "localhost", "unknown"}
+
+
+@dataclass(frozen=True)
+class RedisSessionSource:
+    """Origen Redis de sesiones Odoo para DSAM."""
+    redis_db: int
+    match_pattern: str
+    app_name: str
+
 # ── GeoIP2 lazy loader ──
 _geoip_reader = None
+_geoip_unavailable = False
 
 
 def _get_geoip_reader():
     """Carga GeoIP2 bajo demanda. Si no existe el archivo MMDB, retorna None."""
-    global _geoip_reader
+    global _geoip_reader, _geoip_unavailable
+    if _geoip_unavailable:
+        return None
     if _geoip_reader is not None:
         return _geoip_reader
     try:
@@ -39,6 +56,7 @@ def _get_geoip_reader():
         logger.info("GeoIP2 database loaded: %s", GEOIP_DB_PATH)
     except Exception as e:
         logger.warning("GeoIP2 not available (%s), geolocation disabled", e)
+        _geoip_unavailable = True
         _geoip_reader = None
     return _geoip_reader
 
@@ -85,79 +103,221 @@ def haversine_km(lat1: float, lon1: float, lat2: float, lon2: float) -> float:
     return 2 * R * math.atan2(math.sqrt(a), math.sqrt(1 - a))
 
 
+def _parse_epoch_or_iso(value: Any) -> Optional[datetime]:
+    """Convierte timestamps epoch/ISO a datetime UTC."""
+    if value in (None, "", 0):
+        return None
+    if isinstance(value, datetime):
+        return value
+    if isinstance(value, (int, float)):
+        try:
+            return datetime.utcfromtimestamp(value)
+        except (OverflowError, OSError, ValueError):
+            return None
+    if isinstance(value, str):
+        try:
+            return datetime.fromisoformat(value.replace("Z", "+00:00")).replace(tzinfo=None)
+        except ValueError:
+            try:
+                return datetime.utcfromtimestamp(float(value))
+            except (OverflowError, OSError, ValueError):
+                return None
+    return None
+
+
+def _is_authenticated_session(data: dict[str, Any]) -> bool:
+    """Filtra sesiones anónimas irrelevantes para DSAM."""
+    return bool(data.get("uid") or data.get("login") or data.get("session_token"))
+
+
+def _is_placeholder_ip(ip: Optional[str]) -> bool:
+    """Detecta IPs vacías o internas que no sirven para visualización externa."""
+    normalized = (ip or "").strip().lower()
+    return not normalized or normalized in _PLACEHOLDER_IPS
+
+
+def _extract_ip_from_trace(trace_data: Any) -> Optional[str]:
+    """Busca una IP usable dentro del _trace de Odoo 19."""
+    if not isinstance(trace_data, list):
+        return None
+
+    fallback: Optional[str] = None
+    for item in trace_data:
+        if not isinstance(item, dict):
+            continue
+        candidate = (item.get("ip_address") or item.get("ip") or "").strip()
+        if not candidate:
+            continue
+        if fallback is None:
+            fallback = candidate
+        if not _is_placeholder_ip(candidate):
+            return candidate
+    return fallback
+
+
+def _extract_ip_address(data: dict[str, Any]) -> str:
+    """Extrae la mejor IP disponible desde distintas variantes del payload."""
+    direct_candidates = [
+        data.get("ip"),
+        data.get("remote_addr"),
+        data.get("ip_address"),
+        data.get("client_ip"),
+        data.get("forwarded_for"),
+        data.get("x_forwarded_for"),
+    ]
+    for candidate in direct_candidates:
+        if isinstance(candidate, str) and candidate.strip():
+            return candidate.split(",")[0].strip()
+
+    trace_ip = _extract_ip_from_trace(data.get("_trace"))
+    if trace_ip:
+        return trace_ip
+
+    return "0.0.0.0"
+
+
+def _extract_user_agent(data: dict[str, Any]) -> str:
+    """Extrae un user agent o fallback descriptivo si existe."""
+    if isinstance(data.get("user_agent"), str) and data.get("user_agent", "").strip():
+        return data["user_agent"]
+
+    trace_data = data.get("_trace")
+    if isinstance(trace_data, list) and trace_data:
+        first = trace_data[0]
+        if isinstance(first, dict):
+            browser = first.get("browser")
+            platform = first.get("platform")
+            if browser or platform:
+                return " / ".join(part for part in [browser, platform] if part)
+
+    return ""
+
+
+def _get_session_sources() -> list[RedisSessionSource]:
+    """Parses DSAM Redis session sources from env/config."""
+    sources: list[RedisSessionSource] = []
+    raw = (DSAM_REDIS_SESSION_SOURCES or "").strip()
+    if raw:
+        for chunk in raw.split(","):
+            parts = [part.strip() for part in chunk.split("|")]
+            if len(parts) < 2:
+                continue
+            try:
+                redis_db = int(parts[0])
+            except ValueError:
+                logger.warning("Invalid DSAM Redis source db: %s", parts[0])
+                continue
+            pattern = parts[1] or "session:*"
+            app_name = parts[2] if len(parts) >= 3 and parts[2] else f"redis-db-{redis_db}"
+            sources.append(RedisSessionSource(redis_db=redis_db, match_pattern=pattern, app_name=app_name))
+
+    if not sources:
+        sources.append(RedisSessionSource(redis_db=REDIS_DB, match_pattern="session:*", app_name="legacy"))
+    return sources
+
+
 # ═══════════════════════════════════════════════════════
 # Redis Session Scanner
 # ═══════════════════════════════════════════════════════
 
-async def get_redis_pool() -> aioredis.Redis:
+async def get_redis_pool(redis_db: Optional[int] = None) -> Any:
     """Crea pool async de Redis."""
+    if aioredis is None:
+        raise RuntimeError("redis package is not installed")
+
     return aioredis.Redis(
         host=REDIS_HOST,
         port=REDIS_PORT,
         password=REDIS_PASSWORD,
-        db=REDIS_DB,
+        db=REDIS_DB if redis_db is None else redis_db,
         decode_responses=True,
         socket_connect_timeout=5,
         socket_timeout=5,
     )
 
 
-async def scan_redis_sessions(r: aioredis.Redis) -> list[dict[str, Any]]:
+async def scan_redis_sessions() -> list[dict[str, Any]]:
     """
-    Escanea todas las claves session:* en Redis.
+    Escanea todas las claves configuradas de sesiones Odoo en Redis.
     Retorna lista de dicts con la data de cada sesión.
-    Formato de clave: session:{subdomain}:{session_id}
+    Soporta múltiples DB/prefix por versión de Odoo.
     """
     sessions = []
-    cursor = "0"
-    while True:
-        cursor, keys = await r.scan(cursor=cursor, match="session:*", count=200)
-        for key in keys:
-            try:
-                raw = await r.get(key)
-                if not raw:
-                    continue
-                data = json.loads(raw) if isinstance(raw, str) else raw
-                parts = key.split(":", 2)
-                tenant_db = parts[1] if len(parts) >= 3 else "unknown"
-                sessions.append({
-                    "redis_key": key,
-                    "tenant_db": tenant_db,
-                    "session_id": parts[2] if len(parts) >= 3 else key,
-                    "data": data,
-                })
-            except Exception as e:
-                logger.debug("Error parsing session key %s: %s", key, e)
-        if cursor == 0 or cursor == "0":
-            break
+    for source in _get_session_sources():
+        try:
+            r = await get_redis_pool(source.redis_db)
+        except Exception as e:
+            logger.error("Cannot connect to Redis source db=%s (%s): %s", source.redis_db, source.app_name, e)
+            continue
+
+        cursor = "0"
+        source_count = 0
+        try:
+            while True:
+                cursor, keys = await r.scan(cursor=cursor, match=source.match_pattern, count=200)
+                for key in keys:
+                    try:
+                        raw = await r.get(key)
+                        if not raw:
+                            continue
+                        data = json.loads(raw) if isinstance(raw, str) else raw
+                        if not isinstance(data, dict) or not _is_authenticated_session(data):
+                            continue
+                        tenant_db = data.get("db") or "unknown"
+                        session_id = key.rsplit(":", 1)[-1]
+                        sessions.append({
+                            "redis_key": key,
+                            "tenant_db": tenant_db,
+                            "session_id": session_id,
+                            "source_db": source.redis_db,
+                            "source_app": source.app_name,
+                            "source_pattern": source.match_pattern,
+                            "data": data,
+                        })
+                        source_count += 1
+                    except Exception as e:
+                        logger.debug("Error parsing session key %s from %s: %s", key, source.app_name, e)
+                if cursor == 0 or cursor == "0":
+                    break
+            logger.info(
+                "DSAM scanned Redis source db=%s app=%s pattern=%s sessions=%s",
+                source.redis_db,
+                source.app_name,
+                source.match_pattern,
+                source_count,
+            )
+        finally:
+            await r.aclose()
+
     return sessions
 
 
 def parse_session_data(session: dict) -> dict[str, Any]:
     """Extrae campos relevantes del payload de sesión Odoo en Redis."""
     data = session.get("data", {})
-    # Odoo almacena: db, login, uid, session_token, context, etc.
     if isinstance(data, str):
         try:
             data = json.loads(data)
         except Exception:
             data = {}
+
+    ip_address = _extract_ip_address(data)
+    session_start = (
+        _parse_epoch_or_iso(data.get("created_at"))
+        or _parse_epoch_or_iso(data.get("create_time"))
+    )
+    last_activity = _parse_epoch_or_iso(data.get("last_activity")) or session_start
+
     return {
         "redis_session_key": session["redis_key"],
-        "tenant_db": session.get("tenant_db", data.get("db", "unknown")),
+        "tenant_db": data.get("db") or session.get("tenant_db", "unknown"),
         "odoo_uid": data.get("uid"),
         "odoo_login": data.get("login"),
-        "ip_address": data.get("ip", data.get("remote_addr", "0.0.0.0")),
-        "user_agent": data.get("user_agent", ""),
-        "session_start": data.get("created_at"),
-        "last_activity": data.get("last_activity"),
+        "ip_address": ip_address,
+        "user_agent": _extract_user_agent(data),
+        "session_start": session_start,
+        "last_activity": last_activity,
     }
-
-
-# ═══════════════════════════════════════════════════════
-# Sync to DB
-# ═══════════════════════════════════════════════════════
-
 async def sync_sessions_to_db(db: Session) -> dict[str, int]:
     """
     Escanea Redis → geolocaliza → upsert en active_sessions.
@@ -167,13 +327,7 @@ async def sync_sessions_to_db(db: Session) -> dict[str, int]:
     """
     stats = {"scanned": 0, "created": 0, "updated": 0, "removed": 0}
     try:
-        r = await get_redis_pool()
-    except Exception as e:
-        logger.error("Cannot connect to Redis: %s", e)
-        return stats
-
-    try:
-        raw_sessions = await scan_redis_sessions(r)
+        raw_sessions = await scan_redis_sessions()
         stats["scanned"] = len(raw_sessions)
         now = datetime.utcnow()
         active_keys: set[str] = set()
@@ -195,9 +349,28 @@ async def sync_sessions_to_db(db: Session) -> dict[str, int]:
                 existing.last_polled_at = now
                 existing.last_activity = parsed.get("last_activity")
                 existing.is_active = True
-                # Actualizar geo si cambió IP
-                if existing.ip_address != parsed["ip_address"]:
+                existing.odoo_uid = parsed.get("odoo_uid")
+                existing.odoo_login = parsed.get("odoo_login")
+                if parsed.get("user_agent"):
+                    existing.user_agent = parsed.get("user_agent")
+
+                should_refresh_ip = not _is_placeholder_ip(parsed["ip_address"])
+                should_backfill_geo = (
+                    not _is_placeholder_ip(existing.ip_address)
+                    and existing.geo_lat is None
+                    and geo["lat"] is not None
+                )
+
+                # Actualizar geo si cambió la IP real o si faltaba geo previamente
+                if should_refresh_ip and existing.ip_address != parsed["ip_address"]:
                     existing.ip_address = parsed["ip_address"]
+                    existing.geo_country = geo["country"]
+                    existing.geo_country_code = geo["country_code"]
+                    existing.geo_region = geo["region"]
+                    existing.geo_city = geo["city"]
+                    existing.geo_lat = geo["lat"]
+                    existing.geo_lon = geo["lon"]
+                elif should_backfill_geo:
                     existing.geo_country = geo["country"]
                     existing.geo_country_code = geo["country_code"]
                     existing.geo_region = geo["region"]
@@ -262,8 +435,6 @@ async def sync_sessions_to_db(db: Session) -> dict[str, int]:
         logger.error("Error syncing sessions: %s", e)
         db.rollback()
         raise
-    finally:
-        await r.aclose()
 
     return stats
 

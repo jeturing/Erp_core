@@ -147,6 +147,10 @@ REDIS_URL = os.getenv(
 # ═══════════════════════════════════════════════════════
 GEOIP_DB_PATH = os.getenv("GEOIP_DB_PATH", str(_project_root / "data" / "GeoLite2-City.mmdb"))
 DSAM_POLL_INTERVAL_SECONDS = int(os.getenv("DSAM_POLL_INTERVAL_SECONDS", "60"))
+DSAM_REDIS_SESSION_SOURCES = os.getenv(
+    "DSAM_REDIS_SESSION_SOURCES",
+    "0|odoo17:session:*|odoo17,2|odoo19:session:*|odoo19",
+)
 DSAM_IMPOSSIBLE_TRAVEL_MIN_HOURS = float(os.getenv("DSAM_IMPOSSIBLE_TRAVEL_MIN_HOURS", "3"))
 DSAM_IMPOSSIBLE_TRAVEL_MIN_KM = float(os.getenv("DSAM_IMPOSSIBLE_TRAVEL_MIN_KM", "500"))
 

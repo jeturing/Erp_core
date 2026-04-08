@@ -9,20 +9,21 @@ from typing import Any, Optional
 
 from fastapi import APIRouter, Depends, HTTPException, Query, Request, Cookie
 from pydantic import BaseModel, Field
-from sqlalchemy import select, and_, func, desc, update
+from sqlalchemy import select, and_, func, desc, or_
 from sqlalchemy.orm import Session
 
 from ..models.database import (
     ActiveSession, SessionSecurityRule, SessionGeoEvent,
     AccountSecurityAction, TenantSessionConfig,
     SessionRuleType, SessionActionType, SessionAlertSeverity,
-    get_db,
+    Customer, get_db,
 )
 from ..services.session_monitor import (
     sync_sessions_to_db, terminate_redis_session,
     get_active_sessions_by_tenant, get_active_sessions_by_user,
     get_session_stats, get_geo_heatmap_data,
 )
+from ..services.seat_events import get_non_billable_logins
 from ..security.session_rules import (
     run_full_security_scan, log_security_action, evaluate_rules_for_session,
 )
@@ -31,6 +32,67 @@ from ..tasks.seat_audit import run_seat_audit, get_seat_reconciliation_report
 logger = logging.getLogger(__name__)
 
 router = APIRouter(prefix="/api/dsam", tags=["DSAM – Session Monitoring"])
+
+
+PLAYBOOK_TEMPLATES = [
+    {
+        "id": "concurrent-login",
+        "title": "Login concurrente sospechoso",
+        "severity": "high",
+        "automation": "Terminar sesiones previas y forzar reautenticación",
+        "steps": [
+            "Verificar tenant y usuario impactado.",
+            "Comparar IP actual contra historial reciente.",
+            "Terminar sesiones previas si no pertenecen al usuario.",
+            "Escalar a bloqueo temporal si el patrón se repite.",
+        ],
+    },
+    {
+        "id": "impossible-travel",
+        "title": "Viaje imposible",
+        "severity": "critical",
+        "automation": "Bloqueo preventivo si hay cambio geográfico incompatible",
+        "steps": [
+            "Correlacionar la IP previa y la nueva ubicación.",
+            "Validar si existe VPN aprobada o whitelist.",
+            "Bloquear cuenta temporalmente si no hay justificación.",
+            "Solicitar cambio de contraseña y revisión de MFA.",
+        ],
+    },
+    {
+        "id": "new-device",
+        "title": "Nuevo dispositivo o navegador",
+        "severity": "medium",
+        "automation": "Notificación y enriquecimiento de contexto",
+        "steps": [
+            "Registrar user-agent e IP asociada.",
+            "Notificar a soporte si el tenant es sensible.",
+            "Solicitar validación al usuario ante actividad atípica.",
+        ],
+    },
+    {
+        "id": "seat-overage",
+        "title": "Exceso de seats facturables",
+        "severity": "high",
+        "automation": "Registrar snapshot y escalar a billing",
+        "steps": [
+            "Ejecutar reconciliación de seats.",
+            "Separar cuentas operativas de facturables.",
+            "Registrar HWM y alertar a billing/CSM.",
+        ],
+    },
+    {
+        "id": "country-restriction",
+        "title": "Acceso desde país restringido",
+        "severity": "high",
+        "automation": "Alertar y opcionalmente bloquear sesión",
+        "steps": [
+            "Confirmar política geo del tenant.",
+            "Revisar whitelist o excepciones configuradas.",
+            "Bloquear sesión si el acceso no está permitido.",
+        ],
+    },
+]
 
 
 # ── Auth helper (reuses admin auth from roles) ──
@@ -84,6 +146,102 @@ class UpdateTenantConfigRequest(BaseModel):
 
 class ResolveActionRequest(BaseModel):
     resolution_note: str
+
+
+def _load_customers_by_subdomain(db: Session, tenant_names: set[str]) -> dict[str, Customer]:
+    if not tenant_names:
+        return {}
+    result = db.execute(select(Customer).where(Customer.subdomain.in_(tenant_names)))
+    return {customer.subdomain: customer for customer in result.scalars().all()}
+
+
+def _classify_account_type(tenant_db: str, login: Optional[str], customer: Optional[Customer]) -> str:
+    normalized_login = (login or "").strip().lower()
+    if not normalized_login:
+        return "unknown"
+    excluded = get_non_billable_logins(
+        tenant_db,
+        customer=customer,
+        admin_email=customer.email if customer else None,
+    )
+    return "operational" if normalized_login in excluded else "billable"
+
+
+def _serialize_session(session: ActiveSession, customer: Optional[Customer]) -> dict[str, Any]:
+    return {
+        "id": session.id,
+        "redis_key": session.redis_session_key,
+        "tenant_db": session.tenant_db,
+        "customer_name": customer.company_name if customer else None,
+        "odoo_login": session.odoo_login,
+        "odoo_uid": session.odoo_uid,
+        "ip_address": session.ip_address,
+        "country": session.geo_country,
+        "country_code": session.geo_country_code,
+        "region": session.geo_region,
+        "city": session.geo_city,
+        "lat": session.geo_lat,
+        "lon": session.geo_lon,
+        "session_start": session.session_start.isoformat() if session.session_start else None,
+        "last_activity": session.last_activity.isoformat() if session.last_activity else None,
+        "first_seen": session.first_seen_at.isoformat() if session.first_seen_at else None,
+        "is_active": session.is_active,
+        "account_type": _classify_account_type(session.tenant_db, session.odoo_login, customer),
+    }
+
+
+def _build_grouped_sessions(sessions: list[ActiveSession], customers_by_subdomain: dict[str, Customer]) -> list[dict[str, Any]]:
+    grouped: dict[str, dict[str, Any]] = {}
+    for session in sessions:
+        tenant_group = grouped.setdefault(
+            session.tenant_db,
+            {
+                "tenant_db": session.tenant_db,
+                "customer_name": customers_by_subdomain.get(session.tenant_db).company_name if customers_by_subdomain.get(session.tenant_db) else None,
+                "total_sessions": 0,
+                "billable_users": 0,
+                "operational_users": 0,
+                "unknown_users": 0,
+                "users": {},
+            },
+        )
+        tenant_group["total_sessions"] += 1
+        account_type = _classify_account_type(session.tenant_db, session.odoo_login, customers_by_subdomain.get(session.tenant_db))
+        user_key = (session.odoo_login or "(sin-login)").strip() or "(sin-login)"
+        user_entry = tenant_group["users"].setdefault(
+            user_key,
+            {
+                "odoo_login": session.odoo_login,
+                "account_type": account_type,
+                "session_count": 0,
+                "ip_addresses": [],
+                "last_activity": None,
+                "country": session.geo_country,
+                "city": session.geo_city,
+                "sessions": [],
+            },
+        )
+        user_entry["session_count"] += 1
+        user_entry["sessions"].append(_serialize_session(session, customers_by_subdomain.get(session.tenant_db)))
+        if session.ip_address and session.ip_address not in user_entry["ip_addresses"]:
+            user_entry["ip_addresses"].append(session.ip_address)
+        if session.last_activity:
+            current_last = user_entry["last_activity"]
+            if current_last is None or session.last_activity.isoformat() > current_last:
+                user_entry["last_activity"] = session.last_activity.isoformat()
+
+    normalized_groups = []
+    for tenant_group in grouped.values():
+        users = list(tenant_group["users"].values())
+        users.sort(key=lambda item: ((item["account_type"] != "billable"), item["odoo_login"] or ""))
+        tenant_group["users"] = users
+        tenant_group["billable_users"] = sum(1 for item in users if item["account_type"] == "billable")
+        tenant_group["operational_users"] = sum(1 for item in users if item["account_type"] == "operational")
+        tenant_group["unknown_users"] = sum(1 for item in users if item["account_type"] == "unknown")
+        normalized_groups.append(tenant_group)
+
+    normalized_groups.sort(key=lambda item: item["total_sessions"], reverse=True)
+    return normalized_groups
 
 
 # ═══════════════════════════════════════════════════════
@@ -158,8 +316,9 @@ async def list_all_sessions(
     count_query = select(func.count(ActiveSession.id))
 
     if tenant:
-        query = query.where(ActiveSession.tenant_db == tenant)
-        count_query = count_query.where(ActiveSession.tenant_db == tenant)
+        tenant_like = f"%{tenant.strip()}%"
+        query = query.where(ActiveSession.tenant_db.ilike(tenant_like))
+        count_query = count_query.where(ActiveSession.tenant_db.ilike(tenant_like))
     if active_only:
         query = query.where(ActiveSession.is_active == True)
         count_query = count_query.where(ActiveSession.is_active == True)
@@ -169,31 +328,43 @@ async def list_all_sessions(
     query = query.order_by(ActiveSession.last_activity.desc()).offset(offset).limit(limit)
     result = db.execute(query)
     sessions = result.scalars().all()
+    customers_by_subdomain = _load_customers_by_subdomain(db, {s.tenant_db for s in sessions})
 
     return {
         "success": True,
-        "data": [
-            {
-                "id": s.id,
-                "redis_key": s.redis_session_key,
-                "tenant_db": s.tenant_db,
-                "odoo_login": s.odoo_login,
-                "odoo_uid": s.odoo_uid,
-                "ip_address": s.ip_address,
-                "country": s.geo_country,
-                "country_code": s.geo_country_code,
-                "region": s.geo_region,
-                "city": s.geo_city,
-                "lat": s.geo_lat,
-                "lon": s.geo_lon,
-                "session_start": s.session_start.isoformat() if s.session_start else None,
-                "last_activity": s.last_activity.isoformat() if s.last_activity else None,
-                "first_seen": s.first_seen_at.isoformat() if s.first_seen_at else None,
-                "is_active": s.is_active,
-            }
-            for s in sessions
-        ],
+        "data": [_serialize_session(s, customers_by_subdomain.get(s.tenant_db)) for s in sessions],
         "meta": {"total": total, "page": page, "limit": limit},
+    }
+
+
+@router.get("/sessions/grouped")
+async def list_grouped_sessions(
+    request: Request,
+    access_token: str = Cookie(None),
+    tenant: Optional[str] = Query(None),
+    active_only: bool = Query(True),
+    db: Session = Depends(get_db),
+):
+    """Lista sesiones agrupadas por tenant y usuario, con IPs distintas por cuenta."""
+    _require_admin(request, access_token)
+    query = select(ActiveSession)
+    if tenant:
+        query = query.where(ActiveSession.tenant_db.ilike(f"%{tenant.strip()}%"))
+    if active_only:
+        query = query.where(ActiveSession.is_active == True)
+
+    sessions = db.execute(query.order_by(ActiveSession.tenant_db, ActiveSession.odoo_login, desc(ActiveSession.last_activity))).scalars().all()
+    customers_by_subdomain = _load_customers_by_subdomain(db, {s.tenant_db for s in sessions})
+    grouped = _build_grouped_sessions(sessions, customers_by_subdomain)
+
+    return {
+        "success": True,
+        "data": grouped,
+        "meta": {
+            "total_tenants": len(grouped),
+            "total_sessions": len(sessions),
+            "total_users": sum(len(group["users"]) for group in grouped),
+        },
     }
 
 
@@ -207,20 +378,10 @@ async def sessions_by_tenant(
     """Sesiones activas para un tenant específico."""
     _require_admin(request, access_token)
     sessions = await get_active_sessions_by_tenant(db, tenant_db)
+    customers_by_subdomain = _load_customers_by_subdomain(db, {tenant_db})
     return {
         "success": True,
-        "data": [
-            {
-                "id": s.id,
-                "redis_key": s.redis_session_key,
-                "odoo_login": s.odoo_login,
-                "ip_address": s.ip_address,
-                "country": s.geo_country,
-                "city": s.geo_city,
-                "last_activity": s.last_activity.isoformat() if s.last_activity else None,
-            }
-            for s in sessions
-        ],
+        "data": [_serialize_session(s, customers_by_subdomain.get(tenant_db)) for s in sessions],
         "meta": {"tenant": tenant_db, "count": len(sessions)},
     }
 
@@ -282,7 +443,19 @@ async def geo_heatmap(
     """Datos de mapa de calor geográfico."""
     _require_admin(request, access_token)
     data = await get_geo_heatmap_data(db, days=days)
-    return {"success": True, "data": data, "meta": {"days": days}}
+    active_total = db.execute(
+        select(func.count(ActiveSession.id)).where(ActiveSession.is_active == True)
+    ).scalar() or 0
+    mapped_total = db.execute(
+        select(func.count(ActiveSession.id)).where(
+            and_(ActiveSession.is_active == True, ActiveSession.geo_lat.isnot(None))
+        )
+    ).scalar() or 0
+    return {
+        "success": True,
+        "data": data,
+        "meta": {"days": days, "mapped_active_sessions": mapped_total, "unmapped_active_sessions": max(0, active_total - mapped_total)},
+    }
 
 
 @router.get("/geo/live")
@@ -302,6 +475,9 @@ async def geo_live_map(
         )
     )
     sessions = result.scalars().all()
+    total_active = db.execute(
+        select(func.count(ActiveSession.id)).where(ActiveSession.is_active == True)
+    ).scalar() or 0
     return {
         "success": True,
         "data": [
@@ -317,8 +493,47 @@ async def geo_live_map(
             }
             for s in sessions
         ],
-        "meta": {"count": len(sessions)},
+        "meta": {"count": len(sessions), "unmapped_active_sessions": max(0, total_active - len(sessions))},
     }
+
+
+@router.get("/tenants")
+async def list_dsam_tenants(
+    request: Request,
+    access_token: str = Cookie(None),
+    db: Session = Depends(get_db),
+):
+    """Catálogo de tenants para filtros y reglas DSAM."""
+    _require_admin(request, access_token)
+    customers = db.execute(select(Customer).order_by(Customer.company_name, Customer.subdomain)).scalars().all()
+    active_tenants = {
+        tenant for tenant in db.execute(select(ActiveSession.tenant_db).distinct()).scalars().all() if tenant
+    }
+
+    data = []
+    seen = set()
+    for customer in customers:
+        seen.add(customer.subdomain)
+        data.append(
+            {
+                "tenant_db": customer.subdomain,
+                "customer_name": customer.company_name,
+                "email": customer.email,
+                "has_active_sessions": customer.subdomain in active_tenants,
+            }
+        )
+
+    for tenant in sorted(active_tenants - seen):
+        data.append(
+            {
+                "tenant_db": tenant,
+                "customer_name": None,
+                "email": None,
+                "has_active_sessions": True,
+            }
+        )
+
+    return {"success": True, "data": data, "meta": {"count": len(data)}}
 
 
 # ═══════════════════════════════════════════════════════
@@ -374,9 +589,17 @@ async def create_rule(
     except ValueError:
         raise HTTPException(400, f"Invalid rule_type: {body.rule_type}")
 
+    normalized_tenant = (body.tenant_db or "").strip() or None
+    if normalized_tenant:
+        tenant_exists = db.execute(
+            select(Customer.id).where(Customer.subdomain == normalized_tenant)
+        ).scalar_one_or_none()
+        if tenant_exists is None:
+            raise HTTPException(400, f"Tenant inválido para DSAM: {normalized_tenant}")
+
     rule = SessionSecurityRule(
         rule_type=rule_type,
-        tenant_db=body.tenant_db,
+        tenant_db=normalized_tenant,
         is_enabled=body.is_enabled,
         config=body.config,
         exempt_users=body.exempt_users,
@@ -411,12 +634,20 @@ async def update_rule(
     if not rule:
         raise HTTPException(404, "Rule not found")
 
+    normalized_tenant = (body.tenant_db or "").strip() or None
+    if normalized_tenant:
+        tenant_exists = db.execute(
+            select(Customer.id).where(Customer.subdomain == normalized_tenant)
+        ).scalar_one_or_none()
+        if tenant_exists is None:
+            raise HTTPException(400, f"Tenant inválido para DSAM: {normalized_tenant}")
+
     rule.is_enabled = body.is_enabled
     rule.config = body.config
     rule.exempt_users = body.exempt_users
     rule.exempt_tenants = body.exempt_tenants
     rule.description = body.description
-    rule.tenant_db = body.tenant_db
+    rule.tenant_db = normalized_tenant
     db.commit()
 
     return {"success": True, "data": {"id": rule.id}, "meta": {}}
@@ -515,6 +746,15 @@ async def upsert_tenant_config(
 # ═══════════════════════════════════════════════════════
 # Security Actions / Playbook
 # ═══════════════════════════════════════════════════════
+
+@router.get("/playbook/templates")
+async def list_playbook_templates(
+    request: Request,
+    access_token: str = Cookie(None),
+):
+    """Catálogo base de playbooks operativos para DSAM."""
+    _require_admin(request, access_token)
+    return {"success": True, "data": PLAYBOOK_TEMPLATES, "meta": {"count": len(PLAYBOOK_TEMPLATES)}}
 
 @router.get("/actions")
 async def list_security_actions(

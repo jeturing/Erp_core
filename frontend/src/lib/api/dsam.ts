@@ -10,6 +10,7 @@ export interface SessionEntry {
   id: number;
   redis_key: string;
   tenant_db: string;
+  customer_name?: string | null;
   odoo_login: string | null;
   odoo_uid: number | null;
   ip_address: string;
@@ -23,6 +24,28 @@ export interface SessionEntry {
   last_activity: string | null;
   first_seen: string | null;
   is_active: boolean;
+  account_type?: 'billable' | 'operational' | 'unknown';
+}
+
+export interface GroupedSessionUser {
+  odoo_login: string | null;
+  account_type: 'billable' | 'operational' | 'unknown';
+  session_count: number;
+  ip_addresses: string[];
+  last_activity: string | null;
+  country: string | null;
+  city: string | null;
+  sessions: SessionEntry[];
+}
+
+export interface GroupedSessionTenant {
+  tenant_db: string;
+  customer_name: string | null;
+  total_sessions: number;
+  billable_users: number;
+  operational_users: number;
+  unknown_users: number;
+  users: GroupedSessionUser[];
 }
 
 export interface DashboardStats {
@@ -74,6 +97,21 @@ export interface TenantSessionConfig {
   last_seat_audit_at: string | null;
 }
 
+export interface DsamTenantOption {
+  tenant_db: string;
+  customer_name: string | null;
+  email: string | null;
+  has_active_sessions: boolean;
+}
+
+export interface PlaybookTemplate {
+  id: string;
+  title: string;
+  severity: string;
+  automation: string;
+  steps: string[];
+}
+
 export interface GeoPoint {
   country_code: string;
   country: string;
@@ -97,12 +135,40 @@ export interface LiveSession {
 export interface SeatAuditEntry {
   tenant_db: string;
   subscription_id: number;
+  customer_name?: string | null;
   seats_purchased: number;
   unique_active_users: number;
+  operational_users?: number;
   total_active_sessions: number;
   seats_diff: number;
   over_limit: boolean;
   plan: string | null;
+  active_logins?: string[];
+  operational_logins?: string[];
+}
+
+export interface SeatReconciliationTenant {
+  tenant_db: string;
+  customer_name: string | null;
+  subscription_id: number;
+  plan: string | null;
+  subscription_status: string | null;
+  seats_purchased: number;
+  active_users: number;
+  operational_users: number;
+  active_sessions: number;
+  hwm_value: number | null;
+  hwm_date: string | null;
+  last_snapshot_at: string | null;
+  seats_diff: number;
+  over_limit: boolean;
+  billable_logins: string[];
+  operational_logins: string[];
+}
+
+export interface SeatReconciliationReport {
+  report_date: string;
+  tenants: SeatReconciliationTenant[];
 }
 
 interface ApiResponse<T> {
@@ -140,6 +206,17 @@ export const dsamApi = {
     return api.get(`/api/dsam/sessions${qs ? '?' + qs : ''}`);
   },
 
+  async listGroupedSessions(params?: {
+    tenant?: string;
+    active_only?: boolean;
+  }): Promise<ApiResponse<GroupedSessionTenant[]>> {
+    const query = new URLSearchParams();
+    if (params?.tenant) query.set('tenant', params.tenant);
+    if (params?.active_only !== undefined) query.set('active_only', String(params.active_only));
+    const qs = query.toString();
+    return api.get(`/api/dsam/sessions/grouped${qs ? '?' + qs : ''}`);
+  },
+
   async getSessionsByTenant(tenantDb: string): Promise<ApiResponse<SessionEntry[]>> {
     return api.get(`/api/dsam/sessions/tenant/${tenantDb}`);
   },
@@ -155,6 +232,10 @@ export const dsamApi = {
 
   async getGeoLive(): Promise<ApiResponse<LiveSession[]>> {
     return api.get('/api/dsam/geo/live');
+  },
+
+  async listTenants(): Promise<ApiResponse<DsamTenantOption[]>> {
+    return api.get('/api/dsam/tenants');
   },
 
   // Rules
@@ -214,6 +295,10 @@ export const dsamApi = {
     return api.put(`/api/dsam/actions/${actionId}/resolve`, { resolution_note: note });
   },
 
+  async getPlaybookTemplates(): Promise<ApiResponse<PlaybookTemplate[]>> {
+    return api.get('/api/dsam/playbook/templates');
+  },
+
   // Account Lock/Unlock
   async lockAccount(tenantDb: string, odooLogin: string, reason: string): Promise<ApiResponse<any>> {
     return api.post('/api/dsam/accounts/lock', { tenant_db: tenantDb, odoo_login: odooLogin, reason });
@@ -229,11 +314,11 @@ export const dsamApi = {
   },
 
   // Seat Audit
-  async runSeatAudit(): Promise<ApiResponse<any>> {
+  async runSeatAudit(): Promise<ApiResponse<{ timestamp: string; tenants_audited: number; tenants_over_limit: number; details: SeatAuditEntry[] }>> {
     return api.post('/api/dsam/audit/seats', {});
   },
 
-  async getSeatReconciliation(tenant?: string): Promise<ApiResponse<any>> {
+  async getSeatReconciliation(tenant?: string): Promise<ApiResponse<SeatReconciliationReport>> {
     const qs = tenant ? `?tenant=${tenant}` : '';
     return api.get(`/api/dsam/audit/reconciliation${qs}`);
   },

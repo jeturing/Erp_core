@@ -11,9 +11,10 @@ from sqlalchemy import select, func, and_
 from sqlalchemy.orm import Session
 
 from ..models.database import (
-    ActiveSession, Subscription, SeatEvent, SeatHighWater,
-    TenantSessionConfig, SeatEventType, SubscriptionStatus,
+    ActiveSession, Subscription, SeatHighWater,
+    TenantSessionConfig, SubscriptionStatus, Customer,
 )
+from ..services.seat_events import get_non_billable_logins, record_hwm_snapshot
 
 logger = logging.getLogger(__name__)
 
@@ -26,22 +27,17 @@ async def run_seat_audit(db: Session) -> dict[str, Any]:
     3. Registra discrepancias
     """
     # Sesiones activas por tenant
-    active_result = db.execute(
-        select(
-            ActiveSession.tenant_db,
-            func.count(func.distinct(ActiveSession.odoo_login)).label("unique_users"),
-            func.count(ActiveSession.id).label("total_sessions"),
-        )
-        .where(ActiveSession.is_active == True)
-        .group_by(ActiveSession.tenant_db)
-    )
-    active_by_tenant = {
-        row.tenant_db: {
-            "unique_users": row.unique_users,
-            "total_sessions": row.total_sessions,
-        }
-        for row in active_result.fetchall()
-    }
+    active_sessions = db.execute(
+        select(ActiveSession).where(ActiveSession.is_active == True)
+    ).scalars().all()
+
+    tenant_logins: dict[str, set[str]] = {}
+    tenant_total_sessions: dict[str, int] = {}
+    for session in active_sessions:
+        tenant_total_sessions[session.tenant_db] = tenant_total_sessions.get(session.tenant_db, 0) + 1
+        login = (session.odoo_login or "").strip().lower()
+        if login:
+            tenant_logins.setdefault(session.tenant_db, set()).add(login)
 
     # Cargar suscripciones activas
     subs_result = db.execute(
@@ -49,61 +45,75 @@ async def run_seat_audit(db: Session) -> dict[str, Any]:
             Subscription.status.in_([
                 SubscriptionStatus.ACTIVE,
                 SubscriptionStatus.TRIALING,
+                SubscriptionStatus.PAST_DUE,
             ])
         )
     )
     subscriptions = subs_result.scalars().all()
 
     audit_results = []
+    now = datetime.utcnow()
     for sub in subscriptions:
-        tenant_db = None
-        # Intentar obtener el tenant_db del subdomain o metadata
-        if sub.odoo_db_name:
-            tenant_db = sub.odoo_db_name
-        elif sub.customer and hasattr(sub.customer, "subdomain"):
-            tenant_db = sub.customer.subdomain
+        customer = sub.customer
+        tenant_db = customer.subdomain if customer and customer.subdomain else None
 
         if not tenant_db:
             continue
 
-        active_data = active_by_tenant.get(tenant_db, {"unique_users": 0, "total_sessions": 0})
-        unique_users = active_data["unique_users"]
-        total_sessions = active_data["total_sessions"]
+        logins = tenant_logins.get(tenant_db, set())
+        excluded_logins = get_non_billable_logins(tenant_db, customer=customer, admin_email=customer.email if customer else None)
+        billable_logins = {login for login in logins if login not in excluded_logins}
+        operational_logins = {login for login in logins if login in excluded_logins}
 
-        # Comparar con quantity de la suscripción (seats comprados)
-        seats_purchased = sub.quantity or 1
+        unique_users = len(billable_logins)
+        operational_users = len(operational_logins)
+        total_sessions = tenant_total_sessions.get(tenant_db, 0)
+
+        seats_purchased = sub.user_count or (customer.user_count if customer else 0) or 1
         seats_diff = unique_users - seats_purchased
 
         audit_entry = {
             "tenant_db": tenant_db,
             "subscription_id": sub.id,
+            "customer_name": customer.company_name if customer else None,
             "seats_purchased": seats_purchased,
             "unique_active_users": unique_users,
+            "operational_users": operational_users,
             "total_active_sessions": total_sessions,
             "seats_diff": seats_diff,
             "over_limit": seats_diff > 0,
-            "plan": sub.plan_type.value if sub.plan_type else None,
+            "plan": sub.plan_name,
+            "active_logins": sorted(billable_logins),
+            "operational_logins": sorted(operational_logins),
         }
         audit_results.append(audit_entry)
 
-        # Si hay exceso, registrar HWM snapshot via SeatEvent
+        try:
+            config = db.execute(
+                select(TenantSessionConfig).where(TenantSessionConfig.tenant_db == tenant_db)
+            ).scalar_one_or_none()
+            if config:
+                config.last_seat_audit_at = now
+
+            record_hwm_snapshot(
+                db,
+                sub,
+                user_count_after=unique_users,
+                source="dsam-seat-audit",
+                metadata={
+                    "tenant_db": tenant_db,
+                    "operational_users": operational_users,
+                    "total_sessions": total_sessions,
+                },
+            )
+        except Exception:
+            logger.exception("Error registrando HWM de auditoría para tenant=%s subscription=%s", tenant_db, sub.id)
+
         if seats_diff > 0:
             logger.warning(
                 "Tenant %s excede seats: %d activos vs %d comprados (diff: %d)",
                 tenant_db, unique_users, seats_purchased, seats_diff,
             )
-
-    # Actualizar last_seat_audit_at en configs
-    now = datetime.utcnow()
-    for tenant_db in active_by_tenant:
-        config_result = db.execute(
-            select(TenantSessionConfig).where(
-                TenantSessionConfig.tenant_db == tenant_db
-            )
-        )
-        config = config_result.scalar_one_or_none()
-        if config:
-            config.last_seat_audit_at = now
 
     db.commit()
 
@@ -123,36 +133,68 @@ async def get_seat_reconciliation_report(
     Reporte de reconciliación de seats para un tenant o todos.
     Combina datos de active_sessions + seat_events + subscriptions.
     """
-    query = (
-        select(
-            ActiveSession.tenant_db,
-            func.count(func.distinct(ActiveSession.odoo_login)).label("active_users"),
-            func.count(ActiveSession.id).label("active_sessions"),
-        )
-        .where(ActiveSession.is_active == True)
-        .group_by(ActiveSession.tenant_db)
+    subscriptions_query = select(Subscription).where(
+        Subscription.status.in_([
+            SubscriptionStatus.ACTIVE,
+            SubscriptionStatus.TRIALING,
+            SubscriptionStatus.PAST_DUE,
+        ])
     )
-    if tenant_db:
-        query = query.where(ActiveSession.tenant_db == tenant_db)
+    subscriptions = db.execute(subscriptions_query).scalars().all()
 
-    result = db.execute(query)
+    active_sessions = db.execute(
+        select(ActiveSession).where(ActiveSession.is_active == True)
+    ).scalars().all()
+
+    tenant_logins: dict[str, set[str]] = {}
+    tenant_total_sessions: dict[str, int] = {}
+    for session in active_sessions:
+        tenant_total_sessions[session.tenant_db] = tenant_total_sessions.get(session.tenant_db, 0) + 1
+        login = (session.odoo_login or "").strip().lower()
+        if login:
+            tenant_logins.setdefault(session.tenant_db, set()).add(login)
+
     data = []
-    for row in result.fetchall():
-        # Buscar HWM más reciente
-        hwm_result = db.execute(
+    for sub in subscriptions:
+        customer = sub.customer
+        current_tenant = customer.subdomain if customer and customer.subdomain else None
+        if not current_tenant:
+            continue
+        if tenant_db and current_tenant != tenant_db:
+            continue
+
+        excluded_logins = get_non_billable_logins(current_tenant, customer=customer, admin_email=customer.email if customer else None)
+        active_logins = tenant_logins.get(current_tenant, set())
+        billable_logins = sorted(login for login in active_logins if login not in excluded_logins)
+        operational_logins = sorted(login for login in active_logins if login in excluded_logins)
+
+        hwm = db.execute(
             select(SeatHighWater)
-            .where(SeatHighWater.subscription_id.isnot(None))
-            .order_by(SeatHighWater.recorded_at.desc())
+            .where(SeatHighWater.subscription_id == sub.id)
+            .order_by(SeatHighWater.period_date.desc(), SeatHighWater.created_at.desc())
             .limit(1)
-        )
-        hwm = hwm_result.scalar_one_or_none()
+        ).scalar_one_or_none()
+
+        seats_purchased = sub.user_count or (customer.user_count if customer else 0) or 1
+        active_users = len(billable_logins)
 
         data.append({
-            "tenant_db": row.tenant_db,
-            "active_users": row.active_users,
-            "active_sessions": row.active_sessions,
-            "hwm_value": hwm.high_water_mark if hwm else None,
-            "hwm_date": hwm.recorded_at.isoformat() if hwm else None,
+            "tenant_db": current_tenant,
+            "customer_name": customer.company_name if customer else None,
+            "subscription_id": sub.id,
+            "plan": sub.plan_name,
+            "subscription_status": sub.status.value if sub.status else None,
+            "seats_purchased": seats_purchased,
+            "active_users": active_users,
+            "operational_users": len(operational_logins),
+            "active_sessions": tenant_total_sessions.get(current_tenant, 0),
+            "hwm_value": hwm.hwm_count if hwm else None,
+            "hwm_date": hwm.period_date.isoformat() if hwm else None,
+            "last_snapshot_at": hwm.created_at.isoformat() if hwm else None,
+            "seats_diff": active_users - seats_purchased,
+            "over_limit": active_users > seats_purchased,
+            "billable_logins": billable_logins,
+            "operational_logins": operational_logins,
         })
 
     return {

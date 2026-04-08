@@ -17,6 +17,21 @@ import httpx
 
 logger = logging.getLogger(__name__)
 
+# Import lazy — evita circular imports; se resuelve en tiempo de ejecución
+_rate_limiter_loaded = False
+_check_rate_limit    = None
+_record_email_sent   = None
+
+
+def _load_rate_limiter():
+    """Carga lazy del rate limiter para evitar circular imports."""
+    global _rate_limiter_loaded, _check_rate_limit, _record_email_sent
+    if not _rate_limiter_loaded:
+        from .postal_rate_limiter import check_rate_limit, record_email_sent
+        _check_rate_limit   = check_rate_limit
+        _record_email_sent  = record_email_sent
+        _rate_limiter_loaded = True
+
 # ──────────────────────────────────────────────
 # Configuración de Postal (desde env)
 # ──────────────────────────────────────────────
@@ -119,6 +134,19 @@ def _get_tenant_email_quota(db, tenant_subdomain: str) -> Optional[int]:
     return None
 
 
+def _get_tenant_plan(db, tenant_subdomain: str):
+    """Retorna el objeto Plan activo del tenant, o None si no se encuentra."""
+    from ..models.database import Customer, Plan
+    customer = db.query(Customer).filter(
+        Customer.subdomain == tenant_subdomain
+    ).first()
+    if not customer:
+        return None
+    if not customer.plan_id:
+        return None
+    return db.query(Plan).filter(Plan.id == customer.plan_id).first()
+
+
 async def _suspend_postal_server(server_token: str) -> bool:
     """
     Suspende el servidor de mail en Postal vía API REST.
@@ -148,35 +176,43 @@ async def _suspend_postal_server(server_token: str) -> bool:
 def _check_and_enforce_quota(db, tenant_subdomain: str, current_sent: int) -> None:
     """
     Verifica si el tenant superó su cuota mensual de correos.
-    Si se superó, lanza la suspensión del servidor Postal en background
-    y registra el evento en el log.
-    Esta función es síncrona — la suspensión asíncrona se delega a un hilo.
+    Primero busca addon activo; si no hay, cae al campo max_emails_monthly del Plan.
+    Si se superó, lanza la suspensión del servidor Postal en background.
     """
     try:
         quota = _get_tenant_email_quota(db, tenant_subdomain)
         if quota is None:
-            return  # Sin suscripción activa — no hay cuota que enforcer
+            # Fallback: usar cuota del Plan del tenant
+            plan = _get_tenant_plan(db, tenant_subdomain)
+            if plan:
+                quota = getattr(plan, "max_emails_monthly", None)
+            if not quota:
+                return  # Sin cuota configurada — sin límite
 
         if current_sent >= quota:
             logger.warning(
                 f"⚠️  Tenant {tenant_subdomain} superó cuota: "
                 f"{current_sent}/{quota} correos este mes"
             )
-            # Lanzar suspensión async sin bloquear el webhook (best-effort)
+            # Obtener server_token por tenant (desde PostalEmailUsage) o fallback global
+            from ..models.database import PostalEmailUsage
+            usage_row = db.query(PostalEmailUsage).filter(
+                PostalEmailUsage.tenant_subdomain == tenant_subdomain,
+                PostalEmailUsage.postal_server_token.isnot(None),
+            ).order_by(PostalEmailUsage.id.desc()).first()
+            server_token = (
+                usage_row.postal_server_token if usage_row
+                else POSTAL_SERVER_TOKEN
+            )
+
             import asyncio
             try:
                 loop = asyncio.get_event_loop()
                 if loop.is_running():
-                    # Contexto async (FastAPI) — crear tarea
-                    asyncio.ensure_future(
-                        _suspend_postal_server(POSTAL_SERVER_TOKEN)
-                    )
+                    asyncio.ensure_future(_suspend_postal_server(server_token))
                 else:
-                    loop.run_until_complete(
-                        _suspend_postal_server(POSTAL_SERVER_TOKEN)
-                    )
+                    loop.run_until_complete(_suspend_postal_server(server_token))
             except RuntimeError:
-                # No hay loop disponible — loguear y continuar
                 logger.error(
                     f"No se pudo suspender el servidor Postal para {tenant_subdomain}: "
                     "no hay event loop disponible"
@@ -244,7 +280,17 @@ def handle_postal_webhook(payload: Dict[str, Any]) -> Dict[str, Any]:
             logger.info(f"📧 Postal webhook: tenant={tenant} event={event} "
                         f"sent={rec.emails_sent} cost=${rec.total_cost_usd:.4f}")
 
-            # ── Quota enforcement ──────────────────────────────────────
+            # ── Rate limiting (sliding window) ─────────────────────────
+            # Registrar el envío en las ventanas deslizantes para futuras validaciones.
+            if tenant != "__unknown__":
+                _load_rate_limiter()
+                if _record_email_sent:
+                    try:
+                        _record_email_sent(db, tenant)
+                    except Exception as rl_err:
+                        logger.warning(f"rate_limiter record error para {tenant}: {rl_err}")
+
+            # ── Quota enforcement (mensual) ────────────────────────────
             # Si el tenant tiene un paquete de email activo, verificar si superó la cuota.
             # En caso de superarla, suspender el servidor de mail en Postal via API.
             if tenant != "__unknown__":

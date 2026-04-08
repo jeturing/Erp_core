@@ -97,6 +97,45 @@ CREDENTIAL_DEFINITIONS = {
             {"key": "GUSTO_STATE_SECRET", "description": "Secret para firmar estado OAuth", "is_secret": True},
         ],
     },
+    "meta": {
+        "label": "Meta Hub / Webhooks",
+        "items": [
+            {"key": "META_PROXY_BASE_URL", "description": "Base pública del proxy Meta en SAJET", "is_secret": False, "default": "https://sajet.us/meta"},
+            {"key": "META_OAUTH_REDIRECT_URI", "description": "URI de redirección OAuth para Meta App", "is_secret": False, "default": "https://sajet.us/meta/oauth/callback"},
+            {"key": "META_WEBHOOK_URL", "description": "Webhook público registrado en Meta", "is_secret": False, "default": "https://sajet.us/meta/webhook"},
+            {"key": "META_WEBHOOK_BEARER", "description": "Bearer opcional para proteger el endpoint /meta/webhook", "is_secret": True},
+            {"key": "META_WEBHOOK_TARGETS", "description": "Hosts destino para fanout (coma separada)", "is_secret": False},
+            {"key": "META_WEBHOOK_TARGET_PATHS", "description": "Paths destino por tenant (coma separada)", "is_secret": False, "default": "/jeturing_whatsapp/webhook,/jeturing_meta/webhook"},
+        ],
+    },
+    "delivery_doordash": {
+        "label": "Delivery — DoorDash",
+        "items": [
+            {"key": "DOORDASH_WEBHOOK_URL", "description": "Webhook público de DoorDash en SAJET", "is_secret": False, "default": "https://sajet.us/kds/webhook/doordash-drive"},
+            {"key": "DOORDASH_WEBHOOK_BEARER", "description": "Bearer para validar webhook entrante DoorDash", "is_secret": True},
+            {"key": "DOORDASH_WEBHOOK_TARGETS", "description": "Hosts destino para fanout DoorDash (coma separada)", "is_secret": False},
+        ],
+    },
+    "delivery_uber": {
+        "label": "Delivery — Uber",
+        "items": [
+            {"key": "UBER_WEBHOOK_URL", "description": "Webhook público de Uber en SAJET", "is_secret": False, "default": "https://sajet.us/kds/webhook/uber"},
+            {"key": "UBER_WEBHOOK_BEARER", "description": "Bearer para validar webhook entrante Uber (si aplica)", "is_secret": True},
+            {"key": "UBER_WEBHOOK_TARGETS", "description": "Hosts destino para fanout Uber (coma separada)", "is_secret": False},
+            {"key": "UBER_CLIENT_ID", "description": "Client ID OAuth de Uber", "is_secret": False},
+            {"key": "UBER_CLIENT_SECRET", "description": "Client Secret OAuth de Uber", "is_secret": True},
+        ],
+    },
+    "delivery_pedidosya": {
+        "label": "Delivery — PedidosYa",
+        "items": [
+            {"key": "PEDIDOSYA_WEBHOOK_URL", "description": "Webhook público de PedidosYa en SAJET", "is_secret": False, "default": "https://sajet.us/kds/webhook/pedidosya"},
+            {"key": "PEDIDOSYA_WEBHOOK_BEARER", "description": "Bearer para validar webhook entrante PedidosYa", "is_secret": True},
+            {"key": "PEDIDOSYA_WEBHOOK_TARGETS", "description": "Hosts destino para fanout PedidosYa (coma separada)", "is_secret": False},
+            {"key": "PEDIDOSYA_CLIENT_ID", "description": "Client ID/API key de PedidosYa", "is_secret": False},
+            {"key": "PEDIDOSYA_CLIENT_SECRET", "description": "Client Secret de PedidosYa", "is_secret": True},
+        ],
+    },
     "stripe": {
         "label": "Stripe Payments",
         "items": [
@@ -851,6 +890,29 @@ async def initialize_default_configs(
         ("GUSTO_WEBHOOK_URL", "https://sajet.us/api/v1/gusto/webhook", "Webhook URL pública para Gusto", "gusto", False),
         ("GUSTO_BACKEND_API_TOKEN", "", "Token interno para llamadas Odoo ↔ SAJET", "gusto", True),
         ("GUSTO_SCOPES", "public webhook_subscriptions:read webhook_subscriptions:write", "Scopes OAuth de Gusto", "gusto", False),
+
+        # Meta
+        ("META_PROXY_BASE_URL", "https://sajet.us/meta", "Base pública del proxy Meta en SAJET", "meta", False),
+        ("META_OAUTH_REDIRECT_URI", "https://sajet.us/meta/oauth/callback", "Redirect URI OAuth de Meta", "meta", False),
+        ("META_WEBHOOK_URL", "https://sajet.us/meta/webhook", "Webhook URL pública para Meta", "meta", False),
+        ("META_WEBHOOK_BEARER", "", "Bearer opcional para proteger /meta/webhook", "meta", True),
+        ("META_WEBHOOK_TARGET_PATHS", "/jeturing_whatsapp/webhook,/jeturing_meta/webhook", "Paths destino para fanout Meta", "meta", False),
+
+        # DoorDash
+        ("DOORDASH_WEBHOOK_URL", "https://sajet.us/kds/webhook/doordash-drive", "Webhook URL pública para DoorDash", "delivery_doordash", False),
+        ("DOORDASH_WEBHOOK_BEARER", "", "Bearer para validar webhook DoorDash", "delivery_doordash", True),
+
+        # Uber
+        ("UBER_WEBHOOK_URL", "https://sajet.us/kds/webhook/uber", "Webhook URL pública para Uber", "delivery_uber", False),
+        ("UBER_WEBHOOK_BEARER", "", "Bearer para validar webhook Uber (si aplica)", "delivery_uber", True),
+        ("UBER_CLIENT_ID", "", "Client ID OAuth de Uber", "delivery_uber", False),
+        ("UBER_CLIENT_SECRET", "", "Client Secret OAuth de Uber", "delivery_uber", True),
+
+        # PedidosYa
+        ("PEDIDOSYA_WEBHOOK_URL", "https://sajet.us/kds/webhook/pedidosya", "Webhook URL pública para PedidosYa", "delivery_pedidosya", False),
+        ("PEDIDOSYA_WEBHOOK_BEARER", "", "Bearer para validar webhook PedidosYa", "delivery_pedidosya", True),
+        ("PEDIDOSYA_CLIENT_ID", "", "Client ID/API key de PedidosYa", "delivery_pedidosya", False),
+        ("PEDIDOSYA_CLIENT_SECRET", "", "Client Secret de PedidosYa", "delivery_pedidosya", True),
 
         # Odoo
         ("ODOO_DEFAULT_ADMIN_LOGIN", ODOO_DEFAULT_ADMIN_LOGIN,

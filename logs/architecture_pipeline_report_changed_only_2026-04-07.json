@@ -1,0 +1,80 @@
+{
+  "timestamp": 1775547448,
+  "plan": {
+    "repo": "/opt/Erp_core",
+    "changed_files": [
+      "app/routes/users_neural.py",
+      "frontend/.svelte-kit/generated/server/internal.js",
+      "frontend/src/lib/api/neuralUsers.ts"
+    ],
+    "changed_count": 3,
+    "change_buckets": {
+      "app": 1,
+      "frontend": 2
+    },
+    "stack": {
+      "python": true,
+      "node": false
+    },
+    "phases": [
+      "plan",
+      "security",
+      "qa",
+      "unit_tests",
+      "summary"
+    ],
+    "qa_candidates": [
+      "python3 -m py_compile <changed_py_files>",
+      "ruff check . (if available)",
+      "mypy . (if available)"
+    ],
+    "test_candidates": [
+      "pytest -q --maxfail=1 (if tests/ exists)"
+    ]
+  },
+  "security": {
+    "phase": "security",
+    "passed": true,
+    "critical": false,
+    "total_findings": 0,
+    "files_scanned": 3,
+    "findings": []
+  },
+  "qa": [
+    {
+      "command": "python3 -m py_compile app/routes/users_neural.py",
+      "exit_code": 0,
+      "passed": true,
+      "stdout": "",
+      "stderr": "",
+      "duration_sec": 0.04
+    },
+    {
+      "command": "bash -lc command -v ruff >/dev/null && ruff check app/routes/users_neural.py || echo 'ruff not installed'",
+      "exit_code": 0,
+      "passed": true,
+      "stdout": "ruff not installed\n",
+      "stderr": "",
+      "duration_sec": 0.01
+    },
+    {
+      "command": "bash -lc command -v mypy >/dev/null && mypy app/routes/users_neural.py || echo 'mypy not installed'",
+      "exit_code": 0,
+      "passed": true,
+      "stdout": "mypy not installed\n",
+      "stderr": "",
+      "duration_sec": 0.01
+    }
+  ],
+  "unit_tests": [
+    {
+      "command": "pytest -q --maxfail=1",
+      "exit_code": 4,
+      "passed": false,
+      "stdout": "",
+      "stderr": "ImportError while loading conftest '/opt/Erp_core/tests/conftest.py'.\ntests/conftest.py:27: in <module>\n    from app.main import app\napp/main.py:52: in <module>\n    from .routes import session_monitoring   # 🛡️ DSAM — Dynamic Session & Anti-Theft Monitor\n    ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^\napp/routes/session_monitoring.py:21: in <module>\n    from ..services.session_monitor import (\napp/services/session_monitor.py:13: in <module>\n    import redis.asyncio as aioredis\nE   ModuleNotFoundError: No module named 'redis'\n",
+      "duration_sec": 2.88
+    }
+  ],
+  "status": "blocked_tests"
+}
