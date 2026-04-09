@@ -33,6 +33,7 @@ from .routes import users_neural
 from .routes import agreements
 from .routes import stripe_sync
 from .routes import public_landing
+from .routes import internal_config
 from .routes import accountant_portal
 from .routes import admin_landing
 from .routes import payments  # Nuevo: Pagos y dispersión a proveedores
@@ -267,6 +268,7 @@ app.include_router(meta_webhooks.router)         # 🌐 Meta webhook centralizad
 app.include_router(migration.router)             # 🚚 Migración live de tenants entre nodos (Fase 2)
 app.include_router(session_monitoring.router)    # 🛡️ DSAM — Dynamic Session & Anti-Theft Monitor
 app.include_router(developer_portal.router)      # 🔧 Developer Portal — Apps & Agreement Flows
+app.include_router(internal_config.router)       # 🔒 Config M2M — Jeturing-Pay y servicios internos
 
 
 # ── CORS Cache Refresh endpoint ──
