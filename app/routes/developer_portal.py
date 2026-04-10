@@ -17,9 +17,11 @@ from datetime import datetime
 import io
 import logging
 import os
+import json
 
 from ..models.database import (
     DeveloperApp, DeveloperAgreementFlow, AgreementTemplate,
+    SystemConfig,
     SessionLocal,
 )
 from ..services import agreement_workflow as workflow
@@ -28,6 +30,49 @@ from ..routes.secure_auth import TokenManager
 logger = logging.getLogger(__name__)
 
 router = APIRouter(prefix="/api/developer-portal", tags=["Developer Portal"])
+
+
+API_SUITES_CONFIG_KEY = "DEVELOPER_PORTAL_API_SUITES_JSON"
+API_SUITES_CONFIG_CATEGORY = "developer_portal"
+ALLOWED_SUITE_TARGET_TYPES = {"api", "bda", "route", "webhook", "other"}
+DEFAULT_API_SUITES = [
+    {
+        "code": "eats_marketplace",
+        "name": "Eats Marketplace",
+        "description": "Suite interna para marketplace de restaurantes y pedidos.",
+        "target_type": "api",
+        "target": "/api/eats",
+        "enabled": True,
+        "is_builtin": True,
+    },
+    {
+        "code": "delivery_api",
+        "name": "Delivery API",
+        "description": "Integración logística y tracking de entregas.",
+        "target_type": "api",
+        "target": "/api/delivery",
+        "enabled": True,
+        "is_builtin": True,
+    },
+    {
+        "code": "erp_integration",
+        "name": "ERP Integration",
+        "description": "Conectores para módulos internos ERP/Odoo.",
+        "target_type": "route",
+        "target": "/api/erp",
+        "enabled": True,
+        "is_builtin": True,
+    },
+    {
+        "code": "partner_api",
+        "name": "Partner API",
+        "description": "Operaciones para partners y afiliados.",
+        "target_type": "api",
+        "target": "/api/partners",
+        "enabled": True,
+        "is_builtin": True,
+    },
+]
 
 
 # ═══════════════════════════════════════════
@@ -99,6 +144,103 @@ class UpdateAppRequest(BaseModel):
     description: Optional[str] = None
     webhook_url: Optional[str] = None
     organization_name: Optional[str] = None
+
+
+class ApiSuiteItem(BaseModel):
+    code: str
+    name: str
+    description: Optional[str] = ""
+    target_type: str = "api"
+    target: Optional[str] = ""
+    enabled: bool = True
+    is_builtin: bool = False
+
+
+class ApiSuiteCatalogRequest(BaseModel):
+    items: List[ApiSuiteItem]
+
+
+def _normalize_suite_item(item: dict) -> dict:
+    code = str(item.get("code", "")).strip().lower().replace(" ", "_")
+    name = str(item.get("name", "")).strip()
+    if not code or len(code) < 2:
+        raise ValueError("Cada suite requiere code (mínimo 2 caracteres)")
+    if not name:
+        raise ValueError("Cada suite requiere name")
+
+    target_type = str(item.get("target_type", "api")).strip().lower()
+    if target_type not in ALLOWED_SUITE_TARGET_TYPES:
+        raise ValueError(f"target_type inválido para '{code}'")
+
+    return {
+        "code": code,
+        "name": name,
+        "description": str(item.get("description", "") or "").strip(),
+        "target_type": target_type,
+        "target": str(item.get("target", "") or "").strip(),
+        "enabled": bool(item.get("enabled", True)),
+        "is_builtin": bool(item.get("is_builtin", False)),
+    }
+
+
+def _normalize_suite_catalog(raw_items: list[dict]) -> list[dict]:
+    seen: set[str] = set()
+    normalized: list[dict] = []
+    for raw in raw_items:
+        item = _normalize_suite_item(raw)
+        if item["code"] in seen:
+            raise ValueError(f"code duplicado: {item['code']}")
+        seen.add(item["code"])
+        normalized.append(item)
+    return normalized
+
+
+def _get_api_suite_catalog(db, include_disabled: bool = False) -> list[dict]:
+    cfg = db.query(SystemConfig).filter(SystemConfig.key == API_SUITES_CONFIG_KEY).first()
+    if not cfg or not cfg.value:
+        catalog = list(DEFAULT_API_SUITES)
+    else:
+        try:
+            parsed = json.loads(cfg.value)
+            if not isinstance(parsed, list):
+                raise ValueError("invalid catalog")
+            catalog = _normalize_suite_catalog(parsed)
+        except Exception:
+            logger.warning("Developer Portal API suite catalog inválido; usando defaults")
+            catalog = list(DEFAULT_API_SUITES)
+
+    if include_disabled:
+        return catalog
+    return [item for item in catalog if item.get("enabled", True)]
+
+
+def _save_api_suite_catalog(db, items: list[dict], updated_by: str) -> list[dict]:
+    normalized = _normalize_suite_catalog(items)
+    payload = json.dumps(normalized, ensure_ascii=False)
+
+    cfg = db.query(SystemConfig).filter(SystemConfig.key == API_SUITES_CONFIG_KEY).first()
+    if cfg:
+        cfg.value = payload
+        cfg.category = API_SUITES_CONFIG_CATEGORY
+        cfg.description = "Catálogo de API suites del Developer Portal"
+        cfg.is_secret = False
+        cfg.is_editable = True
+        cfg.updated_by = updated_by
+        cfg.updated_at = datetime.utcnow()
+    else:
+        cfg = SystemConfig(
+            key=API_SUITES_CONFIG_KEY,
+            value=payload,
+            category=API_SUITES_CONFIG_CATEGORY,
+            description="Catálogo de API suites del Developer Portal",
+            is_secret=False,
+            is_editable=True,
+            updated_by=updated_by,
+        )
+        db.add(cfg)
+
+    db.commit()
+    return normalized
 
 
 # ═══════════════════════════════════════════
@@ -176,6 +318,11 @@ async def create_app(data: CreateAppRequest, request: Request, access_token: str
 
     db = SessionLocal()
     try:
+        active_suites = _get_api_suite_catalog(db, include_disabled=False)
+        allowed_codes = {s["code"] for s in active_suites}
+        if data.api_suite not in allowed_codes:
+            raise HTTPException(400, "API Suite inválida o deshabilitada")
+
         app = workflow.create_app(
             db,
             name=data.name.strip(),
@@ -195,6 +342,58 @@ async def create_app(data: CreateAppRequest, request: Request, access_token: str
     except Exception as e:
         logger.error(f"Error creating developer app: {e}")
         raise HTTPException(500, f"Error al crear app: {str(e)}")
+    finally:
+        db.close()
+
+
+@router.get("/api-suites")
+async def list_api_suites(request: Request, access_token: str = Cookie(None)):
+    """Lista suites disponibles para el dropdown de creación de apps."""
+    _get_payload(request, access_token)
+
+    db = SessionLocal()
+    try:
+        items = _get_api_suite_catalog(db, include_disabled=False)
+        return {"items": items, "total": len(items)}
+    finally:
+        db.close()
+
+
+@router.get("/admin/api-suites")
+async def list_api_suites_admin(request: Request, access_token: str = Cookie(None)):
+    """Admin: lista catálogo completo de suites (incluye deshabilitadas)."""
+    _require_admin(request, access_token)
+
+    db = SessionLocal()
+    try:
+        items = _get_api_suite_catalog(db, include_disabled=True)
+        return {"items": items, "total": len(items)}
+    finally:
+        db.close()
+
+
+@router.put("/admin/api-suites")
+async def save_api_suites_admin(
+    data: ApiSuiteCatalogRequest,
+    request: Request,
+    access_token: str = Cookie(None),
+):
+    """Admin: mantenimiento del catálogo de suites (API/BDA/route/webhook)."""
+    payload = _require_admin(request, access_token)
+    updated_by = str(payload.get("sub") or payload.get("username") or "admin")
+
+    db = SessionLocal()
+    try:
+        items = [item.model_dump() for item in data.items]
+        saved = _save_api_suite_catalog(db, items, updated_by)
+        return {
+            "message": "Catálogo de API suites actualizado",
+            "items": saved,
+            "total": len(saved),
+        }
+    except ValueError as e:
+        db.rollback()
+        raise HTTPException(400, str(e))
     finally:
         db.close()
 

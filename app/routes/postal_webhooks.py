@@ -22,6 +22,12 @@ from ..services.postal_service import (
     get_all_tenants_email_usage_summary,
     sync_postal_stats,
 )
+from ..services.postal_rate_limiter import (
+    check_rate_limit,
+    record_email_sent,
+    get_rate_limit_status,
+    resolve_email_limits,
+)
 from ..config import PROVISIONING_API_KEY, get_runtime_setting
 from ..models.database import SessionLocal, ServiceCatalogItem, ServiceCategory
 from .roles import _require_admin
@@ -128,6 +134,79 @@ async def trigger_postal_sync(
     if x_api_key != _provisioning_api_key():
         raise HTTPException(status_code=403, detail="Forbidden")
     return await sync_postal_stats(year, month)
+
+
+# ──────────────────────────────────────────────────────────────────
+# Rate Limiting API — Para bridges SMTP en PCTs remotos
+# Requieren: X-Api-Key de provisioning (interno, no expuesto)
+# ──────────────────────────────────────────────────────────────────
+
+class RateLimitCheckRequest(BaseModel):
+    tenant_subdomain: str
+    n_emails: int = 1
+
+
+@router.post("/postal/rate-limit/check")
+async def rate_limit_check(
+    payload: RateLimitCheckRequest,
+    x_api_key: str = Header(default=""),
+):
+    """
+    Verifica si un tenant puede enviar n emails ahora.
+    Usado por los bridges SMTP de PCT 105/110 antes de forwarding.
+    Retorna: {allowed: bool, reason: str, limits: dict}
+    """
+    if x_api_key != _provisioning_api_key():
+        raise HTTPException(status_code=403, detail="Forbidden")
+    db = SessionLocal()
+    try:
+        allowed, reason = check_rate_limit(
+            db, payload.tenant_subdomain, n_emails=payload.n_emails
+        )
+        return {"allowed": allowed, "reason": reason}
+    finally:
+        db.close()
+
+
+@router.post("/postal/rate-limit/record")
+async def rate_limit_record(
+    payload: RateLimitCheckRequest,
+    x_api_key: str = Header(default=""),
+):
+    """
+    Registra n emails enviados para un tenant en las ventanas de rate limiting.
+    Llamado por el bridge SMTP DESPUÉS de enviar exitosamente vía Postal.
+    """
+    if x_api_key != _provisioning_api_key():
+        raise HTTPException(status_code=403, detail="Forbidden")
+    db = SessionLocal()
+    try:
+        record_email_sent(db, payload.tenant_subdomain, payload.n_emails)
+        return {"success": True}
+    except Exception as e:
+        logger.error(f"Error recording rate limit: {e}")
+        raise HTTPException(status_code=500, detail=str(e))
+    finally:
+        db.close()
+
+
+@router.get("/postal/rate-limit/status/{tenant_subdomain}")
+async def rate_limit_status(
+    tenant_subdomain: str,
+    x_api_key: str = Header(default=""),
+):
+    """
+    Retorna el estado de rate limiting de un tenant (uso actual vs límites).
+    """
+    if x_api_key != _provisioning_api_key():
+        raise HTTPException(status_code=403, detail="Forbidden")
+    db = SessionLocal()
+    try:
+        status = get_rate_limit_status(db, tenant_subdomain)
+        limits = resolve_email_limits(db, tenant_subdomain)
+        return {"status": status, "effective_limits": limits}
+    finally:
+        db.close()
 
 
 # ──────────────────────────────────────────────────────────────────
@@ -296,5 +375,145 @@ async def reactivate_email_package(
         item.is_active = True
         db.commit()
         return {"message": "Paquete reactivado", "item": _email_pkg_to_dict(item)}
+    finally:
+        db.close()
+
+
+# ──────────────────────────────────────────────────────────────────
+# Provisioning API — Llamado por módulo Odoo jeturing_postal_limit
+# Actualiza partner_pricing_overrides con los límites del plan comprado
+# ──────────────────────────────────────────────────────────────────
+
+class ProvisionEmailLimitsRequest(BaseModel):
+    tenant_subdomain: str
+    max_emails_monthly: int
+    email_rate_per_minute: int
+    email_rate_per_hour: int
+    email_rate_per_day: int
+    plan_label: str = ""
+
+
+@router.post("/postal/provision-email-limits")
+async def provision_email_limits(
+    payload: ProvisionEmailLimitsRequest,
+    x_api_key: str = Header(default=""),
+):
+    """
+    Aprovisiona límites de correo para un tenant.
+    Llamado por el módulo Odoo jeturing_postal_limit cuando un partner compra un plan.
+
+    Flujo:
+      1. Busca el customer por subdomain
+      2. Busca/crea el partner_pricing_override correspondiente
+      3. Actualiza los campos email_rate_* con los valores del plan
+      4. Si plan_label == '__reset__', pone los overrides en NULL (vuelta a defaults)
+    """
+    if x_api_key != _provisioning_api_key():
+        raise HTTPException(status_code=403, detail="Forbidden")
+
+    from ..models.database import Customer, PartnerPricingOverride
+
+    db = SessionLocal()
+    try:
+        # 1. Buscar customer
+        customer = (
+            db.query(Customer)
+            .filter(Customer.subdomain == payload.tenant_subdomain)
+            .first()
+        )
+        if not customer:
+            raise HTTPException(
+                status_code=404,
+                detail=f"Tenant '{payload.tenant_subdomain}' no encontrado en SAJET"
+            )
+        if not customer.partner_id:
+            raise HTTPException(
+                status_code=400,
+                detail=f"Tenant '{payload.tenant_subdomain}' no tiene partner asociado"
+            )
+
+        # 2. Resolver plan_name del customer
+        plan_name = getattr(customer, "plan", None)
+        if plan_name:
+            if hasattr(plan_name, "value"):
+                plan_name = plan_name.value
+        if not plan_name:
+            plan_name = "pro"  # fallback
+
+        # 3. Buscar o crear override
+        override = (
+            db.query(PartnerPricingOverride)
+            .filter(
+                PartnerPricingOverride.partner_id == customer.partner_id,
+                PartnerPricingOverride.plan_name == plan_name,
+            )
+            .first()
+        )
+
+        if payload.plan_label == "__reset__":
+            # Reset: poner overrides en NULL para volver a defaults del plan
+            if override:
+                override.max_emails_monthly_override = None
+                override.email_rate_per_minute_override = None
+                override.email_rate_per_hour_override = None
+                override.email_rate_per_day_override = None
+                override.label = None
+                db.commit()
+            return {
+                "success": True,
+                "message": "Límites reseteados a valores del plan",
+                "tenant": payload.tenant_subdomain,
+            }
+
+        if not override:
+            override = PartnerPricingOverride(
+                partner_id=customer.partner_id,
+                plan_name=plan_name,
+                is_active=True,
+            )
+            db.add(override)
+
+        # 4. Actualizar límites
+        override.max_emails_monthly_override = payload.max_emails_monthly
+        override.email_rate_per_minute_override = payload.email_rate_per_minute
+        override.email_rate_per_hour_override = payload.email_rate_per_hour
+        override.email_rate_per_day_override = payload.email_rate_per_day
+        override.label = f"Postal Plan: {payload.plan_label}"
+
+        db.commit()
+
+        # Verificar que los límites se resuelven correctamente
+        effective = resolve_email_limits(db, payload.tenant_subdomain)
+
+        logger.info(
+            "✅ Provisioned email limits for %s: %s/month, %s/min, %s/hr, %s/day (plan: %s)",
+            payload.tenant_subdomain,
+            payload.max_emails_monthly,
+            payload.email_rate_per_minute,
+            payload.email_rate_per_hour,
+            payload.email_rate_per_day,
+            payload.plan_label,
+        )
+
+        return {
+            "success": True,
+            "message": f"Límites aprovisionados para {payload.tenant_subdomain}",
+            "tenant": payload.tenant_subdomain,
+            "plan_label": payload.plan_label,
+            "provisioned_limits": {
+                "max_emails_monthly": payload.max_emails_monthly,
+                "email_rate_per_minute": payload.email_rate_per_minute,
+                "email_rate_per_hour": payload.email_rate_per_hour,
+                "email_rate_per_day": payload.email_rate_per_day,
+            },
+            "effective_limits": effective,
+        }
+
+    except HTTPException:
+        raise
+    except Exception as e:
+        db.rollback()
+        logger.error("Error provisioning email limits: %s", e)
+        raise HTTPException(status_code=500, detail=str(e))
     finally:
         db.close()

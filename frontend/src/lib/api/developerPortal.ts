@@ -3,6 +3,7 @@ import type {
   DeveloperApp,
   DeveloperAppSummary,
   DeveloperAgreementFlow,
+  DeveloperApiSuite,
 } from '../types';
 
 export const developerPortalApi = {
@@ -84,5 +85,19 @@ export const developerPortalApi = {
 
   async verifyApp(appId: number): Promise<{ message: string; status: string }> {
     return api.post(`/api/developer-portal/apps/${appId}/verify`, {});
+  },
+
+  // ── API Suites Catalog ──
+
+  async listApiSuites(): Promise<{ items: DeveloperApiSuite[]; total: number }> {
+    return api.get('/api/developer-portal/api-suites');
+  },
+
+  async listApiSuitesAdmin(): Promise<{ items: DeveloperApiSuite[]; total: number }> {
+    return api.get('/api/developer-portal/admin/api-suites');
+  },
+
+  async saveApiSuitesAdmin(items: DeveloperApiSuite[]): Promise<{ message: string; items: DeveloperApiSuite[]; total: number }> {
+    return api.put('/api/developer-portal/admin/api-suites', { items });
   },
 };

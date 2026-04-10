@@ -292,6 +292,18 @@ export interface DeveloperAgreementFlow {
   signed_agreement_id: number | null;
 }
 
+export type DeveloperApiSuiteTargetType = 'api' | 'bda' | 'route' | 'webhook' | 'other';
+
+export interface DeveloperApiSuite {
+  code: string;
+  name: string;
+  description?: string;
+  target_type: DeveloperApiSuiteTargetType;
+  target?: string;
+  enabled: boolean;
+  is_builtin?: boolean;
+}
+
 export interface ApiResponse<T> {
   data: T;
   success: boolean;

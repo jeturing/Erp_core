@@ -10,15 +10,17 @@
   import {
     Plus, Loader2, CheckCircle, Circle, Clock, Eye, FileSignature,
     Building2, Shield, Rocket, XCircle, ExternalLink, ChevronRight,
-    AlertTriangle, FileText, Trash2, Send
+    AlertTriangle, FileText, Trash2, Send, Settings, Save
   } from 'lucide-svelte';
   import { developerPortalApi } from '../lib/api';
+  import { currentUser } from '../lib/stores';
   import SignaturePanel from '../lib/components/SignaturePanel.svelte';
   import type {
     DeveloperAppSummary,
     DeveloperAgreementFlow,
     DeveloperAgreementFlowItem,
     AgreementFlowStatus,
+    DeveloperApiSuite,
   } from '../lib/types';
 
   let apps: DeveloperAppSummary[] = [];
@@ -32,8 +34,19 @@
   let showCreateModal = false;
   let newAppName = '';
   let newAppDescription = '';
-  let newAppApiSuite = 'eats_marketplace';
+  let newAppApiSuite = '';
   let creating = false;
+
+  // API suites catalog
+  let apiSuites: DeveloperApiSuite[] = [];
+  let suitesLoading = false;
+  let showApiSuiteMaintenanceModal = false;
+  let apiSuiteDraft: DeveloperApiSuite[] = [];
+  let savingApiSuites = false;
+
+  // Verification admin modal
+  let showVerifyModal = false;
+  let verifyingApp = false;
 
   // Link org modal
   let showLinkOrgModal = false;
@@ -48,13 +61,39 @@
   let reviewing = false;
   let rejectReason = '';
 
-  // Admin check (from Layout context or store)
+  // Admin check
   let isAdmin = false;
-  // We'll detect from the app data
+
+  $: isAdmin = Boolean($currentUser && ['admin', 'operator'].includes($currentUser.role));
 
   onMount(async () => {
-    await loadApps();
+    await Promise.all([loadApps(), loadApiSuites()]);
   });
+
+  async function loadApiSuites() {
+    suitesLoading = true;
+    try {
+      const res = await developerPortalApi.listApiSuites();
+      apiSuites = (res.items || []).filter((item) => item.enabled);
+      if (!newAppApiSuite) {
+        newAppApiSuite = apiSuites[0]?.code || 'eats_marketplace';
+      }
+      if (newAppApiSuite && !apiSuites.some((suite) => suite.code === newAppApiSuite)) {
+        newAppApiSuite = apiSuites[0]?.code || '';
+      }
+    } catch (e: any) {
+      // fallback seguro con suites conocidas
+      apiSuites = [
+        { code: 'eats_marketplace', name: 'Eats Marketplace', target_type: 'api', target: '/api/eats', enabled: true, is_builtin: true },
+        { code: 'delivery_api', name: 'Delivery API', target_type: 'api', target: '/api/delivery', enabled: true, is_builtin: true },
+        { code: 'erp_integration', name: 'ERP Integration', target_type: 'route', target: '/api/erp', enabled: true, is_builtin: true },
+        { code: 'partner_api', name: 'Partner API', target_type: 'api', target: '/api/partners', enabled: true, is_builtin: true },
+      ];
+      if (!newAppApiSuite) newAppApiSuite = apiSuites[0].code;
+    } finally {
+      suitesLoading = false;
+    }
+  }
 
   async function loadApps() {
     loading = true;
@@ -78,7 +117,7 @@
   }
 
   async function createApp() {
-    if (!newAppName.trim()) return;
+    if (!newAppName.trim() || !newAppApiSuite) return;
     creating = true;
     error = '';
     try {
@@ -206,6 +245,78 @@
     }
   }
 
+  async function openApiSuiteMaintenance() {
+    if (!isAdmin) return;
+    error = '';
+    try {
+      const res = await developerPortalApi.listApiSuitesAdmin();
+      apiSuiteDraft = (res.items || []).map((item) => ({ ...item }));
+      showApiSuiteMaintenanceModal = true;
+    } catch (e: any) {
+      error = e.message || 'Error al cargar catálogo de API suites';
+    }
+  }
+
+  function addApiSuiteDraft() {
+    apiSuiteDraft = [
+      ...apiSuiteDraft,
+      {
+        code: '',
+        name: '',
+        description: '',
+        target_type: 'api',
+        target: '',
+        enabled: true,
+        is_builtin: false,
+      },
+    ];
+  }
+
+  function removeApiSuiteDraft(index: number) {
+    apiSuiteDraft = apiSuiteDraft.filter((_, idx) => idx !== index);
+  }
+
+  async function saveApiSuiteMaintenance() {
+    savingApiSuites = true;
+    error = '';
+    try {
+      const payload = apiSuiteDraft.map((suite) => ({
+        ...suite,
+        code: (suite.code || '').trim().toLowerCase().replace(/\s+/g, '_'),
+        name: (suite.name || '').trim(),
+        description: (suite.description || '').trim(),
+        target: (suite.target || '').trim(),
+      }));
+      await developerPortalApi.saveApiSuitesAdmin(payload);
+      await loadApiSuites();
+      showApiSuiteMaintenanceModal = false;
+      success = 'Catálogo de API suites actualizado';
+      setTimeout(() => success = '', 3000);
+    } catch (e: any) {
+      error = e.message || 'Error al guardar catálogo';
+    } finally {
+      savingApiSuites = false;
+    }
+  }
+
+  async function approveVerificationAsAdmin() {
+    if (!selectedApp) return;
+    verifyingApp = true;
+    error = '';
+    try {
+      await developerPortalApi.verifyApp(selectedApp.id);
+      selectedApp = await developerPortalApi.getApp(selectedApp.id);
+      apps = apps.map((a) => (a.id === selectedApp!.id ? selectedApp! : a));
+      showVerifyModal = false;
+      success = 'App verificada para producción';
+      setTimeout(() => success = '', 3000);
+    } catch (e: any) {
+      error = e.message || 'Error al aprobar verificación';
+    } finally {
+      verifyingApp = false;
+    }
+  }
+
   // ── UI Helpers ──
 
   const flowStatusConfig: Record<AgreementFlowStatus, { icon: any; color: string; label: string; bg: string }> = {
@@ -243,22 +354,38 @@
     if (mode === 'production') return { label: 'PROD APP', class: 'bg-green-100 text-green-700 border-green-200' };
     return { label: 'TEST APP', class: 'bg-amber-100 text-amber-700 border-amber-200' };
   }
+
+  function getApiSuiteLabel(code: string): string {
+    const suite = apiSuites.find((item) => item.code === code);
+    return suite?.name || code;
+  }
 </script>
 
 <div class="space-y-6">
   <!-- Header -->
-  <div class="flex items-center justify-between">
+  <div class="flex items-center justify-between gap-3">
     <div>
       <h1 class="text-xl font-bold text-[#1a1a1a]">Portal de Desarrollo</h1>
       <p class="text-sm text-gray-500 mt-0.5">Gestiona tus aplicaciones y acuerdos del Developer Portal</p>
     </div>
-    <button
-      class="inline-flex items-center gap-2 bg-[#003B73] text-white text-sm font-semibold px-4 py-2.5 rounded-lg hover:bg-[#002a54] transition-colors"
-      on:click={() => showCreateModal = true}
-    >
-      <Plus class="w-4 h-4" />
-      Crear Aplicación
-    </button>
+    <div class="flex items-center gap-2">
+      {#if isAdmin}
+        <button
+          class="inline-flex items-center gap-2 bg-white text-[#003B73] border border-[#003B73]/30 text-sm font-semibold px-3 py-2.5 rounded-lg hover:bg-[#003B73]/5 transition-colors"
+          on:click={openApiSuiteMaintenance}
+        >
+          <Settings class="w-4 h-4" />
+          Mantenimiento Suites
+        </button>
+      {/if}
+      <button
+        class="inline-flex items-center gap-2 bg-[#003B73] text-white text-sm font-semibold px-4 py-2.5 rounded-lg hover:bg-[#002a54] transition-colors"
+        on:click={() => showCreateModal = true}
+      >
+        <Plus class="w-4 h-4" />
+        Crear Aplicación
+      </button>
+    </div>
   </div>
 
   <!-- Messages -->
@@ -371,7 +498,7 @@
               <span class="px-2 py-0.5 rounded text-xs font-semibold border {getAppModeBadge(selectedApp.app_mode).class}">{getAppModeBadge(selectedApp.app_mode).label}</span>
             </div>
             <div class="text-right text-xs text-gray-400">
-              <p>API Suite: <span class="font-semibold text-gray-600">{selectedApp.api_suite}</span></p>
+              <p>API Suite: <span class="font-semibold text-gray-600">{getApiSuiteLabel(selectedApp.api_suite)}</span></p>
               {#if selectedApp.created_at}
                 <p>Creada: {new Date(selectedApp.created_at).toLocaleDateString('es-DO')}</p>
               {/if}
@@ -558,6 +685,15 @@
               <p class="text-xs text-gray-500 mt-1">
                 Tu solicitud de producción está siendo revisada por el equipo de Sajet.
               </p>
+              {#if isAdmin}
+                <button
+                  class="mt-3 inline-flex items-center gap-1.5 bg-green-600 text-white text-xs font-semibold px-3 py-2 rounded-lg hover:bg-green-700"
+                  on:click={() => showVerifyModal = true}
+                >
+                  <CheckCircle class="w-3.5 h-3.5" />
+                  Aprobar y finalizar flujo
+                </button>
+              {/if}
             </div>
           </div>
         </div>
@@ -629,7 +765,7 @@
 
             <div class="flex items-center justify-between text-xs text-gray-500">
               <span>{getAppStatusLabel(app.status)}</span>
-              <span>{app.api_suite}</span>
+              <span>{getApiSuiteLabel(app.api_suite)}</span>
             </div>
 
             {#if app.agreements_total > 0}
@@ -690,13 +826,25 @@
             id="app-suite"
             bind:value={newAppApiSuite}
             class="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm focus:ring-2 focus:ring-[#003B73] focus:border-transparent outline-none bg-white"
-            disabled={creating}
+            disabled={creating || suitesLoading || apiSuites.length === 0}
           >
-            <option value="eats_marketplace">Eats Marketplace</option>
-            <option value="delivery_api">Delivery API</option>
-            <option value="erp_integration">ERP Integration</option>
-            <option value="partner_api">Partner API</option>
+            {#if apiSuites.length === 0}
+              <option value="">No hay suites configuradas</option>
+            {:else}
+              {#each apiSuites as suite}
+                <option value={suite.code}>{suite.name}</option>
+              {/each}
+            {/if}
           </select>
+          {#if newAppApiSuite}
+            {@const selectedSuite = apiSuites.find((suite) => suite.code === newAppApiSuite)}
+            {#if selectedSuite}
+              <p class="text-[11px] text-gray-500 mt-1">
+                Destino: <span class="font-semibold">{selectedSuite.target_type.toUpperCase()}</span>
+                {#if selectedSuite.target} → {selectedSuite.target}{/if}
+              </p>
+            {/if}
+          {/if}
         </div>
       </div>
       <div class="px-6 py-4 border-t border-gray-100 flex justify-end gap-3">
@@ -710,7 +858,7 @@
         <button
           class="inline-flex items-center gap-2 bg-[#003B73] text-white text-sm font-semibold px-4 py-2 rounded-lg hover:bg-[#002a54] disabled:opacity-60"
           on:click={createApp}
-          disabled={!newAppName.trim() || creating}
+          disabled={!newAppName.trim() || !newAppApiSuite || creating}
         >
           {#if creating}
             <Loader2 class="w-4 h-4 animate-spin" />
@@ -766,6 +914,142 @@
             <Loader2 class="w-4 h-4 animate-spin" />
           {/if}
           Vincular
+        </button>
+      </div>
+    </div>
+  </div>
+{/if}
+
+<!-- ═══════════════════════════════════════ -->
+<!--  VERIFY APP MODAL (ADMIN)             -->
+<!-- ═══════════════════════════════════════ -->
+{#if showVerifyModal && selectedApp}
+  <!-- svelte-ignore a11y_no_noninteractive_element_interactions -->
+  <div class="fixed inset-0 bg-black/50 z-50 flex items-center justify-center p-4" role="dialog" tabindex="-1" on:click={() => !verifyingApp && (showVerifyModal = false)} on:keydown={(e) => e.key === 'Escape' && !verifyingApp && (showVerifyModal = false)}>
+    <!-- svelte-ignore a11y_no_static_element_interactions -->
+    <div class="bg-white rounded-xl shadow-xl max-w-md w-full" role="presentation" on:click|stopPropagation on:keydown|stopPropagation>
+      <div class="px-6 py-4 border-b border-gray-100">
+        <h3 class="text-base font-semibold text-[#1a1a1a]">Aprobar verificación</h3>
+      </div>
+      <div class="p-6 space-y-2">
+        <p class="text-sm text-gray-700">Vas a aprobar la app <span class="font-semibold">{selectedApp.name}</span> para producción.</p>
+        <p class="text-xs text-gray-500">Esta acción cambia el estado a <span class="font-semibold">verified</span> y el modo a <span class="font-semibold">production</span>.</p>
+      </div>
+      <div class="px-6 py-4 border-t border-gray-100 flex justify-end gap-3">
+        <button
+          class="text-sm text-gray-500 hover:text-gray-700 px-4 py-2"
+          on:click={() => showVerifyModal = false}
+          disabled={verifyingApp}
+        >
+          Cancelar
+        </button>
+        <button
+          class="inline-flex items-center gap-2 bg-green-600 text-white text-sm font-semibold px-4 py-2 rounded-lg hover:bg-green-700 disabled:opacity-60"
+          on:click={approveVerificationAsAdmin}
+          disabled={verifyingApp}
+        >
+          {#if verifyingApp}
+            <Loader2 class="w-4 h-4 animate-spin" />
+          {/if}
+          Aprobar
+        </button>
+      </div>
+    </div>
+  </div>
+{/if}
+
+<!-- ═══════════════════════════════════════ -->
+<!--  API SUITES MAINTENANCE MODAL (ADMIN)  -->
+<!-- ═══════════════════════════════════════ -->
+{#if showApiSuiteMaintenanceModal}
+  <!-- svelte-ignore a11y_no_noninteractive_element_interactions -->
+  <div class="fixed inset-0 bg-black/50 z-50 flex items-center justify-center p-4" role="dialog" tabindex="-1" on:click={() => !savingApiSuites && (showApiSuiteMaintenanceModal = false)} on:keydown={(e) => e.key === 'Escape' && !savingApiSuites && (showApiSuiteMaintenanceModal = false)}>
+    <!-- svelte-ignore a11y_no_static_element_interactions -->
+    <div class="bg-white rounded-xl shadow-xl max-w-5xl w-full max-h-[90vh] overflow-hidden" role="presentation" on:click|stopPropagation on:keydown|stopPropagation>
+      <div class="px-6 py-4 border-b border-gray-100 flex items-center justify-between">
+        <h3 class="text-base font-semibold text-[#1a1a1a]">Mantenimiento de API Suites</h3>
+        <button
+          class="inline-flex items-center gap-2 bg-[#003B73] text-white text-xs font-semibold px-3 py-2 rounded-lg hover:bg-[#002a54]"
+          on:click={addApiSuiteDraft}
+          disabled={savingApiSuites}
+        >
+          <Plus class="w-3.5 h-3.5" />
+          Agregar Suite
+        </button>
+      </div>
+
+      <div class="p-6 overflow-auto max-h-[65vh] space-y-3">
+        {#if apiSuiteDraft.length === 0}
+          <div class="rounded-lg border border-dashed border-gray-300 p-6 text-sm text-gray-500 text-center">
+            No hay suites configuradas. Agrega una nueva suite.
+          </div>
+        {:else}
+          {#each apiSuiteDraft as suite, idx}
+            <div class="rounded-lg border border-gray-200 p-4 grid grid-cols-12 gap-2 items-center">
+              <div class="col-span-12 md:col-span-2">
+                <label for={`suite-code-${idx}`} class="block text-[10px] text-gray-500 mb-1 uppercase font-semibold">Code</label>
+                <input id={`suite-code-${idx}`} class="w-full px-2 py-1.5 border border-gray-300 rounded text-xs" bind:value={suite.code} placeholder="delivery_api" disabled={savingApiSuites} />
+              </div>
+              <div class="col-span-12 md:col-span-2">
+                <label for={`suite-name-${idx}`} class="block text-[10px] text-gray-500 mb-1 uppercase font-semibold">Nombre</label>
+                <input id={`suite-name-${idx}`} class="w-full px-2 py-1.5 border border-gray-300 rounded text-xs" bind:value={suite.name} placeholder="Delivery API" disabled={savingApiSuites} />
+              </div>
+              <div class="col-span-12 md:col-span-2">
+                <label for={`suite-type-${idx}`} class="block text-[10px] text-gray-500 mb-1 uppercase font-semibold">Tipo</label>
+                <select id={`suite-type-${idx}`} class="w-full px-2 py-1.5 border border-gray-300 rounded text-xs bg-white" bind:value={suite.target_type} disabled={savingApiSuites}>
+                  <option value="api">API</option>
+                  <option value="bda">BDA</option>
+                  <option value="route">Route</option>
+                  <option value="webhook">Webhook</option>
+                  <option value="other">Other</option>
+                </select>
+              </div>
+              <div class="col-span-12 md:col-span-3">
+                <label for={`suite-target-${idx}`} class="block text-[10px] text-gray-500 mb-1 uppercase font-semibold">Destino</label>
+                <input id={`suite-target-${idx}`} class="w-full px-2 py-1.5 border border-gray-300 rounded text-xs" bind:value={suite.target} placeholder="/api/delivery" disabled={savingApiSuites} />
+              </div>
+              <div class="col-span-12 md:col-span-2">
+                <label for={`suite-description-${idx}`} class="block text-[10px] text-gray-500 mb-1 uppercase font-semibold">Descripción</label>
+                <input id={`suite-description-${idx}`} class="w-full px-2 py-1.5 border border-gray-300 rounded text-xs" bind:value={suite.description} placeholder="Uso interno" disabled={savingApiSuites} />
+              </div>
+              <div class="col-span-12 md:col-span-1 flex md:flex-col gap-2 md:items-center">
+                <label class="inline-flex items-center gap-1 text-[10px] text-gray-500 uppercase font-semibold">
+                  <input type="checkbox" bind:checked={suite.enabled} disabled={savingApiSuites} />
+                  Activa
+                </label>
+                <button
+                  class="inline-flex items-center justify-center text-red-500 hover:text-red-700"
+                  on:click={() => removeApiSuiteDraft(idx)}
+                  disabled={savingApiSuites || suite.is_builtin}
+                  title={suite.is_builtin ? 'Suite base no eliminable' : 'Eliminar suite'}
+                >
+                  <Trash2 class="w-4 h-4" />
+                </button>
+              </div>
+            </div>
+          {/each}
+        {/if}
+      </div>
+
+      <div class="px-6 py-4 border-t border-gray-100 flex justify-end gap-3">
+        <button
+          class="text-sm text-gray-500 hover:text-gray-700 px-4 py-2"
+          on:click={() => showApiSuiteMaintenanceModal = false}
+          disabled={savingApiSuites}
+        >
+          Cancelar
+        </button>
+        <button
+          class="inline-flex items-center gap-2 bg-[#003B73] text-white text-sm font-semibold px-4 py-2 rounded-lg hover:bg-[#002a54] disabled:opacity-60"
+          on:click={saveApiSuiteMaintenance}
+          disabled={savingApiSuites}
+        >
+          {#if savingApiSuites}
+            <Loader2 class="w-4 h-4 animate-spin" />
+          {:else}
+            <Save class="w-4 h-4" />
+          {/if}
+          Guardar catálogo
         </button>
       </div>
     </div>
