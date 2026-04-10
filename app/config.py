@@ -142,6 +142,13 @@ REDIS_URL = os.getenv(
     f"redis://:{REDIS_PASSWORD}@{REDIS_HOST}:{REDIS_PORT}/{REDIS_DB}"
 )
 
+UPSTREAM_MTLS_ENABLED = os.getenv("UPSTREAM_MTLS_ENABLED", "false").lower() == "true"
+UPSTREAM_MTLS_STRICT = os.getenv("UPSTREAM_MTLS_STRICT", "false").lower() == "true"
+UPSTREAM_TLS_VERIFY = os.getenv("UPSTREAM_TLS_VERIFY", "true").lower() == "true"
+UPSTREAM_CA_CERT_PATH = os.getenv("UPSTREAM_CA_CERT_PATH", "")
+UPSTREAM_CLIENT_CERT_PATH = os.getenv("UPSTREAM_CLIENT_CERT_PATH", "")
+UPSTREAM_CLIENT_KEY_PATH = os.getenv("UPSTREAM_CLIENT_KEY_PATH", "")
+
 # ═══════════════════════════════════════════════════════
 # DSAM — Dynamic Session & Anti-Theft Monitor
 # ═══════════════════════════════════════════════════════

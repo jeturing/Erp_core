@@ -22,6 +22,7 @@ from ..config import (
     ODOO_DB_HOST, ODOO_DB_USER, ODOO_DB_PASSWORD,
     get_runtime_int, get_runtime_json, get_runtime_kv_map, get_runtime_setting,
 )
+from ..services.mtls_client import create_upstream_async_client
 from ..services.tenant_accounts import fetch_tenant_accounts_snapshot
 
 logger = logging.getLogger(__name__)
@@ -447,7 +448,7 @@ async def call_odoo_local_api(server_config: dict, method: str, endpoint: str, d
     headers = {"X-API-KEY": _provisioning_api_key()}
     
     try:
-        async with httpx.AsyncClient(timeout=60.0, verify=False) as client:
+        async with create_upstream_async_client(timeout=60.0) as client:
             if method == "GET":
                 resp = await client.get(url, headers=headers)
             elif method == "POST":
@@ -680,7 +681,7 @@ async def change_tenant_password(
         # IMPLEMENTACIÓN FUTURA: Llamar a odoo_local_api.py via HTTP
         # cuando esté disponible en PCT 105
         try:
-            async with httpx.AsyncClient(timeout=10.0, verify=False) as client:
+            async with create_upstream_async_client(timeout=10.0) as client:
                 response = await client.put(
                     f"https://{server_config['ip']}:8070/api/tenant/password",
                     headers={"X-API-KEY": _provisioning_api_key()},
@@ -998,7 +999,7 @@ async def suspend_tenant(
         
         # Fallback: Intentar via odoo_local_api.py
         try:
-            async with httpx.AsyncClient(timeout=10.0, verify=False) as client:
+            async with create_upstream_async_client(timeout=10.0) as client:
                 response = await client.put(
                     f"https://{server_config['ip']}:8070/api/tenant/suspend",
                     headers={"X-API-KEY": _provisioning_api_key()},

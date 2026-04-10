@@ -2,7 +2,6 @@
 	import { onMount } from 'svelte';
 
 	const baseUrl = '/api/admin';
-	const apiKey = 'prov-key-2026-secure';
 
 	let smtpConfig = {
 		host: '',
@@ -24,10 +23,18 @@
 		loadSmtpConfig();
 	});
 
-	const getHeaders = () => ({
-		'Content-Type': 'application/json',
-		'X-API-Key': apiKey
-	});
+	const getHeaders = () => {
+		const headers = {
+			'Content-Type': 'application/json'
+		};
+		if (typeof window !== 'undefined') {
+			const token = localStorage.getItem('access_token');
+			if (token) {
+				headers.Authorization = `Bearer ${token}`;
+			}
+		}
+		return headers;
+	};
 
 	const loadSmtpConfig = async () => {
 		try {

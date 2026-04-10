@@ -10,6 +10,7 @@ from fastapi import APIRouter, HTTPException, Query, Body, Request, Depends
 from sqlalchemy.orm import Session
 from sqlalchemy import text
 from typing import Dict, List, Optional
+import hmac
 import logging
 
 from ..models.database import get_db
@@ -17,6 +18,7 @@ from ..services.admin_smtp_service import AdminSmtpService
 from ..services.admin_email_template_service import AdminEmailTemplateService
 from ..services.admin_storage_alerts_service import AdminStorageAlertsService
 from ..security.tokens import TokenManager
+from ..config import PROVISIONING_API_KEY, get_runtime_setting
 
 logger = logging.getLogger("admin_routes")
 SMTP_ENV_ONLY_MESSAGE = "SMTP se administra solo desde .env.production y requiere reinicio de erp-core"
@@ -50,8 +52,9 @@ def _get_admin_user(request: Request) -> Dict:
             pass
     
     # Fallback a API key
-    api_key = request.headers.get("x-api-key")
-    if api_key == "prov-key-2026-secure":
+    api_key = (request.headers.get("x-api-key") or "").strip()
+    expected_api_key = str(get_runtime_setting("PROVISIONING_API_KEY", PROVISIONING_API_KEY) or "").strip()
+    if expected_api_key and api_key and hmac.compare_digest(api_key, expected_api_key):
         return {"username": "api-admin", "role": "admin"}
     
     raise HTTPException(status_code=401, detail="No autenticado. Requiere token Bearer o x-api-key")

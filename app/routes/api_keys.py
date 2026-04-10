@@ -27,6 +27,8 @@ from ..models.database import (
     ApiKeyRotationRequest, ApiKeyRotationStatus,
     API_KEY_TIER_LIMITS, get_db,
 )
+from ..services.api_key_lifecycle import cleanup_api_keys
+from ..services.rate_limiter import consume_rate_limit
 from .roles import _extract_token, verify_token_with_role
 
 router = APIRouter(prefix="/api/api-keys", tags=["API Keys"])
@@ -217,6 +219,24 @@ def list_tiers():
             }
             for tier, limits in API_KEY_TIER_LIMITS.items()
         ]
+    }
+
+
+@router.post("/maintenance/cleanup", summary="Ejecutar limpieza de ciclo de vida de API keys")
+def run_api_key_lifecycle_cleanup(
+    request: Request,
+    access_token: Optional[str] = Cookie(None),
+    db: Session = Depends(get_db),
+):
+    token_data = _auth(request, access_token)
+    if not (_is_admin(token_data) or _require_permission(token_data, "api_keys:write")):
+        raise HTTPException(status_code=403, detail="Se requiere permiso api_keys:write")
+
+    result = cleanup_api_keys(db)
+    return {
+        "success": True,
+        "result": result,
+        "executed_at": datetime.utcnow().isoformat(),
     }
 
 
@@ -728,44 +748,113 @@ def list_rotation_requests(
 # VERIFY (uso interno — otros módulos pueden llamar esto)
 # ─────────────────────────────────────────────
 
-def verify_api_key(raw_key: str, db: Session) -> Optional[ApiKey]:
+def verify_api_key_detailed(
+    raw_key: str,
+    db: Session,
+    *,
+    endpoint: Optional[str] = None,
+    ip_address: Optional[str] = None,
+) -> tuple[Optional[ApiKey], Optional[str]]:
     """
-    Verifica una API key cruda (formato: sk_live_<16>_<32>).
-    Retorna el objeto ApiKey si es válida y activa, None en caso contrario.
-    Actualiza contadores de uso en la misma transacción.
+    Verifica una API key cruda (formato: sk_live_<16>_<32>) con motivo detallado.
+
+    Returns:
+      - (ApiKey, None) cuando es válida
+      - (None, <reason>) en fallo
+
+    Reasons:
+      invalid | expired | rate_limit_minute | rate_limit_day | quota_month
     """
     if not raw_key or not raw_key.startswith("sk_live_"):
-        return None
+        return None, "invalid"
 
-    # Extraer key_id del formato sk_live_<prefix>_<secret>
     parts = raw_key.split("_")
-    # sk  live  <prefix16>  <secret32>  → partes: ['sk', 'live', prefix, secret]
     if len(parts) < 4:
-        return None
+        return None, "invalid"
 
     key_id = f"sk_live_{parts[2]}"
     key_hash = _hash_key(raw_key)
 
     key = db.query(ApiKey).filter(
-        ApiKey.key_id   == key_id,
+        ApiKey.key_id == key_id,
         ApiKey.key_hash == key_hash,
         ApiKey.status.in_([ApiKeyStatus.active, ApiKeyStatus.rotating]),
     ).first()
 
     if not key:
-        return None
+        return None, "invalid"
 
-    # Comprobar expiración
-    if key.expires_at and key.expires_at < datetime.utcnow():
+    now = datetime.utcnow()
+
+    # Expiración dura
+    if key.expires_at and key.expires_at < now:
         key.status = ApiKeyStatus.expired
         db.commit()
-        return None
+        return None, "expired"
 
-    # Incrementar contadores
-    key.total_requests  += 1
-    key.usage_today     += 1
+    limits = _resolve_tier_limits(key)
+
+    # Cuota mensual (tokens/requests acumuladas según implementación actual)
+    if limits["tokens"] is not None and key.usage_this_month >= int(limits["tokens"]):
+        return None, "quota_month"
+
+    # Límite runtime Redis (híbrido): rpm + rpd en Redis, forense/uso en PostgreSQL.
+    decision = consume_rate_limit(
+        identifier=key.key_id,
+        rpm=int(limits["rpm"]) if limits["rpm"] is not None else None,
+        rpd=int(limits["rpd"]) if limits["rpd"] is not None else None,
+    )
+    if not decision.allowed:
+        return None, decision.reason
+
+    # Actualizar contadores base
+    key.total_requests += 1
+    key.usage_today += 1
     key.usage_this_month += 1
-    key.last_used_at    = datetime.utcnow()
-    db.commit()
+    key.last_used_at = now
+    if ip_address:
+        key.last_used_ip = ip_address
 
+    # Agregación por hora para forense/billing
+    hour_bucket = now.replace(minute=0, second=0, microsecond=0)
+    usage = db.query(ApiKeyUsageLog).filter(
+        ApiKeyUsageLog.key_id == key.key_id,
+        ApiKeyUsageLog.hour_bucket == hour_bucket,
+        ApiKeyUsageLog.endpoint == (endpoint or "*"),
+    ).first()
+
+    if usage:
+        usage.request_count += 1
+        if ip_address:
+            usage.ip_address = ip_address
+    else:
+        usage = ApiKeyUsageLog(
+            key_id=key.key_id,
+            hour_bucket=hour_bucket,
+            request_count=1,
+            token_count=0,
+            error_count=0,
+            endpoint=(endpoint or "*"),
+            ip_address=ip_address,
+        )
+        db.add(usage)
+
+    db.commit()
+    return key, None
+
+
+def verify_api_key(
+    raw_key: str,
+    db: Session,
+    *,
+    endpoint: Optional[str] = None,
+    ip_address: Optional[str] = None,
+) -> Optional[ApiKey]:
+    """Compat wrapper para validación simple de API key."""
+    key, _reason = verify_api_key_detailed(
+        raw_key=raw_key,
+        db=db,
+        endpoint=endpoint,
+        ip_address=ip_address,
+    )
     return key

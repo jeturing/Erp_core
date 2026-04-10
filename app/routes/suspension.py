@@ -14,9 +14,12 @@ from fastapi import APIRouter, Request, Query, HTTPException
 from fastapi.responses import HTMLResponse, JSONResponse
 from sqlalchemy.orm import Session
 from typing import Optional
+import hmac
 import os
 import json
 import logging
+
+from ..config import PROVISIONING_API_KEY, get_runtime_setting
 
 logger = logging.getLogger(__name__)
 
@@ -102,6 +105,12 @@ def _regenerate_nginx_map(data: dict):
         logger.warning(f"⚠️ Sin permisos para escribir {nginx_map_file}")
     except Exception as e:
         logger.error(f"Error escribiendo nginx map: {e}")
+
+
+def _require_api_key(x_api_key: str) -> None:
+    expected = str(get_runtime_setting("PROVISIONING_API_KEY", PROVISIONING_API_KEY) or "").strip()
+    if not expected or not x_api_key or not hmac.compare_digest(x_api_key, expected):
+        raise HTTPException(status_code=401, detail="API key inválida")
 
 
 # ─── Páginas HTML de suspensión ───────────────────────────────
@@ -194,9 +203,7 @@ async def suspend_tenant(
     """
     from datetime import datetime
     
-    PROVISIONING_API_KEY = os.getenv("PROVISIONING_API_KEY", "prov-key-2026-secure")
-    if x_api_key != PROVISIONING_API_KEY:
-        raise HTTPException(status_code=401, detail="API key inválida")
+    _require_api_key(x_api_key)
     
     data = _load_suspended_tenants()
     data[subdomain] = {
@@ -226,9 +233,7 @@ async def reactivate_tenant(
     """
     Reactiva un tenant — lo quita de la lista de suspendidos y regenera Nginx map.
     """
-    PROVISIONING_API_KEY = os.getenv("PROVISIONING_API_KEY", "prov-key-2026-secure")
-    if x_api_key != PROVISIONING_API_KEY:
-        raise HTTPException(status_code=401, detail="API key inválida")
+    _require_api_key(x_api_key)
     
     data = _load_suspended_tenants()
     if subdomain in data:
@@ -247,9 +252,7 @@ async def reactivate_tenant(
 @router.get("/api/tenant-suspensions")
 async def list_suspended_tenants(x_api_key: str = ""):
     """Lista todos los tenants actualmente suspendidos."""
-    PROVISIONING_API_KEY = os.getenv("PROVISIONING_API_KEY", "prov-key-2026-secure")
-    if x_api_key != PROVISIONING_API_KEY:
-        raise HTTPException(status_code=401, detail="API key inválida")
+    _require_api_key(x_api_key)
     
     data = _load_suspended_tenants()
     suspended = {k: v for k, v in data.items() if v.get("suspended", False)}

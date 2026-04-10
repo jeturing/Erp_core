@@ -1,22 +1,4 @@
 <script>
-	import { createEventDispatcher } from 'svelte';
-
-	export let apiKey = 'prov-key-2026-secure';
-
-	const dispatch = createEventDispatcher();
-	let showKeyInput = false;
-	let tempKey = apiKey;
-
-	const handleSaveKey = () => {
-		apiKey = tempKey;
-		dispatch('apiKeyChange', apiKey);
-		showKeyInput = false;
-	};
-
-	const handleCancel = () => {
-		tempKey = apiKey;
-		showKeyInput = false;
-	};
 </script>
 
 <div class="header">
@@ -27,23 +9,7 @@
 		</div>
 
 		<div class="api-key-section">
-			{#if showKeyInput}
-				<div class="key-input-group">
-					<input
-						type="password"
-						bind:value={tempKey}
-						placeholder="API Key"
-						class="key-input"
-					/>
-					<button class="btn btn-small btn-success" on:click={handleSaveKey}>✓ Guardar</button>
-					<button class="btn btn-small btn-secondary" on:click={handleCancel}>✕ Cancelar</button>
-				</div>
-			{:else}
-				<button class="btn btn-small btn-secondary" on:click={() => (showKeyInput = true)}>
-					🔑 Cambiar API Key
-				</button>
-				<span class="api-key-display">API Key: {apiKey.substring(0, 8)}...{apiKey.substring(apiKey.length - 4)}</span>
-			{/if}
+			<span class="api-key-display">Autenticación: sesión admin (JWT)</span>
 		</div>
 	</div>
 
@@ -95,28 +61,6 @@
 		align-items: center;
 	}
 
-	.key-input-group {
-		display: flex;
-		gap: 8px;
-		align-items: center;
-	}
-
-	.key-input {
-		padding: 8px 12px;
-		border: none;
-		border-radius: 6px;
-		font-size: 13px;
-		width: 200px;
-		background: rgba(255, 255, 255, 0.9);
-		color: #1f2937;
-	}
-
-	.key-input:focus {
-		outline: none;
-		background: white;
-		box-shadow: 0 0 0 3px rgba(255, 255, 255, 0.3);
-	}
-
 	.api-key-display {
 		font-size: 12px;
 		opacity: 0.85;
@@ -152,41 +96,6 @@
 
 	.status-time {
 		opacity: 0.8;
-	}
-
-	.btn {
-		padding: 8px 16px;
-		border: none;
-		border-radius: 6px;
-		cursor: pointer;
-		font-size: 13px;
-		font-weight: 600;
-		transition: all 0.2s ease;
-	}
-
-	.btn-small {
-		padding: 6px 12px;
-		font-size: 12px;
-	}
-
-	.btn-success {
-		background: rgba(0, 255, 159, 0.12);
-		color: #00FF9F;
-		border: 1px solid rgba(0, 255, 159, 0.25);
-	}
-
-	.btn-success:hover {
-		background: rgba(0, 255, 159, 0.22);
-	}
-
-	.btn-secondary {
-		background: rgba(255, 255, 255, 0.15);
-		color: white;
-		border: 1px solid rgba(255, 255, 255, 0.2);
-	}
-
-	.btn-secondary:hover {
-		background: rgba(255, 255, 255, 0.25);
 	}
 
 	@media (max-width: 768px) {

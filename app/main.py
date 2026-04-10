@@ -3,7 +3,7 @@ Main application entry point
 Onboarding System API - Modular architecture with production security
 """
 from contextlib import asynccontextmanager
-from fastapi import FastAPI, Cookie, HTTPException, Request
+from fastapi import FastAPI, Cookie, Depends, HTTPException, Request
 from fastapi.responses import HTMLResponse
 from fastapi.staticfiles import StaticFiles
 from starlette.middleware.base import BaseHTTPMiddleware
@@ -58,6 +58,8 @@ from .routes.roles import _require_admin as _require_admin_base
 # Import security middleware
 from .security.middleware import SecurityMiddleware, WAFMiddleware
 from .security.cors_dynamic import DynamicCORSMiddleware, refresh_cors_cache
+from .security.gateway_auth import gateway_api_key_dependency
+from .security.api_scopes import ApiAccessLevel
 
 import sentry_sdk
 from sentry_sdk.integrations.fastapi import FastApiIntegration
@@ -151,10 +153,9 @@ app = FastAPI(
 # ── Protección Basic Auth para Swagger / OpenAPI ──
 # Las rutas /sajet-api-docs, /sajet-api-redoc y /openapi.json requieren
 # usuario y contraseña para evitar exposición pública del schema.
-_DOCS_USER = os.getenv("API_DOCS_USER", "jeturing")
-_DOCS_PASS_HASH = hashlib.sha256(
-    os.getenv("API_DOCS_PASSWORD", "Jeturing2015@").encode()
-).hexdigest()
+_DOCS_USER = os.getenv("API_DOCS_USER", "").strip()
+_docs_pass = os.getenv("API_DOCS_PASSWORD", "")
+_DOCS_PASS_HASH = hashlib.sha256(_docs_pass.encode()).hexdigest() if _docs_pass else ""
 _DOCS_PROTECTED_PATHS = ("/sajet-api-docs", "/sajet-api-redoc", "/openapi.json")
 
 
@@ -165,6 +166,10 @@ class DocsBasicAuthMiddleware(BaseHTTPMiddleware):
         path = request.url.path
         if not any(path.startswith(p) for p in _DOCS_PROTECTED_PATHS):
             return await call_next(request)
+
+        # If docs credentials are not configured, keep docs closed.
+        if not _DOCS_USER or not _DOCS_PASS_HASH:
+            return Response(content="Not Found", status_code=404)
 
         auth_header = request.headers.get("Authorization", "")
         if auth_header.startswith("Basic "):
@@ -215,7 +220,7 @@ app.include_router(onboarding.router)
 app.include_router(tenant_portal.router)
 app.include_router(nodes.router)  # Multi-Proxmox management
 app.include_router(tunnels.router)  # Cloudflare Tunnel management
-app.include_router(provisioning.router)  # Auto-provisioning de tenants Odoo
+app.include_router(provisioning.router, dependencies=[Depends(gateway_api_key_dependency(ApiAccessLevel.SENSITIVE))])  # Auto-provisioning de tenants Odoo
 app.include_router(settings.router)  # Configuración administrable
 app.include_router(billing.router)  # Facturación y métricas de pagos
 app.include_router(logs.router)  # Logs del sistema en tiempo real
@@ -254,10 +259,10 @@ app.include_router(admin_landing.router)         # Landing admin-only
 app.include_router(payments.router)              # Pagos y dispersión a proveedores
 app.include_router(mercury_webhooks.router)      # Webhooks Mercury para conciliación
 app.include_router(dispersion.router)            # Dispersión Mercury con feature flag y auth 4-ojos
-app.include_router(plan_migration.router)        # Migración automática de planes por consumo
+app.include_router(plan_migration.router, dependencies=[Depends(gateway_api_key_dependency(ApiAccessLevel.SENSITIVE))])        # Migración automática de planes por consumo
 app.include_router(plan_governance.router)       # Gobernanza de planes / fair use
-app.include_router(storage_alerts.router)        # Alertas de almacenamiento con notificaciones
-app.include_router(monitoring_dashboard.router)  # Dashboard de monitoreo completo
+app.include_router(storage_alerts.router, dependencies=[Depends(gateway_api_key_dependency(ApiAccessLevel.INTERNAL))])        # Alertas de almacenamiento con notificaciones
+app.include_router(monitoring_dashboard.router, dependencies=[Depends(gateway_api_key_dependency(ApiAccessLevel.PARTNER))])  # Dashboard de monitoreo completo
 app.include_router(admin_control_panel.router)   # 🔧 Panel de control: SMTP, templates, alertas
 app.include_router(api_keys.router)              # 🔑 API Key Management (rate limit, rotación Stripe)
 app.include_router(odoo_webhooks.router)         # 🔄 Webhooks Odoo → Portal (sync bidireccional)

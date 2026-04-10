@@ -86,6 +86,18 @@ class BackgroundScheduler:
             )
         )
 
+        # Limpieza lifecycle de API keys (GW-009) — cada 10 minutos
+        self._tasks.append(
+            asyncio.create_task(
+                self._periodic_task(
+                    "api_key_lifecycle_cleanup",
+                    self._run_api_key_lifecycle_cleanup,
+                    interval_seconds=600,
+                    initial_delay=180,
+                )
+            )
+        )
+
         logger.info(f"⏰ Background Scheduler started with {len(self._tasks)} tasks")
 
     async def stop(self):
@@ -219,6 +231,22 @@ class BackgroundScheduler:
         except Exception as e:
             logger.error(f"Cleanup failed: {e}")
             db.rollback()
+        finally:
+            db.close()
+
+    def _run_api_key_lifecycle_cleanup(self):
+        """Ejecuta limpieza del ciclo de vida de API keys (GW-009)."""
+        from ..models.database import SessionLocal
+        from ..services.api_key_lifecycle import cleanup_api_keys
+
+        db = SessionLocal()
+        try:
+            result = cleanup_api_keys(db)
+            logger.info("🔑 API key lifecycle cleanup result: %s", result)
+            return result
+        except Exception:
+            db.rollback()
+            raise
         finally:
             db.close()
 

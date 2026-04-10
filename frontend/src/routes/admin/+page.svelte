@@ -1,31 +1,18 @@
 <script>
-	import { onMount } from 'svelte';
 	import AdminHeader from './components/AdminHeader.svelte';
 	import SmtpManager from './components/SmtpManager.svelte';
 	import TemplateManager from './components/TemplateManager.svelte';
 	import StorageAlertsManager from './components/StorageAlertsManager.svelte';
 
 	let activeTab = 'smtp';
-	let apiKey = 'prov-key-2026-secure';
-	let baseUrl = '/api/admin';
-
-	// Headers comunes para todas las peticiones
-	const getHeaders = () => ({
-		'Content-Type': 'application/json',
-		'x-api-key': apiKey
-	});
 
 	const handleTabChange = (tab) => {
 		activeTab = tab;
 	};
-
-	const handleApiKeyChange = (event) => {
-		apiKey = event.detail;
-	};
 </script>
 
 <div class="admin-container">
-	<AdminHeader {apiKey} on:apiKeyChange={handleApiKeyChange} />
+	<AdminHeader />
 
 	<div class="tabs-container">
 		<div class="tabs">

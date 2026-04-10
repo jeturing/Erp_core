@@ -1,7 +1,14 @@
 import api from './client';
 import type { Tenant, TenantListResponse } from '../types';
 
-const PROVISIONING_API_KEY = import.meta.env.VITE_PROVISIONING_API_KEY || 'prov-key-2026-secure';
+const PROVISIONING_API_KEY = String(import.meta.env.VITE_PROVISIONING_API_KEY || '').trim();
+
+const provisioningHeaders = (): HeadersInit => {
+  if (!PROVISIONING_API_KEY) {
+    throw new Error('VITE_PROVISIONING_API_KEY no está configurada');
+  }
+  return { 'X-API-KEY': PROVISIONING_API_KEY };
+};
 
 export interface CreateTenantRequest {
   subdomain: string;
@@ -172,7 +179,7 @@ export const tenantsApi = {
         new_password: payload.new_password,
         server: payload.server_id || payload.server || 'primary',
       },
-      { 'X-API-KEY': PROVISIONING_API_KEY },
+      provisioningHeaders(),
     );
   },
 
@@ -185,7 +192,7 @@ export const tenantsApi = {
         reason: payload.reason || (payload.suspend ? 'Suspension manual desde admin SPA' : 'Reactivacion manual desde admin SPA'),
         server: payload.server_id || payload.server || 'primary',
       },
-      { 'X-API-KEY': PROVISIONING_API_KEY },
+      provisioningHeaders(),
     );
   },
 
@@ -197,7 +204,7 @@ export const tenantsApi = {
         new_email: payload.new_email,
         server: payload.server_id || payload.server || 'primary',
       },
-      { 'X-API-KEY': PROVISIONING_API_KEY },
+      provisioningHeaders(),
     );
   },
 
@@ -207,7 +214,7 @@ export const tenantsApi = {
       include_inactive: 'true',
       server: server || 'primary',
     });
-    return api.get<TenantAccountsResponse>(`/api/provisioning/tenant/accounts?${qs.toString()}`, { 'X-API-KEY': PROVISIONING_API_KEY });
+    return api.get<TenantAccountsResponse>(`/api/provisioning/tenant/accounts?${qs.toString()}`, provisioningHeaders());
   },
 
   async updateAccountCredentials(payload: UpdateTenantAccountCredentialsRequest): Promise<{ success: boolean; message: string }> {
@@ -222,7 +229,7 @@ export const tenantsApi = {
         active: payload.active,
         server: payload.server_id || payload.server || 'primary',
       },
-      { 'X-API-KEY': PROVISIONING_API_KEY },
+      provisioningHeaders(),
     );
   },
 
@@ -233,7 +240,7 @@ export const tenantsApi = {
         subdomain,
         server: server || 'primary',
       },
-      { 'X-API-KEY': PROVISIONING_API_KEY },
+      provisioningHeaders(),
     );
   },
 

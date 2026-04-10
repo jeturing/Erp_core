@@ -2341,6 +2341,26 @@ class ApiKeyUsageLog(Base):
     )
 
 
+class ApiKeyAuditLog(Base):
+    """Auditoría detallada por request para gateway/API keys."""
+    __tablename__ = "api_key_audit_logs"
+
+    id = Column(Integer, primary_key=True, index=True)
+    key_id = Column(String(32), nullable=False, index=True)
+    auth_mode = Column(String(32), nullable=True, index=True)  # managed_api_key | legacy_provisioning_key
+    path = Column(String(255), nullable=True)
+    method = Column(String(16), nullable=True)
+    ip_address = Column(String(45), nullable=True)
+    status_code = Column(Integer, nullable=False, default=200)
+    reject_reason = Column(String(64), nullable=True, index=True)
+    created_at = Column(DateTime, nullable=False, default=datetime.utcnow, index=True)
+
+    __table_args__ = (
+        Index("idx_api_key_audit_key_time", "key_id", "created_at"),
+        Index("idx_api_key_audit_status_time", "status_code", "created_at"),
+    )
+
+
 # ── Solicitud de rotación iniciada por el tenant (flujo de soporte) ──────────
 
 class ApiKeyRotationStatus(enum.Enum):
