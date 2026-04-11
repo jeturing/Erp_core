@@ -138,6 +138,9 @@
     return clients?.items?.find((client) => client.customer_id === selectedServiceClientId) || null;
   }
 
+  $: emailProfileCatalog = clientServiceCatalog.filter((item) => isEmailPackage(item));
+  $: activeEmailProfiles = clientServiceSubscriptions.filter((addon) => addon.catalog_item && isEmailPackage(addon.catalog_item));
+
   async function loadData() {
     loading = true;
     error = '';
@@ -312,14 +315,14 @@
     servicesMessage = '';
     try {
       const result = await partnerPortalApi.purchaseClientService(selectedServiceClientId, item.id, 1);
-      servicesMessage = result.message || `Servicio ${item.name} adquirido para el cliente`;
+      servicesMessage = result.message || `Perfil ${item.name} asignado al tenant`;
       servicesMessageType = 'success';
       await loadClientServices(selectedServiceClientId);
       if (result.invoice?.payment_url) {
         window.open(result.invoice.payment_url, '_blank', 'noopener,noreferrer');
       }
     } catch (err) {
-      servicesMessage = err instanceof Error ? err.message : 'No se pudo adquirir el servicio para el cliente';
+      servicesMessage = err instanceof Error ? err.message : 'No se pudo asignar el perfil de correo al tenant';
       servicesMessageType = 'error';
     } finally {
       purchasingServiceId = null;
@@ -850,8 +853,8 @@
         <div class="space-y-4">
           <div class="flex flex-col lg:flex-row lg:items-center lg:justify-between gap-3">
             <div>
-              <h2 class="text-lg font-bold text-[#1a1a1a]">Servicios Adicionales para Clientes</h2>
-              <p class="text-sm text-gray-500">Vende paquetes complementarios desde el portal partner y genera la factura automáticamente.</p>
+              <h2 class="text-lg font-bold text-[#1a1a1a]">Perfiles de Correo por Tenant</h2>
+              <p class="text-sm text-gray-500">Asigna perfiles de correo a tus tenants. El cargo se agrega automáticamente a facturación.</p>
             </div>
 
             <div class="w-full lg:w-80">
@@ -899,8 +902,8 @@
               </div>
               <div class="bg-white rounded-xl border border-gray-200 p-4">
                 <span class="text-[10px] font-semibold text-gray-500 uppercase tracking-wider">Servicios activos</span>
-                <p class="text-lg font-bold text-[#1a1a1a] mt-1">{clientServiceSubscriptions.length}</p>
-                <p class="text-xs text-gray-400 mt-1">La compra genera factura al instante</p>
+                <p class="text-lg font-bold text-[#1a1a1a] mt-1">{activeEmailProfiles.length}</p>
+                <p class="text-xs text-gray-400 mt-1">Perfiles de correo activos</p>
               </div>
             </div>
 
@@ -911,16 +914,16 @@
             {:else}
               <div class="grid grid-cols-1 xl:grid-cols-[0.9fr,1.1fr] gap-6">
                 <div class="bg-white rounded-xl border border-gray-200 p-5">
-                  <h3 class="text-sm font-bold text-[#1a1a1a] mb-4">Servicios activos del cliente</h3>
+                  <h3 class="text-sm font-bold text-[#1a1a1a] mb-4">Perfiles de correo activos</h3>
 
-                  {#if clientServiceSubscriptions.length === 0}
+                  {#if activeEmailProfiles.length === 0}
                     <div class="py-10 text-center">
                       <Package class="w-8 h-8 text-gray-300 mx-auto mb-2" />
-                      <p class="text-sm text-gray-500">Este cliente no tiene servicios adicionales activos.</p>
+                      <p class="text-sm text-gray-500">Este cliente no tiene perfiles de correo activos.</p>
                     </div>
                   {:else}
                     <div class="space-y-3">
-                      {#each clientServiceSubscriptions as addon}
+                      {#each activeEmailProfiles as addon}
                         <div class="rounded-lg border border-gray-200 bg-gray-50 p-4">
                           <div class="flex items-start justify-between gap-3">
                             <div>
@@ -963,16 +966,16 @@
                 </div>
 
                 <div class="bg-white rounded-xl border border-gray-200 p-5">
-                  <h3 class="text-sm font-bold text-[#1a1a1a] mb-4">Catálogo disponible para este cliente</h3>
+                  <h3 class="text-sm font-bold text-[#1a1a1a] mb-4">Catálogo de perfiles de correo</h3>
 
-                  {#if clientServiceCatalog.length === 0}
+                  {#if emailProfileCatalog.length === 0}
                     <div class="py-10 text-center">
                       <Package class="w-8 h-8 text-gray-300 mx-auto mb-2" />
-                      <p class="text-sm text-gray-500">No hay servicios adicionales configurados.</p>
+                      <p class="text-sm text-gray-500">No hay perfiles de correo configurados.</p>
                     </div>
                   {:else}
                     <div class="space-y-4">
-                      {#each clientServiceCatalog as item}
+                      {#each emailProfileCatalog as item}
                         <div class="rounded-xl border border-gray-200 p-4">
                           <div class="flex flex-col lg:flex-row lg:items-start lg:justify-between gap-4">
                             <div class="flex-1">
@@ -1030,7 +1033,7 @@
                                 {#if purchasingServiceId === item.id}
                                   <Loader2 class="w-4 h-4 animate-spin" />
                                 {/if}
-                                {item.is_included_in_plan ? 'Incluido' : item.active_quantity && item.active_quantity > 0 ? 'Comprar otro' : 'Comprar'}
+                                {item.is_included_in_plan ? 'Incluido' : item.active_quantity && item.active_quantity > 0 ? 'Asignar otro perfil' : 'Asignar perfil'}
                               </button>
                             </div>
                           </div>

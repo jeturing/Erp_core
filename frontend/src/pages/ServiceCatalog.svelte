@@ -106,6 +106,7 @@
   let activeCount = $derived(catalog.filter(i => i.is_active).length);
   let addonCount = $derived(catalog.filter(i => i.is_addon && i.is_active).length);
   let linkedCount = $derived(catalog.filter(i => (i.linked_plans?.length || 0) > 0).length);
+  let emailPackageCount = $derived(catalog.filter(i => isEmailPackage(i) && i.is_active).length);
 
   function toggleCategory(cat: string) {
     if (expandedCategories.has(cat)) {
@@ -133,6 +134,7 @@
       soc: 'text-red-400',
       cloud_devops: 'text-cyan-400',
       payments_pos: 'text-pink-400',
+      email_service: 'text-blue-300',
     };
     return colors[cat] || 'text-gray-400';
   }
@@ -308,13 +310,18 @@
       <h1 class="page-title flex items-center gap-2"><ShoppingBag size={24} /> Catálogo de Servicios SAJET</h1>
       <p class="page-subtitle">Administra servicios, precios y vinculación con planes</p>
     </div>
-    <button class="btn-accent flex items-center gap-2" onclick={openCreate}>
-      <Plus size={16} /> Nuevo Servicio
-    </button>
+    <div class="flex items-center gap-2">
+      <a class="btn-secondary flex items-center gap-2" href="/postal-email">
+        📧 Gestión correo
+      </a>
+      <button class="btn-accent flex items-center gap-2" onclick={openCreate}>
+        <Plus size={16} /> Nuevo Servicio
+      </button>
+    </div>
   </div>
 
   <!-- Stats -->
-  <div class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
+  <div class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-5 gap-4">
     <div class="stat-card">
       <div class="text-xs font-semibold uppercase text-gray-500 mb-1">Servicios Activos</div>
       <div class="text-2xl font-bold text-text-light">{activeCount}</div>
@@ -330,6 +337,10 @@
     <div class="stat-card">
       <div class="text-xs font-semibold uppercase text-gray-500 mb-1">Vinculados a Planes</div>
       <div class="text-2xl font-bold text-emerald-400">{linkedCount}</div>
+    </div>
+    <div class="stat-card">
+      <div class="text-xs font-semibold uppercase text-gray-500 mb-1">Paquetes Correo</div>
+      <div class="text-2xl font-bold text-blue-300">{emailPackageCount}</div>
     </div>
   </div>
 

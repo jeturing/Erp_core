@@ -121,18 +121,46 @@ def resolve_email_limits(
             .first()
         )
         if addon_sub:
-            meta = None
-            # Primero metadata del catalog item, luego de la suscripción
+            base_meta: dict = {}
             if addon_sub.catalog_item_id:
                 cat = db.query(ServiceCatalogItem).get(addon_sub.catalog_item_id)
                 if cat and cat.metadata_json:
-                    meta = cat.metadata_json
-            if not meta and addon_sub.metadata_json:
-                meta = addon_sub.metadata_json
+                    base_meta = cat.metadata_json if isinstance(cat.metadata_json, dict) else {}
+
+            sub_meta = addon_sub.metadata_json if isinstance(addon_sub.metadata_json, dict) else {}
+            # Orden de precedencia: catálogo base + overrides puntuales en la suscripción del tenant.
+            meta = {**base_meta, **sub_meta}
 
             if meta:
                 for field in _LIMIT_FIELDS:
                     val = meta.get(field)
+                    # Compatibilidad con metadata legacy del catálogo
+                    if val is None:
+                        if field == "max_emails_monthly":
+                            val = meta.get("email_quota_monthly")
+                        elif field == "email_rate_per_hour":
+                            val = meta.get("email_burst_limit_60m")
+                        elif field == "email_rate_per_minute":
+                            burst = meta.get("email_burst_limit_60m")
+                            if burst is not None:
+                                try:
+                                    val = max(1, int(burst) // 60)
+                                except Exception:
+                                    val = None
+                        elif field == "email_rate_per_day":
+                            quota = meta.get("email_quota_monthly")
+                            burst = meta.get("email_burst_limit_60m")
+                            try:
+                                q = int(quota) if quota is not None else None
+                                b = int(burst) if burst is not None else None
+                                if q is not None and b is not None:
+                                    val = min(q, b * 24)
+                                elif q is not None:
+                                    val = q
+                                elif b is not None:
+                                    val = b * 24
+                            except Exception:
+                                val = None
                     if val is not None:
                         limits[field] = int(val)
 

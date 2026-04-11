@@ -1151,6 +1151,42 @@ export interface SeatSummaryResponse {
   is_partner_metered?: boolean;
 }
 
+export interface SeatOverviewItem {
+  subscription_id: number;
+  stripe_subscription_id?: string | null;
+  customer_id: number;
+  company_name: string;
+  subdomain: string;
+  email?: string | null;
+  partner_id?: number | null;
+  partner_name?: string | null;
+  plan_name?: string | null;
+  status?: string | null;
+  billing_mode?: string | null;
+  current_user_count: number;
+  month_hwm: number;
+  grace_active_count: number;
+  billable_count: number;
+  is_partner_metered: boolean;
+}
+
+export interface SeatOverviewGroup {
+  partner_id: number | null;
+  partner_name: string;
+  customers: number;
+  subscriptions: number;
+  current_user_count: number;
+  billable_count: number;
+  tenants: SeatOverviewItem[];
+}
+
+export interface SeatOverviewResponse {
+  items: SeatOverviewItem[];
+  groups: SeatOverviewGroup[];
+  total: number;
+  generated_at?: string;
+}
+
 // ── Invoice Types (Épica 5) ──
 
 export type InvoiceStatus = 'draft' | 'issued' | 'paid' | 'overdue' | 'void' | 'credited';

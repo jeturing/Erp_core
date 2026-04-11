@@ -58,6 +58,7 @@
       id: 'grp-billing', label: 'Facturación', icon: CreditCard,
       children: [
         { id: 'billing',        label: 'Billing',       icon: CreditCard,       href: '/billing' },
+        { id: 'postal-email',   label: 'Correo / Perfiles', icon: Mail,         href: '/postal-email' },
         { id: 'plans',          label: 'Planes',        icon: Package,          href: '/plans' },
         { id: 'invoices',       label: 'Facturas',      icon: Receipt,          href: '/invoices' },
         { id: 'seats',          label: 'Seats',         icon: UsersRound,       href: '/seats' },

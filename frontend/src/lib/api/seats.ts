@@ -3,6 +3,7 @@ import type {
   SeatEventsResponse,
   SeatHWMResponse,
   SeatSummaryResponse,
+  SeatOverviewResponse,
 } from '../types';
 
 export const seatsApi = {
@@ -26,6 +27,13 @@ export const seatsApi = {
 
   async syncStripe(): Promise<{ message: string; synced: number; errors: number }> {
     return api.post('/api/seats/sync-stripe');
+  },
+
+  async getOverview(search?: string): Promise<SeatOverviewResponse> {
+    const params = new URLSearchParams();
+    if (search?.trim()) params.set('search', search.trim());
+    const qs = params.toString();
+    return api.get<SeatOverviewResponse>(`/api/seats/overview${qs ? `?${qs}` : ''}`);
   },
 
   async getSummary(subscriptionId?: number): Promise<SeatSummaryResponse> {

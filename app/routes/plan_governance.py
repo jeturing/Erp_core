@@ -8,9 +8,10 @@ Fase 1:
 """
 from typing import Optional, Dict, Any, List
 
-from fastapi import APIRouter, Cookie, Request
+from fastapi import APIRouter, Cookie, Request, HTTPException
+from pydantic import BaseModel
 
-from ..models.database import SessionLocal, Plan
+from ..models.database import SessionLocal, Plan, Customer
 from ..services.quota_service import QuotaService
 from .roles import _require_admin
 
@@ -69,6 +70,24 @@ def _recommend_plan(db, current_plan_key: str, top_resource: str, required_used:
     return None
 
 
+class PlanGovernanceUpdate(BaseModel):
+    max_users: Optional[int] = None
+    max_storage_mb: Optional[int] = None
+    max_stock_sku: Optional[int] = None
+    max_emails_monthly: Optional[int] = None
+    email_rate_per_minute: Optional[int] = None
+    email_rate_per_hour: Optional[int] = None
+    email_rate_per_day: Optional[int] = None
+    quota_warning_percent: Optional[int] = None
+    quota_recommend_percent: Optional[int] = None
+    quota_block_percent: Optional[int] = None
+    fair_use_new_customers_only: Optional[bool] = None
+
+
+class CustomerFairUseUpdate(BaseModel):
+    fair_use_enabled: bool
+
+
 @router.get("/summary")
 async def get_plan_governance_summary(
     request: Request,
@@ -121,6 +140,10 @@ async def get_plan_governance_summary(
                     "max_users": plan.max_users,
                     "max_storage_mb": plan.max_storage_mb,
                     "max_stock_sku": getattr(plan, "max_stock_sku", 0),
+                    "max_emails_monthly": getattr(plan, "max_emails_monthly", 0),
+                    "email_rate_per_minute": getattr(plan, "email_rate_per_minute", 0),
+                    "email_rate_per_hour": getattr(plan, "email_rate_per_hour", 0),
+                    "email_rate_per_day": getattr(plan, "email_rate_per_day", 0),
                     "quota_warning_percent": getattr(plan, "quota_warning_percent", 80),
                     "quota_recommend_percent": getattr(plan, "quota_recommend_percent", 95),
                     "quota_block_percent": getattr(plan, "quota_block_percent", 100),
@@ -129,6 +152,67 @@ async def get_plan_governance_summary(
                 for plan in plans
             ],
             "customers": customers,
+        }
+    finally:
+        db.close()
+
+
+@router.put("/plans/{plan_id}")
+async def update_governance_plan(
+    plan_id: int,
+    payload: PlanGovernanceUpdate,
+    request: Request,
+    access_token: Optional[str] = Cookie(None),
+) -> Dict[str, Any]:
+    """Actualiza límites/umbrales de gobernanza para un plan."""
+    _require_admin(request, access_token)
+    db = SessionLocal()
+    try:
+        plan = db.query(Plan).filter(Plan.id == plan_id, Plan.is_active == True).first()
+        if not plan:
+            raise HTTPException(status_code=404, detail="Plan no encontrado")
+
+        changes = []
+        for field, value in payload.model_dump(exclude_unset=True).items():
+            old = getattr(plan, field, None)
+            if old != value:
+                setattr(plan, field, value)
+                changes.append(field)
+
+        db.commit()
+        return {
+            "success": True,
+            "message": "Plan de gobernanza actualizado",
+            "plan_id": plan.id,
+            "changes": changes,
+        }
+    finally:
+        db.close()
+
+
+@router.put("/customers/{customer_id}/fair-use")
+async def update_customer_fair_use(
+    customer_id: int,
+    payload: CustomerFairUseUpdate,
+    request: Request,
+    access_token: Optional[str] = Cookie(None),
+) -> Dict[str, Any]:
+    """Activa/desactiva política fair-use para un cliente puntual."""
+    _require_admin(request, access_token)
+    db = SessionLocal()
+    try:
+        customer = db.query(Customer).filter(Customer.id == customer_id).first()
+        if not customer:
+            raise HTTPException(status_code=404, detail="Cliente no encontrado")
+
+        customer.fair_use_enabled = bool(payload.fair_use_enabled)
+        db.commit()
+
+        return {
+            "success": True,
+            "message": "Fair use actualizado",
+            "customer_id": customer.id,
+            "fair_use_enabled": customer.fair_use_enabled,
         }
     finally:
         db.close()

@@ -2,13 +2,30 @@
   import { onMount } from 'svelte';
   import { planGovernanceApi, type GovernanceCustomerSummary, type GovernancePlan } from '../lib/api/planGovernance';
   import { toasts } from '../lib/stores';
-  import { ShieldCheck, RefreshCw, TriangleAlert, CheckCircle2, Search, Package, HardDrive, Users } from 'lucide-svelte';
+  import { ShieldCheck, RefreshCw, TriangleAlert, CheckCircle2, Search, Package, HardDrive, Users, Pencil, Save } from 'lucide-svelte';
 
   let loading = $state(true);
   let newOnly = $state(true);
   let search = $state('');
   let plans = $state<GovernancePlan[]>([]);
   let customers = $state<GovernanceCustomerSummary[]>([]);
+  let planEditOpen = $state(false);
+  let savingPlan = $state(false);
+  let togglingCustomerId = $state<number | null>(null);
+  let editingPlanId = $state<number | null>(null);
+  let planDraft = $state({
+    max_users: 0,
+    max_storage_mb: 0,
+    max_stock_sku: 0,
+    max_emails_monthly: 0,
+    email_rate_per_minute: 0,
+    email_rate_per_hour: 0,
+    email_rate_per_day: 0,
+    quota_warning_percent: 80,
+    quota_recommend_percent: 95,
+    quota_block_percent: 100,
+    fair_use_new_customers_only: true,
+  });
   const filtered = $derived(customers.filter((item) => {
     const needle = search.toLowerCase();
     if (!needle) return true;
@@ -27,6 +44,54 @@
       toasts.error(e.message || 'Error cargando gobernanza de planes');
     } finally {
       loading = false;
+    }
+  }
+
+  function openPlanEditor(plan: GovernancePlan) {
+    editingPlanId = plan.id;
+    planDraft = {
+      max_users: plan.max_users,
+      max_storage_mb: plan.max_storage_mb,
+      max_stock_sku: plan.max_stock_sku,
+      max_emails_monthly: plan.max_emails_monthly,
+      email_rate_per_minute: plan.email_rate_per_minute,
+      email_rate_per_hour: plan.email_rate_per_hour,
+      email_rate_per_day: plan.email_rate_per_day,
+      quota_warning_percent: plan.quota_warning_percent,
+      quota_recommend_percent: plan.quota_recommend_percent,
+      quota_block_percent: plan.quota_block_percent,
+      fair_use_new_customers_only: plan.fair_use_new_customers_only,
+    };
+    planEditOpen = true;
+  }
+
+  async function savePlanGovernance() {
+    if (!editingPlanId) return;
+    savingPlan = true;
+    try {
+      await planGovernanceApi.updatePlanGovernance(editingPlanId, planDraft as any);
+      toasts.success('Gobernanza del plan actualizada');
+      planEditOpen = false;
+      await loadData();
+    } catch (e: any) {
+      toasts.error(e.message || 'No se pudo guardar la gobernanza del plan');
+    } finally {
+      savingPlan = false;
+    }
+  }
+
+  async function toggleFairUse(item: GovernanceCustomerSummary) {
+    togglingCustomerId = item.customer_id;
+    try {
+      const next = !item.fair_use_enabled;
+      await planGovernanceApi.setCustomerFairUse(item.customer_id, next);
+      item.fair_use_enabled = next;
+      customers = [...customers];
+      toasts.success(`Fair use ${next ? 'activado' : 'desactivado'} para ${item.company_name}`);
+    } catch (e: any) {
+      toasts.error(e.message || 'No se pudo actualizar fair use');
+    } finally {
+      togglingCustomerId = null;
     }
   }
 
@@ -75,7 +140,12 @@
           <div class="flex justify-between"><span class="flex items-center gap-1"><Users size={12} /> Usuarios</span><span class="text-text-light">{formatLimit(plan.max_users)}</span></div>
           <div class="flex justify-between"><span class="flex items-center gap-1"><HardDrive size={12} /> Storage</span><span class="text-text-light">{formatStorageMb(plan.max_storage_mb)}</span></div>
           <div class="flex justify-between"><span class="flex items-center gap-1"><Package size={12} /> SKU</span><span class="text-text-light">{formatLimit(plan.max_stock_sku)}</span></div>
+          <div class="flex justify-between"><span class="flex items-center gap-1">📧 Email/mes</span><span class="text-text-light">{formatLimit(plan.max_emails_monthly)}</span></div>
+          <div class="flex justify-between"><span class="flex items-center gap-1">⏱ Min/Hora/Día</span><span class="text-text-light">{plan.email_rate_per_minute}/{plan.email_rate_per_hour}/{plan.email_rate_per_day}</span></div>
           <div class="text-xs text-gray-500 pt-2">Solo clientes nuevos: <span class="text-text-light">{plan.fair_use_new_customers_only ? 'Sí' : 'No'}</span></div>
+          <button class="btn-sm btn-secondary mt-2" onclick={() => openPlanEditor(plan)}>
+            <Pencil size={12} /> Editar límites
+          </button>
         </div>
       </div>
     {/each}
@@ -109,6 +179,7 @@
               <th>Uso</th>
               <th>Estado</th>
               <th>Recomendación</th>
+              <th>Acciones</th>
             </tr>
           </thead>
           <tbody>
@@ -142,6 +213,15 @@
                     <span class="text-xs text-gray-500">Sin cambio</span>
                   {/if}
                 </td>
+                <td>
+                  <button
+                    class="btn-sm btn-secondary"
+                    disabled={togglingCustomerId === item.customer_id}
+                    onclick={() => toggleFairUse(item)}
+                  >
+                    {togglingCustomerId === item.customer_id ? '...' : (item.fair_use_enabled ? 'Desactivar fair use' : 'Activar fair use')}
+                  </button>
+                </td>
               </tr>
             {/each}
           </tbody>
@@ -150,3 +230,36 @@
     {/if}
   </div>
 </div>
+
+{#if planEditOpen}
+  <div class="fixed inset-0 bg-black/60 z-50 flex items-center justify-center p-4" role="dialog">
+    <div class="bg-charcoal rounded-xl border border-border-dark w-full max-w-2xl">
+      <div class="flex items-center justify-between p-5 border-b border-border-dark">
+        <h3 class="text-lg font-semibold text-text-light">Editar gobernanza del plan</h3>
+        <button class="text-gray-400 hover:text-text-light" onclick={() => (planEditOpen = false)}>×</button>
+      </div>
+      <form class="p-5 grid grid-cols-1 sm:grid-cols-2 gap-4" onsubmit={(e) => { e.preventDefault(); savePlanGovernance(); }}>
+        <div><label class="label" for="pg-max-users">Max usuarios</label><input id="pg-max-users" type="number" min="0" class="input w-full" bind:value={planDraft.max_users} /></div>
+        <div><label class="label" for="pg-max-storage">Max storage (MB)</label><input id="pg-max-storage" type="number" min="0" class="input w-full" bind:value={planDraft.max_storage_mb} /></div>
+        <div><label class="label" for="pg-max-sku">Max SKU</label><input id="pg-max-sku" type="number" min="0" class="input w-full" bind:value={planDraft.max_stock_sku} /></div>
+        <div><label class="label" for="pg-max-emails">Max emails/mes</label><input id="pg-max-emails" type="number" min="0" class="input w-full" bind:value={planDraft.max_emails_monthly} /></div>
+        <div><label class="label" for="pg-min">Rate/min</label><input id="pg-min" type="number" min="0" class="input w-full" bind:value={planDraft.email_rate_per_minute} /></div>
+        <div><label class="label" for="pg-hour">Rate/hora</label><input id="pg-hour" type="number" min="0" class="input w-full" bind:value={planDraft.email_rate_per_hour} /></div>
+        <div><label class="label" for="pg-day">Rate/día</label><input id="pg-day" type="number" min="0" class="input w-full" bind:value={planDraft.email_rate_per_day} /></div>
+        <div><label class="label" for="pg-warning">Warning %</label><input id="pg-warning" type="number" min="0" max="100" class="input w-full" bind:value={planDraft.quota_warning_percent} /></div>
+        <div><label class="label" for="pg-recommend">Recommend %</label><input id="pg-recommend" type="number" min="0" max="100" class="input w-full" bind:value={planDraft.quota_recommend_percent} /></div>
+        <div><label class="label" for="pg-block">Block %</label><input id="pg-block" type="number" min="0" max="100" class="input w-full" bind:value={planDraft.quota_block_percent} /></div>
+        <div class="sm:col-span-2">
+          <label class="inline-flex items-center gap-2 text-sm text-gray-300">
+            <input type="checkbox" bind:checked={planDraft.fair_use_new_customers_only} class="accent-terracotta" />
+            Aplicar fair use solo a clientes nuevos
+          </label>
+        </div>
+        <div class="sm:col-span-2 flex justify-end gap-2 pt-2">
+          <button type="button" class="btn-secondary" onclick={() => (planEditOpen = false)}>Cancelar</button>
+          <button type="submit" class="btn-accent" disabled={savingPlan}><Save size={12} /> {savingPlan ? 'Guardando...' : 'Guardar'}</button>
+        </div>
+      </form>
+    </div>
+  </div>
+{/if}

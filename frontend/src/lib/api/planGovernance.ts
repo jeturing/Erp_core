@@ -7,6 +7,10 @@ export interface GovernancePlan {
   max_users: number;
   max_storage_mb: number;
   max_stock_sku: number;
+  max_emails_monthly: number;
+  email_rate_per_minute: number;
+  email_rate_per_hour: number;
+  email_rate_per_day: number;
   quota_warning_percent: number;
   quota_recommend_percent: number;
   quota_block_percent: number;
@@ -55,6 +59,16 @@ export const planGovernanceApi = {
 
   async getCustomer(customerId: number): Promise<any> {
     return api.get(`/api/plan-governance/customer/${customerId}`);
+  },
+
+  async updatePlanGovernance(planId: number, data: Partial<GovernancePlan>): Promise<{ success: boolean; message: string; changes: string[] }> {
+    return api.put(`/api/plan-governance/plans/${planId}`, data);
+  },
+
+  async setCustomerFairUse(customerId: number, fairUseEnabled: boolean): Promise<{ success: boolean; fair_use_enabled: boolean }> {
+    return api.put(`/api/plan-governance/customers/${customerId}/fair-use`, {
+      fair_use_enabled: fairUseEnabled,
+    });
   },
 };
 

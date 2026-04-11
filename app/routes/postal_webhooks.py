@@ -28,8 +28,20 @@ from ..services.postal_rate_limiter import (
     get_rate_limit_status,
     resolve_email_limits,
 )
+from ..services.addon_billing_service import purchase_customer_addon
+from ..services.stripe_billing import create_checkout_for_invoice
 from ..config import PROVISIONING_API_KEY, get_runtime_setting
-from ..models.database import SessionLocal, ServiceCatalogItem, ServiceCategory
+from ..models.database import (
+    SessionLocal,
+    ServiceCatalogItem,
+    ServiceCategory,
+    Customer,
+    Subscription,
+    CustomerAddonSubscription,
+    Invoice,
+    InvoiceType,
+    InvoiceStatus,
+)
 from .roles import _require_admin
 
 logger = logging.getLogger(__name__)
@@ -217,6 +229,43 @@ async def rate_limit_status(
 EMAIL_PACKAGE_SERVICE_CODE = "postal_email_package"
 
 
+def _build_email_limits_metadata(
+    *,
+    email_quota_monthly: int,
+    email_burst_limit_60m: int,
+    email_overage_price: float,
+) -> dict:
+    """
+    Estandariza metadata para paquetes de correo.
+
+    Mantiene compatibilidad hacia atrás con keys históricas
+    (email_quota_monthly / email_burst_limit_60m) y además
+    publica las keys canónicas usadas por el rate limiter:
+      - max_emails_monthly
+      - email_rate_per_minute
+      - email_rate_per_hour
+      - email_rate_per_day
+    """
+    quota = max(0, int(email_quota_monthly or 0))
+    burst_60m = max(0, int(email_burst_limit_60m or 0))
+    per_hour = burst_60m
+    per_minute = max(1, per_hour // 60) if per_hour > 0 else 0
+    per_day = min(quota, per_hour * 24) if (quota > 0 and per_hour > 0) else (quota or per_hour * 24)
+
+    return {
+        "kind": EMAIL_PACKAGE_SERVICE_CODE,
+        # Keys legacy (UI/compat)
+        "email_quota_monthly": quota,
+        "email_burst_limit_60m": burst_60m,
+        "email_overage_price": float(email_overage_price or 0.00020),
+        # Keys canónicas (rate limiter)
+        "max_emails_monthly": quota,
+        "email_rate_per_minute": per_minute,
+        "email_rate_per_hour": per_hour,
+        "email_rate_per_day": per_day,
+    }
+
+
 class EmailPackageCreate(BaseModel):
     name: str
     description: Optional[str] = None
@@ -283,11 +332,11 @@ async def create_email_package(
             price_monthly=payload.price_monthly,
             is_addon=True,
             service_code=EMAIL_PACKAGE_SERVICE_CODE,
-            metadata_json={
-                "email_quota_monthly": payload.email_quota_monthly,
-                "email_burst_limit_60m": payload.email_burst_limit_60m,
-                "email_overage_price": payload.email_overage_price,
-            },
+            metadata_json=_build_email_limits_metadata(
+                email_quota_monthly=payload.email_quota_monthly,
+                email_burst_limit_60m=payload.email_burst_limit_60m,
+                email_overage_price=payload.email_overage_price,
+            ),
             sort_order=payload.sort_order,
             is_active=True,
         )
@@ -321,11 +370,11 @@ async def update_email_package(
         item.description = payload.description
         item.price_monthly = payload.price_monthly
         item.sort_order = payload.sort_order
-        item.metadata_json = {
-            "email_quota_monthly": payload.email_quota_monthly,
-            "email_burst_limit_60m": payload.email_burst_limit_60m,
-            "email_overage_price": payload.email_overage_price,
-        }
+        item.metadata_json = _build_email_limits_metadata(
+            email_quota_monthly=payload.email_quota_monthly,
+            email_burst_limit_60m=payload.email_burst_limit_60m,
+            email_overage_price=payload.email_overage_price,
+        )
         db.commit()
         db.refresh(item)
         return {"message": "Paquete actualizado", "item": _email_pkg_to_dict(item)}
@@ -375,6 +424,265 @@ async def reactivate_email_package(
         item.is_active = True
         db.commit()
         return {"message": "Paquete reactivado", "item": _email_pkg_to_dict(item)}
+    finally:
+        db.close()
+
+
+class AssignTenantEmailPackageRequest(BaseModel):
+    customer_id: int
+    catalog_item_id: int
+    quantity: int = 1
+    charge_now: bool = True
+    notes: Optional[str] = None
+
+
+@router.get("/admin/email-packages/tenant-overview")
+async def admin_email_tenant_overview(
+    request: Request,
+    access_token: Optional[str] = Cookie(None),
+    search: str = "",
+    limit: int = 100,
+    offset: int = 0,
+):
+    """
+    Vista administrativa por tenant para perfiles/cobros de correo.
+    """
+    _require_admin(request, access_token)
+    db = SessionLocal()
+    try:
+        q = db.query(Customer)
+        if search:
+            like = f"%{search.strip()}%"
+            q = q.filter(
+                (Customer.company_name.ilike(like)) |
+                (Customer.subdomain.ilike(like)) |
+                (Customer.email.ilike(like))
+            )
+
+        total = q.count()
+        customers = (
+            q.order_by(Customer.id.desc())
+            .offset(max(0, offset))
+            .limit(max(1, min(limit, 500)))
+            .all()
+        )
+
+        items = []
+        for customer in customers:
+            sub = (
+                db.query(Subscription)
+                .filter(Subscription.customer_id == customer.id)
+                .order_by(Subscription.id.desc())
+                .first()
+            )
+
+            addon = (
+                db.query(CustomerAddonSubscription)
+                .filter(
+                    CustomerAddonSubscription.customer_id == customer.id,
+                    CustomerAddonSubscription.service_code == EMAIL_PACKAGE_SERVICE_CODE,
+                    CustomerAddonSubscription.status == "active",
+                )
+                .order_by(CustomerAddonSubscription.id.desc())
+                .first()
+            )
+
+            package_item = addon.catalog_item if addon else None
+            effective_limits = resolve_email_limits(db, customer.subdomain)
+
+            pending_invoice_count = 0
+            pending_invoice_total = 0.0
+            pending_invoices = (
+                db.query(Invoice)
+                .filter(
+                    Invoice.customer_id == customer.id,
+                    Invoice.invoice_type == InvoiceType.ADDON,
+                    Invoice.status.in_([
+                        InvoiceStatus.draft,
+                        InvoiceStatus.issued,
+                        InvoiceStatus.overdue,
+                    ]),
+                )
+                .all()
+            )
+            if pending_invoices:
+                pending_invoice_count = len(pending_invoices)
+                pending_invoice_total = float(sum(float(inv.total or 0) for inv in pending_invoices))
+
+            items.append({
+                "customer_id": customer.id,
+                "company_name": customer.company_name,
+                "subdomain": customer.subdomain,
+                "email": customer.email,
+                "partner_id": customer.partner_id,
+                "plan": customer.plan.value if hasattr(customer.plan, "value") else customer.plan,
+                "subscription_id": sub.id if sub else None,
+                "billing_mode": sub.billing_mode.value if (sub and sub.billing_mode) else None,
+                "active_email_profile": {
+                    "addon_id": addon.id,
+                    "catalog_item_id": addon.catalog_item_id,
+                    "name": package_item.name if package_item else None,
+                    "quantity": addon.quantity,
+                    "unit_price_monthly": addon.unit_price_monthly,
+                    "starts_at": addon.starts_at.isoformat() if addon.starts_at else None,
+                } if addon else None,
+                "effective_limits": effective_limits,
+                "pending_addon_invoices": {
+                    "count": pending_invoice_count,
+                    "total": round(pending_invoice_total, 6),
+                    "currency": sub.currency if (sub and sub.currency) else "USD",
+                },
+            })
+
+        packages = (
+            db.query(ServiceCatalogItem)
+            .filter(
+                ServiceCatalogItem.service_code == EMAIL_PACKAGE_SERVICE_CODE,
+                ServiceCatalogItem.is_active == True,
+            )
+            .order_by(ServiceCatalogItem.sort_order, ServiceCatalogItem.id)
+            .all()
+        )
+
+        return {
+            "items": items,
+            "total": total,
+            "limit": limit,
+            "offset": offset,
+            "packages": [_email_pkg_to_dict(pkg) for pkg in packages],
+        }
+    finally:
+        db.close()
+
+
+@router.post("/admin/email-packages/assign")
+async def admin_assign_email_package_to_tenant(
+    payload: AssignTenantEmailPackageRequest,
+    request: Request,
+    access_token: Optional[str] = Cookie(None),
+):
+    """
+    Asigna (compra) un perfil de correo a un tenant.
+
+    - Partners: se agrega a su facturación regular (invoice ADDON).
+    - Clientes directos: opcionalmente retorna checkout inmediato (charge_now=true).
+    """
+    _require_admin(request, access_token)
+    db = SessionLocal()
+    try:
+        customer = db.query(Customer).filter(Customer.id == payload.customer_id).first()
+        if not customer:
+            raise HTTPException(status_code=404, detail="Cliente no encontrado")
+
+        item = (
+            db.query(ServiceCatalogItem)
+            .filter(
+                ServiceCatalogItem.id == payload.catalog_item_id,
+                ServiceCatalogItem.service_code == EMAIL_PACKAGE_SERVICE_CODE,
+                ServiceCatalogItem.is_active == True,
+            )
+            .first()
+        )
+        if not item:
+            raise HTTPException(status_code=404, detail="Paquete de correo no encontrado")
+
+        result = purchase_customer_addon(
+            db=db,
+            customer_id=customer.id,
+            catalog_item_id=item.id,
+            quantity=max(1, int(payload.quantity or 1)),
+            acquired_via="admin_email_profiles",
+            notes=payload.notes or "Asignación manual desde consola admin",
+        )
+
+        charge = None
+        invoice_data = result.get("invoice") if isinstance(result, dict) else None
+        is_direct_customer = customer.partner_id is None
+        if payload.charge_now and is_direct_customer and invoice_data and invoice_data.get("id"):
+            inv = db.query(Invoice).filter(Invoice.id == int(invoice_data["id"])).first()
+            if inv:
+                checkout = create_checkout_for_invoice(db, inv)
+                charge = {
+                    "required": True,
+                    "checkout_url": checkout.get("checkout_url"),
+                    "method": checkout.get("method", "checkout_session"),
+                }
+
+        effective_limits = resolve_email_limits(db, customer.subdomain)
+
+        return {
+            "message": "Perfil de correo asignado correctamente",
+            "customer": {
+                "id": customer.id,
+                "company_name": customer.company_name,
+                "subdomain": customer.subdomain,
+                "partner_id": customer.partner_id,
+            },
+            "assignment": result,
+            "charge": charge,
+            "effective_limits": effective_limits,
+        }
+    except ValueError as exc:
+        db.rollback()
+        raise HTTPException(status_code=400, detail=str(exc))
+    finally:
+        db.close()
+
+
+@router.put("/admin/email-packages/tenant-subscriptions/{addon_id}")
+async def admin_update_tenant_email_subscription(
+    addon_id: int,
+    quantity: int,
+    request: Request,
+    access_token: Optional[str] = Cookie(None),
+):
+    """Actualiza cantidad de una suscripción de perfil de correo activa."""
+    _require_admin(request, access_token)
+    db = SessionLocal()
+    try:
+        addon = (
+            db.query(CustomerAddonSubscription)
+            .filter(
+                CustomerAddonSubscription.id == addon_id,
+                CustomerAddonSubscription.service_code == EMAIL_PACKAGE_SERVICE_CODE,
+                CustomerAddonSubscription.status == "active",
+            )
+            .first()
+        )
+        if not addon:
+            raise HTTPException(status_code=404, detail="Suscripción de correo no encontrada")
+        addon.quantity = max(1, int(quantity or 1))
+        db.commit()
+        return {"message": "Suscripción actualizada", "addon_id": addon.id, "quantity": addon.quantity}
+    finally:
+        db.close()
+
+
+@router.delete("/admin/email-packages/tenant-subscriptions/{addon_id}")
+async def admin_deactivate_tenant_email_subscription(
+    addon_id: int,
+    request: Request,
+    access_token: Optional[str] = Cookie(None),
+):
+    """Desactiva el perfil de correo de un tenant (fallback a límites base)."""
+    _require_admin(request, access_token)
+    db = SessionLocal()
+    try:
+        addon = (
+            db.query(CustomerAddonSubscription)
+            .filter(
+                CustomerAddonSubscription.id == addon_id,
+                CustomerAddonSubscription.service_code == EMAIL_PACKAGE_SERVICE_CODE,
+                CustomerAddonSubscription.status == "active",
+            )
+            .first()
+        )
+        if not addon:
+            raise HTTPException(status_code=404, detail="Suscripción de correo no encontrada")
+
+        addon.status = "cancelled"
+        db.commit()
+        return {"message": "Perfil de correo desactivado", "addon_id": addon.id}
     finally:
         db.close()
 

@@ -44,6 +44,21 @@ export interface AllQuotasResponse {
   customers: CustomerQuotaSummary[];
 }
 
+export interface CustomerEmailLimits {
+  success: boolean;
+  customer_id: number;
+  subdomain: string;
+  source: string;
+  addon_id: number | null;
+  metadata?: Record<string, unknown>;
+  limits: {
+    max_emails_monthly: number;
+    email_rate_per_minute: number;
+    email_rate_per_hour: number;
+    email_rate_per_day: number;
+  };
+}
+
 export const quotasApi = {
   /** Get all quotas for a customer */
   async getCustomerQuotas(customerId: number): Promise<CustomerQuotas> {
@@ -63,5 +78,21 @@ export const quotasApi = {
   /** Get quota summary for all customers (admin dashboard) */
   async getAllQuotas(): Promise<AllQuotasResponse> {
     return api.get<AllQuotasResponse>('/api/quotas');
+  },
+
+  async getCustomerEmailLimits(customerId: number): Promise<CustomerEmailLimits> {
+    return api.get<CustomerEmailLimits>(`/api/quotas/${customerId}/email-limits`);
+  },
+
+  async updateCustomerEmailLimits(
+    customerId: number,
+    data: {
+      max_emails_monthly: number;
+      email_rate_per_minute: number;
+      email_rate_per_hour: number;
+      email_rate_per_day: number;
+    },
+  ): Promise<{ success: boolean; message: string; limits: CustomerEmailLimits['limits'] }> {
+    return api.put(`/api/quotas/${customerId}/email-limits`, data);
   },
 };

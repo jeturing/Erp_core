@@ -1,31 +1,38 @@
 <script lang="ts">
   import { onMount } from 'svelte';
   import { seatsApi } from '../lib/api';
+  import { partnersApi } from '../lib/api/partners';
   import { toasts } from '../lib/stores';
-  import type { SeatHWMRecord, SeatSummaryResponse } from '../lib/types';
+  import type { SeatHWMRecord, SeatSummaryResponse, SeatOverviewItem, SeatOverviewGroup } from '../lib/types';
   import {
-    Users, RefreshCw, ArrowUpDown, TrendingUp,
-    Clock, Zap, BarChart3, ChevronLeft, ChevronRight,
+    Users, RefreshCw, TrendingUp,
+    Clock, Zap, BarChart3, Search, Unlink,
   } from 'lucide-svelte';
 
   let loading = true;
+  let overviewLoading = true;
+  let search = '';
+  let overviewItems: SeatOverviewItem[] = [];
+  let groupedByPartner: SeatOverviewGroup[] = [];
+  let selectedTenant: SeatOverviewItem | null = null;
+
   let hwmRecords: SeatHWMRecord[] = [];
   let summary: SeatSummaryResponse | null = null;
   let syncing = false;
-  let subFilter = '';
+  let unlinkingTenantId: number | null = null;
 
-  async function loadData() {
+  async function loadDetail(subscriptionId?: number) {
     loading = true;
     try {
-      const subId = subFilter ? parseInt(subFilter) : undefined;
-      if (!subId) {
+      if (!subscriptionId) {
         hwmRecords = [];
         summary = null;
         return;
       }
+
       const [hwmRes, sumRes] = await Promise.all([
-        seatsApi.getHWM(subId),
-        seatsApi.getSummary(subId),
+        seatsApi.getHWM(subscriptionId),
+        seatsApi.getSummary(subscriptionId),
       ]);
       hwmRecords = hwmRes.items ?? hwmRes.records ?? [];
       summary = sumRes;
@@ -36,12 +43,59 @@
     }
   }
 
+  async function loadOverview() {
+    overviewLoading = true;
+    try {
+      const res = await seatsApi.getOverview(search || undefined);
+      overviewItems = res.items ?? [];
+      groupedByPartner = res.groups ?? [];
+
+      if (!selectedTenant && overviewItems.length > 0) {
+        selectedTenant = overviewItems[0];
+      } else if (selectedTenant) {
+        const refreshed = overviewItems.find((item) => item.subscription_id === selectedTenant?.subscription_id);
+        selectedTenant = refreshed || null;
+      }
+
+      await loadDetail(selectedTenant?.subscription_id);
+    } catch (e: any) {
+      toasts.error(e.message || 'No se pudo cargar el overview de seats');
+      overviewItems = [];
+      groupedByPartner = [];
+      selectedTenant = null;
+      await loadDetail(undefined);
+    } finally {
+      overviewLoading = false;
+    }
+  }
+
+  async function handleSelectTenant(tenant: SeatOverviewItem) {
+    selectedTenant = tenant;
+    await loadDetail(tenant.subscription_id);
+  }
+
+  async function handleUnlinkTenant(tenant: SeatOverviewItem) {
+    if (!tenant.partner_id) return;
+    if (!confirm(`¿Desvincular "${tenant.company_name}" del partner de facturación?`)) return;
+    unlinkingTenantId = tenant.customer_id;
+    try {
+      await partnersApi.unlinkCustomer(tenant.partner_id, tenant.customer_id);
+      toasts.success('Tenant desvinculado del partner');
+      await loadOverview();
+    } catch (e: any) {
+      toasts.error(e.message || 'No se pudo desvincular el tenant');
+    } finally {
+      unlinkingTenantId = null;
+    }
+  }
+
   async function handleSync() {
     syncing = true;
     try {
       const res = await seatsApi.syncStripe();
-      toasts.success(`Sync completado: ${res.synced} actualizados, ${res.errors} errores`);
-      await loadData();
+      const failed = (res as any).failed ?? (res as any).errors ?? 0;
+      toasts.success(`Sync completado: ${res.synced} actualizados, ${failed} errores`);
+      await loadOverview();
     } catch (e: any) {
       toasts.error(e.message);
     } finally {
@@ -54,9 +108,7 @@
     return new Date(d).toLocaleDateString('es-ES', { day: '2-digit', month: 'short', year: 'numeric' });
   }
 
-  onMount(() => {
-    loading = false;
-  });
+  onMount(loadOverview);
 </script>
 
 <div class="p-6 space-y-6">
@@ -64,17 +116,97 @@
   <div class="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4">
     <div>
       <h1 class="page-title flex items-center gap-2"><Users size={24} /> Seats</h1>
-      <p class="page-subtitle">High Water Mark, eventos de usuarios y sincronización Stripe</p>
+      <p class="page-subtitle">Asientos por tenant, agrupados por partner y sincronización con Stripe</p>
     </div>
     <div class="flex gap-2">
-      <button class="btn-secondary flex items-center gap-2" on:click={loadData} disabled={loading}>
-        <RefreshCw size={14} class={loading ? 'animate-spin' : ''} /> Actualizar
+      <button class="btn-secondary flex items-center gap-2" on:click={loadOverview} disabled={overviewLoading}>
+        <RefreshCw size={14} class={overviewLoading ? 'animate-spin' : ''} /> Actualizar
       </button>
       <button class="btn-accent flex items-center gap-2" on:click={handleSync} disabled={syncing}>
         <Zap size={14} class={syncing ? 'animate-pulse' : ''} /> Sync Stripe
       </button>
     </div>
   </div>
+
+  <div class="relative max-w-xl">
+    <Search size={16} class="absolute left-3 top-1/2 -translate-y-1/2 text-gray-500" />
+    <input
+      type="text"
+      bind:value={search}
+      placeholder="Buscar por tenant, partner, plan, email o subscription..."
+      class="input pl-10 w-full"
+      on:keydown={(e) => e.key === 'Enter' && loadOverview()}
+    />
+  </div>
+
+  <div class="grid grid-cols-1 xl:grid-cols-3 gap-6">
+    <div class="xl:col-span-1 space-y-4">
+      {#if overviewLoading}
+        <div class="card p-8 text-center text-gray-500">Cargando tenants...</div>
+      {:else if groupedByPartner.length === 0}
+        <div class="card p-8 text-center text-gray-500">No hay tenants con seats para mostrar.</div>
+      {:else}
+        {#each groupedByPartner as group}
+          <div class="card p-0 overflow-hidden">
+            <div class="px-4 py-3 border-b border-border-light bg-dark-subtle">
+              <div class="font-semibold text-sm">{group.partner_name}</div>
+              <div class="text-xs text-gray-500">
+                {group.subscriptions} suscripción(es) · {group.billable_count} seat(s) facturable(s)
+              </div>
+            </div>
+            <div class="divide-y divide-border-light">
+              {#each group.tenants as tenant}
+                <div
+                  class="w-full text-left px-4 py-3 hover:bg-cloud dark:hover:bg-dark-card transition-colors cursor-pointer {selectedTenant?.subscription_id === tenant.subscription_id ? 'bg-cloud dark:bg-dark-card' : ''}"
+                  on:click={() => handleSelectTenant(tenant)}
+                  on:keydown={(e) => (e.key === 'Enter' || e.key === ' ') && handleSelectTenant(tenant)}
+                  role="button"
+                  tabindex="0"
+                >
+                  <div class="flex items-start justify-between gap-2">
+                    <div>
+                      <div class="font-medium text-sm">{tenant.company_name}</div>
+                      <div class="text-xs text-gray-500">{tenant.subdomain}.sajet.us · {tenant.plan_name || 'sin plan'}</div>
+                    </div>
+                    <div class="text-right text-xs">
+                      <div class="text-text-primary font-semibold">{tenant.billable_count} billable</div>
+                      <div class="text-gray-500">HWM {tenant.month_hwm}</div>
+                    </div>
+                  </div>
+                  {#if tenant.partner_id}
+                    <div class="mt-2">
+                      <button
+                        class="btn-sm btn-secondary text-xs"
+                        disabled={unlinkingTenantId === tenant.customer_id}
+                        on:click|stopPropagation={() => handleUnlinkTenant(tenant)}
+                      >
+                        <Unlink size={12} />
+                        {unlinkingTenantId === tenant.customer_id ? 'Desvinculando...' : 'Desvincular partner'}
+                      </button>
+                    </div>
+                  {/if}
+                </div>
+              {/each}
+            </div>
+          </div>
+        {/each}
+      {/if}
+    </div>
+
+    <div class="xl:col-span-2 space-y-6">
+      {#if selectedTenant}
+        <div class="card">
+          <div class="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-2">
+            <div>
+              <h2 class="section-heading">{selectedTenant.company_name}</h2>
+              <p class="text-xs text-gray-500">
+                {selectedTenant.subdomain}.sajet.us · Sub #{selectedTenant.subscription_id}
+                {#if selectedTenant.partner_name} · Partner: {selectedTenant.partner_name}{/if}
+              </p>
+            </div>
+          </div>
+        </div>
+      {/if}
 
   <!-- KPIs -->
   {#if summary}
@@ -103,14 +235,6 @@
     </div>
   {/if}
 
-  <!-- Filter -->
-  <div class="flex gap-3">
-    <div class="relative flex-1 max-w-xs">
-      <input type="text" bind:value={subFilter} placeholder="Subscription ID..." class="input w-full" on:keydown={(e) => e.key === 'Enter' && loadData()} />
-    </div>
-    <button class="btn-secondary btn-sm" on:click={loadData}>Filtrar</button>
-  </div>
-
   <!-- HWM History -->
   {#if loading}
     <div class="text-center py-16 text-gray-500">
@@ -118,9 +242,9 @@
       <p class="mt-3">Cargando datos de seats...</p>
     </div>
   {:else}
-    {#if !subFilter}
+    {#if !selectedTenant}
       <div class="card p-8 text-center text-gray-500">
-        Selecciona un `subscription_id` para cargar el historial de seats.
+        Selecciona un tenant para cargar el historial de seats.
       </div>
     {:else}
       <div class="card p-0 overflow-hidden">
@@ -201,4 +325,6 @@
       </div>
     {/if}
   {/if}
+    </div>
+  </div>
 </div>

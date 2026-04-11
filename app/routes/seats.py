@@ -17,7 +17,7 @@ import logging
 
 from ..models.database import (
     SeatEvent, SeatHighWater, Subscription, SeatEventType,
-    BillingMode, get_db
+    BillingMode, Customer, Partner, SubscriptionStatus, get_db
 )
 from ..config import get_runtime_int, get_runtime_setting
 from ..services.seat_events import (
@@ -287,3 +287,146 @@ def seat_summary_compat(
     if not subscription_id:
         raise HTTPException(status_code=400, detail="subscription_id es requerido")
     return seat_summary(subscription_id=subscription_id, db=db)
+
+
+@router.get("/overview")
+def seats_overview(
+    search: Optional[str] = None,
+    partner_id: Optional[int] = None,
+    db: Session = Depends(get_db),
+):
+    """
+    Vista agregada de seats por tenant + agrupación por partner.
+    Se usa en UI admin para evitar depender de `subscription_id` manual.
+    """
+    active_statuses = [
+        SubscriptionStatus.active,
+        SubscriptionStatus.pending,
+        SubscriptionStatus.trialing,
+        SubscriptionStatus.past_due,
+    ]
+
+    query = (
+        db.query(Subscription, Customer, Partner)
+        .join(Customer, Customer.id == Subscription.customer_id)
+        .outerjoin(Partner, Partner.id == Customer.partner_id)
+        .filter(Subscription.status.in_(active_statuses))
+    )
+
+    if partner_id:
+        query = query.filter(Customer.partner_id == partner_id)
+
+    raw_search = (search or "").strip()
+    parsed_subscription_id: Optional[int] = None
+    if raw_search:
+        if raw_search.isdigit():
+            parsed_subscription_id = int(raw_search)
+        like = f"%{raw_search}%"
+        filter_expr = (
+            (Customer.company_name.ilike(like))
+            | (Customer.subdomain.ilike(like))
+            | (Customer.email.ilike(like))
+            | (Partner.company_name.ilike(like))
+            | (Subscription.stripe_subscription_id.ilike(like))
+            | (Subscription.plan_name.ilike(like))
+        )
+        if parsed_subscription_id is not None:
+            filter_expr = filter_expr | (Subscription.id == parsed_subscription_id)
+        query = query.filter(filter_expr)
+
+    rows = query.order_by(
+        Partner.company_name.asc().nullsfirst(),
+        Customer.company_name.asc(),
+    ).all()
+
+    if not rows:
+        return {
+            "items": [],
+            "groups": [],
+            "total": 0,
+            "generated_at": datetime.utcnow().isoformat(),
+        }
+
+    subscription_ids = [sub.id for sub, _, _ in rows]
+    month_start = datetime.utcnow().replace(day=1, hour=0, minute=0, second=0, microsecond=0)
+    now = datetime.utcnow()
+
+    hwm_rows = (
+        db.query(SeatHighWater.subscription_id, func.max(SeatHighWater.hwm_count))
+        .filter(
+            SeatHighWater.subscription_id.in_(subscription_ids),
+            SeatHighWater.period_date >= month_start,
+        )
+        .group_by(SeatHighWater.subscription_id)
+        .all()
+    )
+    hwm_map = {sid: int(max_hwm or 0) for sid, max_hwm in hwm_rows}
+
+    grace_rows = (
+        db.query(SeatEvent.subscription_id, func.count(SeatEvent.id))
+        .filter(
+            SeatEvent.subscription_id.in_(subscription_ids),
+            SeatEvent.event_type == SeatEventType.FIRST_LOGIN,
+            SeatEvent.grace_expires_at > now,
+        )
+        .group_by(SeatEvent.subscription_id)
+        .all()
+    )
+    grace_map = {sid: int(count or 0) for sid, count in grace_rows}
+
+    items = []
+    grouped: dict[str, dict] = {}
+
+    for sub, customer, partner in rows:
+        month_hwm = hwm_map.get(sub.id, 0)
+        grace_count = grace_map.get(sub.id, 0)
+        partner_metered = _is_partner_metered(sub)
+        billable_count = max(0, month_hwm - grace_count) if partner_metered else month_hwm
+
+        row = {
+            "subscription_id": sub.id,
+            "stripe_subscription_id": sub.stripe_subscription_id,
+            "customer_id": customer.id,
+            "company_name": customer.company_name,
+            "subdomain": customer.subdomain,
+            "email": customer.email,
+            "partner_id": partner.id if partner else None,
+            "partner_name": partner.company_name if partner else None,
+            "plan_name": sub.plan_name,
+            "status": sub.status.value if sub.status else None,
+            "billing_mode": sub.billing_mode.value if sub.billing_mode else None,
+            "current_user_count": int(sub.user_count or 0),
+            "month_hwm": month_hwm,
+            "grace_active_count": grace_count,
+            "billable_count": billable_count,
+            "is_partner_metered": partner_metered,
+        }
+        items.append(row)
+
+        group_key = str(partner.id) if partner else "no-partner"
+        if group_key not in grouped:
+            grouped[group_key] = {
+                "partner_id": partner.id if partner else None,
+                "partner_name": partner.company_name if partner else "Sin partner",
+                "customers": 0,
+                "subscriptions": 0,
+                "current_user_count": 0,
+                "billable_count": 0,
+                "tenants": [],
+            }
+
+        group = grouped[group_key]
+        group["subscriptions"] += 1
+        group["customers"] += 1
+        group["current_user_count"] += row["current_user_count"]
+        group["billable_count"] += billable_count
+        group["tenants"].append(row)
+
+    groups = sorted(grouped.values(), key=lambda g: (g["partner_name"] or "").lower())
+
+    return {
+        "items": items,
+        "groups": groups,
+        "total": len(items),
+        "generated_at": datetime.utcnow().isoformat(),
+    }
