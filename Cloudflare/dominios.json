@@ -5,5 +5,6 @@
   { "name": "sajet.us", "zone_id": "4a83b88793ac3688486ace69b6ae80f9" },
   { "name": "segrd.com", "zone_id": "a13f4a0bf1091f040ff692e1ad926da4" },
   { "name": "aysautorepair.com", "zone_id": "5d152d21ef579da1025bafab212a9d6c" },
-  { "name": "esecure.do", "zone_id": "ce7d0136b71576ffd9dbb00cbde568f6" }
+  { "name": "esecure.do", "zone_id": "ce7d0136b71576ffd9dbb00cbde568f6" },
+  { "name": "femrd.net", "zone_id": "1971de05b0de71038dc484f71f9c5f75", "account_id": "b5f8a23e7d06c2de5ef515ae93e16016", "tenant": "techeels", "ns_pending": ["kara.ns.cloudflare.com", "terry.ns.cloudflare.com"] }
 ]
