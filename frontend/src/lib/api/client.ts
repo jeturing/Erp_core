@@ -85,11 +85,19 @@ class ApiClient {
       (headers as Record<string, string>).Authorization = `Bearer ${this.token}`;
     }
 
-    const response = await fetch(`${this.baseUrl}${endpoint}`, {
-      ...options,
-      headers,
-      credentials: 'include',
-    });
+    const controller = new AbortController();
+    const timeoutId = setTimeout(() => controller.abort(), 10000);
+    let response: Response;
+    try {
+      response = await fetch(`${this.baseUrl}${endpoint}`, {
+        ...options,
+        headers,
+        credentials: 'include',
+        signal: options.signal ?? controller.signal,
+      });
+    } finally {
+      clearTimeout(timeoutId);
+    }
 
     if (response.status === 401 && !_isRetry) {
       // Intentar auto-refresh antes de declarar sesión expirada
