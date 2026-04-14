@@ -46,7 +46,7 @@
     {
       id: 'grp-comercial', label: 'Comercial', icon: Handshake,
       children: [
-        { id: 'partners',   label: 'Partners',    icon: Handshake,       href: '/partners' },
+        { id: 'partners',   label: 'Partners',    icon: Handshake,       href: '/partner-management' },
         { id: 'leads',      label: 'Leads',        icon: Target,          href: '/leads' },
         { id: 'clients',    label: 'Clientes',     icon: UserCheck,       href: '/clients' },
         { id: 'quotations', label: 'Cotizaciones', icon: FileSpreadsheet, href: '/quotations' },

@@ -64,10 +64,8 @@ def _require_admin(request: Request, access_token: str = Cookie(None)):
 
 
 def _get_client_ip(request: Request) -> str:
-    forwarded = request.headers.get("X-Forwarded-For")
-    if forwarded:
-        return forwarded.split(",")[0].strip()
-    return request.client.host if request.client else "unknown"
+    from ..utils.ip import get_real_ip
+    return get_real_ip(request)
 
 
 # ═══════════════════════════════════════════

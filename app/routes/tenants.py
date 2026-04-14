@@ -43,6 +43,7 @@ from ..models.database import AuditEventRecord
 
 from ..config import PROVISIONING_API_KEY, ODOO_DB_USER, ODOO_DB_PASSWORD, ODOO_DB_HOST, DATABASE_URL
 from ..services.cloudflare_manager import CloudflareManager
+from ..utils.ip import get_real_ip as _get_real_ip
 
 # BDs del sistema que NUNCA deben aparecer en el listado de tenants ni poder borrarse.
 # Se extrae dinámicamente el nombre de la BD propia de la app desde DATABASE_URL.
@@ -164,17 +165,17 @@ def _safe_actor_from_request(request: Request) -> tuple[Optional[int], Optional[
     try:
         token = _extract_token(request)
         if not token:
-            return None, None, None, request.client.host if request.client else None, request.headers.get("user-agent")
+            return None, None, None, _get_real_ip(request), request.headers.get("user-agent")
         payload = verify_token_with_role(token)
         return (
             payload.get("user_id"),
             payload.get("username") or payload.get("email"),
             payload.get("role"),
-            request.client.host if request.client else None,
+            _get_real_ip(request),
             request.headers.get("user-agent"),
         )
     except Exception:
-        return None, None, None, request.client.host if request.client else None, request.headers.get("user-agent")
+        return None, None, None, _get_real_ip(request), request.headers.get("user-agent")
 
 
 def _log_tenant_audit(

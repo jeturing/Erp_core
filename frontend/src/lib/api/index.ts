@@ -39,3 +39,5 @@ export { planGovernanceApi } from './planGovernance';
 export type { PlanGovernanceSummaryResponse, GovernanceCustomerSummary, GovernancePlan } from './planGovernance';
 export { postalAdminApi } from './postalAdmin';
 export type { PostalEmailPackage, TenantEmailOverviewItem } from './postalAdmin';
+export { submitFunnelLead } from './funnelLeads';
+export type { FunnelLeadPayload, FunnelLeadResponse } from './funnelLeads';

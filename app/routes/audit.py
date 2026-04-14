@@ -37,7 +37,8 @@ def log_audit_event(
     actor_id = None
     actor_username = "system"
     actor_role = None
-    ip_address = request.client.host if request.client else None
+    from ..utils.ip import get_real_ip
+    ip_address = get_real_ip(request)
     user_agent = request.headers.get("user-agent")
 
     try:
