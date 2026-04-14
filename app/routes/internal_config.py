@@ -100,8 +100,9 @@ def get_stripe_config(
     country = get_config("JETURING_PLATFORM_COUNTRY") or \
               os.getenv("JETURING_PLATFORM_COUNTRY", "US")
 
+    from ..utils.ip import get_real_ip
     _logger.info("internal_config: stripe config entregada a %s [mode=%s]",
-                 request.client.host if request.client else "unknown", mode)
+                 get_real_ip(request), mode)
 
     return StripeConfigResponse(
         stripe_secret_key=sk,

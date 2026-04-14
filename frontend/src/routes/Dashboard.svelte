@@ -173,7 +173,7 @@
       <div class="card p-0">
         <div class="px-6 py-4 border-b border-border-light flex items-center justify-between">
           <span class="section-heading">Partners & Pipeline</span>
-          <a href="/partners" class="text-[11px] uppercase tracking-widest text-gray-500 hover:text-terracotta font-sans">Ver →</a>
+          <a href="/partner-management" class="text-[11px] uppercase tracking-widest text-gray-500 hover:text-terracotta font-sans">Ver →</a>
         </div>
         <div class="divide-y divide-border-light">
           <div class="grid grid-cols-2 gap-4 px-6 py-4">
@@ -445,7 +445,7 @@
       {#each [
         { href: '/tenants',         label: 'Tenants' },
         { href: '/billing',         label: 'Billing' },
-        { href: '/partners',        label: 'Partners' },
+        { href: '/partner-management', label: 'Partners' },
         { href: '/leads',           label: 'Leads' },
         { href: '/invoices',        label: 'Facturas' },
         { href: '/settlements',     label: 'Settlements' },

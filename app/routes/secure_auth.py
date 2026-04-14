@@ -81,13 +81,8 @@ class TokenResponse(BaseModel):
     user_id: Optional[int] = None
 
 
-# Helper functions
-def get_client_ip(request: Request) -> str:
-    """Obtiene la IP real del cliente."""
-    forwarded = request.headers.get("X-Forwarded-For")
-    if forwarded:
-        return forwarded.split(",")[0].strip()
-    return request.client.host if request.client else "unknown"
+# Helper — usa utilidad centralizada con soporte Cloudflare
+from ..utils.ip import get_real_ip as get_client_ip
 
 
 # Routes

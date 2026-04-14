@@ -2769,3 +2769,67 @@ class PaymentEvent(Base):
     __table_args__ = (
         Index("ix_payment_events_type_time", "event_type", "created_at"),
     )
+
+
+class FunnelNiche(enum.Enum):
+    mpos      = "mpos"       # MPOS + Stripe payments
+    build     = "build"      # Custom development
+    partners  = "partners"   # Commercial partners
+    cpa       = "cpa"        # Accountants / CPA firms
+    smb       = "smb"        # SMB / mypimes (disqualified)
+    general   = "general"    # Generic / unspecified
+
+
+class FunnelLead(Base):
+    """
+    Lead orgánico capturado desde las landing pages de funnels de venta.
+    No requiere partner_id — entrada directa desde redes sociales / SEO.
+    """
+    __tablename__ = "funnel_leads"
+
+    id              = Column(Integer, primary_key=True, index=True)
+    niche           = Column(Enum(FunnelNiche), nullable=False, index=True)
+
+    # Contacto
+    full_name       = Column(String(150), nullable=False)
+    email           = Column(String(150), nullable=False, index=True)
+    phone           = Column(String(50),  nullable=True)
+    company_name    = Column(String(200), nullable=True)
+    country         = Column(String(100), nullable=True)
+    language        = Column(String(10),  nullable=True)  # es / en
+
+    # Calificación (respuestas al quiz)
+    has_entity      = Column(Boolean, nullable=True)   # ¿Tiene LLC/empresa formada?
+    monthly_volume  = Column(String(50), nullable=True) # MPOS: rango de volumen
+    budget_range    = Column(String(50), nullable=True) # Dev: rango de presupuesto
+    timeline        = Column(String(50), nullable=True) # Dev: timeline estimado
+    client_count    = Column(Integer, nullable=True)    # Partners/CPA: clientes actuales
+    has_sales_team  = Column(Boolean, nullable=True)    # Partners: tiene equipo de ventas
+    industry        = Column(String(100), nullable=True)
+    main_goal       = Column(String(200), nullable=True)  # ¿Qué buscan lograr?
+
+    # Tracking
+    utm_source      = Column(String(100), nullable=True)
+    utm_medium      = Column(String(100), nullable=True)
+    utm_campaign    = Column(String(100), nullable=True)
+    referrer        = Column(String(500), nullable=True)
+    ip_address      = Column(String(45),  nullable=True)
+    geo_country     = Column(String(100), nullable=True)
+    geo_city        = Column(String(100), nullable=True)
+    geo_lat         = Column(Float, nullable=True)
+    geo_lng         = Column(Float, nullable=True)
+    user_agent      = Column(String(500), nullable=True)
+
+    # Estado del lead
+    qualified       = Column(Boolean, default=True, index=True)
+    disqualify_reason = Column(String(200), nullable=True)
+    jeturing_crm_id = Column(String(100), nullable=True)  # ID en Jeturing Odoo CRM
+    notes           = Column(Text, nullable=True)
+
+    created_at      = Column(DateTime, default=datetime.utcnow, index=True)
+    updated_at      = Column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
+
+    __table_args__ = (
+        Index("ix_funnel_leads_niche_created", "niche", "created_at"),
+        Index("ix_funnel_leads_email_niche",   "email", "niche"),
+    )

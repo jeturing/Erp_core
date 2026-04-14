@@ -11,6 +11,7 @@ from ..models.database import (
 )
 from .roles import verify_token_with_role
 from ..config import get_runtime_setting
+from ..utils.ip import get_real_ip
 import stripe
 import logging
 import secrets
@@ -820,7 +821,7 @@ async def reset_customer_password(
                 actor_id=None,
                 actor_username=actor_username,
                 actor_role="admin",
-                ip_address=request.client.host if request.client else None,
+                ip_address=get_real_ip(request),
                 resource=f"customer:{customer.id}:{customer.subdomain}",
                 action="reset_password",
                 status="success",

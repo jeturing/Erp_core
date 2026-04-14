@@ -53,6 +53,7 @@ from .routes import meta_webhooks        # 🌐 Meta webhook centralizado (fanou
 from .routes import migration            # 🚚 Migración live de tenants entre nodos (Fase 2)
 from .routes import session_monitoring   # 🛡️ DSAM — Dynamic Session & Anti-Theft Monitor
 from .routes import developer_portal     # 🔧 Developer Portal — Apps & Agreement Flows
+from .routes import funnel_leads         # 🎯 Funnel Leads — Captura orgánica por nicho
 from .routes.roles import _require_admin as _require_admin_base
 
 # Import security middleware
@@ -274,6 +275,7 @@ app.include_router(migration.router)             # 🚚 Migración live de tenan
 app.include_router(session_monitoring.router)    # 🛡️ DSAM — Dynamic Session & Anti-Theft Monitor
 app.include_router(developer_portal.router)      # 🔧 Developer Portal — Apps & Agreement Flows
 app.include_router(internal_config.router)       # 🔒 Config M2M — Jeturing-Pay y servicios internos
+app.include_router(funnel_leads.router)          # 🎯 Funnel Leads — Captura orgánica por nicho
 
 
 # ── CORS Cache Refresh endpoint ──
