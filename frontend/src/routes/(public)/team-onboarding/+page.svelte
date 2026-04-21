@@ -72,9 +72,9 @@
     },
   };
 
-  $: niche = $page.url.searchParams.get('niche') || 'mpos';
-  $: config = nicheMap[niche] || nicheMap['mpos'];
-  $: accentColor = config.color;
+  let niche = $derived($page.url.searchParams.get('niche') || 'mpos');
+  let config = $derived(nicheMap[niche] || nicheMap['mpos']);
+  let accentColor = $derived(config.color);
 
   let currentStep = $state(0);
   const totalSteps = 4;
