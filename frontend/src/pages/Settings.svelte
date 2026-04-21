@@ -27,7 +27,7 @@
   }
 
   /* ─── Tab state ─── */
-  type TabId = 'credentials' | 'stripe' | 'system' | 'Sajet' | 'environment';
+  type TabId = 'credentials' | 'stripe' | 'system' | 'odoo' | 'environment';
   let activeTab = $state<TabId>('credentials');
 
   /* ─── System config ─── */
@@ -56,10 +56,12 @@
   let expandedCat = $state<string | null>(null);
 
   /* ─── Stripe mode ─── */
+  let selectedStripeApp = $state<'sajet' | 'med'>('sajet');
   let stripeMode = $state<StripeModeResponse | null>(null);
   let stripeModeLoading = $state(true);
   let stripeToggling = $state(false);
   let stripeTestKeys = $state({ secret: '', publishable: '', webhook: '' });
+  let stripeSandboxKeys = $state({ secret: '', publishable: '', webhook: '' });
   let stripeLiveKeys = $state({ secret: '', publishable: '', webhook: '' });
 
   /* ─── Environment ─── */
@@ -117,10 +119,10 @@
     }
   }
 
-  async function loadStripeMode() {
+  async function loadStripeMode(app: 'sajet' | 'med' = selectedStripeApp) {
     stripeModeLoading = true;
     try {
-      stripeMode = await settingsApi.getStripeMode();
+      stripeMode = await settingsApi.getStripeMode(app);
     } catch (e: any) {
       toasts.error(e?.message ?? 'Error al cargar modo Stripe');
     } finally {
@@ -201,33 +203,43 @@
     }
   }
 
-  /* ─── Stripe toggle ─── */
-  async function toggleStripeMode() {
-    if (!stripeMode) return;
-    const newMode = stripeMode.mode === 'test' ? 'live' : 'test';
+  function selectStripeApp(app: 'sajet' | 'med') {
+    selectedStripeApp = app;
+    loadStripeMode(app);
+  }
 
-    const msg = newMode === 'live'
-      ? '⚠️ ¿Cambiar a modo PRODUCCIÓN (live)?\n\nSe usarán las claves REALES de Stripe.'
-      : '¿Cambiar a modo TEST?\n\nSe usarán las claves de prueba de Stripe.';
+  /* ─── Stripe toggle ─── */
+  async function setStripeMode(targetMode: 'test' | 'sandbox' | 'live') {
+    if (!stripeMode || stripeMode.mode === targetMode) return;
+
+    const appLabel = selectedStripeApp === 'med' ? 'MED' : 'SAJET';
+    const modeLabel = targetMode === 'live' ? 'PRODUCCIÓN' : targetMode === 'sandbox' ? 'SANDBOX' : 'TEST';
+    const msg = targetMode === 'live'
+      ? `⚠️ ¿Cambiar ${appLabel} a modo ${modeLabel}?\n\nSe usarán las claves REALES de Stripe.`
+      : `¿Cambiar ${appLabel} a modo ${modeLabel}?\n\nSe usarán las claves de ${targetMode === 'sandbox' ? 'sandbox aislado' : 'prueba'} de Stripe.`;
     if (!window.confirm(msg)) return;
 
     stripeToggling = true;
     try {
-      const payload: any = { mode: newMode };
-      // Include keys if provided
-      if (newMode === 'test' && stripeTestKeys.secret) {
+      const payload: any = { mode: targetMode };
+      if (stripeTestKeys.secret) {
         payload.test_secret_key = stripeTestKeys.secret;
         payload.test_publishable_key = stripeTestKeys.publishable;
         payload.test_webhook_secret = stripeTestKeys.webhook;
       }
-      if (newMode === 'live' && stripeLiveKeys.secret) {
+      if (stripeSandboxKeys.secret) {
+        payload.sandbox_secret_key = stripeSandboxKeys.secret;
+        payload.sandbox_publishable_key = stripeSandboxKeys.publishable;
+        payload.sandbox_webhook_secret = stripeSandboxKeys.webhook;
+      }
+      if (stripeLiveKeys.secret) {
         payload.live_secret_key = stripeLiveKeys.secret;
         payload.live_publishable_key = stripeLiveKeys.publishable;
         payload.live_webhook_secret = stripeLiveKeys.webhook;
       }
-      const res = await settingsApi.setStripeMode(payload);
-      toasts.success(res.message || `Modo cambiado a ${newMode.toUpperCase()}`);
-      await loadStripeMode();
+      const res = await settingsApi.setStripeMode(payload, selectedStripeApp);
+      toasts.success(res.message || `Modo cambiado a ${targetMode.toUpperCase()}`);
+      await loadStripeMode(selectedStripeApp);
     } catch (e: any) {
       toasts.error(e?.message ?? 'Error al cambiar modo Stripe');
     } finally {
@@ -437,7 +449,7 @@
         <div class="flex items-center justify-between mb-4">
           <div>
             <h3 class="section-heading flex items-center gap-2"><CreditCard size={16} /> MODO STRIPE</h3>
-            <p class="text-xs text-gray-400 mt-1">Cambiar entre claves de prueba y producción</p>
+            <p class="text-xs text-gray-400 mt-1">Seleccionar app activa y modo de operación de Stripe — test / sandbox / live</p>
           </div>
           {#if stripeModeLoading}
             <RefreshCw size={16} class="animate-spin text-gray-400" />
@@ -445,35 +457,74 @@
         </div>
 
         {#if stripeMode}
-          <div class="flex items-center gap-6 mb-6">
-            <!-- Toggle switch -->
-            <div class="flex items-center gap-4">
-              <span class="text-sm font-medium {stripeMode.mode === 'test' ? 'text-amber-600' : 'text-gray-400'}">TEST</span>
-              <button
-                class="relative w-14 h-7 rounded-full transition-colors {stripeMode.mode === 'live' ? 'bg-emerald-500' : 'bg-amber-400'} disabled:opacity-50"
-                disabled={stripeToggling}
-                onclick={toggleStripeMode}
-                aria-label="Toggle Stripe Mode"
-              >
-                <div class="absolute top-0.5 w-6 h-6 bg-white rounded-full shadow transition-transform {stripeMode.mode === 'live' ? 'translate-x-7' : 'translate-x-0.5'}"></div>
-              </button>
-              <span class="text-sm font-medium {stripeMode.mode === 'live' ? 'text-emerald-600' : 'text-gray-400'}">LIVE</span>
+          <div class="space-y-5 mb-6">
+            <div>
+              <div class="text-[10px] text-gray-400 uppercase font-semibold mb-2">Aplicación</div>
+              <div class="grid grid-cols-1 md:grid-cols-2 gap-3">
+                {#each [
+                  { key: 'sajet' as const, label: 'SAJET', host: 'sajet.us' },
+                  { key: 'med' as const, label: 'MED', host: 'med.sajet.us' },
+                ] as appOption (appOption.key)}
+                  <button
+                    class="rounded-xl border px-4 py-3 text-left transition-all {selectedStripeApp === appOption.key ? 'border-indigo-500 bg-indigo-50 ring-1 ring-indigo-500/30' : 'border-border-light bg-bg-page hover:border-indigo-300'}"
+                    onclick={() => selectStripeApp(appOption.key)}
+                  >
+                    <div class="flex items-center justify-between gap-3">
+                      <div>
+                        <div class="text-sm font-semibold text-gray-800">{appOption.label}</div>
+                        <div class="text-xs text-gray-500">{appOption.host}</div>
+                      </div>
+                      {#if selectedStripeApp === appOption.key}
+                        <span class="rounded-full bg-indigo-100 px-2 py-1 text-[10px] font-semibold uppercase text-indigo-700">Activa</span>
+                      {/if}
+                    </div>
+                  </button>
+                {/each}
+              </div>
             </div>
 
-            <!-- Status indicator -->
-            <div class="flex items-center gap-2 px-3 py-1.5 rounded-lg {stripeMode.mode === 'live' ? 'bg-emerald-50 border border-emerald-200' : 'bg-amber-50 border border-amber-200'}">
+            <div class="grid grid-cols-1 md:grid-cols-3 gap-3">
+              {#each [
+                { key: 'test' as const, label: 'TEST', desc: 'Pruebas', active: stripeMode.has_test_keys, color: 'amber' },
+                { key: 'sandbox' as const, label: 'SANDBOX', desc: 'Aislado', active: stripeMode.has_sandbox_keys, color: 'blue' },
+                { key: 'live' as const, label: 'LIVE', desc: 'Producción', active: stripeMode.has_live_keys, color: 'emerald' },
+              ] as modeOption (modeOption.key)}
+                <button
+                  class="rounded-xl border px-4 py-4 text-center transition-all disabled:opacity-60 {stripeMode.mode === modeOption.key ? modeOption.color === 'emerald' ? 'border-emerald-500 bg-emerald-50 ring-1 ring-emerald-500/30' : modeOption.color === 'blue' ? 'border-blue-500 bg-blue-50 ring-1 ring-blue-500/30' : 'border-amber-500 bg-amber-50 ring-1 ring-amber-500/30' : 'border-border-light bg-bg-page hover:border-gray-300'}"
+                  disabled={stripeToggling || !modeOption.active}
+                  onclick={() => setStripeMode(modeOption.key)}
+                >
+                  <div class="text-sm font-bold text-gray-800">{modeOption.label}</div>
+                  <div class="text-xs text-gray-500 mt-1">{modeOption.desc}</div>
+                  {#if stripeMode.mode === modeOption.key}
+                    <div class="mt-2 text-[10px] font-semibold uppercase {modeOption.color === 'emerald' ? 'text-emerald-700' : modeOption.color === 'blue' ? 'text-blue-700' : 'text-amber-700'}">Activo</div>
+                  {:else if !modeOption.active}
+                    <div class="mt-2 text-[10px] font-semibold uppercase text-gray-400">Sin claves</div>
+                  {/if}
+                </button>
+              {/each}
+            </div>
+
+            <div class="flex items-center gap-2 px-3 py-1.5 rounded-lg {stripeMode.mode === 'live' ? 'bg-emerald-50 border border-emerald-200' : stripeMode.mode === 'sandbox' ? 'bg-blue-50 border border-blue-200' : 'bg-amber-50 border border-amber-200'} w-fit">
               {#if stripeMode.mode === 'live'}
                 <CheckCircle size={14} class="text-emerald-600" />
-                <span class="text-xs font-semibold text-emerald-700 uppercase">Producción</span>
+                <span class="text-xs font-semibold text-emerald-700 uppercase">Cobros reales activos en {stripeMode.app_label}</span>
+              {:else if stripeMode.mode === 'sandbox'}
+                <Globe size={14} class="text-blue-600" />
+                <span class="text-xs font-semibold text-blue-700 uppercase">Sandbox aislado activo en {stripeMode.app_label}</span>
               {:else}
                 <AlertCircle size={14} class="text-amber-600" />
-                <span class="text-xs font-semibold text-amber-700 uppercase">Pruebas</span>
+                <span class="text-xs font-semibold text-amber-700 uppercase">Pruebas activas en {stripeMode.app_label}</span>
               {/if}
             </div>
           </div>
 
           <!-- Active keys info -->
-          <div class="grid grid-cols-1 md:grid-cols-2 gap-4 mb-6">
+          <div class="grid grid-cols-1 md:grid-cols-3 gap-4 mb-6">
+            <div class="bg-bg-page border border-border-light rounded p-3">
+              <div class="text-[10px] text-gray-400 uppercase font-semibold mb-1">App</div>
+              <div class="font-mono text-sm text-gray-700">{stripeMode.app_host || '—'}</div>
+            </div>
             <div class="bg-bg-page border border-border-light rounded p-3">
               <div class="text-[10px] text-gray-400 uppercase font-semibold mb-1">Secret Key (prefijo)</div>
               <div class="font-mono text-sm text-gray-700">{stripeMode.active_secret_key_prefix || '—'}</div>
@@ -491,10 +542,20 @@
               <span class="{stripeMode.has_test_keys ? 'text-gray-700' : 'text-gray-400'}">Claves TEST</span>
             </div>
             <div class="flex items-center gap-1.5">
+              {#if stripeMode.has_sandbox_keys}<CheckCircle size={12} class="text-emerald-500" />{:else}<AlertCircle size={12} class="text-gray-300" />{/if}
+              <span class="{stripeMode.has_sandbox_keys ? 'text-gray-700' : 'text-gray-400'}">Claves SANDBOX</span>
+            </div>
+            <div class="flex items-center gap-1.5">
               {#if stripeMode.has_live_keys}<CheckCircle size={12} class="text-emerald-500" />{:else}<AlertCircle size={12} class="text-gray-300" />{/if}
               <span class="{stripeMode.has_live_keys ? 'text-gray-700' : 'text-gray-400'}">Claves LIVE</span>
             </div>
           </div>
+
+          {#if stripeMode.coherence_warning}
+            <div class="mb-6 rounded-lg border border-amber-200 bg-amber-50 px-4 py-3 text-xs text-amber-700">
+              {stripeMode.coherence_warning}
+            </div>
+          {/if}
 
           <!-- Optional key override forms -->
           <details class="group">
@@ -502,7 +563,7 @@
               <ChevronDown size={12} class="group-open:rotate-180 transition-transform" />
               Configurar claves manualmente
             </summary>
-            <div class="grid grid-cols-1 md:grid-cols-2 gap-6 pt-2">
+            <div class="grid grid-cols-1 md:grid-cols-3 gap-6 pt-2">
               <!-- Test Keys -->
               <div class="space-y-3 p-4 border border-amber-200 bg-amber-50/50 rounded-lg">
                 <h4 class="text-xs font-semibold text-amber-700 uppercase flex items-center gap-1"><AlertCircle size={12} /> Claves TEST</h4>
@@ -517,6 +578,22 @@
                 <div>
                   <label class="label text-[10px]" for="wh-test">Webhook Secret</label>
                   <input id="wh-test" type="password" class="input w-full px-3 py-1.5 text-xs" placeholder="whsec_..." bind:value={stripeTestKeys.webhook} />
+                </div>
+              </div>
+              <!-- Sandbox Keys -->
+              <div class="space-y-3 p-4 border border-blue-200 bg-blue-50/50 rounded-lg">
+                <h4 class="text-xs font-semibold text-blue-700 uppercase flex items-center gap-1"><Globe size={12} /> Claves SANDBOX</h4>
+                <div>
+                  <label class="label text-[10px]" for="sk-sandbox">Secret Key</label>
+                  <input id="sk-sandbox" type="password" class="input w-full px-3 py-1.5 text-xs" placeholder="sk_test_...sandbox..." bind:value={stripeSandboxKeys.secret} />
+                </div>
+                <div>
+                  <label class="label text-[10px]" for="pk-sandbox">Publishable Key</label>
+                  <input id="pk-sandbox" type="text" class="input w-full px-3 py-1.5 text-xs" placeholder="pk_test_...sandbox..." bind:value={stripeSandboxKeys.publishable} />
+                </div>
+                <div>
+                  <label class="label text-[10px]" for="wh-sandbox">Webhook Secret</label>
+                  <input id="wh-sandbox" type="password" class="input w-full px-3 py-1.5 text-xs" placeholder="whsec_..." bind:value={stripeSandboxKeys.webhook} />
                 </div>
               </div>
               <!-- Live Keys -->
@@ -536,7 +613,7 @@
                 </div>
               </div>
             </div>
-            <p class="text-[10px] text-gray-400 mt-2 italic">Las claves se guardan al cambiar de modo. Déjelas vacías para mantener las actuales.</p>
+            <p class="text-[10px] text-gray-400 mt-2 italic">Las claves se guardan al cambiar de modo para la app seleccionada. Déjelas vacías para mantener las actuales.</p>
           </details>
         {:else}
           <p class="text-sm text-gray-400 italic">No se pudo obtener el estado de Stripe</p>
@@ -608,7 +685,7 @@
     {/if}
 
   <!-- ═══════════ TAB: Sajet ═══════════ -->
-  {:else if activeTab === 'Sajet'}
+  {:else if activeTab === 'odoo'}
     <div class="card">
       <div class="flex items-center justify-between mb-5">
         <h3 class="section-heading">CONFIGURACIÓN Sajet</h3>

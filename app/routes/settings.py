@@ -65,11 +65,14 @@ class CredentialBulkRequest(BaseModel):
 
 
 class StripeModeRequest(BaseModel):
-    """Cambiar modo Stripe (test/live)."""
-    mode: str = Field(..., description="'test' o 'live'")
+    """Cambiar modo Stripe (test/sandbox/live)."""
+    mode: str = Field(..., description="'test', 'sandbox' o 'live'")
     test_secret_key: Optional[str] = None
     test_publishable_key: Optional[str] = None
     test_webhook_secret: Optional[str] = None
+    sandbox_secret_key: Optional[str] = None
+    sandbox_publishable_key: Optional[str] = None
+    sandbox_webhook_secret: Optional[str] = None
     live_secret_key: Optional[str] = None
     live_publishable_key: Optional[str] = None
     live_webhook_secret: Optional[str] = None
@@ -223,6 +226,82 @@ def require_admin(authorization: str = None, cookie_token: str = None):
         raise
     except Exception as e:
         raise HTTPException(status_code=401, detail="Token inválido")
+
+
+_STRIPE_APPS = {
+    "sajet": {
+        "label": "SAJET",
+        "base_prefix": "STRIPE_",
+        "host": "sajet.us",
+    },
+    "med": {
+        "label": "MED",
+        "base_prefix": "STRIPE_MED_",
+        "host": "med.sajet.us",
+    },
+}
+
+_STRIPE_KEY_SUFFIX = {
+    "secret": "SECRET_KEY",
+    "publishable": "PUBLISHABLE_KEY",
+    "webhook": "WEBHOOK_SECRET",
+}
+
+_STRIPE_MODE_LABELS = {
+    "test": "Pruebas",
+    "sandbox": "Aislado",
+    "live": "Producción",
+}
+
+
+def _normalize_stripe_app(app: Optional[str]) -> str:
+    value = (app or "sajet").strip().lower()
+    if value not in _STRIPE_APPS:
+        raise HTTPException(status_code=400, detail="App inválida. Use 'sajet' o 'med'")
+    return value
+
+
+def _stripe_mode_key(app: str) -> str:
+    return f"{_STRIPE_APPS[app]['base_prefix']}MODE"
+
+
+def _stripe_active_key(app: str, kind: str) -> str:
+    return f"{_STRIPE_APPS[app]['base_prefix']}{_STRIPE_KEY_SUFFIX[kind]}"
+
+
+def _stripe_stored_key(app: str, mode: str, kind: str) -> str:
+    return f"{_STRIPE_APPS[app]['base_prefix']}{mode.upper()}_{_STRIPE_KEY_SUFFIX[kind]}"
+
+
+def _get_runtime_env_value(key: str) -> str:
+    return os.getenv(key, "") or ""
+
+
+def _get_config_or_env(key: str, default: str = "") -> str:
+    value = get_config(key, None)
+    if value is not None and value != "":
+        return value
+    env_value = _get_runtime_env_value(key)
+    return env_value if env_value else default
+
+
+def _infer_stripe_mode_from_key(secret_key: str) -> str:
+    key = (secret_key or "").lower()
+    if not key:
+        return "unknown"
+    if "rk_live" in key or "sk_live" in key:
+        return "live"
+    if "sandbox" in key:
+        return "sandbox"
+    if "test" in key:
+        return "test"
+    return "unknown"
+
+
+def _mask_key_prefix(value: str, limit: int = 20) -> str:
+    if not value:
+        return ""
+    return value[:limit] + "..." if len(value) > limit else value
 
 
 # =====================================================
@@ -396,50 +475,58 @@ async def update_credentials_bulk(
 
 @router.get("/stripe/mode")
 async def get_stripe_mode(
+    app: str = Query("sajet", description="App Stripe: sajet o med"),
     authorization: str = Header(None),
     access_token: str = Cookie(None)
 ):
     """
-    Obtiene el modo actual de Stripe (test/live) y las keys configuradas.
+    Obtiene el modo actual de Stripe por app (sajet/med) y las keys configuradas.
     """
     require_admin(authorization, access_token)
 
-    mode = get_config("STRIPE_MODE", None) or "live"
-    current_sk = get_config("STRIPE_SECRET_KEY", None) or os.getenv("STRIPE_SECRET_KEY", "")
-    current_pk = get_config("STRIPE_PUBLISHABLE_KEY", None) or os.getenv("STRIPE_PUBLISHABLE_KEY", "")
+    normalized_app = _normalize_stripe_app(app)
+    current_sk = _get_config_or_env(_stripe_active_key(normalized_app, "secret"))
+    current_pk = _get_config_or_env(_stripe_active_key(normalized_app, "publishable"))
+    mode = _get_config_or_env(_stripe_mode_key(normalized_app), "") or _infer_stripe_mode_from_key(current_sk)
+    if mode not in _STRIPE_MODE_LABELS:
+        mode = "test"
 
-    # Auto-detectar modo si no está explícito
-    if current_sk:
-        if current_sk.startswith("sk_test_") or current_sk.startswith("rk_test_"):
-            detected = "test"
-        else:
-            detected = "live"
-    else:
-        detected = "unknown"
-
-    # Verificar si hay keys guardadas para cada modo
-    has_test = bool(get_config("STRIPE_TEST_SECRET_KEY", None))
-    has_live = bool(get_config("STRIPE_LIVE_SECRET_KEY", None) or (current_sk and "live" in current_sk))
+    detected = _infer_stripe_mode_from_key(current_sk)
+    has_test = bool(_get_config_or_env(_stripe_stored_key(normalized_app, "test", "secret")))
+    has_sandbox = bool(_get_config_or_env(_stripe_stored_key(normalized_app, "sandbox", "secret")))
+    has_live = bool(_get_config_or_env(_stripe_stored_key(normalized_app, "live", "secret")) or (current_sk and "live" in current_sk.lower()))
+    coherence_warning = None
+    if detected != "unknown" and mode != detected:
+        coherence_warning = f"Modo guardado={mode} pero la key activa parece {detected}"
 
     return {
         "success": True,
+        "app": normalized_app,
+        "app_label": _STRIPE_APPS[normalized_app]["label"],
+        "app_host": _STRIPE_APPS[normalized_app]["host"],
         "mode": mode,
+        "mode_label": _STRIPE_MODE_LABELS.get(mode, mode.upper()),
         "detected_mode": detected,
-        "active_secret_key_prefix": current_sk[:12] + "..." if current_sk and len(current_sk) > 12 else "",
-        "active_publishable_key": current_pk[:20] + "..." if current_pk and len(current_pk) > 20 else "",
+        "active_secret_key_prefix": _mask_key_prefix(current_sk, 12),
+        "active_publishable_key": _mask_key_prefix(current_pk, 20),
         "has_test_keys": has_test,
+        "has_sandbox_keys": has_sandbox,
         "has_live_keys": has_live,
+        "coherence_warning": coherence_warning,
+        "requires_restart": False,
+        "cache_ttl_seconds": 5,
     }
 
 
 @router.post("/stripe/mode")
 async def set_stripe_mode(
     payload: StripeModeRequest,
+    app: str = Query("sajet", description="App Stripe: sajet o med"),
     authorization: str = Header(None),
     access_token: str = Cookie(None)
 ):
     """
-    Cambia el modo Stripe entre test y live.
+    Cambia el modo Stripe por app entre test, sandbox y live.
     
     Flujo:
     1. Si se proporcionan keys nuevas, las guarda en STRIPE_{TEST/LIVE}_*
@@ -451,65 +538,76 @@ async def set_stripe_mode(
     """
     require_admin(authorization, access_token)
 
-    if payload.mode not in ("test", "live"):
-        raise HTTPException(status_code=400, detail="Modo debe ser 'test' o 'live'")
+    normalized_app = _normalize_stripe_app(app)
+
+    if payload.mode not in ("test", "sandbox", "live"):
+        raise HTTPException(status_code=400, detail="Modo debe ser 'test', 'sandbox' o 'live'")
 
     changes = []
 
-    # Guardar keys nuevas si se proporcionan
-    if payload.mode == "test":
-        if payload.test_secret_key:
-            set_config("STRIPE_TEST_SECRET_KEY", payload.test_secret_key, "Secret key TEST", "stripe", True, "admin")
-            changes.append("STRIPE_TEST_SECRET_KEY")
-        if payload.test_publishable_key:
-            set_config("STRIPE_TEST_PUBLISHABLE_KEY", payload.test_publishable_key, "Publishable key TEST", "stripe", False, "admin")
-            changes.append("STRIPE_TEST_PUBLISHABLE_KEY")
-        if payload.test_webhook_secret:
-            set_config("STRIPE_TEST_WEBHOOK_SECRET", payload.test_webhook_secret, "Webhook secret TEST", "stripe", True, "admin")
-            changes.append("STRIPE_TEST_WEBHOOK_SECRET")
-    else:
-        if payload.live_secret_key:
-            set_config("STRIPE_LIVE_SECRET_KEY", payload.live_secret_key, "Secret key LIVE", "stripe", True, "admin")
-            changes.append("STRIPE_LIVE_SECRET_KEY")
-        if payload.live_publishable_key:
-            set_config("STRIPE_LIVE_PUBLISHABLE_KEY", payload.live_publishable_key, "Publishable key LIVE", "stripe", False, "admin")
-            changes.append("STRIPE_LIVE_PUBLISHABLE_KEY")
-        if payload.live_webhook_secret:
-            set_config("STRIPE_LIVE_WEBHOOK_SECRET", payload.live_webhook_secret, "Webhook secret LIVE", "stripe", True, "admin")
-            changes.append("STRIPE_LIVE_WEBHOOK_SECRET")
+    payload_keys = {
+        "test": {
+            "secret": payload.test_secret_key,
+            "publishable": payload.test_publishable_key,
+            "webhook": payload.test_webhook_secret,
+        },
+        "sandbox": {
+            "secret": payload.sandbox_secret_key,
+            "publishable": payload.sandbox_publishable_key,
+            "webhook": payload.sandbox_webhook_secret,
+        },
+        "live": {
+            "secret": payload.live_secret_key,
+            "publishable": payload.live_publishable_key,
+            "webhook": payload.live_webhook_secret,
+        },
+    }
 
-    # Obtener las keys del modo seleccionado
-    if payload.mode == "test":
-        sk = get_config("STRIPE_TEST_SECRET_KEY", "")
-        pk = get_config("STRIPE_TEST_PUBLISHABLE_KEY", "")
-        wh = get_config("STRIPE_TEST_WEBHOOK_SECRET", "")
-    else:
-        sk = get_config("STRIPE_LIVE_SECRET_KEY", None) or os.getenv("STRIPE_SECRET_KEY", "")
-        pk = get_config("STRIPE_LIVE_PUBLISHABLE_KEY", None) or os.getenv("STRIPE_PUBLISHABLE_KEY", "")
-        wh = get_config("STRIPE_LIVE_WEBHOOK_SECRET", None) or os.getenv("STRIPE_WEBHOOK_SECRET", "")
+    for mode_name, values in payload_keys.items():
+        for kind, value in values.items():
+            if not value:
+                continue
+            key_name = _stripe_stored_key(normalized_app, mode_name, kind)
+            is_secret = kind != "publishable"
+            desc = f"Stripe {mode_name.upper()} {kind} ({_STRIPE_APPS[normalized_app]['label']})"
+            set_config(key_name, value, desc, "stripe", is_secret, "admin")
+            changes.append(key_name)
+
+    sk = _get_config_or_env(_stripe_stored_key(normalized_app, payload.mode, "secret"))
+    pk = _get_config_or_env(_stripe_stored_key(normalized_app, payload.mode, "publishable"))
+    wh = _get_config_or_env(_stripe_stored_key(normalized_app, payload.mode, "webhook"))
 
     if not sk:
         raise HTTPException(
             status_code=400,
-            detail=f"No hay Secret Key configurada para modo '{payload.mode}'. Primero guarde las credenciales."
+            detail=f"No hay Secret Key configurada para modo '{payload.mode}' en app '{normalized_app}'. Primero guarde las credenciales."
         )
 
-    # Activar las keys del modo seleccionado
-    set_config("STRIPE_SECRET_KEY", sk, f"Stripe SK activa ({payload.mode})", "stripe", True, "admin")
-    set_config("STRIPE_PUBLISHABLE_KEY", pk, f"Stripe PK activa ({payload.mode})", "stripe", False, "admin")
-    if wh:
-        set_config("STRIPE_WEBHOOK_SECRET", wh, f"Stripe WH activa ({payload.mode})", "stripe", True, "admin")
-    set_config("STRIPE_MODE", payload.mode, "Modo Stripe activo", "stripe", False, "admin")
+    detected = _infer_stripe_mode_from_key(sk)
+    if payload.mode == "live" and detected != "live":
+        raise HTTPException(status_code=400, detail="No se puede activar LIVE con una clave que no sea live")
+    if payload.mode == "sandbox" and detected not in ("sandbox", "test"):
+        logger.warning("Sandbox configurado con una clave sin patrón sandbox/test para app=%s", normalized_app)
 
-    logger.info(f"Stripe modo cambiado a '{payload.mode}' — SK prefix: {sk[:12]}...")
+    # Activar las keys del modo seleccionado
+    set_config(_stripe_active_key(normalized_app, "secret"), sk, f"Stripe SK activa ({payload.mode}) [{normalized_app}]", "stripe", True, "admin")
+    set_config(_stripe_active_key(normalized_app, "publishable"), pk, f"Stripe PK activa ({payload.mode}) [{normalized_app}]", "stripe", False, "admin")
+    if wh:
+        set_config(_stripe_active_key(normalized_app, "webhook"), wh, f"Stripe WH activa ({payload.mode}) [{normalized_app}]", "stripe", True, "admin")
+    set_config(_stripe_mode_key(normalized_app), payload.mode, f"Modo Stripe activo ({normalized_app})", "stripe", False, "admin")
+
+    logger.info("Stripe modo cambiado app=%s mode=%s — SK prefix: %s", normalized_app, payload.mode, _mask_key_prefix(sk, 12))
 
     return {
         "success": True,
+        "app": normalized_app,
         "mode": payload.mode,
-        "message": f"Stripe cambiado a modo {payload.mode.upper()}. Reinicie el servicio para aplicar globalmente.",
-        "active_key_prefix": sk[:12] + "..." if len(sk) > 12 else sk,
+        "mode_label": _STRIPE_MODE_LABELS.get(payload.mode, payload.mode.upper()),
+        "message": f"Stripe {_STRIPE_APPS[normalized_app]['label']} cambiado a modo {payload.mode.upper()}.",
+        "active_key_prefix": _mask_key_prefix(sk, 12),
         "changes": changes,
-        "requires_restart": True,
+        "requires_restart": False,
+        "cache_ttl_seconds": 5,
     }
 
 

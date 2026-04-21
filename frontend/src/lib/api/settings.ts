@@ -23,20 +23,31 @@ export interface CredentialsResponse {
 
 export interface StripeModeResponse {
   success: boolean;
-  mode: 'test' | 'live';
+  app: 'sajet' | 'med';
+  app_label: string;
+  app_host: string;
+  mode: 'test' | 'sandbox' | 'live';
+  mode_label: string;
   detected_mode: string;
   active_secret_key_prefix: string;
   active_publishable_key: string;
   has_test_keys: boolean;
+  has_sandbox_keys: boolean;
   has_live_keys: boolean;
+  coherence_warning?: string | null;
+  requires_restart?: boolean;
+  cache_ttl_seconds?: number;
 }
 
 export interface StripeModeSetResponse {
   success: boolean;
+  app: 'sajet' | 'med';
   mode: string;
+  mode_label?: string;
   message: string;
   active_key_prefix: string;
   requires_restart: boolean;
+  cache_ttl_seconds?: number;
 }
 
 export interface EnvironmentInfo {
@@ -121,20 +132,23 @@ export const settingsApi = {
 
   // ── Stripe Mode ──
 
-  async getStripeMode(): Promise<StripeModeResponse> {
-    return api.get<StripeModeResponse>('/api/settings/stripe/mode');
+  async getStripeMode(app: 'sajet' | 'med' = 'sajet'): Promise<StripeModeResponse> {
+    return api.get<StripeModeResponse>(`/api/settings/stripe/mode?app=${encodeURIComponent(app)}`);
   },
 
   async setStripeMode(payload: {
-    mode: 'test' | 'live';
+    mode: 'test' | 'sandbox' | 'live';
     test_secret_key?: string;
     test_publishable_key?: string;
     test_webhook_secret?: string;
+    sandbox_secret_key?: string;
+    sandbox_publishable_key?: string;
+    sandbox_webhook_secret?: string;
     live_secret_key?: string;
     live_publishable_key?: string;
     live_webhook_secret?: string;
-  }): Promise<StripeModeSetResponse> {
-    return api.post('/api/settings/stripe/mode', payload);
+  }, app: 'sajet' | 'med' = 'sajet'): Promise<StripeModeSetResponse> {
+    return api.post(`/api/settings/stripe/mode?app=${encodeURIComponent(app)}`, payload);
   },
 
   // ── Environment ──
