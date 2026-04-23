@@ -1,1 +1,1 @@
-export { default as component } from "../../../../src/routes/(admin)/neural-users/+page.svelte";
+export { default as component } from "../../../../src/routes/(admin)/migrations/+page.svelte";

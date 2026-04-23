@@ -1,5 +1,6 @@
 import { d as derived, w as writable } from "./index.js";
 import { a as api } from "./client.js";
+import "./tenants.js";
 import deepmerge from "deepmerge";
 import { IntlMessageFormat } from "intl-messageformat";
 const dashboardApi = {

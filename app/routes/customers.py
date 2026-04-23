@@ -510,11 +510,37 @@ async def _auto_provision_tenant(
 
     # 2. Provisionar nginx
     try:
-        nginx_result = provision_sajet_subdomain(subdomain)
+        # Resolver node_ip real desde el resultado del create_tenant_from_template
+        # (NO usar default CT105_IP que apuntaría a IP muerta si no estuviera bien override)
+        from ..services.deployment_writer import _resolve_node_from_server_id  # type: ignore
+        from ..models.database import SessionLocal as _SL
+        _ng_node_ip = None
+        try:
+            _ng_db = _SL()
+            _node = _resolve_node_from_server_id(_ng_db, result.get("server"))
+            if _node:
+                _ng_node_ip = _node.hostname
+            _ng_db.close()
+        except Exception:
+            pass
+        if not _ng_node_ip:
+            from ..config import ODOO_PRIMARY_IP as _PRIMARY_IP
+            _ng_node_ip = _PRIMARY_IP
+
+        nginx_result = provision_sajet_subdomain(subdomain, node_ip=_ng_node_ip)
         if not nginx_result.get("success"):
             logger.warning(f"Nginx provisioning failed for {subdomain}: {nginx_result.get('error')}")
     except Exception as ng_err:
         logger.warning(f"Nginx error for {subdomain}: {ng_err}")
+
+    # 2b. Cloudflared gateway en PCT 205
+    try:
+        from ..services.cloudflare_tunnel_gate import add_tenant_route
+        gate_res = add_tenant_route(subdomain=subdomain, node_ip=_ng_node_ip)
+        if not gate_res.get("success"):
+            logger.warning(f"Cloudflared gate failed for {subdomain}: {gate_res.get('error')}")
+    except Exception as gate_err:
+        logger.warning(f"Cloudflared gate error for {subdomain}: {gate_err}")
 
     # 3. Crear TenantDeployment con campos multi-nodo
     deployment_id = None

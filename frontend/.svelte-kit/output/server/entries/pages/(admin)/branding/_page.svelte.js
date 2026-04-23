@@ -1,6 +1,7 @@
 import "clsx";
 import { c as attr, d as escape_html } from "../../../../chunks/index2.js";
 import "../../../../chunks/client.js";
+import "../../../../chunks/tenants.js";
 import "../../../../chunks/darkMode.js";
 import "../../../../chunks/toast.js";
 import { P as Palette } from "../../../../chunks/palette.js";

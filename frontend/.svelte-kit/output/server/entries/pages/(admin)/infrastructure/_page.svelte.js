@@ -2,6 +2,7 @@ import "clsx";
 import { c as attr } from "../../../../chunks/index2.js";
 import { o as onDestroy } from "../../../../chunks/index-server.js";
 import "../../../../chunks/client.js";
+import "../../../../chunks/tenants.js";
 import "../../../../chunks/toast.js";
 import { A as Activity } from "../../../../chunks/activity.js";
 import { R as Refresh_cw } from "../../../../chunks/refresh-cw.js";

@@ -13,6 +13,7 @@ function ServiceCatalog($$renderer, $$props) {
     let search = "";
     let categoryFilter = "";
     let showInactive = false;
+    const EMAIL_PACKAGE_CODE = "postal_email_package";
     let filtered = derived(() => catalog.filter((item) => {
       const matchesCategory = !categoryFilter;
       return matchesCategory;
@@ -29,11 +30,15 @@ function ServiceCatalog($$renderer, $$props) {
     let activeCount = derived(() => catalog.filter((i) => i.is_active).length);
     let addonCount = derived(() => catalog.filter((i) => i.is_addon && i.is_active).length);
     let linkedCount = derived(() => catalog.filter((i) => (i.linked_plans?.length || 0) > 0).length);
+    let emailPackageCount = derived(() => catalog.filter((i) => isEmailPackage(i) && i.is_active).length);
+    function isEmailPackage(item) {
+      return item.service_code === EMAIL_PACKAGE_CODE || item.metadata_json?.kind === EMAIL_PACKAGE_CODE;
+    }
     $$renderer2.push(`<div class="p-6 space-y-6"><div class="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4"><div><h1 class="page-title flex items-center gap-2">`);
     Shopping_bag($$renderer2, { size: 24 });
-    $$renderer2.push(`<!----> Catálogo de Servicios SAJET</h1> <p class="page-subtitle">Administra servicios, precios y vinculación con planes</p></div> <button class="btn-accent flex items-center gap-2">`);
+    $$renderer2.push(`<!----> Catálogo de Servicios SAJET</h1> <p class="page-subtitle">Administra servicios, precios y vinculación con planes</p></div> <div class="flex items-center gap-2"><a class="btn-secondary flex items-center gap-2" href="/postal-email">📧 Gestión correo</a> <button class="btn-accent flex items-center gap-2">`);
     Plus($$renderer2, { size: 16 });
-    $$renderer2.push(`<!----> Nuevo Servicio</button></div> <div class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4"><div class="stat-card"><div class="text-xs font-semibold uppercase text-gray-500 mb-1">Servicios Activos</div> <div class="text-2xl font-bold text-text-light">${escape_html(activeCount())}</div></div> <div class="stat-card"><div class="text-xs font-semibold uppercase text-gray-500 mb-1">Categorías</div> <div class="text-2xl font-bold text-blue-400">${escape_html(Object.keys(groupedByCategory()).length)}</div></div> <div class="stat-card"><div class="text-xs font-semibold uppercase text-gray-500 mb-1">Add-ons</div> <div class="text-2xl font-bold text-amber-400">${escape_html(addonCount())}</div></div> <div class="stat-card"><div class="text-xs font-semibold uppercase text-gray-500 mb-1">Vinculados a Planes</div> <div class="text-2xl font-bold text-emerald-400">${escape_html(linkedCount())}</div></div></div> <div class="flex flex-col sm:flex-row gap-3"><div class="relative flex-1">`);
+    $$renderer2.push(`<!----> Nuevo Servicio</button></div></div> <div class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-5 gap-4"><div class="stat-card"><div class="text-xs font-semibold uppercase text-gray-500 mb-1">Servicios Activos</div> <div class="text-2xl font-bold text-text-light">${escape_html(activeCount())}</div></div> <div class="stat-card"><div class="text-xs font-semibold uppercase text-gray-500 mb-1">Categorías</div> <div class="text-2xl font-bold text-blue-400">${escape_html(Object.keys(groupedByCategory()).length)}</div></div> <div class="stat-card"><div class="text-xs font-semibold uppercase text-gray-500 mb-1">Add-ons</div> <div class="text-2xl font-bold text-amber-400">${escape_html(addonCount())}</div></div> <div class="stat-card"><div class="text-xs font-semibold uppercase text-gray-500 mb-1">Vinculados a Planes</div> <div class="text-2xl font-bold text-emerald-400">${escape_html(linkedCount())}</div></div> <div class="stat-card"><div class="text-xs font-semibold uppercase text-gray-500 mb-1">Paquetes Correo</div> <div class="text-2xl font-bold text-blue-300">${escape_html(emailPackageCount())}</div></div></div> <div class="flex flex-col sm:flex-row gap-3"><div class="relative flex-1">`);
     Search($$renderer2, {
       size: 16,
       class: "absolute left-3 top-1/2 -translate-y-1/2 text-gray-500"

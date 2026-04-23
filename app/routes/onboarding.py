@@ -213,7 +213,6 @@ def _log_provisioning_audit(
 # ─────────────────────────────────────────────────────────────────
 #  Motor maduro de provisioning desde Stripe checkout (background)
 # ─────────────────────────────────────────────────────────────────
-CT105_IP = "10.10.10.100"
 
 async def _provision_tenant_from_checkout(
     *,
@@ -229,48 +228,125 @@ async def _provision_tenant_from_checkout(
 ):
     """
     Provisiona un tenant Odoo completo tras un pago exitoso en Stripe.
-    Usa el motor maduro (SQL fast-path → fallback HTTP) en lugar del legacy shell.
+
+    Delega TODA la lógica al orquestador único (`TenantLifecycleOrchestrator`),
+    el mismo que usa el admin SPA. Garantiza un único camino end-to-end.
     """
-    import asyncio
+    from ..services.tenant_lifecycle import orchestrator, TenantSpec
+
+    log_prefix = f"[provision:{subdomain}]"
+    spec = TenantSpec(
+        subdomain=subdomain,
+        company_name=company_name,
+        admin_email=admin_email,
+        plan_name=plan_name,
+        partner_id=partner_id,
+        country_code=country_code,
+        blueprint_package_name=blueprint_package_name,
+        customer_id=customer_id,
+        subscription_id=subscription_id,
+        send_credentials_email=True,
+    )
+
+    op = await orchestrator.provision(spec, source="onboarding")
+
+    # Auditoría agregada
+    _log_provisioning_audit(
+        "tenant.provisioned" if op.success else "tenant.provision.failed",
+        subdomain=subdomain,
+        detail=f"plan={plan_name} partner_id={partner_id} country={country_code} steps={len(op.steps)} error={op.error}",
+        success=op.success,
+        subscription_id=subscription_id,
+    )
+
+    if op.success:
+        # Marcar suscripción ACTIVE + tenant_provisioned (la columna odoo_db_name
+        # NO existe en el schema; el subdominio actúa como nombre de BD por
+        # convención y se persiste en TenantDeployment.subdomain).
+        try:
+            db_session = SessionLocal()
+            sub = db_session.query(Subscription).filter_by(id=subscription_id).first()
+            if sub:
+                sub.status = SubscriptionStatus.ACTIVE
+                sub.tenant_provisioned = True
+                db_session.commit()
+        except Exception as e:
+            logger.warning("%s Subscription update falló: %s", log_prefix, e)
+        finally:
+            try:
+                db_session.close()
+            except Exception:
+                pass
+        logger.info("%s 🎉 Provisioning completo via orchestrator", log_prefix)
+    else:
+        logger.error("%s ❌ Provisioning falló: %s", log_prefix, op.error)
+    return op
+
+
+async def _provision_tenant_from_checkout_LEGACY(
+    *,
+    subdomain: str,
+    company_name: str,
+    admin_email: str,
+    subscription_id: int,
+    customer_id: int,
+    plan_name: str = "enterprise",
+    partner_id: int | None = None,
+    country_code: str | None = None,
+    blueprint_package_name: str | None = None,
+):
+    """
+    [DEPRECATED 2026-04-22] Implementación inline anterior, mantenida como
+    referencia. NO usar — el callsite invoca la versión que delega al
+    orquestador (`TenantLifecycleOrchestrator`).
+    """
+    from ..config import ODOO_PRIMARY_IP
     log_prefix = f"[provision:{subdomain}]"
 
     # 1 ── Credenciales
     admin_login, admin_password = build_tenant_admin_credentials(subdomain)
     logger.info("%s Generando credenciales admin_login=%s", log_prefix, admin_login)
 
-    # 2 ── Crear base de datos Odoo (fast-path SQL → fallback HTTP)
-    db_name = subdomain  # Convención: subdomain == db name
+    # 2 ── Crear base de datos Odoo (fast-path SQL → fallback HTTP) ─ MISMA ruta que admin
+    db_name = subdomain
     loc = COUNTRY_LOCALIZATION.get((country_code or "US").upper(), COUNTRY_LOCALIZATION["US"])
+    creation_mode = None
+    server_id_used = None
 
     try:
-        # Fast path: SQL CREATE DATABASE WITH TEMPLATE
-        ok = create_tenant_from_template(
-            new_db=db_name,
+        # Fast path: SQL CREATE DATABASE WITH TEMPLATE (firma: subdomain=, no new_db=)
+        fast = await create_tenant_from_template(
+            subdomain=db_name,
+            company_name=company_name,
             admin_login=admin_login,
             admin_password=admin_password,
-            company_name=company_name,
+            partner_id=partner_id,
             country_code=(country_code or "US").upper(),
+            blueprint_package_name=blueprint_package_name,
         )
-        if ok:
-            logger.info("%s DB creada vía SQL fast-path ✅", log_prefix)
+        if fast and fast.get("success"):
+            creation_mode = "fast"
+            server_id_used = fast.get("server")
+            logger.info("%s DB creada vía SQL fast-path ✅ (server=%s)", log_prefix, server_id_used)
         else:
-            raise RuntimeError("create_tenant_from_template retornó False")
+            raise RuntimeError(fast.get("error") if fast else "fast-path returned None")
     except Exception as e:
         logger.warning("%s SQL fast-path falló: %s — fallback HTTP", log_prefix, e)
         try:
-            result = provision_tenant_standard(
-                db_name=db_name,
+            result = await provision_tenant_standard(
+                subdomain=db_name,
+                company_name=company_name,
                 admin_login=admin_login,
                 admin_password=admin_password,
-                admin_email=admin_email,
-                company_name=company_name,
                 country_code=(country_code or "US").upper(),
-                phone=loc.get("phone", "+1"),
                 lang=loc.get("lang", "en_US"),
+                blueprint_package_name=blueprint_package_name,
             )
             if not result.get("success"):
                 raise RuntimeError(result.get("error", "provision_tenant_standard failed"))
-            logger.info("%s DB creada vía HTTP fallback ✅", log_prefix)
+            creation_mode = "fallback_standard"
+            server_id_used = result.get("server")
+            logger.info("%s DB creada vía HTTP fallback ✅ (server=%s)", log_prefix, server_id_used)
         except Exception as e2:
             logger.error("%s ❌ Provisioning DB falló: %s", log_prefix, e2)
             _log_provisioning_audit(
@@ -282,19 +358,31 @@ async def _provision_tenant_from_checkout(
             )
             return
 
-    # 3 ── Registrar deployment
+    # 3 ── Registrar deployment (resuelve node desde server_id, sin IP hardcoded)
+    deployment_node_ip: str | None = None
+    deployment_http_port: int = 8080
+    deployment_chat_port: int = 8072
     try:
         db_session = SessionLocal()
         ensure_tenant_deployment(
             subdomain=subdomain,
             subscription_id=subscription_id,
             customer_id=customer_id,
-            server_ip=CT105_IP,
+            server_id=server_id_used,
             plan_name=plan_name,
             db=db_session,
         )
         db_session.commit()
-        logger.info("%s Deployment registrado ✅", log_prefix)
+        # Resolver datos reales del deployment para nginx + cloudflared
+        dep = db_session.query(TenantDeployment).filter(
+            TenantDeployment.subdomain == subdomain
+        ).first()
+        if dep:
+            deployment_node_ip = dep.backend_host or ODOO_PRIMARY_IP
+            deployment_http_port = dep.http_port or 8080
+            deployment_chat_port = dep.chat_port or 8072
+        logger.info("%s Deployment registrado ✅ host=%s http=%s chat=%s",
+                    log_prefix, deployment_node_ip, deployment_http_port, deployment_chat_port)
     except Exception as e:
         logger.warning("%s Deployment write falló: %s", log_prefix, e)
     finally:
@@ -303,12 +391,36 @@ async def _provision_tenant_from_checkout(
         except Exception:
             pass
 
-    # 4 ── Configurar nginx (subdomain → nodo Odoo)
+    # Si no logramos resolver, usar el primary actual (NUNCA 10.10.10.100 hardcodeado)
+    deployment_node_ip = deployment_node_ip or ODOO_PRIMARY_IP
+
+    # 4 ── Configurar nginx en el nodo Odoo real
     try:
-        nginx_result = provision_sajet_subdomain(subdomain, node_ip=CT105_IP)
-        logger.info("%s Nginx configurado: %s ✅", log_prefix, nginx_result)
+        nginx_result = provision_sajet_subdomain(
+            subdomain=subdomain,
+            node_ip=deployment_node_ip,
+            http_port=deployment_http_port,
+            chat_port=deployment_chat_port,
+        )
+        logger.info("%s Nginx configurado en %s: %s ✅", log_prefix, deployment_node_ip, nginx_result)
     except Exception as e:
         logger.warning("%s Nginx config falló (no bloquea): %s", log_prefix, e)
+
+    # 4b ── Cloudflared gateway en PCT 205: añadir routes y reiniciar tunnel
+    try:
+        from ..services.cloudflare_tunnel_gate import add_tenant_route
+        gate_result = add_tenant_route(
+            subdomain=subdomain,
+            node_ip=deployment_node_ip,
+            http_port=deployment_http_port,
+            chat_port=deployment_chat_port,
+        )
+        if gate_result.get("success"):
+            logger.info("%s Cloudflared route registrado ✅: %s", log_prefix, gate_result.get("changed"))
+        else:
+            logger.warning("%s Cloudflared route falló: %s", log_prefix, gate_result.get("error"))
+    except Exception as e:
+        logger.warning("%s Cloudflared gate falló: %s", log_prefix, e)
 
     # 5 ── Actualizar subscription status
     try:

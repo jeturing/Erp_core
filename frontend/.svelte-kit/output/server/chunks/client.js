@@ -69,11 +69,19 @@ class ApiClient {
     if (this.token) {
       headers.Authorization = `Bearer ${this.token}`;
     }
-    const response = await fetch(`${this.baseUrl}${endpoint}`, {
-      ...options,
-      headers,
-      credentials: "include"
-    });
+    const controller = new AbortController();
+    const timeoutId = setTimeout(() => controller.abort(), 1e4);
+    let response;
+    try {
+      response = await fetch(`${this.baseUrl}${endpoint}`, {
+        ...options,
+        headers,
+        credentials: "include",
+        signal: options.signal ?? controller.signal
+      });
+    } finally {
+      clearTimeout(timeoutId);
+    }
     if (response.status === 401 && !_isRetry) {
       const refreshed = await this.ensureRefresh();
       if (refreshed) {
@@ -92,8 +100,8 @@ class ApiClient {
     }
     return response.json();
   }
-  async get(endpoint) {
-    return this.request(endpoint, { method: "GET" });
+  async get(endpoint, headers) {
+    return this.request(endpoint, { method: "GET", headers });
   }
   async post(endpoint, data, headers) {
     return this.request(endpoint, {

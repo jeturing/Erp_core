@@ -1,6 +1,7 @@
 import "clsx";
 import { h as sanitize_props, i as spread_props, j as slot, k as attr_class, e as ensure_array_like, d as escape_html, b as stringify } from "../../../../chunks/index2.js";
 import { a as api } from "../../../../chunks/client.js";
+import "../../../../chunks/tenants.js";
 import "../../../../chunks/darkMode.js";
 import { t as toasts } from "../../../../chunks/toast.js";
 import { F as File_text } from "../../../../chunks/file-text.js";

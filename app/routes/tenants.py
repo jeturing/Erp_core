@@ -1025,6 +1025,30 @@ async def create_tenant(
                 if nginx_result.get("success"):
                     logger.info(f"✅ Subdominio {payload.subdomain}.sajet.us provisionado en nginx")
                     result["nginx_provisioned"] = True
+
+                    # ── Cloudflared gateway en PCT 205: añadir routes y reiniciar tunnel ──
+                    try:
+                        from ..services.cloudflare_tunnel_gate import add_tenant_route
+                        gate_res = add_tenant_route(
+                            subdomain=payload.subdomain,
+                            node_ip=_nginx_node_ip or "10.10.20.201",
+                            http_port=_nginx_http_port,
+                            chat_port=_nginx_chat_port,
+                        )
+                        if gate_res.get("success"):
+                            result["cloudflared_route"] = "added"
+                            logger.info(
+                                f"✅ Cloudflared route añadido para {payload.subdomain}.sajet.us "
+                                f"(http={_nginx_http_port}, chat={_nginx_chat_port})"
+                            )
+                        else:
+                            result["cloudflared_route"] = f"failed: {gate_res.get('error')}"
+                            logger.warning(
+                                f"⚠️ Cloudflared route no añadido para '{payload.subdomain}': {gate_res.get('error')}"
+                            )
+                    except Exception as gate_err:
+                        result["cloudflared_route"] = f"exception: {gate_err}"
+                        logger.warning(f"⚠️ Cloudflared gate exception para '{payload.subdomain}': {gate_err}")
                 else:
                     ng_err = nginx_result.get("error") or "Error no especificado al provisionar nginx"
                     logger.error(
@@ -1313,6 +1337,23 @@ async def delete_tenant_endpoint(
             except Exception as ng_err:
                 logger.warning(f"No se pudo limpiar nginx para {subdomain}: {ng_err}")
 
+            # 5b) Eliminar entries del cloudflared en PCT 205 + reiniciar tunnel
+            try:
+                from ..services.cloudflare_tunnel_gate import remove_tenant_route
+                gate_rm = remove_tenant_route(subdomain)
+                if gate_rm.get("success"):
+                    logger.info(
+                        f"✅ Cloudflared routes removidos para {subdomain}.sajet.us "
+                        f"(removed={gate_rm.get('removed')})"
+                    )
+                else:
+                    logger.warning(
+                        f"⚠️ No se pudieron remover routes cloudflared para '{subdomain}': "
+                        f"{gate_rm.get('error')}"
+                    )
+            except Exception as gate_err:
+                logger.warning(f"⚠️ Cloudflared gate exception en delete '{subdomain}': {gate_err}")
+
         # 5.1) Eliminar registro DNS de Cloudflare
         cloudflare_result: dict = {}
         if deleted_remote:
@@ -1444,6 +1485,13 @@ async def get_tenant_details(
 ):
     """Obtener detalles de un tenant específico. Requiere autenticación."""
     _require_admin_base(request, access_token)
+    # Fast-path: si pasan un id numérico no es un subdomain válido — devolver 400
+    # inmediatamente en vez de hacer SSH a todos los nodos Odoo (5+s timeout).
+    if subdomain.isdigit():
+        raise HTTPException(
+            status_code=400,
+            detail="Use el subdominio (no el id numérico). Ej: /api/tenants/techeels",
+        )
     try:
         all_tenants = await get_all_tenants_from_servers()
         if not all_tenants:

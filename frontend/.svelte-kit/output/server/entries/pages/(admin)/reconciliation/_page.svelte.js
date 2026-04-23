@@ -1,6 +1,7 @@
 import "clsx";
 import { h as sanitize_props, i as spread_props, j as slot, c as attr, d as escape_html, k as attr_class, b as stringify } from "../../../../chunks/index2.js";
 import "../../../../chunks/client.js";
+import "../../../../chunks/tenants.js";
 import "../../../../chunks/darkMode.js";
 import "../../../../chunks/toast.js";
 import { f as formatCurrency } from "../../../../chunks/formatters.js";

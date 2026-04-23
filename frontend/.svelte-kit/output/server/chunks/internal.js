@@ -30,7 +30,23 @@ const options = {
   service_worker_options: void 0,
   server_error_boundaries: false,
   templates: {
-    app: ({ head, body, assets, nonce, env }) => '<!doctype html>\n<html lang="es">\n  <head>\n    <meta charset="UTF-8" />\n    <link rel="icon" type="image/svg+xml" href="' + assets + '/favicon.svg" />\n    <link rel="icon" type="image/png" href="' + assets + '/favicon.png" />\n    <link rel="apple-touch-icon" href="' + assets + '/icons/apple-touch-icon.png" />\n    <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover" />\n    <meta name="theme-color" content="#1e3a5f" />\n    <meta name="description" content="Sajet ERP — Sistema de gestión empresarial en la nube" />\n    <!-- PWA meta tags -->\n    <meta name="mobile-web-app-capable" content="yes" />\n    <meta name="apple-mobile-web-app-capable" content="yes" />\n    <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent" />\n    <meta name="apple-mobile-web-app-title" content="Sajet ERP" />\n    <meta name="application-name" content="Sajet ERP" />\n    <title>Sajet ERP</title>\n    ' + head + '\n  </head>\n  <body data-sveltekit-preload-data="hover">\n    <div style="display: contents">' + body + "</div>\n  </body>\n</html>\n",
+    app: ({ head, body, assets, nonce, env }) => '<!doctype html>\n<html lang="es">\n  <head>\n    <meta charset="UTF-8" />\n    <link rel="icon" type="image/svg+xml" href="' + assets + '/favicon.svg" />\n    <link rel="icon" type="image/png" href="' + assets + '/favicon.png" />\n    <link rel="apple-touch-icon" href="' + assets + '/icons/apple-touch-icon.png" />\n    <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover" />\n    <meta name="theme-color" content="#1e3a5f" />\n    <meta name="description" content="Sajet ERP — Sistema de gestión empresarial en la nube" />\n    <!-- PWA meta tags -->\n    <meta name="mobile-web-app-capable" content="yes" />\n    <meta name="apple-mobile-web-app-capable" content="yes" />\n    <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent" />\n    <meta name="apple-mobile-web-app-title" content="Sajet ERP" />\n    <meta name="application-name" content="Sajet ERP" />\n    <title>Sajet ERP</title>\n    ' + head + `
+    <!-- Meta Pixel Code -->
+    <script>
+      !function(f,b,e,v,n,t,s){if(f.fbq)return;n=f.fbq=function(){n.callMethod?
+      n.callMethod.apply(n,arguments):n.queue.push(arguments)};if(!f._fbq)f._fbq=n;
+      n.push=n;n.loaded=!0;n.version='2.0';n.queue=[];t=b.createElement(e);t.async=!0;
+      t.src=v;s=b.getElementsByTagName(e)[0];s.parentNode.insertBefore(t,s)}(window, document,'script',
+      'https://connect.facebook.net/es_ES/fbevents.js');
+      fbq('init', '1311011047792538');
+      fbq('track', 'PageView');
+    <\/script>
+    <noscript><img height="1" width="1" style="display:none"
+      src="https://www.facebook.com/tr?id=1311011047792538&ev=PageView&noscript=1"
+    /></noscript>
+    <!-- End Meta Pixel Code -->
+  <body data-sveltekit-preload-data="hover">
+    <div style="display: contents">` + body + "</div>\n  </body>\n</html>\n",
     error: ({ status, message }) => '<!doctype html>\n<html lang="en">\n	<head>\n		<meta charset="utf-8" />\n		<title>' + message + `</title>
 
 		<style>
@@ -102,7 +118,7 @@ const options = {
 		<div class="error">
 			<span class="status">` + status + '</span>\n			<div class="message">\n				<h1>' + message + "</h1>\n			</div>\n		</div>\n	</body>\n</html>\n"
   },
-  version_hash: "qkkpq1"
+  version_hash: "1jgtyfo"
 };
 async function get_hooks() {
   let handle;

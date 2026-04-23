@@ -1,6 +1,7 @@
 import "clsx";
 import { h as sanitize_props, i as spread_props, j as slot, e as ensure_array_like, k as attr_class, b as stringify, d as escape_html } from "../../../../chunks/index2.js";
 import "../../../../chunks/client.js";
+import "../../../../chunks/tenants.js";
 import "../../../../chunks/toast.js";
 import { R as Refresh_cw } from "../../../../chunks/refresh-cw.js";
 import { K as Key } from "../../../../chunks/key.js";

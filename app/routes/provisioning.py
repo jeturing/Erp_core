@@ -293,13 +293,24 @@ class TenantPasswordChangeRequest(BaseModel):
 
 
 class TenantSuspensionRequest(BaseModel):
-    """Request para suspender/reactivar un tenant"""
+    """Request para suspender/reactivar un tenant.
+
+    Por defecto (web_access_only=True) solo bloquea el acceso web público
+    vía cloudflared en PCT 205, sin tocar usuarios Odoo ni la BD. Si se
+    pasa web_access_only=False, también desactiva todos los usuarios en
+    Odoo (excepto admin) — útil para suspensión por falta de pago.
+    """
     subdomain: str = Field(..., min_length=3, max_length=30)
     suspend: bool = Field(default=True)
-    reason: Optional[str] = Field(default="Suspension por falta de pago")
+    reason: Optional[str] = Field(default="Suspension manual desde admin")
     server: str = Field(default="primary")
     install_modules: Optional[List[str]] = None
     with_demo: bool = False
+    web_access_only: bool = Field(
+        default=True,
+        description="Si True (default), solo bloquea el acceso web público (cloudflared 503). "
+                    "Si False, también desactiva usuarios Odoo (UPDATE res_users SET active=false).",
+    )
 
 
 class TenantEmailUpdateRequest(BaseModel):
@@ -927,18 +938,54 @@ async def suspend_tenant(
     request: TenantSuspensionRequest,
     x_api_key: str = Header(None)
 ):
-    """Suspende o reactiva un tenant (cierra acceso por falta de pago)"""
+    """
+    Suspende o reactiva un tenant.
+
+    Modo por defecto (web_access_only=True): bloquea acceso web público
+    vía cloudflared en PCT 205 (HTTP 503 desde el edge). NO toca BD ni usuarios.
+
+    Modo full (web_access_only=False): adicionalmente desactiva usuarios Odoo.
+    """
     _require_api_key(x_api_key)
-    
+
     server_key, server_config = _resolve_server_config(request.server)
-    
+    subdomain = request.subdomain.lower()
+    action = "Suspendiendo" if request.suspend else "Reactivando"
+    logger.info(f"{action} tenant: {subdomain} (web_access_only={request.web_access_only})")
+
+    # ─── PASO 1: Bloquear/desbloquear acceso web público (cloudflared en PCT 205) ───
+    from ..services.cloudflare_tunnel_gate import set_web_access
+    gate_results: list[dict] = []
+    # Probar el subdominio principal y normalizar variantes (ej. flujoeletronic vs Flujo_electronic)
+    candidates = list({subdomain, subdomain.replace("_", ""), request.subdomain})
+    any_gate_ok = False
+    for cand in candidates:
+        gate_res = set_web_access(cand, blocked=request.suspend, reason=request.reason)
+        gate_res["candidate"] = cand
+        gate_results.append(gate_res)
+        if gate_res.get("success"):
+            any_gate_ok = True
+    if not any_gate_ok:
+        logger.warning(f"⚠️ Cloudflare gate no aplicó cambios para {subdomain}: {gate_results}")
+
+    # Si solo se pidió bloqueo web, terminar aquí
+    if request.web_access_only:
+        # Actualizar BD local de suscripciones de forma best-effort solo si se está suspendiendo definitivamente
+        return {
+            "success": any_gate_ok,
+            "subdomain": subdomain,
+            "status": "suspended" if request.suspend else "active",
+            "mode": "web_access_only",
+            "gate": gate_results,
+            "message": (
+                f"Acceso web {'bloqueado' if request.suspend else 'restaurado'} para {subdomain}"
+                if any_gate_ok else
+                f"No se pudo aplicar el cambio de acceso web para {subdomain} — revisar logs"
+            ),
+        }
+
     try:
-        subdomain = request.subdomain.lower()
-        action = "Suspendiendo" if request.suspend else "Reactivando"
-        
-        logger.info(f"{action} tenant: {subdomain}")
-        
-        # Actualizar BD local primero
+        # ─── PASO 2 (modo full): Actualizar BD local de SAJET ───
         from ..models.database import SessionLocal, Customer, Subscription, SubscriptionStatus
         db = SessionLocal()
         try:
@@ -957,12 +1004,12 @@ async def suspend_tenant(
             logger.warning(f"No se pudo actualizar BD local: {db_err}")
         finally:
             db.close()
-        
-        # Intentar conectar directamente a PostgreSQL
+
+        # ─── PASO 3 (modo full): Desactivar usuarios Odoo via psql ───
         db_host = _odoo_db_host()
         db_user = _odoo_db_user()
         db_password = _odoo_db_password()
-        
+
         if request.suspend:
             sql_cmd = f"""UPDATE res_users SET active = false WHERE login != 'admin';"""
         else:

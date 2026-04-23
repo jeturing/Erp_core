@@ -9,8 +9,16 @@ import "@sveltejs/kit/internal/server";
 import "../../../../chunks/root.js";
 import "../../../../chunks/state.svelte.js";
 import "../../../../chunks/client.js";
+import "../../../../chunks/tenants.js";
 function PartnerPortal($$renderer, $$props) {
   $$renderer.component(($$renderer2) => {
+    let clientServiceCatalog = [];
+    let clientServiceSubscriptions = [];
+    function isEmailPackage(item) {
+      return item.service_code === "postal_email_package" || item.metadata_json?.kind === "postal_email_package";
+    }
+    clientServiceCatalog.filter((item) => isEmailPackage(item));
+    clientServiceSubscriptions.filter((addon) => addon.catalog_item && isEmailPackage(addon.catalog_item));
     {
       $$renderer2.push("<!--[-->");
       $$renderer2.push(`<div class="min-h-screen bg-[#F5F3EF] flex items-center justify-center"><div class="text-center">`);

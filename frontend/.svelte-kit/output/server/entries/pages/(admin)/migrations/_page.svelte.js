@@ -2,6 +2,7 @@ import "clsx";
 import { h as sanitize_props, i as spread_props, j as slot, c as attr } from "../../../../chunks/index2.js";
 import { o as onDestroy } from "../../../../chunks/index-server.js";
 import "../../../../chunks/client.js";
+import "../../../../chunks/tenants.js";
 import "../../../../chunks/toast.js";
 import "@sveltejs/kit/internal";
 import "../../../../chunks/exports.js";

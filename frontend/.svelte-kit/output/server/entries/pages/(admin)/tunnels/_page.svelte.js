@@ -1,9 +1,11 @@
 import "clsx";
 import { h as sanitize_props, i as spread_props, j as slot, c as attr, d as escape_html, e as ensure_array_like, f as derived } from "../../../../chunks/index2.js";
 import "../../../../chunks/client.js";
+import "../../../../chunks/tenants.js";
 import "../../../../chunks/toast.js";
 import { R as Refresh_cw } from "../../../../chunks/refresh-cw.js";
-import { a as Wifi, W as Wifi_off } from "../../../../chunks/wifi.js";
+import { W as Wifi } from "../../../../chunks/wifi.js";
+import { W as Wifi_off } from "../../../../chunks/wifi-off.js";
 import { G as Globe } from "../../../../chunks/globe.js";
 import { I as Icon } from "../../../../chunks/Icon.js";
 function Circle_plus($$renderer, $$props) {

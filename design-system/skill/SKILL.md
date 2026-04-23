@@ -1,0 +1,1 @@
+/opt/Erp_core/.claude/skills/design-web/SKILL.md

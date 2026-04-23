@@ -1,6 +1,7 @@
 import "clsx";
 import { c as attr } from "../../../../chunks/index2.js";
 import "../../../../chunks/client.js";
+import "../../../../chunks/tenants.js";
 import "../../../../chunks/darkMode.js";
 import "../../../../chunks/toast.js";
 import { A as Arrow_right_left } from "../../../../chunks/arrow-right-left.js";

@@ -11,7 +11,7 @@ type EnsureDefined<T> = T extends null | undefined ? {} : T;
 type OptionalUnion<U extends Record<string, any>, A extends keyof U = U extends U ? keyof U : never> = U extends unknown ? { [P in Exclude<A, keyof U>]?: never } & U : never;
 export type Snapshot<T = any> = Kit.Snapshot<T>;
 type PageParentData = Omit<EnsureDefined<import('../$types.js').LayoutData>, keyof LayoutData> & EnsureDefined<LayoutData>;
-type LayoutRouteId = RouteId | "/(public)" | "/(public)/about" | "/(public)/accountants" | "/(public)/data-processing" | "/(public)/login" | "/(public)/login/admin" | "/(public)/onboarding-access" | "/(public)/partner-signup" | "/(public)/plt/[slug]" | "/(public)/pricing" | "/(public)/privacy" | "/(public)/recover-account" | "/(public)/security" | "/(public)/servicios" | "/(public)/signup" | "/(public)/sla" | "/(public)/terms"
+type LayoutRouteId = RouteId | "/(public)" | "/(public)/about" | "/(public)/accountants" | "/(public)/cpa" | "/(public)/data-processing" | "/(public)/login" | "/(public)/login/admin" | "/(public)/mpos" | "/(public)/onboarding-access" | "/(public)/partner-program" | "/(public)/partner-signup" | "/(public)/plt/[slug]" | "/(public)/pricing" | "/(public)/privacy" | "/(public)/recover-account" | "/(public)/security" | "/(public)/servicios" | "/(public)/signup" | "/(public)/sla" | "/(public)/smb" | "/(public)/team-onboarding" | "/(public)/terms"
 type LayoutParams = RouteParams & { slug?: string }
 type LayoutParentData = EnsureDefined<import('../$types.js').LayoutData>;
 

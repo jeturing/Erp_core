@@ -3,7 +3,8 @@ import { e as ensure_array_like, s as store_get, a as attr_style, b as stringify
 import { t as toasts } from "../../chunks/toast.js";
 import { S as Spinner } from "../../chunks/Spinner.js";
 import { o as onDestroy } from "../../chunks/index-server.js";
-import { W as Wifi_off, a as Wifi } from "../../chunks/wifi.js";
+import { W as Wifi_off } from "../../chunks/wifi-off.js";
+import { W as Wifi } from "../../chunks/wifi.js";
 import "../../chunks/darkMode.js";
 function Toast($$renderer, $$props) {
   $$renderer.component(($$renderer2) => {

@@ -2,6 +2,7 @@
   import { t } from 'svelte-i18n';
   import { Check, Sparkles, Zap } from 'lucide-svelte';
   import { goto } from '$app/navigation';
+  import { metaEvents } from '$lib/meta';
 
   export let plans: any[] = [];
   export let partnerCode: string = '';
@@ -115,6 +116,10 @@
   }
 
   function goCheckout(plan: any) {
+    // Track InitiateCheckout event
+    const planPrice = (plan.base_price || 0) + (plan.price_per_user || 0) * (userCount || 1);
+    metaEvents.initiateCheckout(plan.id || plan.name, plan.display_name || plan.name, planPrice);
+    
     const params = new URLSearchParams({
       mode: 'tenant',
       plan: plan.id || plan.name,

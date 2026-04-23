@@ -1,6 +1,7 @@
 import "clsx";
 import { d as escape_html, f as derived } from "../../../../chunks/index2.js";
 import "../../../../chunks/client.js";
+import "../../../../chunks/tenants.js";
 import "../../../../chunks/toast.js";
 import { P as Plus } from "../../../../chunks/plus.js";
 function Roles($$renderer, $$props) {

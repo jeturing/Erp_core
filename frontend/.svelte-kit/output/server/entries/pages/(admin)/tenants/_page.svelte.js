@@ -1,6 +1,7 @@
 import "clsx";
 import { h as sanitize_props, i as spread_props, j as slot, d as escape_html, c as attr, e as ensure_array_like, f as derived } from "../../../../chunks/index2.js";
 import "../../../../chunks/client.js";
+import "../../../../chunks/tenants.js";
 import "../../../../chunks/toast.js";
 import "../../../../chunks/darkMode.js";
 import { I as Icon } from "../../../../chunks/Icon.js";

@@ -149,9 +149,38 @@ CREDENTIAL_DEFINITIONS = {
             {"key": "STRIPE_TEST_SECRET_KEY", "description": "Secret key de TEST (sk_test_)", "is_secret": True},
             {"key": "STRIPE_TEST_PUBLISHABLE_KEY", "description": "Publishable key de TEST (pk_test_)", "is_secret": False},
             {"key": "STRIPE_TEST_WEBHOOK_SECRET", "description": "Webhook secret de TEST", "is_secret": True},
+            {"key": "STRIPE_SANDBOX_SECRET_KEY", "description": "Secret key de SANDBOX", "is_secret": True},
+            {"key": "STRIPE_SANDBOX_PUBLISHABLE_KEY", "description": "Publishable key de SANDBOX", "is_secret": False},
+            {"key": "STRIPE_SANDBOX_WEBHOOK_SECRET", "description": "Webhook secret de SANDBOX", "is_secret": True},
             {"key": "STRIPE_LIVE_SECRET_KEY", "description": "Secret key de LIVE (rk_live_ / sk_live_)", "is_secret": True},
             {"key": "STRIPE_LIVE_PUBLISHABLE_KEY", "description": "Publishable key de LIVE (pk_live_)", "is_secret": False},
             {"key": "STRIPE_LIVE_WEBHOOK_SECRET", "description": "Webhook secret de LIVE", "is_secret": True},
+            {"key": "STRIPE_MED_MODE", "description": "Modo activo de MED (test / live)", "is_secret": False, "default": "test"},
+            {"key": "STRIPE_MED_SECRET_KEY", "description": "Secret key activa de MED", "is_secret": True},
+            {"key": "STRIPE_MED_PUBLISHABLE_KEY", "description": "Publishable key activa de MED", "is_secret": False},
+            {"key": "STRIPE_MED_WEBHOOK_SECRET", "description": "Webhook secret activo de MED", "is_secret": True},
+            {"key": "STRIPE_MED_TEST_SECRET_KEY", "description": "Secret key TEST de MED", "is_secret": True},
+            {"key": "STRIPE_MED_TEST_PUBLISHABLE_KEY", "description": "Publishable key TEST de MED", "is_secret": False},
+            {"key": "STRIPE_MED_TEST_WEBHOOK_SECRET", "description": "Webhook secret TEST de MED", "is_secret": True},
+            {"key": "STRIPE_MED_SANDBOX_SECRET_KEY", "description": "Secret key SANDBOX de MED", "is_secret": True},
+            {"key": "STRIPE_MED_SANDBOX_PUBLISHABLE_KEY", "description": "Publishable key SANDBOX de MED", "is_secret": False},
+            {"key": "STRIPE_MED_SANDBOX_WEBHOOK_SECRET", "description": "Webhook secret SANDBOX de MED", "is_secret": True},
+            {"key": "STRIPE_MED_LIVE_SECRET_KEY", "description": "Secret key LIVE de MED", "is_secret": True},
+            {"key": "STRIPE_MED_LIVE_PUBLISHABLE_KEY", "description": "Publishable key LIVE de MED", "is_secret": False},
+            {"key": "STRIPE_MED_LIVE_WEBHOOK_SECRET", "description": "Webhook secret LIVE de MED", "is_secret": True},
+            {"key": "STRIPE_TRACK_MODE", "description": "Modo activo de TRACK (test / sandbox / live)", "is_secret": False, "default": "test"},
+            {"key": "STRIPE_TRACK_SECRET_KEY", "description": "Secret key activa de TRACK", "is_secret": True},
+            {"key": "STRIPE_TRACK_PUBLISHABLE_KEY", "description": "Publishable key activa de TRACK", "is_secret": False},
+            {"key": "STRIPE_TRACK_WEBHOOK_SECRET", "description": "Webhook secret activo de TRACK", "is_secret": True},
+            {"key": "STRIPE_TRACK_TEST_SECRET_KEY", "description": "Secret key TEST de TRACK", "is_secret": True},
+            {"key": "STRIPE_TRACK_TEST_PUBLISHABLE_KEY", "description": "Publishable key TEST de TRACK", "is_secret": False},
+            {"key": "STRIPE_TRACK_TEST_WEBHOOK_SECRET", "description": "Webhook secret TEST de TRACK", "is_secret": True},
+            {"key": "STRIPE_TRACK_SANDBOX_SECRET_KEY", "description": "Secret key SANDBOX de TRACK", "is_secret": True},
+            {"key": "STRIPE_TRACK_SANDBOX_PUBLISHABLE_KEY", "description": "Publishable key SANDBOX de TRACK", "is_secret": False},
+            {"key": "STRIPE_TRACK_SANDBOX_WEBHOOK_SECRET", "description": "Webhook secret SANDBOX de TRACK", "is_secret": True},
+            {"key": "STRIPE_TRACK_LIVE_SECRET_KEY", "description": "Secret key LIVE de TRACK", "is_secret": True},
+            {"key": "STRIPE_TRACK_LIVE_PUBLISHABLE_KEY", "description": "Publishable key LIVE de TRACK", "is_secret": False},
+            {"key": "STRIPE_TRACK_LIVE_WEBHOOK_SECRET", "description": "Webhook secret LIVE de TRACK", "is_secret": True},
         ],
     },
     "cloudflare": {
@@ -239,6 +268,11 @@ _STRIPE_APPS = {
         "base_prefix": "STRIPE_MED_",
         "host": "med.sajet.us",
     },
+    "track": {
+        "label": "TRACK",
+        "base_prefix": "STRIPE_TRACK_",
+        "host": "tack.sajet.us",
+    },
 }
 
 _STRIPE_KEY_SUFFIX = {
@@ -257,7 +291,7 @@ _STRIPE_MODE_LABELS = {
 def _normalize_stripe_app(app: Optional[str]) -> str:
     value = (app or "sajet").strip().lower()
     if value not in _STRIPE_APPS:
-        raise HTTPException(status_code=400, detail="App inválida. Use 'sajet' o 'med'")
+        raise HTTPException(status_code=400, detail="App inválida. Use 'sajet', 'med' o 'track'")
     return value
 
 
@@ -625,13 +659,13 @@ _ENV_DEFINITIONS = {
     "test": {
         "label": "Pruebas",
         "env_file": ".env.test",
-        "description": "Ambiente de pruebas — BD local 10.10.10.20, Stripe test",
+        "description": "Ambiente de pruebas — BD 10.10.20.200, Stripe test",
         "color": "amber",
     },
     "production": {
         "label": "Producción",
         "env_file": ".env.production",
-        "description": "Ambiente productivo — BD HA 10.10.10.137, Stripe live",
+        "description": "Ambiente productivo — BD 10.10.20.200, Stripe live",
         "color": "emerald",
     },
 }

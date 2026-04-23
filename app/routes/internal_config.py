@@ -13,19 +13,26 @@ Seguridad:
 """
 import logging
 import os
-from typing import Optional
+from typing import Optional, Literal
 
 from fastapi import APIRouter, Header, HTTPException, Request
 from pydantic import BaseModel
 
 from app.models.database import get_config
+from app.config import get_runtime_setting
 
 _logger = logging.getLogger(__name__)
 
 router = APIRouter(prefix="/api/internal", tags=["Internal Config"])
 
 # ── Red interna permitida ──────────────────────────────────────────────────────
-_ALLOWED_PREFIXES = ("10.10.10.", "10.0.0.", "127.", "::1", "192.168.1.")
+_ALLOWED_PREFIXES = ("10.10.20.", "10.10.10.", "10.0.0.", "127.", "::1", "192.168.1.")
+
+_STRIPE_APP_PREFIX = {
+    "sajet": "STRIPE_",
+    "med": "STRIPE_MED_",
+    "track": "STRIPE_TRACK_",
+}
 
 
 def _assert_internal_network(request: Request) -> None:
@@ -56,12 +63,32 @@ def _assert_service_key(x_internal_service_key: Optional[str]) -> None:
 # ── Schemas ────────────────────────────────────────────────────────────────────
 
 class StripeConfigResponse(BaseModel):
+    app: str
     stripe_secret_key: str
     stripe_publishable_key: str
     stripe_webhook_secret: str
     jeturing_fee_percentage: float
     platform_country: str
     mode: str                   # "live" | "test"
+
+
+def _stripe_key_name(app: str, suffix: str) -> str:
+    return f"{_STRIPE_APP_PREFIX[app]}{suffix}"
+
+
+def _resolve_stripe_value(app: str, suffix: str) -> str:
+    primary = get_runtime_setting(_stripe_key_name(app, suffix), "") or ""
+    if primary:
+        return primary
+    # Fallback para compatibilidad con despliegues previos
+    return get_runtime_setting(f"STRIPE_{suffix}", "") or ""
+
+
+def _detect_mode(secret_key: str) -> str:
+    sk = (secret_key or "").lower()
+    if sk.startswith("rk_live_") or sk.startswith("sk_live_"):
+        return "live"
+    return "test"
 
 
 # ── Endpoints ─────────────────────────────────────────────────────────────────
@@ -77,23 +104,23 @@ class StripeConfigResponse(BaseModel):
 )
 def get_stripe_config(
     request: Request,
+    app: Literal["sajet", "med", "track"] = "med",
     x_internal_service_key: Optional[str] = Header(None, alias="X-Internal-Service-Key"),
 ):
     _assert_internal_network(request)
     _assert_service_key(x_internal_service_key)
 
-    sk = get_config("STRIPE_SECRET_KEY") or ""
-    pk = get_config("STRIPE_PUBLISHABLE_KEY") or ""
-    wh = get_config("STRIPE_WEBHOOK_SECRET") or ""
+    sk = _resolve_stripe_value(app, "SECRET_KEY")
+    pk = _resolve_stripe_value(app, "PUBLISHABLE_KEY")
+    wh = _resolve_stripe_value(app, "WEBHOOK_SECRET")
 
     if not sk:
         raise HTTPException(
             status_code=503,
-            detail="STRIPE_SECRET_KEY no encontrada en system_config de SAJET."
+            detail=f"{_stripe_key_name(app, 'SECRET_KEY')} no encontrada en system_config de SAJET."
         )
 
-    # Detectar modo por prefijo de la key
-    mode = "live" if sk.startswith("rk_live_") or sk.startswith("sk_live_") else "test"
+    mode = _detect_mode(sk)
 
     fee = float(get_config("JETURING_FEE_PERCENTAGE") or
                 os.getenv("JETURING_FEE_PERCENTAGE", "1"))
@@ -101,10 +128,15 @@ def get_stripe_config(
               os.getenv("JETURING_PLATFORM_COUNTRY", "US")
 
     from ..utils.ip import get_real_ip
-    _logger.info("internal_config: stripe config entregada a %s [mode=%s]",
-                 get_real_ip(request), mode)
+    _logger.info(
+        "internal_config: stripe config app=%s entregada a %s [mode=%s]",
+        app,
+        get_real_ip(request),
+        mode,
+    )
 
     return StripeConfigResponse(
+        app=app,
         stripe_secret_key=sk,
         stripe_publishable_key=pk,
         stripe_webhook_secret=wh,

@@ -75,6 +75,10 @@
 		"src/routes/(admin)/+layout.ts",
 		"src/routes/+layout.ts"
 	],
+	"/(public)/cpa": [
+		"src/routes/(public)/+layout.ts",
+		"src/routes/+layout.ts"
+	],
 	"/(portal)/customer-onboarding": [
 		"src/routes/(portal)/+layout.ts",
 		"src/routes/+layout.ts"
@@ -127,8 +131,16 @@
 		"src/routes/(admin)/+layout.ts",
 		"src/routes/+layout.ts"
 	],
+	"/(admin)/medprep-students": [
+		"src/routes/(admin)/+layout.ts",
+		"src/routes/+layout.ts"
+	],
 	"/(admin)/migrations": [
 		"src/routes/(admin)/+layout.ts",
+		"src/routes/+layout.ts"
+	],
+	"/(public)/mpos": [
+		"src/routes/(public)/+layout.ts",
 		"src/routes/+layout.ts"
 	],
 	"/(admin)/neural-users": [
@@ -143,8 +155,16 @@
 		"src/routes/(admin)/+layout.ts",
 		"src/routes/+layout.ts"
 	],
+	"/(admin)/partner-management": [
+		"src/routes/(admin)/+layout.ts",
+		"src/routes/+layout.ts"
+	],
 	"/(portal)/partner-portal": [
 		"src/routes/(portal)/+layout.ts",
+		"src/routes/+layout.ts"
+	],
+	"/(public)/partner-program": [
+		"src/routes/(public)/+layout.ts",
 		"src/routes/+layout.ts"
 	],
 	"/(public)/partner-signup": [
@@ -169,6 +189,10 @@
 	],
 	"/(portal)/portal": [
 		"src/routes/(portal)/+layout.ts",
+		"src/routes/+layout.ts"
+	],
+	"/(admin)/postal-email": [
+		"src/routes/(admin)/+layout.ts",
 		"src/routes/+layout.ts"
 	],
 	"/(public)/pricing": [
@@ -235,8 +259,16 @@
 		"src/routes/(public)/+layout.ts",
 		"src/routes/+layout.ts"
 	],
+	"/(public)/smb": [
+		"src/routes/(public)/+layout.ts",
+		"src/routes/+layout.ts"
+	],
 	"/(admin)/stripe-connect": [
 		"src/routes/(admin)/+layout.ts",
+		"src/routes/+layout.ts"
+	],
+	"/(public)/team-onboarding": [
+		"src/routes/(public)/+layout.ts",
 		"src/routes/+layout.ts"
 	],
 	"/(admin)/tenants": [

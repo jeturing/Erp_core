@@ -17,6 +17,7 @@ import { T as Target } from "./target.js";
 import { F as File_spreadsheet } from "./file-spreadsheet.js";
 import { S as Shopping_bag } from "./shopping-bag.js";
 import { C as Credit_card } from "./credit-card.js";
+import { M as Mail } from "./mail.js";
 import { P as Package } from "./package.js";
 import { R as Receipt } from "./receipt.js";
 import { S as Scale } from "./scale.js";
@@ -27,7 +28,6 @@ import { B as Boxes } from "./boxes.js";
 import { P as Percent } from "./percent.js";
 import { P as Palette } from "./palette.js";
 import { C as Chart_no_axes_column } from "./chart-no-axes-column.js";
-import { M as Mail } from "./mail.js";
 import { M as Message_circle } from "./message-circle.js";
 import { L as Languages } from "./languages.js";
 import { A as Activity } from "./activity.js";
@@ -440,7 +440,7 @@ function Layout($$renderer, $$props) {
             id: "partners",
             label: "Partners",
             icon: Handshake,
-            href: "/partners"
+            href: "/partner-management"
           },
           { id: "leads", label: "Leads", icon: Target, href: "/leads" },
           {
@@ -473,6 +473,12 @@ function Layout($$renderer, $$props) {
             label: "Billing",
             icon: Credit_card,
             href: "/billing"
+          },
+          {
+            id: "postal-email",
+            label: "Correo / Perfiles",
+            icon: Mail,
+            href: "/postal-email"
           },
           { id: "plans", label: "Planes", icon: Package, href: "/plans" },
           {

@@ -44,6 +44,9 @@
   // Authorize
   let authorizeNote = '';
   let authorizing = false;
+  const PAYOUT_WARNING_ACK_KEY = 'dispersion_payout_warning_ack_v1';
+  let payoutWarningAckPersisted = false;
+  let payoutWarningChecked = false;
 
   // Reject
   let rejectReason = '';
@@ -95,7 +98,16 @@
     refreshing = false;
   }
 
-  onMount(loadAll);
+  function loadPayoutWarningAck() {
+    if (typeof window === 'undefined') return;
+    payoutWarningAckPersisted = localStorage.getItem(PAYOUT_WARNING_ACK_KEY) === '1';
+    payoutWarningChecked = payoutWarningAckPersisted;
+  }
+
+  onMount(() => {
+    loadPayoutWarningAck();
+    loadAll();
+  });
 
   // ── feature flag ───────────────────────────────────────────────────────────
   async function handleToggleFlag() {
@@ -143,6 +155,16 @@
   // ── authorize ──────────────────────────────────────────────────────────────
   async function handleAuthorize() {
     if (!selectedPayout) return;
+    if (!payoutWarningAckPersisted && !payoutWarningChecked) {
+      toasts.error('Debes confirmar que leíste la advertencia antes de procesar el payout');
+      return;
+    }
+
+    if (!payoutWarningAckPersisted && payoutWarningChecked && typeof window !== 'undefined') {
+      localStorage.setItem(PAYOUT_WARNING_ACK_KEY, '1');
+      payoutWarningAckPersisted = true;
+    }
+
     authorizing = true;
     try {
       await dispersionApi.authorizePayout(selectedPayout.id, authorizeNote || undefined);
@@ -177,7 +199,11 @@
     }
   }
 
-  function openAuthorize(p: PayoutRequest) { selectedPayout = p; showAuthorizeModal = true; }
+  function openAuthorize(p: PayoutRequest) {
+    selectedPayout = p;
+    payoutWarningChecked = payoutWarningAckPersisted;
+    showAuthorizeModal = true;
+  }
   function openReject(p: PayoutRequest)    { selectedPayout = p; showRejectModal    = true; }
 </script>
 
@@ -649,6 +675,17 @@
         <span><strong>Este pago se ejecutará inmediatamente en Mercury</strong> al autorizar. No es reversible.</span>
       </div>
 
+      {#if !payoutWarningAckPersisted}
+        <label class="flex items-start gap-2 text-sm text-gray-700">
+          <input
+            type="checkbox"
+            class="mt-1"
+            bind:checked={payoutWarningChecked}
+          />
+          <span>Leí y comprendí la advertencia. Acepto continuar con la ejecución del payout.</span>
+        </label>
+      {/if}
+
       <div>
         <label class="block text-sm font-medium text-gray-700 mb-1">Nota de autorización <span class="text-gray-400">(opcional)</span></label>
         <textarea bind:value={authorizeNote} rows="2" class="input w-full resize-none" placeholder="Ej: Verificado con factura #INV-2026-001" />
@@ -660,7 +697,7 @@
         </button>
         <button
           on:click={handleAuthorize}
-          disabled={authorizing}
+          disabled={authorizing || (!payoutWarningAckPersisted && !payoutWarningChecked)}
           class="flex-1 py-2 rounded-lg font-medium text-white bg-green-600 hover:bg-green-700 transition"
         >
           {authorizing ? 'Autorizando…' : '✓ Autorizar y Ejecutar'}

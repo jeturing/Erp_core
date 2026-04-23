@@ -1,5 +1,6 @@
 import { w as head } from "../../../../chunks/index2.js";
 import "../../../../chunks/client.js";
+import "../../../../chunks/tenants.js";
 function _page($$renderer, $$props) {
   $$renderer.component(($$renderer2) => {
     head("1p8uqgz", $$renderer2, ($$renderer3) => {

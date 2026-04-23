@@ -116,16 +116,17 @@ MERCURY_DISPERSION_REQUIRE_ADMIN_AUTH = os.getenv("MERCURY_DISPERSION_REQUIRE_AD
 MERCURY_DISPERSION_MAX_AUTO_USD = float(os.getenv("MERCURY_DISPERSION_MAX_AUTO_USD", "0"))  # 0 = siempre requiere auth
 
 # ═══════════════════════════════════════════════════════
-# Infrastructure IPs
+# Infrastructure IPs (PCT inventory actual: 200=PG, 201=Odoo17, 202=SAJET, 204=Odoo19, 205=NPM)
 # ═══════════════════════════════════════════════════════
-ODOO_PRIMARY_IP = os.getenv("ODOO_PRIMARY_IP", ODOO_DB_HOST or "10.10.10.100")
-ODOO_PRIMARY_PCT_ID = int(os.getenv("ODOO_PRIMARY_PCT_ID", "105"))
+ODOO_PRIMARY_IP = os.getenv("ODOO_PRIMARY_IP", ODOO_DB_HOST or "10.10.20.201")
+ODOO_PRIMARY_PCT_ID = int(os.getenv("ODOO_PRIMARY_PCT_ID", "201"))
 ODOO_PRIMARY_PORT = int(os.getenv("ODOO_PRIMARY_PORT", "8069"))
 ODOO_PRIMARY_API_PORT = int(os.getenv("ODOO_PRIMARY_API_PORT", "8070"))
 
-ERP_CORE_IP = os.getenv("ERP_CORE_IP", "10.10.10.20")
+ERP_CORE_IP = os.getenv("ERP_CORE_IP", "10.10.20.202")
 ERP_CORE_PUBLIC_IP = os.getenv("ERP_CORE_PUBLIC_IP", "208.115.125.29")
 
+# Alias legacy CT105_* mantenido por backwards-compat; resuelve a ODOO_PRIMARY_IP (PCT 201)
 CT105_IP = os.getenv("CT105_IP", ODOO_PRIMARY_IP)
 CT105_NGINX_PORT = int(os.getenv("CT105_NGINX_PORT", "8080"))
 
