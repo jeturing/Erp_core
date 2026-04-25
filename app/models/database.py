@@ -2833,3 +2833,46 @@ class FunnelLead(Base):
         Index("ix_funnel_leads_niche_created", "niche", "created_at"),
         Index("ix_funnel_leads_email_niche",   "email", "niche"),
     )
+
+
+# ──────────────────────────────────────────────────────────────────────────
+# Stripe Connect Family — Tenant central config (Phase 6)
+# ──────────────────────────────────────────────────────────────────────────
+class TenantStripeConfig(Base):
+    """Configuración Stripe Connect que cada tenant **pushea** a SAJET.
+
+    SAJET no es la fuente de verdad operativa (los tenants Odoo siguen siendo
+    autónomos); esta tabla es **espejo agregado** para visibilidad central:
+    panel administrativo, alertas, reportes de comisiones, y posible toggle
+    de feature flags vía push reverso.
+
+    Sync: el tenant llama POST /api/v1/stripe-connect/sync con los campos
+    relevantes; SAJET upsert por (tenant_id, source).
+    """
+    __tablename__ = "tenant_stripe_configs"
+    __table_args__ = (
+        UniqueConstraint("tenant_id", "source", name="uq_tenant_source"),
+        Index("ix_tenant_stripe_configs_tenant", "tenant_id"),
+    )
+
+    id = Column(Integer, primary_key=True)
+    tenant_id = Column(
+        Integer, ForeignKey("tenant_deployments.id", ondelete="CASCADE"),
+        nullable=False, index=True,
+    )
+    source = Column(String(50), nullable=False, index=True)  # boletly_tickets, jeturing_pay_shop, jeturing_event_stripe
+    stripe_mode = Column(String(20))            # test | live
+    stripe_account_count = Column(Integer, default=0)
+    stripe_account_type = Column(String(20))    # express | standard
+    connect_country = Column(String(2))
+    terminal_routing = Column(String(20), default="connect")  # connect | platform | hybrid
+    terminal_max_devices = Column(Integer, default=0)
+    feature_flags = Column(JSON, nullable=True)  # JSONB granular
+    fee_rules_count = Column(Integer, default=0)
+    last_transaction_at = Column(DateTime, nullable=True)
+    transactions_30d = Column(Integer, default=0)
+    transfers_30d_cents = Column(BigInteger, default=0)
+    refunds_30d_cents = Column(BigInteger, default=0)
+    raw_payload = Column(JSON, nullable=True)
+    created_at = Column(DateTime, default=datetime.utcnow)
+    updated_at = Column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)

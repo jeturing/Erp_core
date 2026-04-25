@@ -32,6 +32,7 @@ from .routes import admin_users
 from .routes import users_neural
 from .routes import agreements
 from .routes import stripe_sync
+from .routes import stripe_connect_family
 from .routes import public_landing
 from .routes import internal_config
 from .routes import accountant_portal
@@ -255,6 +256,7 @@ app.include_router(admin_users.router)           # CRUD usuarios administrativos
 app.include_router(users_neural.router)           # 🧠 Centro Neural de Gestión de Usuarios
 app.include_router(agreements.router)            # NDA/TOS templates + signing flow
 app.include_router(stripe_sync.router)           # Stripe webhook sync
+app.include_router(stripe_connect_family.router) # Stripe Connect Family — tenant push sync
 app.include_router(public_landing.router)        # Landing page pública
 app.include_router(accountant_portal.router)     # Portal para contadores
 app.include_router(admin_landing.router)         # Landing admin-only
