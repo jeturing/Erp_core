@@ -351,6 +351,7 @@ class CreateCustomerRequest(BaseModel):
     plan_name: str = "basic"
     user_count: int = 1
     partner_id: Optional[int] = None
+    country_code: Optional[str] = None
     auto_provision: Optional[bool] = True  # Auto-provision tenant Odoo
 
 
@@ -373,6 +374,10 @@ async def create_customer(
     _verify_admin(request, access_token)
     db = SessionLocal()
     try:
+        from ..services.stripe_connect import normalize_country_code
+
+        effective_country = normalize_country_code(payload.country_code, get_runtime_setting("ODOO_DEFAULT_COUNTRY", "DO"))
+
         # Validar subdominio único
         existing = db.query(Customer).filter(Customer.subdomain == payload.subdomain).first()
         if existing:
@@ -394,6 +399,7 @@ async def create_customer(
             company_name=payload.company_name,
             subdomain=payload.subdomain,
             user_count=payload.user_count,
+            country=effective_country,
             fair_use_enabled=True,
             partner_id=partner_id,
         )
@@ -433,6 +439,7 @@ async def create_customer(
                     subdomain=payload.subdomain,
                     company_name=payload.company_name,
                     partner_id=partner_id,
+                    country_code=effective_country,
                     plan_name=payload.plan_name,
                     subscription_id=sub.id,
                     customer_id=customer.id,
@@ -472,6 +479,7 @@ async def _auto_provision_tenant(
     subdomain: str,
     company_name: str,
     partner_id: Optional[int] = None,
+    country_code: Optional[str] = None,
     plan_name: str = "basic",
     subscription_id: Optional[int] = None,
     customer_id: Optional[int] = None,
@@ -499,6 +507,7 @@ async def _auto_provision_tenant(
         server_id=None,  # auto-select
         admin_login=admin_login,
         admin_password=admin_password,
+        country_code=country_code,
     )
 
     if not result.get("success"):

@@ -37,6 +37,7 @@ usage() {
     echo "  --admin-password   Password del admin de Odoo (default: admin)"
     echo "  --lang             Idioma (default: es_DO)"
     echo "  --country          País código ISO (default: DO)"
+    echo "  --template-db      BD template a clonar (default: resuelta por país)"
     echo "  --demo             Instalar datos de demostración"
     echo "  --modules          Módulos a instalar separados por coma"
     echo "  --help, -h         Mostrar esta ayuda"
@@ -60,6 +61,8 @@ LANG="es_DO"
 COUNTRY="DO"
 DEMO="False"
 MODULES=""
+TEMPLATE_DB=""
+TEMPLATE_DB_BY_COUNTRY="${ODOO_TEMPLATE_DB_BY_COUNTRY:-DO=tenant_do,US=tenant_us}"
 DEFAULT_MODULES="spiffy_theme_backend,hide_powered_by_odoo,rest_api_odoo"
 
 while [[ $# -gt 0 ]]; do
@@ -67,6 +70,7 @@ while [[ $# -gt 0 ]]; do
         --admin-password) ADMIN_PASS="$2"; shift 2 ;;
         --lang) LANG="$2"; shift 2 ;;
         --country) COUNTRY="$2"; shift 2 ;;
+        --template-db) TEMPLATE_DB="$2"; shift 2 ;;
         --demo) DEMO="True"; shift ;;
         --modules) MODULES="$2"; shift 2 ;;
         --help|-h) usage ;;
@@ -106,6 +110,28 @@ echo -e "  ${GREEN}Idioma:${NC}     $LANG"
 echo -e "  ${GREEN}País:${NC}       $COUNTRY"
 echo -e "  ${GREEN}Demo:${NC}       $DEMO"
 
+# Resolver template por país si no se pasó --template-db
+COUNTRY=$(echo "$COUNTRY" | tr '[:lower:]' '[:upper:]')
+if [[ -z "$TEMPLATE_DB" ]]; then
+    IFS=',' read -ra MAP_ITEMS <<< "$TEMPLATE_DB_BY_COUNTRY"
+    for item in "${MAP_ITEMS[@]}"; do
+        key="${item%%=*}"
+        val="${item#*=}"
+        key=$(echo "$key" | tr '[:lower:]' '[:upper:]' | xargs)
+        val=$(echo "$val" | tr '[:upper:]' '[:lower:]' | tr '-' '_' | xargs)
+        if [[ "$key" == "$COUNTRY" && -n "$val" ]]; then
+            TEMPLATE_DB="$val"
+            break
+        fi
+    done
+fi
+
+if [[ -z "$TEMPLATE_DB" ]]; then
+    TEMPLATE_DB="${ODOO_TEMPLATE_DB:-template_tenant}"
+fi
+
+echo -e "  ${GREEN}Template DB:${NC} $TEMPLATE_DB"
+
 ALL_MODULES="$DEFAULT_MODULES"
 if [[ -n "$MODULES" ]]; then
     ALL_MODULES="$DEFAULT_MODULES,$MODULES"
@@ -142,9 +168,6 @@ fi
 echo "  Usuario PostgreSQL: $PG_USER"
 
 # Método: Duplicar una BD existente como plantilla (más rápido y confiable)
-# Usamos 'tcs' como plantilla base
-
-TEMPLATE_DB="tcs"
 
 # Verificar que existe la plantilla
 if ! sudo -u postgres psql -lqt | cut -d \| -f 1 | grep -qw "$TEMPLATE_DB"; then
@@ -191,18 +214,35 @@ fi
 # Actualizar datos únicos del nuevo tenant
 echo "  Configurando datos del nuevo tenant..."
 sudo -u postgres psql -d "$TENANT_NAME" << SQLEOF
--- Resetear password admin
-UPDATE res_users SET password = '$ADMIN_PASS' WHERE login = 'admin';
+-- Resetear password admin (compat: login admin y/o id=2)
+UPDATE res_users SET password = '$ADMIN_PASS' WHERE login IN ('admin', 'admin@sajet.us') OR id = 2;
 
--- Limpiar sessions
-DELETE FROM ir_sessions;
+-- Limpiar sessions (si la tabla existe)
+DO \
+\$\$ \
+BEGIN \
+    IF EXISTS (SELECT 1 FROM information_schema.tables WHERE table_name = 'ir_sessions') THEN \
+        EXECUTE 'DELETE FROM ir_sessions'; \
+    END IF; \
+END \
+\$\$;
 
--- Actualizar nombre de compañía
+-- Actualizar nombre de compañía/partner
 UPDATE res_company SET name = '${TENANT_NAME}' WHERE id = 1;
 UPDATE res_partner SET name = '${TENANT_NAME}' WHERE id = 1;
 
--- Limpiar attachments de filestore (opcional, mantener estructura)
--- DELETE FROM ir_attachment WHERE store_fname IS NOT NULL;
+-- Configuración crítica de URL (NO depender solo de XML-RPC)
+INSERT INTO ir_config_parameter (key, value, create_uid, write_uid, create_date, write_date)
+VALUES ('web.base.url', 'https://${TENANT_NAME}.${DOMAIN}', 1, 1, NOW(), NOW())
+ON CONFLICT (key) DO UPDATE SET value = EXCLUDED.value, write_date = NOW();
+
+INSERT INTO ir_config_parameter (key, value, create_uid, write_uid, create_date, write_date)
+VALUES ('web.base.url.freeze', 'True', 1, 1, NOW(), NOW())
+ON CONFLICT (key) DO UPDATE SET value = EXCLUDED.value, write_date = NOW();
+
+INSERT INTO ir_config_parameter (key, value, create_uid, write_uid, create_date, write_date)
+VALUES ('mail.catchall.domain', '${TENANT_NAME}.${DOMAIN}', 1, 1, NOW(), NOW())
+ON CONFLICT (key) DO UPDATE SET value = EXCLUDED.value, write_date = NOW();
 
 -- Regenerar UUID para evitar conflictos
 UPDATE ir_config_parameter SET value = gen_random_uuid()::text WHERE key = 'database.uuid';

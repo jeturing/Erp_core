@@ -21,6 +21,8 @@ from typing import Any
 from dotenv import load_dotenv
 from sqlalchemy import create_engine, text
 
+from .utils.runtime_security import redact_secret_url, require_runtime_secret
+
 logger = logging.getLogger(__name__)
 
 # ── Resolve which .env file to load ──
@@ -95,11 +97,12 @@ ODOO_MASTER_PASSWORD = os.getenv("ODOO_MASTER_PASSWORD", "")
 ODOO_DB_HOST = os.getenv("ODOO_DB_HOST", "10.10.10.137")
 ODOO_DB_PORT = int(os.getenv("ODOO_DB_PORT", "5432"))
 ODOO_DB_USER = os.getenv("ODOO_DB_USER", "Jeturing")
-ODOO_DB_PASSWORD = os.getenv("ODOO_DB_PASSWORD", "321Abcd")
+ODOO_DB_PASSWORD = os.getenv("ODOO_DB_PASSWORD", "")
 ODOO_DEFAULT_LANG = os.getenv("ODOO_DEFAULT_LANG", "es_DO")
 ODOO_DEFAULT_COUNTRY = os.getenv("ODOO_DEFAULT_COUNTRY", "DO")
 ODOO_BASE_DOMAIN = os.getenv("ODOO_BASE_DOMAIN", "sajet.us")
 ODOO_TEMPLATE_DB = os.getenv("ODOO_TEMPLATE_DB", "template_tenant")
+ODOO_TEMPLATE_DB_BY_COUNTRY = os.getenv("ODOO_TEMPLATE_DB_BY_COUNTRY", "DO=tenant_do")
 ODOO_FILESTORE_PATH = os.getenv("ODOO_FILESTORE_PATH", "/var/lib/odoo/filestore")
 ODOO_FILESTORE_PCT_ID = int(os.getenv("ODOO_FILESTORE_PCT_ID", os.getenv("LXC_CONTAINER_ID", "105")))
 
@@ -136,11 +139,16 @@ CT105_NGINX_PORT = int(os.getenv("CT105_NGINX_PORT", "8080"))
 # ═══════════════════════════════════════════════════════
 REDIS_HOST = os.getenv("REDIS_HOST", "10.10.10.7")
 REDIS_PORT = int(os.getenv("REDIS_PORT", "6379"))
-REDIS_PASSWORD = os.getenv("REDIS_PASSWORD", "JtrRedis2026!")
+REDIS_PASSWORD = os.getenv("REDIS_PASSWORD", "")
 REDIS_DB = int(os.getenv("REDIS_DB", "0"))
+_REDIS_URL_DEFAULT = (
+    f"redis://:{REDIS_PASSWORD}@{REDIS_HOST}:{REDIS_PORT}/{REDIS_DB}"
+    if REDIS_PASSWORD
+    else f"redis://{REDIS_HOST}:{REDIS_PORT}/{REDIS_DB}"
+)
 REDIS_URL = os.getenv(
     "REDIS_URL",
-    f"redis://:{REDIS_PASSWORD}@{REDIS_HOST}:{REDIS_PORT}/{REDIS_DB}"
+    _REDIS_URL_DEFAULT
 )
 
 UPSTREAM_MTLS_ENABLED = os.getenv("UPSTREAM_MTLS_ENABLED", "false").lower() == "true"
@@ -396,11 +404,7 @@ OPENAI_COMPATIBLE_API_KEY = os.getenv("OPENAI_COMPATIBLE_API_KEY", "sk-dummy-loc
 
 def get_env_info() -> dict:
     """Return current environment info (for /api/env endpoint and logging)."""
-    # Mask sensitive parts of DATABASE_URL
-    _masked_db = DATABASE_URL
-    if "@" in _masked_db:
-        _pre, _post = _masked_db.split("@", 1)
-        _masked_db = _pre.rsplit(":", 1)[0] + ":****@" + _post
+    _masked_db = redact_secret_url(DATABASE_URL)
     return {
         "erp_env": _erp_env,
         "env_file": ACTIVE_ENV_FILE,
@@ -437,3 +441,7 @@ def validate_required():
         logging.getLogger(__name__).warning(
             f"⚠️  Missing env vars (non-production): {', '.join(missing)}"
         )
+
+
+def require_config_secret(name: str, value: str | None, *, production_only: bool = True) -> str:
+    return require_runtime_secret(name, value, production_only=production_only)

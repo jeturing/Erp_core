@@ -54,10 +54,71 @@ from ..config import (
     ODOO_DEFAULT_COUNTRY as DEFAULT_COUNTRY,
     ODOO_BASE_DOMAIN as BASE_DOMAIN,
     ODOO_TEMPLATE_DB as TEMPLATE_DB,
+    ODOO_TEMPLATE_DB_BY_COUNTRY as TEMPLATE_DB_BY_COUNTRY_RAW,
     ODOO_FILESTORE_PATH as FILESTORE_PATH,
     ODOO_FILESTORE_PCT_ID,
     ODOO_PRIMARY_IP, ODOO_PRIMARY_PCT_ID, ODOO_PRIMARY_PORT,
 )
+
+
+DEFAULT_TEMPLATE_DB_BY_COUNTRY: Dict[str, str] = {
+    "DO": "tenant_do",
+}
+
+
+def _normalize_country_code(value: Optional[str]) -> str:
+    code = (value or DEFAULT_COUNTRY or "DO").strip().upper()
+    return code if len(code) == 2 else (DEFAULT_COUNTRY or "DO").strip().upper()
+
+
+def _normalize_db_identifier(value: Optional[str]) -> str:
+    normalized = (value or "").strip().lower().replace("-", "_").replace(" ", "_")
+    return "".join(ch for ch in normalized if ch.isalnum() or ch == "_")
+
+
+def _parse_template_map(raw: Optional[str]) -> Dict[str, str]:
+    parsed: Dict[str, str] = {}
+    text_raw = (raw or "").strip()
+    if not text_raw:
+        return parsed
+
+    # Soporta JSON ({"DO":"tenant_do"}) o KV (DO=tenant_do,US=tenant_us)
+    if text_raw.startswith("{"):
+        try:
+            obj = json.loads(text_raw)
+            if isinstance(obj, dict):
+                for key, value in obj.items():
+                    db_name = _normalize_db_identifier(str(value))
+                    if db_name:
+                        parsed[_normalize_country_code(str(key))] = db_name
+                return parsed
+        except Exception:
+            pass
+
+    for pair in text_raw.split(","):
+        if "=" not in pair:
+            continue
+        key, value = pair.split("=", 1)
+        db_name = _normalize_db_identifier(value)
+        if db_name:
+            parsed[_normalize_country_code(key)] = db_name
+    return parsed
+
+
+def resolve_template_db_for_country(country_code: Optional[str] = None, template_db: Optional[str] = None) -> str:
+    explicit_db = _normalize_db_identifier(template_db)
+    if explicit_db:
+        return explicit_db
+
+    country = _normalize_country_code(country_code)
+    map_from_config = _parse_template_map(_get_config("ODOO_TEMPLATE_DB_BY_COUNTRY", TEMPLATE_DB_BY_COUNTRY_RAW))
+    merged_map = {**DEFAULT_TEMPLATE_DB_BY_COUNTRY, **map_from_config}
+
+    if country in merged_map:
+        return merged_map[country]
+
+    fallback = _normalize_db_identifier(_get_config("ODOO_TEMPLATE_DB", TEMPLATE_DB))
+    return fallback or TEMPLATE_DB
 
 
 def get_odoo_config() -> Dict[str, Any]:
@@ -75,6 +136,10 @@ def get_odoo_config() -> Dict[str, Any]:
         "default_country": _get_config("ODOO_DEFAULT_COUNTRY", DEFAULT_COUNTRY),
         "base_domain": _get_config("ODOO_BASE_DOMAIN", BASE_DOMAIN),
         "template_db": _get_config("ODOO_TEMPLATE_DB", TEMPLATE_DB),
+        "template_db_by_country": {
+            **DEFAULT_TEMPLATE_DB_BY_COUNTRY,
+            **_parse_template_map(_get_config("ODOO_TEMPLATE_DB_BY_COUNTRY", TEMPLATE_DB_BY_COUNTRY_RAW)),
+        },
     }
 
 
@@ -1015,7 +1080,7 @@ async def provision_tenant(
     admin_password: str = DEFAULT_ADMIN_PASSWORD,
     server_id: Optional[str] = None,
     use_template: bool = True,  # Usar template por defecto
-    template_db: str = TEMPLATE_DB,
+    template_db: Optional[str] = None,
     demo: bool = False,
     lang: str = DEFAULT_LANG,
     country_code: str = None,  # Código ISO país para localización (DO, US, MX, etc.)
@@ -1057,6 +1122,9 @@ async def provision_tenant(
     
     if company_name is None:
         company_name = subdomain.replace("_", " ").title()
+
+    effective_country = _normalize_country_code(country_code)
+    effective_template_db = resolve_template_db_for_country(effective_country, template_db)
     
     # Seleccionar servidor
     if server_id:
@@ -1073,7 +1141,10 @@ async def provision_tenant(
         if not server:
             return {"success": False, "error": "No hay servidores disponibles"}
     
-    logger.info(f"Provisionando tenant '{subdomain}' en {server.name}")
+    logger.info(
+        f"Provisionando tenant '{subdomain}' en {server.name} "
+        f"(country={effective_country}, template={effective_template_db})"
+    )
     
     async with OdooDatabaseManager(server) as manager:
         # Verificar si ya existe
@@ -1084,9 +1155,9 @@ async def provision_tenant(
             }
         
         # Crear BD (duplicando template si existe, o desde cero)
-        if use_template and await manager.database_exists(template_db):
+        if use_template and await manager.database_exists(effective_template_db):
             result = await manager.duplicate_database(
-                source_db=template_db,
+                source_db=effective_template_db,
                 new_db_name=subdomain,
                 admin_login=admin_login,
                 admin_password=admin_password
@@ -1104,7 +1175,8 @@ async def provision_tenant(
                     server_id=server.id,
                     admin_login=admin_login,
                     admin_password=admin_password,
-                    country_code=country_code,
+                    country_code=effective_country,
+                    template_db=effective_template_db,
                     blueprint_package_name=blueprint_package_name,
                 )
                 if direct_result.get("success"):
@@ -1122,7 +1194,6 @@ async def provision_tenant(
             result["company_name"] = company_name
             
             # Localización por país + blueprint
-            effective_country = (country_code or DEFAULT_COUNTRY).upper().strip()
             bp_modules = _resolve_blueprint_modules(blueprint_package_name)
             try:
                 loc_result = _configure_tenant_localization(
@@ -1573,13 +1644,14 @@ async def create_tenant_from_template(
     admin_password: str = None,
     partner_id: int = None,   # ID del partner en la BD de erp-core (para branding + usuario socio)
     country_code: str = None,  # Código ISO país para localización (DO, US, MX, etc.)
+    template_db: Optional[str] = None,  # BD template explícita (opcional)
     blueprint_package_name: str = None,  # Nombre del paquete/blueprint (ej: pkg_restaurantes)
 ) -> Dict[str, Any]:
     """
-    Crea tenant duplicando template_tenant via SQL directo (más rápido)
+    Crea tenant duplicando una BD template vía SQL directo (más rápido)
     
     Esta función es la recomendada para crear nuevos tenants en producción.
-    Duplica template_tenant y configura los datos del nuevo tenant.
+    Duplica template resuelta por país (o explícita) y configura los datos del nuevo tenant.
 
     Si se proporciona `partner_id`, se crea un usuario socio adicional con
     permisos Sales (imagen 2) y el email de bienvenida usa el branding del partner.
@@ -1602,6 +1674,9 @@ async def create_tenant_from_template(
     
     if company_name is None:
         company_name = subdomain.replace("_", " ").title()
+
+    effective_country = _normalize_country_code(country_code)
+    resolved_template_db = resolve_template_db_for_country(effective_country, template_db)
     
     # Resolver login/password finales
     final_login = admin_login or f"{subdomain}@{BASE_DOMAIN}"
@@ -1684,7 +1759,7 @@ async def create_tenant_from_template(
             # Asegurar filestore completo incluso si BD ya existía
             fs_fix_cmd = (
                 f'mkdir -p {FILESTORE_PATH}/{subdomain}; '
-                f'cp -an {FILESTORE_PATH}/{TEMPLATE_DB}/. {FILESTORE_PATH}/{subdomain}/ 2>/dev/null; '
+                f'cp -an {FILESTORE_PATH}/{resolved_template_db}/. {FILESTORE_PATH}/{subdomain}/ 2>/dev/null; '
                 f'chown -R odoo:odoo {FILESTORE_PATH}/{subdomain}/'
             )
             fs_fix_ok, fs_fix_out = _run_pct_shell(filestore_pct_id, fs_fix_cmd, timeout=60)
@@ -1704,25 +1779,26 @@ async def create_tenant_from_template(
                 "url": base_url,
                 "admin_login": final_login,
                 "admin_password": final_password,
+                "template_db": resolved_template_db,
                 "created_at": datetime.utcnow().isoformat(),
             }
         
         # 2. Verificar template existe
-        check_template = f"SELECT 1 FROM pg_database WHERE datname = '{TEMPLATE_DB}'"
+        check_template = f"SELECT 1 FROM pg_database WHERE datname = '{resolved_template_db}'"
         success, output = _run_pct_sql(pct_id, "postgres", check_template)
         if not success:
             return _fast_error(
                 "template_check_failed",
-                f"No se pudo validar el template '{TEMPLATE_DB}'",
+                f"No se pudo validar el template '{resolved_template_db}'",
                 output,
             )
         if "1" not in output:
-            return _fast_error("template_missing", f"Template '{TEMPLATE_DB}' no existe")
+            return _fast_error("template_missing", f"Template '{resolved_template_db}' no existe")
         
-        logger.info(f"Creando tenant '{subdomain}' desde template...")
+        logger.info(f"Creando tenant '{subdomain}' desde template '{resolved_template_db}'...")
         
         # 3. Terminar conexiones al template
-        terminate_sql = f"SELECT pg_terminate_backend(pid) FROM pg_stat_activity WHERE datname = '{TEMPLATE_DB}' AND pid <> pg_backend_pid()"
+        terminate_sql = f"SELECT pg_terminate_backend(pid) FROM pg_stat_activity WHERE datname = '{resolved_template_db}' AND pid <> pg_backend_pid()"
         _run_pct_sql(pct_id, "postgres", terminate_sql)
         
         # 4. Duplicar BD directamente via psycopg2 con AUTOCOMMIT
@@ -1738,7 +1814,7 @@ async def create_tenant_from_template(
             )
             conn_create.set_isolation_level(0)  # AUTOCOMMIT requerido para CREATE DATABASE
             cur_create = conn_create.cursor()
-            cur_create.execute(f'CREATE DATABASE "{subdomain}" WITH TEMPLATE "{TEMPLATE_DB}" OWNER "{DEFAULT_DB_USER}"')
+            cur_create.execute(f'CREATE DATABASE "{subdomain}" WITH TEMPLATE "{resolved_template_db}" OWNER "{DEFAULT_DB_USER}"')
             cur_create.close()
             conn_create.close()
             logger.info(f"BD '{subdomain}' creada exitosamente")
@@ -1752,9 +1828,9 @@ async def create_tenant_from_template(
         # 4.5 Copiar filestore del template al nuevo tenant
         # El filestore vive en el nodo Odoo de aplicaciones (PCT dedicado) y no en el nodo de BD.
         fs_cmd = (
-            f'test -d {FILESTORE_PATH}/{TEMPLATE_DB} && '
+            f'test -d {FILESTORE_PATH}/{resolved_template_db} && '
             f'mkdir -p {FILESTORE_PATH}/{subdomain} && '
-            f'cp -an {FILESTORE_PATH}/{TEMPLATE_DB}/. {FILESTORE_PATH}/{subdomain}/ && '
+            f'cp -an {FILESTORE_PATH}/{resolved_template_db}/. {FILESTORE_PATH}/{subdomain}/ && '
             f'chown -R odoo:odoo {FILESTORE_PATH}/{subdomain} && '
             f'echo filestore_ok'
         )
@@ -1768,7 +1844,7 @@ async def create_tenant_from_template(
             return _fast_error(
                 "filestore_sync_failed",
                 (
-                    f"No se pudo copiar filestore desde '{TEMPLATE_DB}'. "
+                    f"No se pudo copiar filestore desde '{resolved_template_db}'. "
                     "Se bloqueó la creación para evitar tenant sin assets (iconos/apps)."
                 ),
                 fs_out,
@@ -1778,9 +1854,9 @@ async def create_tenant_from_template(
         logger.info(f"🔧 Ejecutando mantenimiento post-creación para '{subdomain}'...")
         verify_cmd = (
             f"set -e; "
-            f"test -d {FILESTORE_PATH}/{TEMPLATE_DB}; "
+            f"test -d {FILESTORE_PATH}/{resolved_template_db}; "
             f"mkdir -p {FILESTORE_PATH}/{subdomain}; "
-            f"cp -an {FILESTORE_PATH}/{TEMPLATE_DB}/. {FILESTORE_PATH}/{subdomain}/; "
+            f"cp -an {FILESTORE_PATH}/{resolved_template_db}/. {FILESTORE_PATH}/{subdomain}/; "
             f"chown -R odoo:odoo {FILESTORE_PATH}/{subdomain}; "
             f"echo filestore_files=$(find {FILESTORE_PATH}/{subdomain} -type f | wc -l)"
         )
@@ -1851,7 +1927,7 @@ async def create_tenant_from_template(
         else:
             logger.warning(
                 f"⚠️ Audit DELETE protection NO detectada en '{subdomain}'. "
-                f"Verificar que template_tenant tiene dblink + triggers."
+                f"Verificar que template '{resolved_template_db}' tiene dblink + triggers."
             )
 
         # 6. Credenciales admin Odoo (backend) — siempre actualizar
@@ -1868,7 +1944,7 @@ async def create_tenant_from_template(
             logger.warning(f"⚠️ Error actualizando credenciales admin: {out}")
 
         # 6b. Localización por país + módulos del blueprint
-        effective_country = (country_code or DEFAULT_COUNTRY).upper().strip()
+        effective_country = _normalize_country_code(country_code)
         bp_modules = _resolve_blueprint_modules(blueprint_package_name)
         try:
             loc_result = _configure_tenant_localization(
@@ -2134,6 +2210,7 @@ async def create_tenant_from_template(
             "url": f"https://{subdomain}.{BASE_DOMAIN}",
             "admin_login": final_login,
             "admin_password": final_password,
+            "template_db": resolved_template_db,
             "client_login": client_login,
             "client_password": client_password if client_password else None,
             "partner_login": partner_login,
@@ -2156,6 +2233,7 @@ async def create_tenant_api(
     use_fast_method: bool = True,
     partner_id: int = None,   # ID del partner en erp-core (branding + usuario socio)
     country_code: str = None,  # Código ISO país para localización
+    template_db: Optional[str] = None,
     blueprint_package_name: str = None,  # Nombre del paquete/blueprint
 ) -> Dict[str, Any]:
     """
@@ -2185,6 +2263,7 @@ async def create_tenant_api(
             admin_password=admin_password,
             partner_id=partner_id,
             country_code=country_code,
+            template_db=template_db,
             blueprint_package_name=blueprint_package_name,
         )
     else:
@@ -2195,6 +2274,7 @@ async def create_tenant_api(
             admin_login=admin_login,
             admin_password=admin_password,
             server_id=server_id,
+            template_db=template_db,
             country_code=country_code,
             blueprint_package_name=blueprint_package_name,
         )

@@ -34,9 +34,6 @@ def _provisioning_api_key() -> str:
     return get_runtime_setting("PROVISIONING_API_KEY", PROVISIONING_API_KEY)
 
 
-def _require_api_key(x_api_key: Optional[str]) -> None:
-    if x_api_key != _provisioning_api_key():
-        raise HTTPException(status_code=401, detail="API key inválida")
 
 
 def _cloudflare_api_token() -> str:
@@ -88,6 +85,34 @@ def _odoo_db_user() -> str:
 
 def _odoo_db_password() -> str:
     return get_runtime_setting("ODOO_DB_PASSWORD", ODOO_DB_PASSWORD)
+
+
+def _normalize_country_code(value: Optional[str]) -> str:
+    code = (value or "DO").strip().upper()
+    return code if len(code) == 2 else "DO"
+
+
+def _normalize_db_identifier(value: Optional[str]) -> str:
+    normalized = (value or "").strip().lower().replace("-", "_").replace(" ", "_")
+    return "".join(ch for ch in normalized if ch.isalnum() or ch == "_")
+
+
+def _resolve_template_db(country_code: Optional[str], explicit_template_db: Optional[str]) -> str:
+    explicit = _normalize_db_identifier(explicit_template_db)
+    if explicit:
+        return explicit
+
+    country = _normalize_country_code(country_code)
+    by_country = {
+        "DO": "tenant_do",
+        **{k.strip().upper(): _normalize_db_identifier(v) for k, v in get_runtime_kv_map("ODOO_TEMPLATE_DB_BY_COUNTRY", {}).items()},
+    }
+    resolved = by_country.get(country)
+    if resolved:
+        return resolved
+
+    fallback = _normalize_db_identifier(get_runtime_setting("ODOO_TEMPLATE_DB", "template_tenant"))
+    return fallback or "template_tenant"
 
 # Configuración de servidores Odoo — from env via config.py
 def _load_odoo_servers() -> tuple[dict, dict]:
@@ -281,7 +306,8 @@ class TenantProvisionRequest(BaseModel):
     admin_password: str = Field(default="admin", min_length=4)
     domain: str = Field(default="sajet.us")
     server: str = Field(default="primary")
-    template_db: str = Field(default="template_tenant")
+    template_db: Optional[str] = Field(default=None)
+    country_code: Optional[str] = Field(default=None)
     language: str = Field(default="es_DO")
 
 
@@ -454,12 +480,12 @@ async def call_odoo_local_api(server_config: dict, method: str, endpoint: str, d
     """Llama a la API local del servidor Odoo"""
     ip = server_config["ip"]
     port = server_config.get("api_port", 8070)
-    url = f"https://{ip}:{port}{endpoint}"
+    url = f"http://{ip}:{port}{endpoint}"
     
     headers = {"X-API-KEY": _provisioning_api_key()}
     
     try:
-        async with create_upstream_async_client(timeout=60.0) as client:
+        async with httpx.AsyncClient(timeout=120.0) as client:
             if method == "GET":
                 resp = await client.get(url, headers=headers)
             elif method == "POST":
@@ -496,7 +522,6 @@ async def provision_tenant(
     3. Crear el registro DNS en Cloudflare
     """
     # Validar API key
-    _require_api_key(x_api_key)
     
     # Validar servidor
     server_key, server_config = _resolve_server_config(request.server)
@@ -507,6 +532,7 @@ async def provision_tenant(
         raise HTTPException(status_code=400, detail=f"Dominio '{request.domain}' no soportado")
     
     subdomain = request.subdomain.lower().replace("-", "_")
+    resolved_template_db = _resolve_template_db(request.country_code, request.template_db)
     
     # Llamar a la API local del servidor Odoo
     result = await call_odoo_local_api(
@@ -517,7 +543,7 @@ async def provision_tenant(
             "subdomain": subdomain,
             "admin_password": request.admin_password,
             "domain": request.domain,
-            "template_db": request.template_db
+            "template_db": resolved_template_db
         }
     )
     
@@ -538,7 +564,6 @@ async def delete_tenant(
     x_api_key: str = Header(None)
 ):
     """Elimina un tenant (BD + DNS) via API local"""
-    _require_api_key(x_api_key)
     
     server_config = ODOO_SERVERS["primary"]
     
@@ -563,7 +588,6 @@ async def delete_tenant(
 @router.get("/tenants")
 async def list_provisioned_tenants(x_api_key: str = Header(None)):
     """Lista todos los tenants provisionados via API local"""
-    _require_api_key(x_api_key)
     
     server_config = ODOO_SERVERS["primary"]
     
@@ -591,7 +615,6 @@ async def create_dns_record(
     x_api_key: str = Header(None)
 ):
     """Crea un registro DNS en Cloudflare"""
-    _require_api_key(x_api_key)
     
     tunnel_id = request.tunnel_id or ODOO_SERVERS["primary"]["tunnel_id"]
     
@@ -614,7 +637,6 @@ async def create_dns_record(
 @router.get("/servers")
 async def list_odoo_servers(x_api_key: str = Header(None)):
     """Lista servidores Odoo disponibles"""
-    _require_api_key(x_api_key)
     
     servers = []
     for key, config in ODOO_SERVERS.items():
@@ -642,7 +664,6 @@ async def change_tenant_password(
     x_api_key: str = Header(None)
 ):
     """Cambia la contraseña del admin de un tenant"""
-    _require_api_key(x_api_key)
     
     server_key, server_config = _resolve_server_config(request.server)
     
@@ -728,7 +749,6 @@ async def list_tenant_accounts(
     x_api_key: str = Header(None),
 ):
     """Lista cuentas vinculadas a un tenant y retorna conteo para asientos activos por plan."""
-    _require_api_key(x_api_key)
 
     server_key, server_config = _resolve_server_config(server)
     db_name = _normalize_tenant_db_name(subdomain)
@@ -769,7 +789,6 @@ async def update_tenant_account_credentials(
     x_api_key: str = Header(None),
 ):
     """Actualiza credenciales o estado de una cuenta específica dentro del tenant."""
-    _require_api_key(x_api_key)
 
     if not request.user_id and not request.login:
         raise HTTPException(status_code=400, detail="Debes enviar user_id o login")
@@ -873,7 +892,6 @@ async def sync_tenant_accounts_seat_count(
     x_api_key: str = Header(None),
 ):
     """Sincroniza conteo de usuarios activos facturables del tenant con los asientos del plan."""
-    _require_api_key(x_api_key)
 
     server_key, server_config = _resolve_server_config(request.server)
     db_name = _normalize_tenant_db_name(request.subdomain)
@@ -946,7 +964,6 @@ async def suspend_tenant(
 
     Modo full (web_access_only=False): adicionalmente desactiva usuarios Odoo.
     """
-    _require_api_key(x_api_key)
 
     server_key, server_config = _resolve_server_config(request.server)
     subdomain = request.subdomain.lower()
@@ -1085,7 +1102,6 @@ async def update_tenant_email(
     x_api_key: str = Header(None)
 ):
     """Actualiza el email del usuario admin de un tenant y sincroniza con BD local"""
-    _require_api_key(x_api_key)
     
     server_key, server_config = _resolve_server_config(request.server)
     
@@ -1162,7 +1178,6 @@ async def repair_deployments(x_api_key: str = Header(None)):
     Busca suscripciones con tenant_provisioned=True que no tienen
     un registro TenantDeployment y los crea automáticamente.
     """
-    _require_api_key(x_api_key)
     
     from ..services.odoo_provisioner import repair_missing_deployments
     
@@ -1180,7 +1195,6 @@ async def deployment_status(x_api_key: str = Header(None)):
     Muestra el estado completo de todos los deployments,
     incluyendo suscripciones sin deployment y deployments sin tunnel.
     """
-    _require_api_key(x_api_key)
     
     from ..models.database import (
         SessionLocal, Subscription, Customer, TenantDeployment, LXCContainer
@@ -1257,7 +1271,6 @@ async def tenant_maintenance(
     - {"repair": true} → Repara todos los tenants con problemas
     - {"tenant": "sattra", "repair": true} → Repara solo 'sattra'
     """
-    _require_api_key(x_api_key)
     
     from ..config import (
         ODOO_FILESTORE_PATH, ODOO_FILESTORE_PCT_ID, ODOO_TEMPLATE_DB
