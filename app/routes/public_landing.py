@@ -20,7 +20,7 @@ from fastapi import APIRouter, HTTPException, Query
 from fastapi.responses import JSONResponse
 from pydantic import BaseModel, EmailStr
 from typing import Optional, List
-from datetime import datetime
+from datetime import datetime, timezone
 import json
 import logging
 import secrets
@@ -633,7 +633,7 @@ async def public_partner_signup(payload: PublicPartnerSignupRequest):
             partner_code=_generate_partner_code(db),
             password_hash=password_hash,
             onboarding_step=1,
-            invited_at=datetime.utcnow(),
+            invited_at=datetime.now(timezone.utc).replace(tzinfo=None),
             invited_by="self_signup",
         )
         db.add(partner)

@@ -22,7 +22,7 @@ Ejemplo de uso:
 import logging
 from typing import Dict, Any, Optional, List
 from sqlalchemy.orm import Session
-from datetime import datetime
+from datetime import datetime, timezone
 
 from ..models.database import (
     Customer, Subscription, SubscriptionStatus,
@@ -100,7 +100,7 @@ class PlanMigrationService:
             "db_size_mb": round(db_size_mb, 2),
             "filestore_size_mb": filestore_size_mb,
             "total_size_mb": round(total_size_mb, 2),
-            "measured_at": datetime.utcnow().isoformat(),
+            "measured_at": datetime.now(timezone.utc).replace(tzinfo=None).isoformat(),
         }
     
     def get_customer_plan_and_usage(self, customer_id: int) -> Dict[str, Any]:

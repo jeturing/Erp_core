@@ -9,7 +9,7 @@ import logging
 import threading
 import time
 from dataclasses import dataclass
-from datetime import datetime
+from datetime import datetime, timezone
 
 from redis import Redis
 from redis.exceptions import RedisError
@@ -107,7 +107,7 @@ def consume_rate_limit(identifier: str, rpm: int | None, rpd: int | None) -> Rat
     - rate_limit_minute
     - rate_limit_day
     """
-    now = datetime.utcnow()
+    now = datetime.now(timezone.utc).replace(tzinfo=None)
     redis_client = _get_redis_client()
     if redis_client is None:
         return _fallback_consume(identifier=identifier, rpm=rpm, rpd=rpd, now=now)

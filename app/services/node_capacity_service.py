@@ -13,7 +13,7 @@ Auto-drain: when a node crosses a critical threshold the service sets
 the provisioning system to skip the node for new tenants.
 """
 import logging
-from datetime import datetime
+from datetime import datetime, timezone
 from typing import Dict, Any, List, Optional
 
 from sqlalchemy import and_
@@ -354,7 +354,7 @@ class NodeCapacityService:
                 cluster_action = "NODE_DRAINED"
 
             return {
-                "timestamp": datetime.utcnow().isoformat(),
+                "timestamp": datetime.now(timezone.utc).replace(tzinfo=None).isoformat(),
                 "cluster": {
                     "total_nodes": len(results),
                     "total_tenants": total_tenants,
@@ -586,7 +586,7 @@ class NodeCapacityService:
                             nca_table.c.severity == sv,
                             nca_table.c.is_active == True,
                         ))
-                        .values(is_active=False, resolved_at=datetime.utcnow())
+                        .values(is_active=False, resolved_at=datetime.now(timezone.utc).replace(tzinfo=None))
                     )
                 except Exception as e:
                     logger.warning(f"Could not resolve alert: {e}")

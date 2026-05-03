@@ -56,7 +56,7 @@ def _log_to_db(
     """Persiste el registro del email en la tabla email_logs."""
     try:
         from ..models.database import EmailLog, SessionLocal
-        from datetime import datetime
+        from datetime import datetime, timezone
         db = SessionLocal()
         try:
             record = EmailLog(
@@ -68,7 +68,7 @@ def _log_to_db(
                 customer_id=customer_id,
                 partner_id=partner_id,
                 related_id=related_id,
-                sent_at=datetime.utcnow(),
+                sent_at=datetime.now(timezone.utc).replace(tzinfo=None),
             )
             db.add(record)
             db.commit()
@@ -245,6 +245,101 @@ def send_tenant_credentials(
         text_body=f"Bienvenido a SAJET\n\nURL: {url}\nUsuario: {admin_login}\nContraseña: {admin_password}\nPlan: {plan_name}",
         email_type="tenant_credentials",
     )
+
+
+def send_customer_registration_acknowledgement(
+        to_email: str,
+        company_name: str,
+        phone: str,
+        customer_id: Optional[int] = None,
+) -> dict:
+        """Envía correo de agradecimiento al registrar un nuevo cliente en SAJET."""
+        safe_company_name = company_name or "su empresa"
+        safe_phone = phone.strip()
+        help_url = "https://Jeturing.com/help"
+        linkedin_url = "https://www.linkedin.com/company/jeturing"
+
+        content = f"""
+        <h2 style="color: #e74c3c; margin-top: 0;">¡Gracias por registrarte en Sajet!</h2>
+        <p>Nos alegra tenerte con nosotros.</p>
+        <p>
+            Estás a un paso de acceder a una plataforma ERP diseñada para simplificar y potenciar la operación
+            de tu negocio. En breve, uno de nuestros especialistas se pondrá en contacto contigo para completar
+            la configuración de tu cuenta y guiarte en tus primeros pasos.
+        </p>
+
+        <div style="background: #1a1a2e; border-radius: 8px; padding: 20px; margin: 20px 0; border-left: 4px solid #3498db;">
+            <h3 style="margin-top: 0; color: #fff;">Contacto registrado</h3>
+            <table style="width: 100%; border-collapse: collapse;">
+                <tr>
+                    <td style="padding: 6px 0; color: #999; width: 140px;">Empresa:</td>
+                    <td style="padding: 6px 0; color: #fff;">{safe_company_name}</td>
+                </tr>
+                <tr>
+                    <td style="padding: 6px 0; color: #999;">Teléfono:</td>
+                    <td style="padding: 6px 0; color: #fff;">{safe_phone}</td>
+                </tr>
+            </table>
+        </div>
+
+        <p>
+            Mientras tanto, si tienes alguna pregunta o necesitas asistencia inmediata, no dudes en responder
+            este correo o escribirnos directamente a <a href="mailto:sales@jeturing.com" style="color: #e74c3c;">sales@jeturing.com</a>.
+            Estamos aquí para ayudarte.
+        </p>
+        <p>¡Bienvenido a la plataforma que hará crecer tu negocio!</p>
+
+        <div style="background: #0f1629; border: 1px solid #2a2a4a; border-radius: 8px; padding: 20px; margin: 24px 0;">
+            <div style="font-weight: 700; color: #fff; margin-bottom: 8px;">Sales Team</div>
+            <div style="color: #c7c7c7; line-height: 1.7; font-size: 14px;">
+                <div>Sales Team | Jeturing inc</div>
+                <div>Work: 401-648-2327</div>
+                <div>Email: <a href="mailto:sales@jeturing.com" style="color: #e74c3c;">sales@jeturing.com</a></div>
+                <div>Our Brand: Sajet us | Segrd.com</div>
+                <div>Follow me: <a href="{linkedin_url}" style="color: #e74c3c;">LinkedIn</a></div>
+                <div><a href="{help_url}" style="color: #e74c3c;">Jeturing.com/help</a></div>
+            </div>
+        </div>
+
+        <p style="color: #999; font-size: 12px; line-height: 1.6; margin-bottom: 0;">
+            <strong>CONFIDENTIAL NOTE:</strong> The information in this e-mail and/or attachments is intended to be confidential and only for use
+            of the individual or entity to whom it is addressed and/or the issuer. If you are not the intended recipient, any retention,
+            dissemination, distribution or copying of this message is strictly prohibited and sanctioned by law. If you receive this message
+            and/or attachments in error, please notify the sender immediately and delete this message and all its attachments from your computer.
+            Thank you.
+        </p>
+        """
+
+        text_body = (
+                "¡Gracias por registrarte en Sajet!\n\n"
+                "Nos alegra tenerte con nosotros.\n\n"
+                "Estás a un paso de acceder a una plataforma ERP diseñada para simplificar y potenciar la operación de tu negocio. "
+                "En breve, uno de nuestros especialistas se pondrá en contacto contigo para completar la configuración de tu cuenta y guiarte en tus primeros pasos.\n\n"
+                f"Necesitamos un número de teléfono de contacto. Teléfono registrado: {safe_phone}\n\n"
+                "Mientras tanto, si tienes alguna pregunta o necesitas asistencia inmediata, no dudes en responder este correo o escribirnos directamente a sales@jeturing.com. "
+                "Estamos aquí para ayudarte.\n\n"
+                "¡Bienvenido a la plataforma que hará crecer tu negocio!\n\n"
+                "Sales Team\n"
+                "Sales Team | Jeturing inc\n"
+                "Work: 401-648-2327\n"
+                "Email: sales@jeturing.com\n"
+                "Our Brand: Sajet us | Segrd.com\n"
+                f"Follow me: LinkedIn {linkedin_url}\n"
+                f"{help_url}\n\n"
+                "CONFIDENTIAL NOTE: The information in this e-mail and/or attachments is intended to be confidential and only for use of the individual or entity to whom it is addressed and/or the issuer. "
+                "If you are not the intended recipient, any retention, dissemination, distribution or copying of this message is strictly prohibited and sanctioned by law. "
+                "If you receive this message and/or attachments in error, please notify the sender immediately and delete this message and all its attachments from your computer. Thank you."
+        )
+
+        return send_email(
+                to_email=to_email,
+                subject="¡Gracias por registrarte en Sajet!",
+                html_body=_base_template(content),
+                text_body=text_body,
+                reply_to="sales@jeturing.com",
+                email_type="customer_registration_acknowledgement",
+                customer_id=customer_id,
+        )
 
 
 def _partner_template(content: str, brand: dict) -> str:

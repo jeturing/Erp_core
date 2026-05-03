@@ -13,7 +13,7 @@ from fastapi import APIRouter, HTTPException, Request, Cookie
 from fastapi.responses import StreamingResponse
 from pydantic import BaseModel
 from typing import Optional, List
-from datetime import datetime
+from datetime import datetime, timezone
 import io
 import logging
 import os
@@ -224,7 +224,7 @@ def _save_api_suite_catalog(db, items: list[dict], updated_by: str) -> list[dict
         cfg.is_secret = False
         cfg.is_editable = True
         cfg.updated_by = updated_by
-        cfg.updated_at = datetime.utcnow()
+        cfg.updated_at = datetime.now(timezone.utc).replace(tzinfo=None)
     else:
         cfg = SystemConfig(
             key=API_SUITES_CONFIG_KEY,
@@ -425,7 +425,7 @@ async def update_app(app_id: int, data: UpdateAppRequest, request: Request, acce
         if data.organization_name is not None:
             app.organization_name = data.organization_name
 
-        app.updated_at = datetime.utcnow()
+        app.updated_at = datetime.now(timezone.utc).replace(tzinfo=None)
         db.commit()
 
         return {"message": "App actualizada"}
@@ -709,7 +709,7 @@ async def request_production(app_id: int, request: Request, access_token: str = 
             raise HTTPException(400, f"La app ya está en estado: {app.status}")
 
         app.status = "verification_requested"
-        app.updated_at = datetime.utcnow()
+        app.updated_at = datetime.now(timezone.utc).replace(tzinfo=None)
         db.commit()
 
         return {"message": "Solicitud de producción enviada. Un administrador la revisará.", "status": app.status}
@@ -735,7 +735,7 @@ async def verify_app(app_id: int, request: Request, access_token: str = Cookie(N
 
         app.status = "verified"
         app.app_mode = "production"
-        app.updated_at = datetime.utcnow()
+        app.updated_at = datetime.now(timezone.utc).replace(tzinfo=None)
         db.commit()
 
         return {"message": "App verificada para producción", "status": app.status}

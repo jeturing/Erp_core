@@ -5,7 +5,7 @@ Legacy mode = solo lectura, sin acciones correctivas.
 """
 import stripe
 import logging
-from datetime import datetime, timedelta
+from datetime import datetime, timedelta, timezone
 from sqlalchemy.orm import Session
 
 from ..models.database import (
@@ -35,7 +35,7 @@ class StripeReconciliationService:
         dry_run: True = solo reportar, no tocar nada
         """
         run = ReconciliationRun(
-            run_date=datetime.utcnow(),
+            run_date=datetime.now(timezone.utc).replace(tzinfo=None),
             scope=scope,
             status="running",
             total_checked=0,
@@ -206,7 +206,7 @@ class StripeReconciliationService:
         return None
 
     def _get_local_hwm(self, subscription_id: int) -> int | None:
-        today = datetime.utcnow().date()
+        today = datetime.now(timezone.utc).replace(tzinfo=None).date()
         hwm = self.db.query(SeatHighWater).filter(
             SeatHighWater.subscription_id == subscription_id,
             SeatHighWater.period_date == today,

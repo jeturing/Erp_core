@@ -11,7 +11,7 @@ Fase 1 — SAJET Multi-Node Architecture
 from __future__ import annotations
 
 import logging
-from datetime import datetime
+from datetime import datetime, timezone
 from typing import Any, Dict, Optional
 
 from sqlalchemy.orm import Session
@@ -244,7 +244,7 @@ def ensure_tenant_deployment(
             http_port=ports["http_port"],
             chat_port=ports["chat_port"],
             migration_state=MigrationState.idle,
-            deployed_at=datetime.utcnow(),
+            deployed_at=datetime.now(timezone.utc).replace(tzinfo=None),
         )
         db.add(deployment)
 

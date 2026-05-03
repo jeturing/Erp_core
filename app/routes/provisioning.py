@@ -12,6 +12,12 @@ import logging
 import subprocess
 import hashlib
 import re
+import secrets
+import string
+import threading
+import time
+from datetime import datetime, timezone
+from functools import lru_cache
 from urllib.parse import quote_plus
 from sqlalchemy import create_engine, text
 
@@ -28,6 +34,10 @@ from ..services.tenant_accounts import fetch_tenant_accounts_snapshot
 logger = logging.getLogger(__name__)
 
 router = APIRouter(prefix="/api/provisioning", tags=["Provisioning"])
+
+_SERVER_CACHE_LOCK = threading.RLock()
+_SERVER_CACHE: tuple[float, dict, dict] = (0.0, {}, {})
+_SERVER_CACHE_TTL_SECONDS = 60.0
 
 
 def _provisioning_api_key() -> str:
@@ -46,6 +56,14 @@ def _cloudflare_zones() -> dict[str, str]:
 
 def _cloudflare_tunnel_id() -> str:
     return get_runtime_setting("CLOUDFLARE_TUNNEL_ID", CLOUDFLARE_TUNNEL_ID)
+
+
+def _cloudflare_npm_tunnel_id() -> str:
+    # Tunnel operativo del gateway NPM/PCT205. Configurable en system_config.
+    return get_runtime_setting(
+        "CLOUDFLARE_NPM_TUNNEL_ID",
+        os.getenv("CLOUDFLARE_NPM_TUNNEL_ID", "fe306012-27d1-46d3-9b52-371987c39cf7"),
+    )
 
 
 def _odoo_primary_ip() -> str:
@@ -173,29 +191,35 @@ def _load_odoo_servers() -> tuple[dict, dict]:
     return servers, aliases
 
 
-ODOO_SERVERS, SERVER_ALIASES = _load_odoo_servers()
+def _cached_odoo_servers() -> tuple[dict, dict]:
+    global _SERVER_CACHE
+    now = time.monotonic()
+    with _SERVER_CACHE_LOCK:
+        loaded_at, servers, aliases = _SERVER_CACHE
+        if not servers or now - loaded_at > _SERVER_CACHE_TTL_SECONDS:
+            servers, aliases = _load_odoo_servers()
+            _SERVER_CACHE = (now, servers, aliases)
+        return servers, aliases
 
 
 def _normalize_server_key(raw_server: Optional[str]) -> str:
+    servers, aliases = _cached_odoo_servers()
     if not raw_server:
         return "primary"
     normalized = raw_server.strip().lower()
-    if normalized in ODOO_SERVERS:
+    if normalized in servers:
         return normalized
-    return SERVER_ALIASES.get(normalized, normalized)
+    return aliases.get(normalized, normalized)
 
 
 def _resolve_server_config(raw_server: Optional[str]) -> tuple[str, dict]:
-    global ODOO_SERVERS, SERVER_ALIASES
-    ODOO_SERVERS, SERVER_ALIASES = _load_odoo_servers()
-
+    servers, _aliases = _cached_odoo_servers()
     server_key = _normalize_server_key(raw_server)
-    server_config = ODOO_SERVERS.get(server_key)
+    server_config = servers.get(server_key)
     if not server_config:
-        supported = ", ".join(sorted(ODOO_SERVERS.keys()))
         raise HTTPException(
             status_code=400,
-            detail=f"Servidor '{raw_server}' no existe. Soportados: {supported}",
+            detail="Servidor de Odoo no soportado",
         )
     return server_key, server_config
 
@@ -207,14 +231,27 @@ def _normalize_tenant_db_name(subdomain: str) -> str:
     return db_name
 
 
+def _generate_admin_password() -> str:
+    alphabet = string.ascii_letters + string.digits + "!@#$%^&*"
+    return "".join(secrets.choice(alphabet) for _ in range(24))
+
+
+@lru_cache(maxsize=64)
 def _odoo_engine_for_db(db_name: str):
+    db_name = _normalize_tenant_db_name(db_name)
     host = quote_plus(_odoo_db_host() or "")
     user = quote_plus(_odoo_db_user() or "")
     pwd = quote_plus(_odoo_db_password() or "")
     if not host or not user:
         raise HTTPException(status_code=500, detail="Configuración ODOO_DB incompleta")
     url = f"postgresql+psycopg2://{user}:{pwd}@{host}:5432/{db_name}"
-    return create_engine(url, pool_pre_ping=True)
+    return create_engine(
+        url,
+        pool_pre_ping=True,
+        pool_size=int(os.getenv("ODOO_TENANT_DB_POOL_SIZE", "2")),
+        max_overflow=int(os.getenv("ODOO_TENANT_DB_MAX_OVERFLOW", "2")),
+        pool_recycle=int(os.getenv("ODOO_TENANT_DB_POOL_RECYCLE_SECONDS", "1800")),
+    )
 
 
 def _fetch_tenant_accounts_from_db(
@@ -236,12 +273,11 @@ def _fetch_tenant_accounts_from_db(
 
 
 def _sync_seat_count_with_local_db(subdomain: str, billable_active_accounts: int) -> dict:
-    from ..models.database import SessionLocal, Customer, Subscription, SubscriptionStatus, Plan
+    from ..models.database import db_session, Customer, Subscription, SubscriptionStatus, Plan
     from ..services.pricing import recalculate_subscription_monthly_amount
     from ..services.seat_events import record_hwm_snapshot
 
-    db = SessionLocal()
-    try:
+    with db_session() as db:
         customer = db.query(Customer).filter(Customer.subdomain == subdomain).first()
         if not customer:
             return {
@@ -292,23 +328,20 @@ def _sync_seat_count_with_local_db(subdomain: str, billable_active_accounts: int
             "plan_user_limit": plan_user_limit,
             "extra_over_plan": max(0, billable_active_accounts - plan_user_limit) if plan_user_limit and plan_user_limit > 0 else 0,
         }
-    except Exception:
-        db.rollback()
-        raise
-    finally:
-        db.close()
 
 
 # DTOs
 class TenantProvisionRequest(BaseModel):
     """Request para crear un nuevo tenant"""
     subdomain: str = Field(..., min_length=3, max_length=30, pattern="^[a-z0-9_]+$")
-    admin_password: str = Field(default="admin", min_length=4)
+    admin_password: str = Field(default_factory=_generate_admin_password, min_length=12)
     domain: str = Field(default="sajet.us")
     server: str = Field(default="primary")
     template_db: Optional[str] = Field(default=None)
     country_code: Optional[str] = Field(default=None)
     language: str = Field(default="es_DO")
+    admin_email: Optional[str] = Field(default=None)
+    company_name: Optional[str] = Field(default=None)
 
 
 class TenantPasswordChangeRequest(BaseModel):
@@ -380,6 +413,11 @@ class TenantProvisionResponse(BaseModel):
     database: str
     dns_created: bool
     server: str
+    template_db: Optional[str] = None
+    http_port: Optional[int] = None
+    longpolling_port: Optional[int] = None
+    routing: Optional[dict] = None
+    health: Optional[dict] = None
 
 
 class CloudflareDNSRequest(BaseModel):
@@ -398,7 +436,7 @@ class TenantDeleteRequest(BaseModel):
 
 # Funciones auxiliares
 async def create_cloudflare_dns(subdomain: str, domain: str, tunnel_id: str) -> bool:
-    """Crea registro CNAME en Cloudflare"""
+    """Crea o actualiza registro CNAME en Cloudflare."""
     zone_id = _cloudflare_zones().get(domain)
     if not zone_id:
         logger.error(f"Zone ID no encontrado para {domain}")
@@ -410,7 +448,9 @@ async def create_cloudflare_dns(subdomain: str, domain: str, tunnel_id: str) -> 
         "Content-Type": "application/json"
     }
     
-    # Verificar si ya existe
+    desired_content = f"{tunnel_id}.cfargotunnel.com"
+
+    # Verificar si ya existe y corregir contenido/proxy si hace falta
     async with httpx.AsyncClient() as client:
         check_resp = await client.get(
             url,
@@ -420,17 +460,36 @@ async def create_cloudflare_dns(subdomain: str, domain: str, tunnel_id: str) -> 
         if check_resp.status_code == 200:
             result = check_resp.json()
             if result.get("result"):
-                logger.info(f"DNS ya existe: {subdomain}.{domain}")
-                return True
+                record = result["result"][0]
+                record_id = record.get("id")
+                if record.get("content") == desired_content and record.get("proxied") is True:
+                    logger.info(f"DNS ya existe correcto: {subdomain}.{domain}")
+                    return True
+
+                data = {
+                    "type": "CNAME",
+                    "name": subdomain,
+                    "content": desired_content,
+                    "ttl": 1,
+                    "proxied": True,
+                    "comment": f"Auto-provisioned tenant {subdomain} via PCT205",
+                }
+                update_resp = await client.put(f"{url}/{record_id}", headers=headers, json=data)
+                update_result = update_resp.json()
+                if update_result.get("success"):
+                    logger.info(f"DNS actualizado: {subdomain}.{domain} -> {desired_content}")
+                    return True
+                logger.error(f"Error actualizando DNS: {update_result.get('errors', [])}")
+                return False
         
         # Crear nuevo registro
         data = {
             "type": "CNAME",
             "name": subdomain,
-            "content": f"{tunnel_id}.cfargotunnel.com",
+            "content": desired_content,
             "ttl": 1,
             "proxied": True,
-            "comment": f"Auto-provisioned tenant {subdomain}"
+            "comment": f"Auto-provisioned tenant {subdomain} via PCT205"
         }
         
         resp = await client.post(url, headers=headers, json=data)
@@ -443,6 +502,102 @@ async def create_cloudflare_dns(subdomain: str, domain: str, tunnel_id: str) -> 
             errors = result.get("errors", [])
             logger.error(f"Error creando DNS: {errors}")
             return False
+
+
+async def _tenant_http_health(url: str, *, host_header: Optional[str] = None) -> dict:
+    headers = {"Host": host_header} if host_header else None
+    try:
+        async with httpx.AsyncClient(timeout=20.0, follow_redirects=False, verify=False) as client:
+            resp = await client.get(url, headers=headers)
+        return {"ok": resp.status_code < 500, "status_code": resp.status_code, "url": url}
+    except Exception as exc:
+        return {"ok": False, "url": url, "error": str(exc)}
+
+
+async def _configure_public_routing(
+    *,
+    subdomain: str,
+    domain: str,
+    server_config: dict,
+    http_port: int,
+    chat_port: int,
+) -> dict:
+    """Configura NPM/PCT205 + Cloudflare y valida salud sin bloquear con excepciones."""
+    fqdn = f"{subdomain}.{domain}"
+    node_ip = server_config["ip"]
+    result: dict = {"domain": fqdn, "node_ip": node_ip, "http_port": http_port, "chat_port": chat_port}
+
+    try:
+        from ..services.npm_proxy_manager import create_tenant_proxy_host
+        npm_result = await create_tenant_proxy_host(
+            subdomain=subdomain,
+            base_domain=domain,
+            forward_host=node_ip,
+            forward_port=http_port,
+            ssl_forced=False,
+            allow_websocket_upgrade=True,
+        )
+        result["npm"] = npm_result
+    except Exception as exc:
+        logger.warning("NPM provisioning falló para %s: %s", fqdn, exc)
+        result["npm"] = {"success": False, "error": str(exc)}
+
+    try:
+        from ..services.cloudflare_tunnel_gate import add_tenant_route
+        gate_result = add_tenant_route(
+            subdomain=subdomain,
+            node_ip=node_ip,
+            http_port=http_port,
+            chat_port=chat_port,
+            base_domain=domain,
+        )
+        result["pct205_gate"] = gate_result
+    except Exception as exc:
+        logger.warning("PCT205 gate provisioning falló para %s: %s", fqdn, exc)
+        result["pct205_gate"] = {"success": False, "error": str(exc)}
+
+    tunnel_id = _cloudflare_npm_tunnel_id()
+    dns_created = await create_cloudflare_dns(subdomain, domain, tunnel_id)
+    result["cloudflare_dns"] = {"success": dns_created, "tunnel_id": tunnel_id}
+
+    result["health"] = {
+        "pct201": await _tenant_http_health(f"http://{node_ip}:{http_port}/web/login"),
+        "pct205": await _tenant_http_health("http://10.10.20.205/web/login", host_header=fqdn),
+        "public": await _tenant_http_health(f"https://{fqdn}/web/login"),
+        "favicon": await _tenant_http_health(f"https://{fqdn}/web/image/website/1/favicon"),
+        "logo": await _tenant_http_health(f"https://{fqdn}/web/image/website/1/logo"),
+    }
+    return result
+
+
+def _update_tenant_deployment_routing(subdomain: str, domain: str, server_config: dict, result: dict, routing: dict) -> None:
+    try:
+        from ..models.database import db_session, TenantDeployment, RuntimeMode, RoutingMode
+
+        with db_session() as db:
+            deployment = db.query(TenantDeployment).filter(TenantDeployment.subdomain == subdomain).order_by(
+                TenantDeployment.id.desc()
+            ).first()
+            if not deployment:
+                return
+            http_port = result.get("http_port") or deployment.http_port
+            chat_port = result.get("longpolling_port") or result.get("chat_port") or deployment.chat_port
+            public_ok = bool((routing.get("health") or {}).get("public", {}).get("ok"))
+            deployment.database_name = result.get("database") or subdomain
+            deployment.tunnel_url = f"https://{subdomain}.{domain}"
+            deployment.direct_url = f"http://{server_config['ip']}:{http_port}"
+            deployment.tunnel_active = bool(routing.get("cloudflare_dns", {}).get("success")) and public_ok
+            deployment.tunnel_id = (routing.get("cloudflare_dns") or {}).get("tunnel_id")
+            deployment.backend_host = server_config["ip"]
+            deployment.http_port = http_port
+            deployment.chat_port = chat_port
+            deployment.service_name = result.get("service") or f"odoo-tenant@{subdomain}"
+            deployment.runtime_mode = RuntimeMode.dedicated_service
+            deployment.routing_mode = RoutingMode.direct_service
+            deployment.last_healthcheck_at = datetime.now(timezone.utc).replace(tzinfo=None)
+            db.commit()
+    except Exception as exc:
+        logger.warning("No se pudo actualizar tenant_deployments para %s: %s", subdomain, exc)
 
 
 async def delete_cloudflare_dns(subdomain: str, domain: str) -> bool:
@@ -543,9 +698,26 @@ async def provision_tenant(
             "subdomain": subdomain,
             "admin_password": request.admin_password,
             "domain": request.domain,
-            "template_db": resolved_template_db
+            "template_db": resolved_template_db,
+            "admin_email": request.admin_email,
+            "company_name": request.company_name,
         }
     )
+
+    http_port = int(result.get("http_port") or 0)
+    chat_port = int(result.get("longpolling_port") or result.get("chat_port") or (http_port + 500 if http_port else 0))
+    routing: dict = {"skipped": True, "reason": "tenant_agent no devolvió http_port"}
+    if http_port:
+        routing = await _configure_public_routing(
+            subdomain=subdomain,
+            domain=request.domain,
+            server_config=server_config,
+            http_port=http_port,
+            chat_port=chat_port,
+        )
+        _update_tenant_deployment_routing(subdomain, request.domain, server_config, result, routing)
+
+    dns_created = bool((routing.get("cloudflare_dns") or {}).get("success")) or bool(result.get("dns_created", False))
     
     return TenantProvisionResponse(
         success=result.get("success", True),
@@ -553,8 +725,13 @@ async def provision_tenant(
         url=result.get("url", f"https://{subdomain}.{request.domain}"),
         message=f"Tenant {subdomain} creado exitosamente",
         database=result.get("database", subdomain),
-        dns_created=result.get("dns_created", False),
-        server=server_key
+        dns_created=dns_created,
+        server=server_key,
+        template_db=result.get("template_db") or resolved_template_db,
+        http_port=http_port or None,
+        longpolling_port=chat_port or None,
+        routing=routing,
+        health=routing.get("health") or result.get("health"),
     )
 
 
@@ -565,7 +742,7 @@ async def delete_tenant(
 ):
     """Elimina un tenant (BD + DNS) via API local"""
     
-    server_config = ODOO_SERVERS["primary"]
+    _server_key, server_config = _resolve_server_config("primary")
     
     result = await call_odoo_local_api(
         server_config,
@@ -589,7 +766,7 @@ async def delete_tenant(
 async def list_provisioned_tenants(x_api_key: str = Header(None)):
     """Lista todos los tenants provisionados via API local"""
     
-    server_config = ODOO_SERVERS["primary"]
+    _server_key, server_config = _resolve_server_config("primary")
     
     result = await call_odoo_local_api(server_config, "GET", "/api/tenants")
     
@@ -616,7 +793,8 @@ async def create_dns_record(
 ):
     """Crea un registro DNS en Cloudflare"""
     
-    tunnel_id = request.tunnel_id or ODOO_SERVERS["primary"]["tunnel_id"]
+    _server_key, primary_server = _resolve_server_config("primary")
+    tunnel_id = request.tunnel_id or primary_server["tunnel_id"]
     
     success = await create_cloudflare_dns(
         request.subdomain,
@@ -639,7 +817,8 @@ async def list_odoo_servers(x_api_key: str = Header(None)):
     """Lista servidores Odoo disponibles"""
     
     servers = []
-    for key, config in ODOO_SERVERS.items():
+    server_map, _aliases = _cached_odoo_servers()
+    for key, config in server_map.items():
         servers.append({
             "id": key,
             "name": config["name"],

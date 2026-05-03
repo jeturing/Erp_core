@@ -7,6 +7,8 @@ import sys
 from sqlalchemy import create_engine, text
 from dotenv import load_dotenv
 
+from app.utils.runtime_security import redact_secret_url
+
 # Cargar variables de entorno
 load_dotenv()
 
@@ -18,7 +20,7 @@ def validate_connection():
         print("❌ ERROR: DATABASE_URL no está configurado en .env")
         return False
     
-    print(f"📡 Conectando a: {database_url.replace('321Abcd', '***')}")
+    print(f"📡 Conectando a: {redact_secret_url(database_url)}")
     
     try:
         # Crear engine

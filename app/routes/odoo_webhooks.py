@@ -16,7 +16,7 @@ Eventos soportados:
 import hmac
 import hashlib
 import logging
-from datetime import datetime
+from datetime import datetime, timezone
 from typing import Optional, Dict, Any, List
 from urllib.parse import urlparse
 
@@ -337,7 +337,7 @@ def _upsert_customer_from_snapshot(db, tenant_db: str, data: Dict[str, Any]) -> 
         customer.stock_sku_count = max(0, int(stock_sku_raw))
     except (TypeError, ValueError):
         customer.stock_sku_count = max(0, customer.stock_sku_count or 0)
-    customer.last_usage_sync_at = datetime.utcnow()
+    customer.last_usage_sync_at = datetime.now(timezone.utc).replace(tzinfo=None)
 
     owner_partner_id = _coerce_positive_int(data.get("owner_partner_id") or data.get("partner_id"))
     if owner_partner_id:
@@ -472,7 +472,7 @@ def _sync_domains_from_snapshot(db, customer: Customer, data: Dict[str, Any]) ->
                 external_domain=host,
                 sajet_subdomain=customer.subdomain,
                 verification_status=DomainVerificationStatus.verified,
-                verified_at=datetime.utcnow(),
+                verified_at=datetime.now(timezone.utc).replace(tzinfo=None),
                 is_active=True,
                 is_primary=bool(item.get("is_primary")),
                 target_node_ip=target_node_ip,
@@ -492,7 +492,7 @@ def _sync_domains_from_snapshot(db, customer: Customer, data: Dict[str, Any]) ->
         domain.is_active = True
         domain.verification_status = DomainVerificationStatus.verified
         if not domain.verified_at:
-            domain.verified_at = datetime.utcnow()
+            domain.verified_at = datetime.now(timezone.utc).replace(tzinfo=None)
         if primary_domain:
             domain.is_primary = (host == primary_domain)
         elif item.get("is_primary"):

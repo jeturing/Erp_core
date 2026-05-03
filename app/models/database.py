@@ -1,8 +1,9 @@
+from contextlib import contextmanager
 from sqlalchemy import create_engine, Column, Integer, String, DateTime, Boolean, Text, Enum, Float, ForeignKey, JSON, UniqueConstraint, Index, BigInteger
 from sqlalchemy.dialects.postgresql import UUID as PG_UUID
 from sqlalchemy.ext.declarative import declarative_base
 from sqlalchemy.orm import sessionmaker, relationship
-from datetime import datetime
+from datetime import datetime, timezone
 import enum
 import os
 import uuid
@@ -290,8 +291,8 @@ class AdminUser(Base):
     last_login_at = Column(DateTime, nullable=True)
     login_count = Column(Integer, default=0)
     notes = Column(Text, nullable=True)
-    created_at = Column(DateTime, default=datetime.utcnow)
-    updated_at = Column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
+    created_at = Column(DateTime, default=lambda: datetime.now(timezone.utc).replace(tzinfo=None))
+    updated_at = Column(DateTime, default=lambda: datetime.now(timezone.utc).replace(tzinfo=None), onupdate=lambda: datetime.now(timezone.utc).replace(tzinfo=None))
     created_by = Column(String(150), nullable=True)
 
 
@@ -318,7 +319,7 @@ class EmailVerificationToken(Base):
     is_used = Column(Boolean, default=False, nullable=False)
     used_at = Column(DateTime, nullable=True)
     expires_at = Column(DateTime, nullable=False)
-    created_at = Column(DateTime, default=datetime.utcnow)
+    created_at = Column(DateTime, default=lambda: datetime.now(timezone.utc).replace(tzinfo=None))
 
 
 # ═══════════════════════════════════════════════════════
@@ -360,8 +361,8 @@ class AgreementTemplate(Base):
     sort_order = Column(Integer, default=0)
     created_by = Column(String(150), nullable=True)
     updated_by = Column(String(150), nullable=True)
-    created_at = Column(DateTime, default=datetime.utcnow)
-    updated_at = Column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
+    created_at = Column(DateTime, default=lambda: datetime.now(timezone.utc).replace(tzinfo=None))
+    updated_at = Column(DateTime, default=lambda: datetime.now(timezone.utc).replace(tzinfo=None), onupdate=lambda: datetime.now(timezone.utc).replace(tzinfo=None))
 
     signed_agreements = relationship("SignedAgreement", back_populates="template")
 
@@ -387,8 +388,8 @@ class SignedAgreement(Base):
     user_agent = Column(String(500), nullable=True)
     document_hash = Column(String(64), nullable=False)     # SHA256 of rendered HTML
     pdf_path = Column(String(500), nullable=True)
-    signed_at = Column(DateTime, default=datetime.utcnow, nullable=False)
-    created_at = Column(DateTime, default=datetime.utcnow)
+    signed_at = Column(DateTime, default=lambda: datetime.now(timezone.utc).replace(tzinfo=None), nullable=False)
+    created_at = Column(DateTime, default=lambda: datetime.now(timezone.utc).replace(tzinfo=None))
 
     template = relationship("AgreementTemplate", back_populates="signed_agreements")
     partner = relationship("Partner", foreign_keys=[partner_id])
@@ -442,8 +443,8 @@ class DeveloperApp(Base):
     client_id = Column(String(200), nullable=True)
     client_secret = Column(String(500), nullable=True)
     metadata_json = Column(Text, nullable=True)
-    created_at = Column(DateTime, default=datetime.utcnow)
-    updated_at = Column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
+    created_at = Column(DateTime, default=lambda: datetime.now(timezone.utc).replace(tzinfo=None))
+    updated_at = Column(DateTime, default=lambda: datetime.now(timezone.utc).replace(tzinfo=None), onupdate=lambda: datetime.now(timezone.utc).replace(tzinfo=None))
 
     # Relationships
     agreement_flows = relationship("DeveloperAgreementFlow", back_populates="app", cascade="all, delete-orphan")
@@ -463,7 +464,7 @@ class DeveloperAgreementFlow(Base):
     template_id = Column(Integer, ForeignKey("agreement_templates.id", ondelete="RESTRICT"), nullable=False)
     signed_agreement_id = Column(Integer, ForeignKey("signed_agreements.id", ondelete="SET NULL"), nullable=True)
     status = Column(String(30), nullable=False, default="generated")
-    generated_at = Column(DateTime, default=datetime.utcnow)
+    generated_at = Column(DateTime, default=lambda: datetime.now(timezone.utc).replace(tzinfo=None))
     viewed_at = Column(DateTime, nullable=True)
     submitted_at = Column(DateTime, nullable=True)
     reviewed_at = Column(DateTime, nullable=True)
@@ -472,8 +473,8 @@ class DeveloperAgreementFlow(Base):
     rejection_reason = Column(Text, nullable=True)
     pdf_preview_path = Column(String(500), nullable=True)
     reviewer_id = Column(String(150), nullable=True)
-    created_at = Column(DateTime, default=datetime.utcnow)
-    updated_at = Column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
+    created_at = Column(DateTime, default=lambda: datetime.now(timezone.utc).replace(tzinfo=None))
+    updated_at = Column(DateTime, default=lambda: datetime.now(timezone.utc).replace(tzinfo=None), onupdate=lambda: datetime.now(timezone.utc).replace(tzinfo=None))
 
     # Relationships
     app = relationship("DeveloperApp", back_populates="agreement_flows")
@@ -526,8 +527,8 @@ class Customer(Base):
     totp_backup_codes = Column(Text, nullable=True)          # JSON list de códigos de respaldo
     totp_backup_codes_used = Column(Text, nullable=True)     # JSON list de códigos ya usados
 
-    created_at = Column(DateTime, default=datetime.utcnow)
-    updated_at = Column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
+    created_at = Column(DateTime, default=lambda: datetime.now(timezone.utc).replace(tzinfo=None))
+    updated_at = Column(DateTime, default=lambda: datetime.now(timezone.utc).replace(tzinfo=None), onupdate=lambda: datetime.now(timezone.utc).replace(tzinfo=None))
     last_password_changed_at = Column(DateTime, nullable=True)  # Último cambio de contraseña en Odoo
 
     # Relaciones
@@ -559,8 +560,8 @@ class Subscription(Base):
     owner_partner_id = Column(Integer, ForeignKey("partners.id"), nullable=True)  # Partner que trajo este cliente
     package_id = Column(Integer, ForeignKey("module_packages.id"), nullable=True)  # Épica 2: Paquete de módulos
 
-    created_at = Column(DateTime, default=datetime.utcnow)
-    updated_at = Column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
+    created_at = Column(DateTime, default=lambda: datetime.now(timezone.utc).replace(tzinfo=None))
+    updated_at = Column(DateTime, default=lambda: datetime.now(timezone.utc).replace(tzinfo=None), onupdate=lambda: datetime.now(timezone.utc).replace(tzinfo=None))
     
     # Relaciones
     customer = relationship("Customer", back_populates="subscriptions")
@@ -578,7 +579,7 @@ class StripeEvent(Base):
     event_type = Column(String, nullable=False)
     payload = Column(Text, nullable=False)
     processed = Column(Boolean, default=False)
-    created_at = Column(DateTime, default=datetime.utcnow)
+    created_at = Column(DateTime, default=lambda: datetime.now(timezone.utc).replace(tzinfo=None))
 
 
 class Plan(Base):
@@ -623,8 +624,8 @@ class Plan(Base):
     trial_days = Column(Integer, default=14)                     # Días de prueba gratis
     annual_discount_percent = Column(Float, default=20)          # Descuento por pago anual
     sort_order = Column(Integer, default=0)                      # Orden de visualización
-    created_at = Column(DateTime, default=datetime.utcnow)
-    updated_at = Column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
+    created_at = Column(DateTime, default=lambda: datetime.now(timezone.utc).replace(tzinfo=None))
+    updated_at = Column(DateTime, default=lambda: datetime.now(timezone.utc).replace(tzinfo=None), onupdate=lambda: datetime.now(timezone.utc).replace(tzinfo=None))
     
     def calculate_monthly(self, user_count: int, partner_id: int = None) -> float:
         """Calcula precio mensual según cantidad de usuarios y override de partner."""
@@ -678,8 +679,8 @@ class ServiceCatalogItem(Base):
     metadata_json = Column(JSON, nullable=True)                     # Metadata flexible por servicio
     is_active = Column(Boolean, default=True)
     sort_order = Column(Integer, default=0)
-    created_at = Column(DateTime, default=datetime.utcnow)
-    updated_at = Column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
+    created_at = Column(DateTime, default=lambda: datetime.now(timezone.utc).replace(tzinfo=None))
+    updated_at = Column(DateTime, default=lambda: datetime.now(timezone.utc).replace(tzinfo=None), onupdate=lambda: datetime.now(timezone.utc).replace(tzinfo=None))
 
 
 class CustomerAddonSubscription(Base):
@@ -705,12 +706,12 @@ class CustomerAddonSubscription(Base):
     metadata_json = Column(JSON, nullable=True)
     acquired_via = Column(String(50), nullable=False, default="tenant_portal")
     notes = Column(Text, nullable=True)
-    starts_at = Column(DateTime, nullable=False, default=datetime.utcnow)
+    starts_at = Column(DateTime, nullable=False, default=lambda: datetime.now(timezone.utc).replace(tzinfo=None))
     ends_at = Column(DateTime, nullable=True)
     last_invoiced_year = Column(Integer, nullable=True)
     last_invoiced_month = Column(Integer, nullable=True)
-    created_at = Column(DateTime, default=datetime.utcnow)
-    updated_at = Column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
+    created_at = Column(DateTime, default=lambda: datetime.now(timezone.utc).replace(tzinfo=None))
+    updated_at = Column(DateTime, default=lambda: datetime.now(timezone.utc).replace(tzinfo=None), onupdate=lambda: datetime.now(timezone.utc).replace(tzinfo=None))
 
     customer = relationship("Customer", foreign_keys=[customer_id], backref="addon_subscriptions")
     subscription = relationship("Subscription", foreign_keys=[subscription_id], backref="addon_subscriptions")
@@ -789,8 +790,8 @@ class Partner(Base):
     smtp_from_email = Column(String(200), nullable=True)    # "From" email si partner tiene SMTP propio
 
     notes = Column(Text)
-    created_at = Column(DateTime, default=datetime.utcnow)
-    updated_at = Column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
+    created_at = Column(DateTime, default=lambda: datetime.now(timezone.utc).replace(tzinfo=None))
+    updated_at = Column(DateTime, default=lambda: datetime.now(timezone.utc).replace(tzinfo=None), onupdate=lambda: datetime.now(timezone.utc).replace(tzinfo=None))
 
     # Relaciones
     customer = relationship("Customer", foreign_keys=[customer_id], backref="partner_profile")
@@ -838,8 +839,8 @@ class PartnerPricingOverride(Base):
     is_active = Column(Boolean, default=True)
     valid_from = Column(DateTime, nullable=True)                      # Vigencia (NULL = siempre)
     valid_until = Column(DateTime, nullable=True)
-    created_at = Column(DateTime, default=datetime.utcnow)
-    updated_at = Column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
+    created_at = Column(DateTime, default=lambda: datetime.now(timezone.utc).replace(tzinfo=None))
+    updated_at = Column(DateTime, default=lambda: datetime.now(timezone.utc).replace(tzinfo=None), onupdate=lambda: datetime.now(timezone.utc).replace(tzinfo=None))
 
     __table_args__ = (
         UniqueConstraint("partner_id", "plan_name", name="uq_partner_plan_override"),
@@ -877,8 +878,8 @@ class Lead(Base):
     converted_customer_id = Column(Integer, ForeignKey("customers.id"))  # Si se convierte
     converted_at = Column(DateTime)
     lost_reason = Column(String(200))
-    registered_at = Column(DateTime, default=datetime.utcnow)
-    updated_at = Column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
+    registered_at = Column(DateTime, default=lambda: datetime.now(timezone.utc).replace(tzinfo=None))
+    updated_at = Column(DateTime, default=lambda: datetime.now(timezone.utc).replace(tzinfo=None), onupdate=lambda: datetime.now(timezone.utc).replace(tzinfo=None))
 
     # Relaciones
     partner = relationship("Partner", back_populates="leads")
@@ -907,7 +908,7 @@ class Commission(Base):
     paid_at = Column(DateTime)
     payment_reference = Column(String(100))
     notes = Column(Text)
-    created_at = Column(DateTime, default=datetime.utcnow)
+    created_at = Column(DateTime, default=lambda: datetime.now(timezone.utc).replace(tzinfo=None))
 
     # Relaciones
     partner = relationship("Partner", back_populates="commissions")
@@ -951,8 +952,8 @@ class Quotation(Base):
     sent_at = Column(DateTime)
     accepted_at = Column(DateTime)
     rejected_at = Column(DateTime)
-    created_at = Column(DateTime, default=datetime.utcnow)
-    updated_at = Column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
+    created_at = Column(DateTime, default=lambda: datetime.now(timezone.utc).replace(tzinfo=None))
+    updated_at = Column(DateTime, default=lambda: datetime.now(timezone.utc).replace(tzinfo=None), onupdate=lambda: datetime.now(timezone.utc).replace(tzinfo=None))
 
     # Relaciones
     partner = relationship("Partner")
@@ -1030,8 +1031,8 @@ class ProxmoxNode(Base):
                                 comment="Delay entre arranques de tenants (seg)")
 
     # Metadatos
-    created_at = Column(DateTime, default=datetime.utcnow)
-    updated_at = Column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
+    created_at = Column(DateTime, default=lambda: datetime.now(timezone.utc).replace(tzinfo=None))
+    updated_at = Column(DateTime, default=lambda: datetime.now(timezone.utc).replace(tzinfo=None), onupdate=lambda: datetime.now(timezone.utc).replace(tzinfo=None))
     last_health_check = Column(DateTime)
     
     # Relaciones
@@ -1069,8 +1070,8 @@ class LXCContainer(Base):
     template_used = Column(String(100))                 # ej: "odoo-17-template"
     
     # Metadatos
-    created_at = Column(DateTime, default=datetime.utcnow)
-    updated_at = Column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
+    created_at = Column(DateTime, default=lambda: datetime.now(timezone.utc).replace(tzinfo=None))
+    updated_at = Column(DateTime, default=lambda: datetime.now(timezone.utc).replace(tzinfo=None), onupdate=lambda: datetime.now(timezone.utc).replace(tzinfo=None))
     last_backup = Column(DateTime)
     
     # Relaciones
@@ -1127,7 +1128,7 @@ class TenantDeployment(Base):
     
     # ── Health & metadatos ────────────────────────────────────────────────
     last_healthcheck_at = Column(DateTime, nullable=True)
-    deployed_at = Column(DateTime, default=datetime.utcnow)
+    deployed_at = Column(DateTime, default=lambda: datetime.now(timezone.utc).replace(tzinfo=None))
     last_accessed = Column(DateTime)
     
     # Relaciones
@@ -1167,8 +1168,8 @@ class InfraTunnel(Base):
     target_url = Column(String(300), nullable=True)                      # ej: "http://localhost:8069"
     is_active = Column(Boolean, default=True, nullable=False)
     description = Column(Text, nullable=True)
-    created_at = Column(DateTime, default=datetime.utcnow)
-    updated_at = Column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
+    created_at = Column(DateTime, default=lambda: datetime.now(timezone.utc).replace(tzinfo=None))
+    updated_at = Column(DateTime, default=lambda: datetime.now(timezone.utc).replace(tzinfo=None), onupdate=lambda: datetime.now(timezone.utc).replace(tzinfo=None))
 
     def __repr__(self):
         return f"<InfraTunnel {self.name}: {self.domain} → PCT {self.target_pct}>"
@@ -1193,8 +1194,8 @@ class ReservedSubdomain(Base):
     reason = Column(String(300), nullable=True)                               # ej: "Tunnel infraestructura PCT 154"
     category = Column(String(50), nullable=False, default="infrastructure")   # infrastructure, service, reserved, system
     is_active = Column(Boolean, default=True, nullable=False)
-    created_at = Column(DateTime, default=datetime.utcnow)
-    updated_at = Column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
+    created_at = Column(DateTime, default=lambda: datetime.now(timezone.utc).replace(tzinfo=None))
+    updated_at = Column(DateTime, default=lambda: datetime.now(timezone.utc).replace(tzinfo=None), onupdate=lambda: datetime.now(timezone.utc).replace(tzinfo=None))
 
     def __repr__(self):
         return f"<ReservedSubdomain {self.subdomain} ({self.category})>"
@@ -1250,8 +1251,8 @@ class TenantMigrationJob(Base):
     rollback_reason = Column(Text, nullable=True)
 
     # Timestamps
-    created_at = Column(DateTime, default=datetime.utcnow)
-    updated_at = Column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
+    created_at = Column(DateTime, default=lambda: datetime.now(timezone.utc).replace(tzinfo=None))
+    updated_at = Column(DateTime, default=lambda: datetime.now(timezone.utc).replace(tzinfo=None), onupdate=lambda: datetime.now(timezone.utc).replace(tzinfo=None))
     completed_at = Column(DateTime, nullable=True)
 
     # Relationships
@@ -1261,7 +1262,7 @@ class TenantMigrationJob(Base):
 
     def append_error(self, msg: str) -> None:
         """Agrega un mensaje al log de errores acumulado."""
-        ts = datetime.utcnow().strftime("%H:%M:%S")
+        ts = datetime.now(timezone.utc).replace(tzinfo=None).strftime("%H:%M:%S")
         entry = f"[{ts}] {msg}"
         self.error_log = f"{self.error_log}\n{entry}" if self.error_log else entry
 
@@ -1316,8 +1317,8 @@ class CustomDomain(Base):
     target_port = Column(Integer, default=8069)
     
     # Auditoría
-    created_at = Column(DateTime, default=datetime.utcnow)
-    updated_at = Column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
+    created_at = Column(DateTime, default=lambda: datetime.now(timezone.utc).replace(tzinfo=None))
+    updated_at = Column(DateTime, default=lambda: datetime.now(timezone.utc).replace(tzinfo=None), onupdate=lambda: datetime.now(timezone.utc).replace(tzinfo=None))
     created_by = Column(String(100))
     
     # Relaciones
@@ -1349,7 +1350,7 @@ class ResourceMetric(Base):
     network_out_mb = Column(Float)
     
     # Timestamp
-    recorded_at = Column(DateTime, default=datetime.utcnow, index=True)
+    recorded_at = Column(DateTime, default=lambda: datetime.now(timezone.utc).replace(tzinfo=None), index=True)
 
 
 class SystemConfig(Base):
@@ -1368,8 +1369,8 @@ class SystemConfig(Base):
     category = Column(String(50), default="general")  # odoo, stripe, security, etc.
     is_secret = Column(Boolean, default=False)  # Si es contraseña/token, no mostrar valor
     is_editable = Column(Boolean, default=True)  # Si se puede editar desde UI
-    created_at = Column(DateTime, default=datetime.utcnow)
-    updated_at = Column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
+    created_at = Column(DateTime, default=lambda: datetime.now(timezone.utc).replace(tzinfo=None))
+    updated_at = Column(DateTime, default=lambda: datetime.now(timezone.utc).replace(tzinfo=None), onupdate=lambda: datetime.now(timezone.utc).replace(tzinfo=None))
     updated_by = Column(String(100))  # Usuario que hizo el último cambio
     
     def __repr__(self):
@@ -1399,8 +1400,8 @@ class ModuleCatalog(Base):
     requires_module_id = Column(Integer, ForeignKey("module_catalog.id"), nullable=True)
     is_active = Column(Boolean, default=True)
     sort_order = Column(Integer, default=0)
-    created_at = Column(DateTime, default=datetime.utcnow)
-    updated_at = Column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
+    created_at = Column(DateTime, default=lambda: datetime.now(timezone.utc).replace(tzinfo=None))
+    updated_at = Column(DateTime, default=lambda: datetime.now(timezone.utc).replace(tzinfo=None), onupdate=lambda: datetime.now(timezone.utc).replace(tzinfo=None))
 
     # Relaciones
     requires = relationship("ModuleCatalog", remote_side=[id])
@@ -1423,8 +1424,8 @@ class ModulePackage(Base):
     is_active = Column(Boolean, default=True)
     # JSON array de technical_names de módulos incluidos
     module_list = Column(JSON, default=list)               # ["jeturing_finance_core", "account", ...]
-    created_at = Column(DateTime, default=datetime.utcnow)
-    updated_at = Column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
+    created_at = Column(DateTime, default=lambda: datetime.now(timezone.utc).replace(tzinfo=None))
+    updated_at = Column(DateTime, default=lambda: datetime.now(timezone.utc).replace(tzinfo=None), onupdate=lambda: datetime.now(timezone.utc).replace(tzinfo=None))
 
 
 class ModulePackageItem(Base):
@@ -1435,7 +1436,7 @@ class ModulePackageItem(Base):
     package_id = Column(Integer, ForeignKey("module_packages.id", ondelete="CASCADE"), nullable=False)
     module_id = Column(Integer, ForeignKey("module_catalog.id", ondelete="CASCADE"), nullable=False)
     is_optional = Column(Boolean, default=False)           # Si es opcional dentro del paquete
-    created_at = Column(DateTime, default=datetime.utcnow)
+    created_at = Column(DateTime, default=lambda: datetime.now(timezone.utc).replace(tzinfo=None))
 
     __table_args__ = (UniqueConstraint("package_id", "module_id", name="uq_package_module"),)
 
@@ -1465,7 +1466,7 @@ class SeatEvent(Base):
     grace_expires_at = Column(DateTime, nullable=True)     # Épica 4: gracia 8h desde first_login
     source = Column(String(50), default="webhook")         # webhook, api, cron, manual
     metadata_json = Column(JSON, nullable=True)            # Datos adicionales
-    created_at = Column(DateTime, default=datetime.utcnow, index=True)
+    created_at = Column(DateTime, default=lambda: datetime.now(timezone.utc).replace(tzinfo=None), index=True)
 
     # Relaciones
     subscription = relationship("Subscription", back_populates="seat_events")
@@ -1484,7 +1485,7 @@ class SeatHighWater(Base):
     hwm_count = Column(Integer, nullable=False)            # Máximo de usuarios activos ese día
     stripe_qty_updated = Column(Boolean, default=False)    # Si ya se actualizó Stripe
     stripe_qty_updated_at = Column(DateTime, nullable=True)
-    created_at = Column(DateTime, default=datetime.utcnow)
+    created_at = Column(DateTime, default=lambda: datetime.now(timezone.utc).replace(tzinfo=None))
 
     __table_args__ = (
         UniqueConstraint("subscription_id", "period_date", name="uq_sub_period"),
@@ -1538,8 +1539,8 @@ class Invoice(Base):
     due_date = Column(DateTime, nullable=True)
     notes = Column(Text, nullable=True)
 
-    created_at = Column(DateTime, default=datetime.utcnow)
-    updated_at = Column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
+    created_at = Column(DateTime, default=lambda: datetime.now(timezone.utc).replace(tzinfo=None))
+    updated_at = Column(DateTime, default=lambda: datetime.now(timezone.utc).replace(tzinfo=None), onupdate=lambda: datetime.now(timezone.utc).replace(tzinfo=None))
 
     # Relaciones
     subscription = relationship("Subscription", back_populates="invoices")
@@ -1573,8 +1574,8 @@ class SettlementPeriod(Base):
     transfer_reference = Column(String(200), nullable=True)
     transferred_at = Column(DateTime, nullable=True)
     notes = Column(Text, nullable=True)
-    created_at = Column(DateTime, default=datetime.utcnow)
-    updated_at = Column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
+    created_at = Column(DateTime, default=lambda: datetime.now(timezone.utc).replace(tzinfo=None))
+    updated_at = Column(DateTime, default=lambda: datetime.now(timezone.utc).replace(tzinfo=None), onupdate=lambda: datetime.now(timezone.utc).replace(tzinfo=None))
 
     __table_args__ = (
         UniqueConstraint("partner_id", "period_start", name="uq_partner_period"),
@@ -1600,7 +1601,7 @@ class SettlementLine(Base):
     net_amount = Column(Float, default=0)
     jeturing_amount = Column(Float, default=0)
     partner_amount = Column(Float, default=0)
-    created_at = Column(DateTime, default=datetime.utcnow)
+    created_at = Column(DateTime, default=lambda: datetime.now(timezone.utc).replace(tzinfo=None))
 
     settlement = relationship("SettlementPeriod", back_populates="lines")
 
@@ -1623,8 +1624,8 @@ class InfraAsset(Base):
     monthly_cost = Column(Float, default=0)                # Costo mensual de este asset
     is_billable = Column(Boolean, default=True)
     metadata_json = Column(JSON, nullable=True)
-    created_at = Column(DateTime, default=datetime.utcnow)
-    updated_at = Column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
+    created_at = Column(DateTime, default=lambda: datetime.now(timezone.utc).replace(tzinfo=None))
+    updated_at = Column(DateTime, default=lambda: datetime.now(timezone.utc).replace(tzinfo=None), onupdate=lambda: datetime.now(timezone.utc).replace(tzinfo=None))
 
     subscription = relationship("Subscription")
 
@@ -1642,7 +1643,7 @@ class ReconciliationRun(Base):
     discrepancy_details = Column(JSON, nullable=True)      # [{sub_id, expected, actual, diff}]
     status = Column(String(20), default="completed")       # completed, discrepancy_found
     run_by = Column(String(100), default="cron")
-    created_at = Column(DateTime, default=datetime.utcnow)
+    created_at = Column(DateTime, default=lambda: datetime.now(timezone.utc).replace(tzinfo=None))
 
 
 # ═══════════════════════════════════════════════════════
@@ -1672,7 +1673,7 @@ class WorkOrder(Base):
     requested_by = Column(String(150), nullable=False)
     approved_by = Column(String(150), nullable=True)
     completed_by = Column(String(150), nullable=True)
-    requested_at = Column(DateTime, default=datetime.utcnow)
+    requested_at = Column(DateTime, default=lambda: datetime.now(timezone.utc).replace(tzinfo=None))
     approved_at = Column(DateTime, nullable=True)
     completed_at = Column(DateTime, nullable=True)
     result_json = Column(JSON, nullable=True)              # Resultado de la ejecución
@@ -1688,8 +1689,8 @@ class WorkOrder(Base):
     tenant_user_email = Column(String(200), nullable=True)
     tenant_user_password = Column(String(200), nullable=True)
 
-    created_at = Column(DateTime, default=datetime.utcnow)
-    updated_at = Column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
+    created_at = Column(DateTime, default=lambda: datetime.now(timezone.utc).replace(tzinfo=None))
+    updated_at = Column(DateTime, default=lambda: datetime.now(timezone.utc).replace(tzinfo=None), onupdate=lambda: datetime.now(timezone.utc).replace(tzinfo=None))
 
 
 # ═══════════════════════════════════════════════════════
@@ -1714,7 +1715,7 @@ class AuditEventRecord(Base):
     action = Column(String(100), nullable=True)
     status = Column(String(20), default="success")         # success, failure, blocked
     details = Column(JSON, nullable=True)
-    created_at = Column(DateTime, default=datetime.utcnow, index=True)
+    created_at = Column(DateTime, default=lambda: datetime.now(timezone.utc).replace(tzinfo=None), index=True)
 
     __table_args__ = (
         Index("ix_audit_type_created", "event_type", "created_at"),
@@ -1737,7 +1738,7 @@ class PlanCatalogLink(Base):
     is_included = Column(Boolean, default=True)            # True = incluido, False = addon con descuento
     discount_percent = Column(Float, default=0)            # Descuento sobre precio_catalogo para este plan
     notes = Column(String(300), nullable=True)
-    created_at = Column(DateTime, default=datetime.utcnow)
+    created_at = Column(DateTime, default=lambda: datetime.now(timezone.utc).replace(tzinfo=None))
 
     __table_args__ = (
         UniqueConstraint("plan_id", "catalog_item_id", name="uq_plan_catalog"),
@@ -1769,8 +1770,8 @@ class PartnerBrandingProfile(Base):
     privacy_url = Column(String(500), nullable=True)       # URL a política de privacidad del partner
     custom_css = Column(Text, nullable=True)               # CSS adicional
     is_active = Column(Boolean, default=True)
-    created_at = Column(DateTime, default=datetime.utcnow)
-    updated_at = Column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
+    created_at = Column(DateTime, default=lambda: datetime.now(timezone.utc).replace(tzinfo=None))
+    updated_at = Column(DateTime, default=lambda: datetime.now(timezone.utc).replace(tzinfo=None), onupdate=lambda: datetime.now(timezone.utc).replace(tzinfo=None))
 
     partner = relationship("Partner", backref="branding_profile", foreign_keys="[PartnerBrandingProfile.partner_id]")
 
@@ -1812,8 +1813,8 @@ class OnboardingConfig(Base):
     ecf_countries = Column(JSON, nullable=False, default=lambda: ["DO"])
 
     is_active = Column(Boolean, default=True)
-    created_at = Column(DateTime, default=datetime.utcnow)
-    updated_at = Column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
+    created_at = Column(DateTime, default=lambda: datetime.now(timezone.utc).replace(tzinfo=None))
+    updated_at = Column(DateTime, default=lambda: datetime.now(timezone.utc).replace(tzinfo=None), onupdate=lambda: datetime.now(timezone.utc).replace(tzinfo=None))
 
 
 # ═══════════════════════════════════════════════════════
@@ -1835,7 +1836,7 @@ class RefreshToken(Base):
     tenant_id = Column(Integer, nullable=True)
     expires_at = Column(DateTime, nullable=False)
     revoked = Column(Boolean, default=False, nullable=False)
-    created_at = Column(DateTime, default=datetime.utcnow)
+    created_at = Column(DateTime, default=lambda: datetime.now(timezone.utc).replace(tzinfo=None))
 
 
 # ═══════════════════════════════════════════════════════
@@ -1858,8 +1859,8 @@ class EmailLog(Base):
     customer_id = Column(Integer, ForeignKey("customers.id"), nullable=True)
     partner_id = Column(Integer, ForeignKey("partners.id"), nullable=True)
     related_id = Column(Integer, nullable=True)        # ID del objeto relacionado (work_order, commission, etc.)
-    sent_at = Column(DateTime, default=datetime.utcnow)
-    created_at = Column(DateTime, default=datetime.utcnow)
+    sent_at = Column(DateTime, default=lambda: datetime.now(timezone.utc).replace(tzinfo=None))
+    created_at = Column(DateTime, default=lambda: datetime.now(timezone.utc).replace(tzinfo=None))
 
     customer = relationship("Customer", foreign_keys=[customer_id])
     partner = relationship("Partner", foreign_keys=[partner_id])
@@ -1902,8 +1903,8 @@ class PostalEmailUsage(Base):
     is_billed = Column(Boolean, default=False, nullable=False)         # True cuando se incluyó en factura
     billed_at  = Column(DateTime, nullable=True)
     notes = Column(Text, nullable=True)
-    created_at = Column(DateTime, default=datetime.utcnow)
-    updated_at = Column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
+    created_at = Column(DateTime, default=lambda: datetime.now(timezone.utc).replace(tzinfo=None))
+    updated_at = Column(DateTime, default=lambda: datetime.now(timezone.utc).replace(tzinfo=None), onupdate=lambda: datetime.now(timezone.utc).replace(tzinfo=None))
 
     __table_args__ = (
         UniqueConstraint("tenant_subdomain", "period_year", "period_month",
@@ -1945,8 +1946,8 @@ class EmailRateLimitWindow(Base):
     window_start     = Column(DateTime, nullable=False, index=True)   # inicio de la ventana (UTC truncado)
     window_end       = Column(DateTime, nullable=False)               # inicio + 1min / 1h / 1d
     emails_count     = Column(Integer, default=0, nullable=False)     # contador acumulado en esta ventana
-    created_at       = Column(DateTime, default=datetime.utcnow)
-    updated_at       = Column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
+    created_at       = Column(DateTime, default=lambda: datetime.now(timezone.utc).replace(tzinfo=None))
+    updated_at       = Column(DateTime, default=lambda: datetime.now(timezone.utc).replace(tzinfo=None), onupdate=lambda: datetime.now(timezone.utc).replace(tzinfo=None))
 
     __table_args__ = (
         UniqueConstraint(
@@ -1985,7 +1986,7 @@ class AccountantTenantAccess(Base):
     access_level = Column(Enum(AccountantAccessLevel), default=AccountantAccessLevel.readonly)
     granted_by = Column(String(200), nullable=True)          # Quién otorgó el acceso
     is_active = Column(Boolean, default=True)
-    granted_at = Column(DateTime, default=datetime.utcnow)
+    granted_at = Column(DateTime, default=lambda: datetime.now(timezone.utc).replace(tzinfo=None))
     revoked_at = Column(DateTime, nullable=True)
     notes = Column(Text, nullable=True)
 
@@ -2017,8 +2018,8 @@ class Testimonial(Base):
     locale = Column(String(10), nullable=False, default="en")  # "en" | "es"
     featured = Column(Boolean, default=False)
     sort_order = Column(Integer, default=0)
-    created_at = Column(DateTime, default=datetime.utcnow)
-    updated_at = Column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
+    created_at = Column(DateTime, default=lambda: datetime.now(timezone.utc).replace(tzinfo=None))
+    updated_at = Column(DateTime, default=lambda: datetime.now(timezone.utc).replace(tzinfo=None), onupdate=lambda: datetime.now(timezone.utc).replace(tzinfo=None))
 
     __table_args__ = (
         Index('ix_testimonials_locale', 'locale'),
@@ -2047,8 +2048,8 @@ class LandingSection(Base):
     og_description = Column(String(500), nullable=True)
     og_image_url = Column(String(500), nullable=True)
     structured_data = Column(JSON, nullable=True)  # schema.org JSON-LD
-    created_at = Column(DateTime, default=datetime.utcnow)
-    updated_at = Column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
+    created_at = Column(DateTime, default=lambda: datetime.now(timezone.utc).replace(tzinfo=None))
+    updated_at = Column(DateTime, default=lambda: datetime.now(timezone.utc).replace(tzinfo=None), onupdate=lambda: datetime.now(timezone.utc).replace(tzinfo=None))
 
     __table_args__ = (
         UniqueConstraint('section_key', 'locale', name='uq_landing_section_key_locale'),
@@ -2073,8 +2074,8 @@ class Translation(Base):
     is_approved = Column(Boolean, default=False)
     approved_by = Column(String(150), nullable=True)
     created_by = Column(String(150), nullable=True)
-    created_at = Column(DateTime, default=datetime.utcnow)
-    updated_at = Column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
+    created_at = Column(DateTime, default=lambda: datetime.now(timezone.utc).replace(tzinfo=None))
+    updated_at = Column(DateTime, default=lambda: datetime.now(timezone.utc).replace(tzinfo=None), onupdate=lambda: datetime.now(timezone.utc).replace(tzinfo=None))
 
     __table_args__ = (
         UniqueConstraint('key', 'locale', name='uq_translation_key_locale'),
@@ -2180,7 +2181,16 @@ _SessionLocal = None
 def _get_engine():
     global _engine
     if _engine is None:
-        _engine = create_engine(DATABASE_URL)
+        pool_size = int(os.getenv("DB_POOL_SIZE", "10"))
+        max_overflow = int(os.getenv("DB_MAX_OVERFLOW", "20"))
+        pool_recycle = int(os.getenv("DB_POOL_RECYCLE_SECONDS", "1800"))
+        _engine = create_engine(
+            DATABASE_URL,
+            pool_pre_ping=True,
+            pool_size=pool_size,
+            max_overflow=max_overflow,
+            pool_recycle=pool_recycle,
+        )
     return _engine
 
 def _get_session_factory():
@@ -2205,6 +2215,18 @@ class _SessionLocalProxy:
 engine = _EngineProxy()
 SessionLocal = _SessionLocalProxy()
 
+
+@contextmanager
+def db_session():
+    db = _get_session_factory()()
+    try:
+        yield db
+    except Exception:
+        db.rollback()
+        raise
+    finally:
+        db.close()
+
 def init_db():
     Base.metadata.create_all(bind=_get_engine())
 
@@ -2228,7 +2250,7 @@ class StorageAlert(Base):
     email_recipient = Column(String(255), nullable=True)
     
     # Tracking
-    created_at = Column(DateTime, default=datetime.utcnow, nullable=False)
+    created_at = Column(DateTime, default=lambda: datetime.now(timezone.utc).replace(tzinfo=None), nullable=False)
     resolved_at = Column(DateTime, nullable=True)  # Cuando el uso bajó de la alerta
     
     __table_args__ = (
@@ -2301,8 +2323,8 @@ class ApiKey(Base):
 
     # Ciclo de vida
     expires_at           = Column(DateTime, nullable=True)
-    created_at           = Column(DateTime, nullable=False, default=datetime.utcnow)
-    updated_at           = Column(DateTime, nullable=True, onupdate=datetime.utcnow)
+    created_at           = Column(DateTime, nullable=False, default=lambda: datetime.now(timezone.utc).replace(tzinfo=None))
+    updated_at           = Column(DateTime, nullable=True, onupdate=lambda: datetime.now(timezone.utc).replace(tzinfo=None))
     rotated_at           = Column(DateTime, nullable=True)
     rotation_old_key_id  = Column(String(32), nullable=True)  # key_id anterior en rotación
 
@@ -2353,7 +2375,7 @@ class ApiKeyAuditLog(Base):
     ip_address = Column(String(45), nullable=True)
     status_code = Column(Integer, nullable=False, default=200)
     reject_reason = Column(String(64), nullable=True, index=True)
-    created_at = Column(DateTime, nullable=False, default=datetime.utcnow, index=True)
+    created_at = Column(DateTime, nullable=False, default=lambda: datetime.now(timezone.utc).replace(tzinfo=None), index=True)
 
     __table_args__ = (
         Index("idx_api_key_audit_key_time", "key_id", "created_at"),
@@ -2394,7 +2416,7 @@ class ApiKeyRotationRequest(Base):
     reason      = Column(Text, nullable=True)       # nota del tenant
     reject_note = Column(Text, nullable=True)       # nota del soporte si rechaza
 
-    created_at  = Column(DateTime, nullable=False, default=datetime.utcnow)
+    created_at  = Column(DateTime, nullable=False, default=lambda: datetime.now(timezone.utc).replace(tzinfo=None))
     expires_at  = Column(DateTime, nullable=False)  # TTL: 24h desde creación
     resolved_at = Column(DateTime, nullable=True)
 
@@ -2474,8 +2496,8 @@ class ActiveSession(Base):
     # Timestamps
     session_start = Column(DateTime, nullable=True)
     last_activity = Column(DateTime, nullable=True)
-    first_seen_at = Column(DateTime, default=datetime.utcnow)
-    last_polled_at = Column(DateTime, default=datetime.utcnow)
+    first_seen_at = Column(DateTime, default=lambda: datetime.now(timezone.utc).replace(tzinfo=None))
+    last_polled_at = Column(DateTime, default=lambda: datetime.now(timezone.utc).replace(tzinfo=None))
 
     # Estado
     is_active = Column(Boolean, default=True)
@@ -2522,8 +2544,8 @@ class SessionSecurityRule(Base):
     exempt_tenants = Column(JSON, default=list) # ["cliente1", "jeturing"]
 
     description = Column(Text, nullable=True)
-    created_at = Column(DateTime, default=datetime.utcnow)
-    updated_at = Column(DateTime, onupdate=datetime.utcnow)
+    created_at = Column(DateTime, default=lambda: datetime.now(timezone.utc).replace(tzinfo=None))
+    updated_at = Column(DateTime, onupdate=lambda: datetime.now(timezone.utc).replace(tzinfo=None))
 
     __table_args__ = (
         Index("ix_sec_rules_type_tenant", "rule_type", "tenant_db"),
@@ -2555,7 +2577,7 @@ class SessionGeoEvent(Base):
     browser = Column(String(50), nullable=True)
     os_name = Column(String(50), nullable=True)
 
-    event_at = Column(DateTime, default=datetime.utcnow, index=True)
+    event_at = Column(DateTime, default=lambda: datetime.now(timezone.utc).replace(tzinfo=None), index=True)
 
     __table_args__ = (
         Index("ix_geo_events_user_time", "tenant_db", "odoo_login", "event_at"),
@@ -2613,7 +2635,7 @@ class AccountSecurityAction(Base):
     resolved_by = Column(String(150), nullable=True)
     resolution_note = Column(Text, nullable=True)
 
-    created_at = Column(DateTime, default=datetime.utcnow, index=True)
+    created_at = Column(DateTime, default=lambda: datetime.now(timezone.utc).replace(tzinfo=None), index=True)
 
     __table_args__ = (
         Index("ix_sec_actions_tenant_time", "tenant_db", "created_at"),
@@ -2647,8 +2669,8 @@ class TenantSessionConfig(Base):
     seat_audit_enabled = Column(Boolean, default=True)
     last_seat_audit_at = Column(DateTime, nullable=True)
 
-    created_at = Column(DateTime, default=datetime.utcnow)
-    updated_at = Column(DateTime, onupdate=datetime.utcnow)
+    created_at = Column(DateTime, default=lambda: datetime.now(timezone.utc).replace(tzinfo=None))
+    updated_at = Column(DateTime, onupdate=lambda: datetime.now(timezone.utc).replace(tzinfo=None))
 
 
 # ═══════════════════════════════════════════════════════
@@ -2706,8 +2728,8 @@ class PayoutRequest(Base):
     completed_at = Column(DateTime, nullable=True)
     failed_reason = Column(Text, nullable=True)
 
-    created_at = Column(DateTime, default=datetime.utcnow, index=True)
-    updated_at = Column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
+    created_at = Column(DateTime, default=lambda: datetime.now(timezone.utc).replace(tzinfo=None), index=True)
+    updated_at = Column(DateTime, default=lambda: datetime.now(timezone.utc).replace(tzinfo=None), onupdate=lambda: datetime.now(timezone.utc).replace(tzinfo=None))
 
     __table_args__ = (
         Index("ix_payout_partner_status", "partner_id", "status"),
@@ -2742,8 +2764,8 @@ class ProviderAccount(Base):
     kyc_notes = Column(Text, nullable=True)
 
     is_active = Column(Boolean, default=True)
-    created_at = Column(DateTime, default=datetime.utcnow)
-    updated_at = Column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
+    created_at = Column(DateTime, default=lambda: datetime.now(timezone.utc).replace(tzinfo=None))
+    updated_at = Column(DateTime, default=lambda: datetime.now(timezone.utc).replace(tzinfo=None), onupdate=lambda: datetime.now(timezone.utc).replace(tzinfo=None))
 
     # Relaciones
     partner = relationship("Partner")
@@ -2764,7 +2786,7 @@ class PaymentEvent(Base):
     metadata_json = Column(JSON, default=dict)
     actor = Column(String(150), nullable=True)  # email del admin que ejecutó la acción
 
-    created_at = Column(DateTime, default=datetime.utcnow, index=True)
+    created_at = Column(DateTime, default=lambda: datetime.now(timezone.utc).replace(tzinfo=None), index=True)
 
     __table_args__ = (
         Index("ix_payment_events_type_time", "event_type", "created_at"),
@@ -2826,8 +2848,8 @@ class FunnelLead(Base):
     jeturing_crm_id = Column(String(100), nullable=True)  # ID en Jeturing Odoo CRM
     notes           = Column(Text, nullable=True)
 
-    created_at      = Column(DateTime, default=datetime.utcnow, index=True)
-    updated_at      = Column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
+    created_at      = Column(DateTime, default=lambda: datetime.now(timezone.utc).replace(tzinfo=None), index=True)
+    updated_at      = Column(DateTime, default=lambda: datetime.now(timezone.utc).replace(tzinfo=None), onupdate=lambda: datetime.now(timezone.utc).replace(tzinfo=None))
 
     __table_args__ = (
         Index("ix_funnel_leads_niche_created", "niche", "created_at"),
@@ -2874,5 +2896,5 @@ class TenantStripeConfig(Base):
     transfers_30d_cents = Column(BigInteger, default=0)
     refunds_30d_cents = Column(BigInteger, default=0)
     raw_payload = Column(JSON, nullable=True)
-    created_at = Column(DateTime, default=datetime.utcnow)
-    updated_at = Column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
+    created_at = Column(DateTime, default=lambda: datetime.now(timezone.utc).replace(tzinfo=None))
+    updated_at = Column(DateTime, default=lambda: datetime.now(timezone.utc).replace(tzinfo=None), onupdate=lambda: datetime.now(timezone.utc).replace(tzinfo=None))

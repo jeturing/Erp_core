@@ -11,7 +11,7 @@ Stripe es la fuente de verdad:
 from fastapi import APIRouter, HTTPException, Request, Cookie, Depends
 from typing import Dict, Any, Optional
 from sqlalchemy.orm import Session
-from datetime import datetime
+from datetime import datetime, timezone
 import logging
 
 from ..models.database import (
@@ -70,7 +70,7 @@ async def run_full_sync(
     try:
         result = full_stripe_sync(db, months_back=months_back)
         _last_sync_result = result
-        _last_sync_time = datetime.utcnow()
+        _last_sync_time = datetime.now(timezone.utc).replace(tzinfo=None)
         return {
             "success": True,
             "synced_at": _last_sync_time.isoformat(),

@@ -111,7 +111,7 @@ def _find_partner_by_email(db: Session, email: str) -> Optional[Partner]:
 
 def _next_invoice_number(db: Session) -> str:
     """Genera INV-YYYY-NNNN."""
-    year = datetime.utcnow().year
+    year = datetime.now(timezone.utc).replace(tzinfo=None).year
     last = db.query(Invoice).filter(
         Invoice.invoice_number.like(f"INV-{year}-%")
     ).order_by(Invoice.id.desc()).first()
@@ -472,7 +472,7 @@ def upsert_stripe_subscription(
             local_sub.monthly_amount = effective_amount
             changed.append(f"amount→${effective_amount:.2f}")
 
-        local_sub.updated_at = datetime.utcnow()
+        local_sub.updated_at = datetime.now(timezone.utc).replace(tzinfo=None)
 
         if changed:
             results["updated"] += 1
@@ -550,7 +550,7 @@ def sync_invoices(
 
     try:
         since_ts = int(
-            datetime.utcnow().replace(
+            datetime.now(timezone.utc).replace(tzinfo=None).replace(
                 day=1, hour=0, minute=0, second=0
             ).timestamp()
         ) - (months_back * 30 * 86400)

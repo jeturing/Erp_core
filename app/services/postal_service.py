@@ -10,7 +10,7 @@ Responsabilidades:
 import logging
 import os
 import re
-from datetime import datetime, date
+from datetime import datetime, date, timezone
 from typing import Optional, Dict, Any, List
 
 import httpx
@@ -244,13 +244,13 @@ def handle_postal_webhook(payload: Dict[str, Any]) -> Dict[str, Any]:
         message = payload.get("payload", {}).get("message", {})
         from_   = message.get("from", "")
         to_     = message.get("to", "")
-        ts_str  = message.get("timestamp") or datetime.utcnow().isoformat()
+        ts_str  = message.get("timestamp") or datetime.now(timezone.utc).replace(tzinfo=None).isoformat()
 
         # Parsear timestamp
         try:
             ts = datetime.fromisoformat(ts_str.replace("Z", "+00:00"))
         except Exception:
-            ts = datetime.utcnow()
+            ts = datetime.now(timezone.utc).replace(tzinfo=None)
 
         year, month = ts.year, ts.month
 
@@ -274,7 +274,7 @@ def handle_postal_webhook(payload: Dict[str, Any]) -> Dict[str, Any]:
                 rec.emails_sent += 1
 
             rec.total_cost_usd   = rec.emails_sent * rec.cost_per_email
-            rec.last_synced_at   = datetime.utcnow()
+            rec.last_synced_at   = datetime.now(timezone.utc).replace(tzinfo=None)
             rec.postal_server_token = POSTAL_SERVER_TOKEN
             db.commit()
             logger.info(f"📧 Postal webhook: tenant={tenant} event={event} "
@@ -325,7 +325,7 @@ async def sync_postal_stats(year: Optional[int] = None, month: Optional[int] = N
         logger.warning("POSTAL_API_KEY no configurada — sync omitido")
         return {"success": False, "error": "POSTAL_API_KEY not set"}
 
-    now = datetime.utcnow()
+    now = datetime.now(timezone.utc).replace(tzinfo=None)
     year  = year  or now.year
     month = month or now.month
 
@@ -393,7 +393,7 @@ async def sync_postal_stats(year: Optional[int] = None, month: Optional[int] = N
             rec.emails_bounced   = s["bounced"]
             rec.emails_failed    = s["failed"]
             rec.total_cost_usd   = s["sent"] * rec.cost_per_email
-            rec.last_synced_at   = datetime.utcnow()
+            rec.last_synced_at   = datetime.now(timezone.utc).replace(tzinfo=None)
             rec.postal_server_token = POSTAL_SERVER_TOKEN
             updated.append({"tenant": tenant, **s, "cost": s["sent"] * COST_PER_EMAIL})
         db.commit()
@@ -422,7 +422,7 @@ def get_tenant_email_usage(
     Si no se pasa año/mes, devuelve el mes actual.
     """
     from ..models.database import PostalEmailUsage, SessionLocal
-    now   = datetime.utcnow()
+    now   = datetime.now(timezone.utc).replace(tzinfo=None)
     year  = year  or now.year
     month = month or now.month
 
@@ -466,7 +466,7 @@ def get_all_tenants_email_usage_summary(
     Útil para el panel de administración y generación de facturas.
     """
     from ..models.database import PostalEmailUsage, SessionLocal
-    now   = datetime.utcnow()
+    now   = datetime.now(timezone.utc).replace(tzinfo=None)
     year  = year  or now.year
     month = month or now.month
 

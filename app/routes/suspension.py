@@ -201,7 +201,7 @@ async def suspend_tenant(
     Esto NO desactiva usuarios en Odoo (eso lo hace /api/provisioning/tenant/suspend).
     Esto controla la REDIRECCIÓN a nivel de proxy.
     """
-    from datetime import datetime
+    from datetime import datetime, timezone
     
     _require_api_key(x_api_key)
     
@@ -210,7 +210,7 @@ async def suspend_tenant(
         "suspended": True,
         "reason": reason,
         "owner_email": owner_email or "",
-        "suspended_at": datetime.utcnow().isoformat(),
+        "suspended_at": datetime.now(timezone.utc).replace(tzinfo=None).isoformat(),
     }
     _save_suspended_tenants(data)
     

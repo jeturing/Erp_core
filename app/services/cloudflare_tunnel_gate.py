@@ -53,9 +53,9 @@ def _should_use_proxmox_helper() -> bool:
 
 
 def _build_pct_exec_cmd(remote_cmd: str) -> List[str]:
-    full_remote = f"pct exec {NPM_PCT_ID} -- bash -lc {shlex.quote(remote_cmd)}"
     if _should_use_proxmox_helper():
         return [SUDO_BIN, "-n", PROXMOX_ADMIN_HELPER, "pct-exec", str(NPM_PCT_ID), remote_cmd]
+    full_remote = shlex.join(["pct", "exec", str(NPM_PCT_ID), "--", *shlex.split(remote_cmd)])
     return [
         SSH_BIN, "-i", PROXMOX_SSH_KEY,
         "-o", "StrictHostKeyChecking=no",

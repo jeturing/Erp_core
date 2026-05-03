@@ -3,7 +3,7 @@ Seat Events Service — helpers reutilizables para HWM y exclusión de cuentas n
 """
 from __future__ import annotations
 
-from datetime import datetime, timedelta
+from datetime import datetime, timedelta, timezone
 from typing import Optional
 
 from sqlalchemy.orm import Session
@@ -73,7 +73,7 @@ def is_partner_metered(subscription: Subscription) -> bool:
 
 def update_hwm(db: Session, subscription_id: int, count: int) -> SeatHighWater:
     """Actualiza o crea el snapshot diario del high-water mark."""
-    today = datetime.utcnow().replace(hour=0, minute=0, second=0, microsecond=0)
+    today = datetime.now(timezone.utc).replace(tzinfo=None).replace(hour=0, minute=0, second=0, microsecond=0)
     hwm = db.query(SeatHighWater).filter(
         SeatHighWater.subscription_id == subscription_id,
         SeatHighWater.period_date == today,
@@ -112,7 +112,7 @@ def record_seat_event(
     if partner_metered:
         if event_type == SeatEventType.FIRST_LOGIN:
             is_billable = True
-            grace_expires = datetime.utcnow() + timedelta(hours=8)
+            grace_expires = datetime.now(timezone.utc).replace(tzinfo=None) + timedelta(hours=8)
     else:
         if event_type in (
             SeatEventType.USER_CREATED,
@@ -136,7 +136,7 @@ def record_seat_event(
 
     hwm = update_hwm(db, subscription.id, user_count_after)
     subscription.user_count = user_count_after
-    subscription.updated_at = datetime.utcnow()
+    subscription.updated_at = datetime.now(timezone.utc).replace(tzinfo=None)
     if subscription.customer is not None:
         subscription.customer.user_count = user_count_after
 
@@ -164,7 +164,7 @@ def record_hwm_snapshot(
 
     hwm = update_hwm(db, subscription.id, user_count_after)
     subscription.user_count = user_count_after
-    subscription.updated_at = datetime.utcnow()
+    subscription.updated_at = datetime.now(timezone.utc).replace(tzinfo=None)
     if subscription.customer is not None:
         subscription.customer.user_count = user_count_after
 

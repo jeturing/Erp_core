@@ -10,7 +10,7 @@ from pydantic import BaseModel
 from typing import Optional
 from sqlalchemy.orm import Session
 from sqlalchemy import func
-from datetime import datetime, date
+from datetime import datetime, date, timezone
 import logging
 
 from ..models.database import (
@@ -216,7 +216,7 @@ def close_settlement_period(
     period.adjustments = adjustments
     period.net_to_partner = net
     period.status = SettlementStatus.closed
-    period.closed_at = datetime.utcnow()
+    period.closed_at = datetime.now(timezone.utc).replace(tzinfo=None)
     if payload.notes:
         period.notes = (period.notes or "") + f"\n[Close] {payload.notes}"
 

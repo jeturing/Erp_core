@@ -15,7 +15,7 @@ import secrets
 import logging
 import httpx
 from typing import Optional, List, Dict, Any
-from datetime import datetime
+from datetime import datetime, timezone
 from sqlalchemy.orm import Session
 from sqlalchemy.exc import IntegrityError
 
@@ -294,7 +294,7 @@ class DomainManager:
             if key in allowed_fields and hasattr(domain, key):
                 setattr(domain, key, value)
         
-        domain.updated_at = datetime.utcnow()
+        domain.updated_at = datetime.now(timezone.utc).replace(tzinfo=None)
         self.db.commit()
         self.db.refresh(domain)
         
@@ -505,7 +505,7 @@ class DomainManager:
 
         def _mark_verified(method: str, details: dict = None) -> Dict[str, Any]:
             domain.verification_status = DomainVerificationStatus.verified
-            domain.verified_at = datetime.utcnow()
+            domain.verified_at = datetime.now(timezone.utc).replace(tzinfo=None)
             domain.is_active = True
             self.db.commit()
             result = {
@@ -652,7 +652,7 @@ class DomainManager:
         
         domain.is_active = True
         domain.verification_status = DomainVerificationStatus.verified
-        domain.verified_at = datetime.utcnow()
+        domain.verified_at = datetime.now(timezone.utc).replace(tzinfo=None)
         self.db.commit()
         
         # ── Configurar nginx automáticamente ──

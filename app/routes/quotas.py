@@ -5,7 +5,7 @@ Endpoints para consultar y verificar cuotas de recursos por cliente.
 from fastapi import APIRouter, HTTPException, Request, Cookie, Query
 from pydantic import BaseModel
 from typing import Optional, Dict, Any, List
-from datetime import datetime
+from datetime import datetime, timezone
 from ..models.database import (
     SessionLocal,
     Customer,
@@ -252,7 +252,7 @@ async def update_customer_email_limits(
                 currency="USD",
                 service_code=EMAIL_PACKAGE_SERVICE_CODE,
                 acquired_via="admin_quota_override",
-                starts_at=datetime.utcnow(),
+                starts_at=datetime.now(timezone.utc).replace(tzinfo=None),
             )
             db.add(addon)
             db.flush()

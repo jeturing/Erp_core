@@ -7,7 +7,7 @@ import json
 import logging
 import math
 from dataclasses import dataclass
-from datetime import datetime, timedelta
+from datetime import datetime, timedelta, timezone
 from typing import Any, Optional
 
 from sqlalchemy import select, delete, and_
@@ -329,7 +329,7 @@ async def sync_sessions_to_db(db: Session) -> dict[str, int]:
     try:
         raw_sessions = await scan_redis_sessions()
         stats["scanned"] = len(raw_sessions)
-        now = datetime.utcnow()
+        now = datetime.now(timezone.utc).replace(tzinfo=None)
         active_keys: set[str] = set()
 
         for sess in raw_sessions:
@@ -521,7 +521,7 @@ async def get_geo_heatmap_data(
 ) -> list[dict[str, Any]]:
     """Datos para mapa de calor geográfico."""
     from sqlalchemy import func
-    cutoff = datetime.utcnow() - timedelta(days=days)
+    cutoff = datetime.now(timezone.utc).replace(tzinfo=None) - timedelta(days=days)
     result = db.execute(
         select(
             SessionGeoEvent.geo_country_code,

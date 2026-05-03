@@ -11,7 +11,7 @@ sidecar usa credenciales de Docker interno (`npm:81`) que pueden fallar.
 Config (via system_config o .env):
   NPM_API_URL        → http://10.10.20.205:81/api  (NPM API directo)
   NPM_ADMIN_EMAIL    → soc@jeturing.com
-  NPM_ADMIN_PASSWORD → 321Abcd.
+  NPM_ADMIN_PASSWORD → required for direct NPM auth
   NPM_SIDECAR_URL    → http://10.10.20.205:8888    (sidecar, opcional)
   NPM_ADMIN_API_KEY  → jt_api_...                  (key del sidecar)
   NPM_ODOO17_FORWARD_PORT → 80                     (puerto Odoo en PCT 201)
@@ -49,7 +49,7 @@ def _npm_admin_email() -> str:
 
 
 def _npm_admin_password() -> str:
-    return get_runtime_setting("NPM_ADMIN_PASSWORD", "321Abcd.")
+    return get_runtime_setting("NPM_ADMIN_PASSWORD", "")
 
 
 def _npm_sidecar_url() -> str:
@@ -74,7 +74,11 @@ def _sidecar_headers() -> dict:
 def _sidecar_path(path: str) -> str:
     """Mapea rutas NPM nativas a rutas del sidecar."""
     if path.startswith("/nginx/proxy-hosts"):
-        return path.replace("/nginx/proxy-hosts", "/proxy-hosts", 1)
+        mapped = path.replace("/nginx/proxy-hosts", "/proxy-hosts", 1)
+        # FastAPI redirects collection routes without trailing slash. httpx does
+        # not follow redirects by default, and POST redirects lose the request in
+        # some clients, so call the canonical sidecar route directly.
+        return "/proxy-hosts/" if mapped == "/proxy-hosts" else mapped
     return path
 
 
@@ -153,7 +157,8 @@ async def _npm_request(method: str, path: str, **kwargs) -> dict | list:
             logger.warning(f"NPM sidecar no disponible, fallback a API directa: {exc}")
 
     token = await _get_npm_token()
-    headers = {"Authorization": f"Bearer {token}"}
+    extra_headers = kwargs.pop("headers", {}) if isinstance(kwargs.get("headers"), dict) else {}
+    headers = {"Authorization": f"Bearer {token}", **extra_headers}
 
     async with httpx.AsyncClient(timeout=30.0) as client:
         resp = await client.request(method, f"{_npm_api_url()}{path}", headers=headers, **kwargs)
@@ -185,7 +190,8 @@ def _npm_request_sync(method: str, path: str, **kwargs) -> dict | list:
             logger.warning(f"NPM sidecar no disponible (sync), fallback a API directa: {exc}")
 
     token = _get_npm_token_sync()
-    headers = {"Authorization": f"Bearer {token}"}
+    extra_headers = kwargs.pop("headers", {}) if isinstance(kwargs.get("headers"), dict) else {}
+    headers = {"Authorization": f"Bearer {token}", **extra_headers}
 
     with httpx.Client(timeout=30.0) as client:
         resp = client.request(method, f"{_npm_api_url()}{path}", headers=headers, **kwargs)

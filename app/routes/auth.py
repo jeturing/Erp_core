@@ -4,10 +4,11 @@ Authentication Routes - Login, JWT management
 from fastapi import APIRouter, HTTPException, Request, status
 from fastapi.responses import HTMLResponse
 from pydantic import BaseModel
-from datetime import datetime, timedelta
+from datetime import timedelta
 import jwt
 
-from ..config import get_runtime_setting
+from ..config import get_runtime_setting, require_config_secret
+from ..utils.runtime_security import utc_now
 
 router = APIRouter(prefix="/api/admin", tags=["Authentication"])
 
@@ -16,7 +17,7 @@ JWT_EXPIRATION_HOURS = 24
 
 
 def _jwt_secret_key() -> str:
-    return get_runtime_setting("JWT_SECRET_KEY", "")
+    return require_config_secret("JWT_SECRET_KEY", get_runtime_setting("JWT_SECRET_KEY", ""), production_only=False)
 
 
 def _jwt_algorithm() -> str:
@@ -42,10 +43,11 @@ class TokenData(BaseModel):
 # JWT Utilities
 def create_access_token(username: str) -> str:
     """Crea un token JWT."""
+    now = utc_now()
     payload = {
         "sub": username,
-        "exp": datetime.utcnow() + timedelta(hours=JWT_EXPIRATION_HOURS),
-        "iat": datetime.utcnow()
+        "exp": now + timedelta(hours=JWT_EXPIRATION_HOURS),
+        "iat": now,
     }
     encoded_jwt = jwt.encode(payload, _jwt_secret_key(), algorithm=_jwt_algorithm())
     return encoded_jwt

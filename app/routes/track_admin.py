@@ -57,7 +57,7 @@ def _get_track_stripe_secret_key() -> str:
 # ─── Conexión a la BD `track` (separada de erp_core_db) ───────
 _TRACK_DB_URL = os.getenv(
     "TRACK_DATABASE_URL",
-    "postgresql+psycopg2://jeturing:321Abcd@10.10.20.200:5432/track",
+    "",
 )
 _track_engine = None
 _TrackSession = None
@@ -65,6 +65,8 @@ _TrackSession = None
 
 def _get_track_db():
     global _track_engine, _TrackSession
+    if not _TRACK_DB_URL:
+        raise HTTPException(status_code=503, detail="Track database is not configured")
     if _TrackSession is None:
         _track_engine = create_engine(
             _TRACK_DB_URL,
@@ -100,7 +102,7 @@ def _get_redis():
         _redis_client = _redis.Redis(
             host=os.getenv("REDIS_HOST", "10.10.20.203"),
             port=int(os.getenv("REDIS_PORT", "6379")),
-            password=os.getenv("REDIS_PASSWORD", "JtrRedis2026!"),
+            password=os.getenv("REDIS_PASSWORD", "") or None,
             db=int(os.getenv("REDIS_DB", "0")),
             socket_timeout=2,
             socket_connect_timeout=2,

@@ -1,7 +1,7 @@
 """
 Audit Logging - Security event tracking and logging
 """
-from datetime import datetime
+from datetime import datetime, timezone
 from typing import Optional
 from enum import Enum
 import json
@@ -24,7 +24,7 @@ audit_file_handler.setLevel(logging.INFO)
 class JSONFormatter(logging.Formatter):
     def format(self, record):
         log_data = {
-            "timestamp": datetime.utcnow().isoformat(),
+            "timestamp": datetime.now(timezone.utc).replace(tzinfo=None).isoformat(),
             "level": record.levelname,
             "message": record.getMessage(),
         }
@@ -296,7 +296,7 @@ class AuditLogStore:
     def store(cls, audit_data: dict):
         """Almacena un log en la BD."""
         audit_data["id"] = len(cls._logs) + 1
-        audit_data["created_at"] = datetime.utcnow().isoformat()
+        audit_data["created_at"] = datetime.now(timezone.utc).replace(tzinfo=None).isoformat()
         cls._logs.append(audit_data)
     
     @classmethod

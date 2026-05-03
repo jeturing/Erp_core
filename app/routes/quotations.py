@@ -3,7 +3,7 @@ Quotations & Service Catalog Routes
 Cotizaciones enviables + catálogo de precios oficial SAJET
 """
 import json
-from datetime import datetime, timedelta
+from datetime import datetime, timedelta, timezone
 from typing import List, Optional
 
 from fastapi import APIRouter, Cookie, HTTPException, Request
@@ -128,7 +128,7 @@ def _catalog_to_dict(c: ServiceCatalogItem) -> dict:
 
 def _generate_quote_number(db) -> str:
     """Genera QT-YYYY-NNNN secuencial."""
-    year = datetime.utcnow().year
+    year = datetime.now(timezone.utc).replace(tzinfo=None).year
     last = (
         db.query(Quotation)
         .filter(Quotation.quote_number.like(f"QT-{year}-%"))
@@ -598,7 +598,7 @@ async def create_quotation(
             total_monthly=total_monthly,
             currency=payload.currency,
             status=QuotationStatus.draft,
-            valid_until=datetime.utcnow() + timedelta(days=payload.valid_days),
+            valid_until=datetime.now(timezone.utc).replace(tzinfo=None) + timedelta(days=payload.valid_days),
             notes=payload.notes,
             terms=payload.terms,
         )
@@ -633,11 +633,11 @@ async def update_quotation(
                 new_status = QuotationStatus(data["status"])
                 qt.status = new_status
                 if new_status == QuotationStatus.sent:
-                    qt.sent_at = datetime.utcnow()
+                    qt.sent_at = datetime.now(timezone.utc).replace(tzinfo=None)
                 elif new_status == QuotationStatus.accepted:
-                    qt.accepted_at = datetime.utcnow()
+                    qt.accepted_at = datetime.now(timezone.utc).replace(tzinfo=None)
                 elif new_status == QuotationStatus.rejected:
-                    qt.rejected_at = datetime.utcnow()
+                    qt.rejected_at = datetime.now(timezone.utc).replace(tzinfo=None)
                 changes.append("status")
             except ValueError:
                 pass
@@ -686,7 +686,7 @@ async def send_quotation(
             raise HTTPException(status_code=404, detail="Cotización no encontrada")
 
         qt.status = QuotationStatus.sent
-        qt.sent_at = datetime.utcnow()
+        qt.sent_at = datetime.now(timezone.utc).replace(tzinfo=None)
         db.commit()
 
         return {"message": f"Cotización {qt.quote_number} marcada como enviada"}

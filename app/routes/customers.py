@@ -4,7 +4,7 @@ Customers Management Routes - Mantenimiento de clientes, montos y user_count
 from fastapi import APIRouter, HTTPException, Request, Cookie
 from pydantic import BaseModel
 from typing import Optional, Dict, Any, List
-from datetime import datetime
+from datetime import datetime, timezone
 from ..models.database import (
     Customer, Subscription, SubscriptionStatus, Plan,
     TenantDeployment, CustomDomain, SessionLocal
@@ -40,6 +40,7 @@ def _verify_admin(request: Request, token: str = None):
 class CustomerUpdate(BaseModel):
     company_name: Optional[str] = None
     email: Optional[str] = None
+    phone: Optional[str] = None
     user_count: Optional[int] = None
     is_admin_account: Optional[bool] = None
     plan_name: Optional[str] = None  # Cambiar plan de la suscripción
@@ -66,22 +67,53 @@ async def list_customers(
             q = q.filter(Customer.partner_id == partner_id)
         customers = q.order_by(Customer.created_at.desc()).all()
         items = []
+        customer_ids = [c.id for c in customers]
+
+        subscriptions_by_customer = {}
+        if customer_ids:
+            subscriptions = (
+                db.query(Subscription)
+                .filter(
+                    Subscription.customer_id.in_(customer_ids),
+                    Subscription.status == SubscriptionStatus.active,
+                )
+                .order_by(Subscription.customer_id.asc(), Subscription.created_at.desc())
+                .all()
+            )
+            for sub in subscriptions:
+                subscriptions_by_customer.setdefault(sub.customer_id, sub)
+
+        plan_names = {sub.plan_name for sub in subscriptions_by_customer.values() if sub.plan_name}
+        plans_by_name = {}
+        if plan_names:
+            plans = (
+                db.query(Plan)
+                .filter(Plan.name.in_(plan_names), Plan.is_active == True)
+                .all()
+            )
+            plans_by_name = {plan.name: plan for plan in plans}
+
+        deployments_by_subscription = {}
+        subscription_ids = [sub.id for sub in subscriptions_by_customer.values()]
+        if subscription_ids:
+            deployments = (
+                db.query(TenantDeployment)
+                .filter(TenantDeployment.subscription_id.in_(subscription_ids))
+                .all()
+            )
+            deployments_by_subscription = {
+                deployment.subscription_id: deployment for deployment in deployments
+            }
 
         for c in customers:
             # Obtener suscripción activa
-            sub = db.query(Subscription).filter(
-                Subscription.customer_id == c.id,
-                Subscription.status == SubscriptionStatus.active
-            ).first()
+            sub = subscriptions_by_customer.get(c.id)
 
             # Obtener plan si existe
             plan_data = None
             calculated_amount = 0
             if sub:
-                plan = db.query(Plan).filter(
-                    Plan.name == sub.plan_name,
-                    Plan.is_active == True
-                ).first()
+                plan = plans_by_name.get(sub.plan_name)
                 if plan:
                     user_count = c.user_count or sub.user_count or 1
                     # Use partner_id from subscription or customer for pricing overrides
@@ -98,14 +130,13 @@ async def list_customers(
             # Deployment info (via subscription)
             deployment = None
             if sub:
-                deployment = db.query(TenantDeployment).filter(
-                    TenantDeployment.subscription_id == sub.id
-                ).first()
+                deployment = deployments_by_subscription.get(sub.id)
 
             items.append({
                 "id": c.id,
                 "company_name": c.company_name,
                 "email": c.email,
+                "phone": c.phone,
                 "full_name": c.full_name,
                 "subdomain": c.subdomain,
                 "user_count": c.user_count or 1,
@@ -175,6 +206,11 @@ async def update_customer(
             customer.email = payload.email
             messages.append(f"Email: {old_email} → {payload.email}")
 
+        if payload.phone is not None:
+            old_phone = customer.phone or ""
+            customer.phone = payload.phone.strip()
+            messages.append(f"Teléfono: {old_phone or 'N/D'} → {customer.phone}")
+
         # Actualizar campos simples
         if payload.company_name is not None:
             customer.company_name = payload.company_name
@@ -202,6 +238,7 @@ async def update_customer(
                     stripe_cust = stripe.Customer.create(
                         name=customer.company_name,
                         email=email_to_search,
+                        phone=payload.phone or customer.phone,
                         metadata={"sajet_customer_id": customer.id}
                     )
                     customer.stripe_customer_id = stripe_cust.id
@@ -346,6 +383,7 @@ async def update_user_count(
 class CreateCustomerRequest(BaseModel):
     company_name: str
     email: str
+    phone: str
     full_name: Optional[str] = ""
     subdomain: str
     plan_name: str = "basic"
@@ -395,6 +433,7 @@ async def create_customer(
         # Crear cliente
         customer = Customer(
             email=payload.email,
+            phone=payload.phone.strip(),
             full_name=payload.full_name or "",
             company_name=payload.company_name,
             subdomain=payload.subdomain,
@@ -429,8 +468,25 @@ async def create_customer(
             "id": customer.id,
             "subscription_id": sub.id,
             "monthly_amount": calculated_amount,
+            "welcome_email_sent": False,
             "message": f"Cliente '{payload.company_name}' creado exitosamente",
         }
+
+        try:
+            from ..services.email_service import send_customer_registration_acknowledgement
+
+            email_result = send_customer_registration_acknowledgement(
+                to_email=customer.email,
+                company_name=customer.company_name or customer.full_name or customer.email,
+                phone=customer.phone,
+                customer_id=customer.id,
+            )
+            response["welcome_email_sent"] = bool(email_result.get("success"))
+            if not email_result.get("success"):
+                response["welcome_email_error"] = email_result.get("error")
+        except Exception as email_err:
+            logger.warning(f"No se pudo enviar correo de registro a {customer.email}: {email_err}")
+            response["welcome_email_error"] = str(email_err)
 
         # ── Auto-provision tenant Odoo ──
         if payload.auto_provision and payload.subdomain:
@@ -684,6 +740,7 @@ async def create_stripe_customer(
         stripe_customer = stripe.Customer.create(
             email=customer.email,
             name=customer.company_name or customer.full_name,
+            phone=customer.phone,
             metadata={
                 "erp_customer_id": str(customer.id),
                 "subdomain": customer.subdomain or "",
@@ -810,7 +867,7 @@ async def reset_customer_password(
             raise HTTPException(status_code=500, detail=f"Error reseteando password en Odoo: {output}")
 
         # Actualizar timestamp de cambio de contraseña
-        customer.last_password_changed_at = datetime.utcnow()
+        customer.last_password_changed_at = datetime.now(timezone.utc).replace(tzinfo=None)
         db.commit()
 
         # Enviar nueva contraseña por email
@@ -1050,7 +1107,7 @@ async def set_portal_bypass(
         customer.onboarding_step = 4
         from datetime import datetime
         if not customer.onboarding_completed_at:
-            customer.onboarding_completed_at = datetime.utcnow()
+            customer.onboarding_completed_at = datetime.now(timezone.utc).replace(tzinfo=None)
 
         db.commit()
 

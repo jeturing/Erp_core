@@ -22,8 +22,9 @@ import subprocess
 import logging
 import os
 import re
+import shlex
 from typing import Dict, Any, Optional
-from datetime import datetime
+from datetime import datetime, timezone
 
 from sqlalchemy import text
 
@@ -226,12 +227,15 @@ async def provision_tenant(
         script_path = config["create_tenant_script"]
         
         # 5. Ejecutar provisioning script
-        cmd = f"pct exec {lxc_id} -- bash -c 'cd /root/Cloudflare && {script_path} {subdomain} --without-demo {container_ip} {local_port}'"
+        script_cmd = (
+            f"cd /root/Cloudflare && {shlex.quote(script_path)} {shlex.quote(subdomain)} "
+            f"--without-demo {shlex.quote(container_ip)} {int(local_port)}"
+        )
+        cmd = ["pct", "exec", str(lxc_id), "--", "bash", "-lc", script_cmd]
         
         logger.info(f"📦 Aprovisionando tenant: {subdomain} on {container_ip}:{local_port}")
         result = subprocess.run(
             cmd,
-            shell=True,
             capture_output=True,
             text=True,
             timeout=300  # 5 minutos timeout
@@ -273,7 +277,7 @@ async def provision_tenant(
                 if subscription:
                     subscription.status = SubscriptionStatus.active
                     subscription.tenant_provisioned = True
-                    subscription.updated_at = datetime.utcnow()
+                    subscription.updated_at = datetime.now(timezone.utc).replace(tzinfo=None)
                     
                     # Determinar plan_type desde plan_name de la suscripción
                     plan_map = {
@@ -317,7 +321,7 @@ async def provision_tenant(
                                 tunnel_active=bool(actual_tunnel_id),
                                 tunnel_id=actual_tunnel_id or None,
                                 plan_type=plan_type,
-                                deployed_at=datetime.utcnow(),
+                                deployed_at=datetime.now(timezone.utc).replace(tzinfo=None),
                             )
                             db.add(deployment)
                             db.flush()
@@ -353,7 +357,7 @@ async def provision_tenant(
             "local_port": local_port,
             "subscription_id": subscription_id,
             "deployment_id": deployment_id,
-            "created_at": datetime.utcnow().isoformat()
+            "created_at": datetime.now(timezone.utc).replace(tzinfo=None).isoformat()
         }
         
         if tunnel_info and tunnel_info.get("success"):
@@ -457,10 +461,13 @@ async def check_tenant_exists(subdomain: str) -> bool:
         config = _get_config_from_env()
         lxc_id = config["lxc_container_id"]
         
-        cmd = f"pct exec {lxc_id} -- bash -c 'sudo -u postgres psql -lqt | cut -d | -f 1 | grep -wq {subdomain}'"
-        result = subprocess.run(cmd, shell=True, capture_output=True, timeout=10)
+        cmd = [
+            "pct", "exec", str(lxc_id), "--",
+            "sudo", "-u", "postgres", "psql", "-lqt",
+        ]
+        result = subprocess.run(cmd, capture_output=True, text=True, timeout=10)
         
-        exists = result.returncode == 0
+        exists = result.returncode == 0 and any(line.split("|", 1)[0].strip() == subdomain for line in result.stdout.splitlines())
         logger.info(f"Tenant {subdomain} exists: {exists}")
         return exists
         
@@ -503,8 +510,12 @@ async def delete_tenant(
         logger.info(f"🗑️  Eliminando tenant: {subdomain}")
         
         # 1. Eliminar base de datos
-        cmd = f"pct exec {lxc_id} -- bash -c 'sudo -u postgres psql -c \"DROP DATABASE IF EXISTS \\\"{subdomain}\\\" WITH (FORCE);\"'"
-        result = subprocess.run(cmd, shell=True, capture_output=True, text=True, timeout=60)
+        sql = f'DROP DATABASE IF EXISTS "{subdomain}" WITH (FORCE);'
+        cmd = [
+            "pct", "exec", str(lxc_id), "--",
+            "sudo", "-u", "postgres", "psql", "-c", sql,
+        ]
+        result = subprocess.run(cmd, capture_output=True, text=True, timeout=60)
         
         if result.returncode != 0:
             logger.error(f"❌ Error eliminando BD: {result.stderr}")
@@ -539,7 +550,7 @@ async def delete_tenant(
         return {
             "success": True,
             "message": f"Tenant {subdomain} eliminado exitosamente",
-            "deleted_at": datetime.utcnow().isoformat()
+            "deleted_at": datetime.now(timezone.utc).replace(tzinfo=None).isoformat()
         }
         
     except ValidationError as ve:
@@ -646,7 +657,7 @@ async def repair_missing_deployments() -> Dict[str, Any]:
                     tunnel_active=bool(cf_tunnel_id),
                     tunnel_id=cf_tunnel_id or None,
                     plan_type=plan_type,
-                    deployed_at=datetime.utcnow(),
+                    deployed_at=datetime.now(timezone.utc).replace(tzinfo=None),
                 )
                 db.add(deployment)
                 db.flush()

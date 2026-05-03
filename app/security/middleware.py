@@ -11,6 +11,7 @@ import re
 import os
 import logging
 import hashlib
+import threading
 
 logger = logging.getLogger(__name__)
 
@@ -88,6 +89,7 @@ class RateLimiter:
         self.block_duration_seconds = block_duration_seconds
         self.attempts = defaultdict(list)  # ip -> lista de timestamps
         self.blocked = {}  # ip -> timestamp de desbloqueo
+        self._lock = threading.RLock()
     
     def _get_client_id(self, request: Request) -> str:
         """Obtiene identificador único del cliente (IP o hash)."""
@@ -111,16 +113,14 @@ class RateLimiter:
     def is_blocked(self, request: Request) -> bool:
         """Verifica si el cliente está bloqueado."""
         client_id = self._get_client_id(request)
-        
-        if client_id in self.blocked:
-            if time.time() < self.blocked[client_id]:
-                return True
-            else:
+        with self._lock:
+            if client_id in self.blocked:
+                if time.time() < self.blocked[client_id]:
+                    return True
                 # Desbloquear
                 del self.blocked[client_id]
                 self.attempts[client_id] = []
-        
-        return False
+            return False
     
     def check_rate_limit(self, request: Request) -> tuple[bool, dict]:
         """
@@ -128,52 +128,52 @@ class RateLimiter:
         info contiene remaining_attempts y retry_after si está bloqueado.
         """
         client_id = self._get_client_id(request)
-        
-        # Verificar bloqueo
-        if client_id in self.blocked:
-            if time.time() < self.blocked[client_id]:
-                retry_after = int(self.blocked[client_id] - time.time())
-                return False, {
-                    "blocked": True,
-                    "retry_after": retry_after,
-                    "message": f"Demasiados intentos. Reintente en {retry_after // 60} minutos."
-                }
-            else:
+        with self._lock:
+            # Verificar bloqueo
+            if client_id in self.blocked:
+                if time.time() < self.blocked[client_id]:
+                    retry_after = int(self.blocked[client_id] - time.time())
+                    return False, {
+                        "blocked": True,
+                        "retry_after": retry_after,
+                        "message": f"Demasiados intentos. Reintente en {retry_after // 60} minutos."
+                    }
                 del self.blocked[client_id]
                 self.attempts[client_id] = []
-        
-        # Limpiar intentos antiguos
-        self._cleanup_old_attempts(client_id)
-        
-        # Registrar nuevo intento
-        self.attempts[client_id].append(time.time())
-        
-        current_attempts = len(self.attempts[client_id])
-        remaining = max(0, self.max_requests - current_attempts)
-        
-        # Verificar si excede límite
-        if current_attempts > self.max_requests:
-            # Bloquear cliente
-            self.blocked[client_id] = time.time() + self.block_duration_seconds
-            logger.warning(f"Rate limit exceeded for client {client_id}. Blocked for {self.block_duration_seconds}s")
-            return False, {
-                "blocked": True,
-                "retry_after": self.block_duration_seconds,
-                "message": f"Demasiados intentos. Cuenta bloqueada por {self.block_duration_seconds // 60} minutos."
+
+            # Limpiar intentos antiguos
+            self._cleanup_old_attempts(client_id)
+
+            # Registrar nuevo intento
+            self.attempts[client_id].append(time.time())
+
+            current_attempts = len(self.attempts[client_id])
+            remaining = max(0, self.max_requests - current_attempts)
+
+            # Verificar si excede límite
+            if current_attempts > self.max_requests:
+                # Bloquear cliente
+                self.blocked[client_id] = time.time() + self.block_duration_seconds
+                logger.warning(f"Rate limit exceeded for client {client_id}. Blocked for {self.block_duration_seconds}s")
+                return False, {
+                    "blocked": True,
+                    "retry_after": self.block_duration_seconds,
+                    "message": f"Demasiados intentos. Cuenta bloqueada por {self.block_duration_seconds // 60} minutos."
+                }
+
+            return True, {
+                "blocked": False,
+                "remaining_attempts": remaining,
+                "window_seconds": self.window_seconds
             }
-        
-        return True, {
-            "blocked": False,
-            "remaining_attempts": remaining,
-            "window_seconds": self.window_seconds
-        }
     
     def reset(self, request: Request):
         """Resetea el contador para un cliente (llamar después de login exitoso)."""
         client_id = self._get_client_id(request)
-        self.attempts[client_id] = []
-        if client_id in self.blocked:
-            del self.blocked[client_id]
+        with self._lock:
+            self.attempts[client_id] = []
+            if client_id in self.blocked:
+                del self.blocked[client_id]
 
 
 class WAFMiddleware(BaseHTTPMiddleware):

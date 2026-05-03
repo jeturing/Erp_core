@@ -17,7 +17,7 @@ import json
 import logging
 import os
 import time
-from datetime import datetime, timedelta
+from datetime import datetime, timedelta, timezone
 from typing import Any, Optional
 from urllib.parse import urlencode
 
@@ -431,7 +431,7 @@ def _update_odoo_company_metadata(addon: CustomerAddonSubscription, payload: Gus
             "odoo_user_id": payload.odoo_user_id,
             "odoo_return_url": payload.return_url,
             "oauth_status": "pending",
-            "oauth_last_started_at": datetime.utcnow().isoformat(),
+            "oauth_last_started_at": datetime.now(timezone.utc).replace(tzinfo=None).isoformat(),
         }
     )
     addon.metadata_json = metadata
@@ -450,7 +450,7 @@ def _store_payslip_event(addon: CustomerAddonSubscription, event: dict[str, Any]
     if key:
         statuses[key] = event
     metadata["odoo_payslip_statuses"] = statuses
-    metadata["gusto_last_webhook_at"] = datetime.utcnow().isoformat()
+    metadata["gusto_last_webhook_at"] = datetime.now(timezone.utc).replace(tzinfo=None).isoformat()
     addon.metadata_json = metadata
 
 
@@ -556,7 +556,7 @@ async def get_gusto_connect_url(
         metadata = dict(addon.metadata_json or {})
         metadata.update({
             "oauth_status": "pending",
-            "oauth_last_started_at": datetime.utcnow().isoformat(),
+            "oauth_last_started_at": datetime.now(timezone.utc).replace(tzinfo=None).isoformat(),
         })
         addon.metadata_json = metadata
         db.commit()
@@ -634,7 +634,7 @@ async def odoo_prevalidate_payslip(
             "odoo_payslip_id": payload.payslip.id,
             "payment_reference": None,
             "event_type": "payroll.payment.pre_validated",
-            "timestamp": datetime.utcnow().isoformat(),
+            "timestamp": datetime.now(timezone.utc).replace(tzinfo=None).isoformat(),
         }
         _store_payslip_event(addon, event)
         db.commit()
@@ -662,7 +662,7 @@ async def odoo_send_payslip_payment(
             "odoo_payslip_id": payload.payslip.id,
             "payment_reference": payment_reference,
             "event_type": "payroll.payment.submitted",
-            "timestamp": datetime.utcnow().isoformat(),
+            "timestamp": datetime.now(timezone.utc).replace(tzinfo=None).isoformat(),
         }
         _store_payslip_event(addon, event)
         db.commit()
@@ -708,7 +708,7 @@ async def odoo_sync_attendance(
         metadata = dict(addon.metadata_json or {})
         rows = [row.model_dump() for row in payload.rows]
         metadata["odoo_last_attendance_rows"] = rows[-500:]
-        metadata["odoo_last_attendance_sync_at"] = datetime.utcnow().isoformat()
+        metadata["odoo_last_attendance_sync_at"] = datetime.now(timezone.utc).replace(tzinfo=None).isoformat()
         metadata["odoo_last_attendance_sync_count"] = len(rows)
         addon.metadata_json = metadata
         db.commit()
@@ -758,7 +758,7 @@ async def _handle_gusto_callback(code: Optional[str], state: Optional[str], erro
             metadata.update({
                 "oauth_status": "error",
                 "oauth_last_error": response.text[:500],
-                "oauth_last_error_at": datetime.utcnow().isoformat(),
+                "oauth_last_error_at": datetime.now(timezone.utc).replace(tzinfo=None).isoformat(),
             })
             addon.metadata_json = metadata
             db.commit()
@@ -767,7 +767,7 @@ async def _handle_gusto_callback(code: Optional[str], state: Optional[str], erro
         token_data = GustoCompanyTokenResponse.model_validate(response.json())
         expires_at = None
         if token_data.expires_in:
-            expires_at = (datetime.utcnow() + timedelta(seconds=int(token_data.expires_in))).isoformat()
+            expires_at = (datetime.now(timezone.utc).replace(tzinfo=None) + timedelta(seconds=int(token_data.expires_in))).isoformat()
 
         metadata = dict(addon.metadata_json or {})
         metadata.update({
@@ -776,7 +776,7 @@ async def _handle_gusto_callback(code: Optional[str], state: Optional[str], erro
             "gusto_company_uuid": token_data.company_uuid,
             "gusto_token_type": token_data.token_type,
             "gusto_scope": token_data.scope,
-            "gusto_connected_at": datetime.utcnow().isoformat(),
+            "gusto_connected_at": datetime.now(timezone.utc).replace(tzinfo=None).isoformat(),
             "gusto_token_expires_at": expires_at,
             "gusto_access_token_enc": _encrypt(token_data.access_token),
             "gusto_refresh_token_enc": _encrypt(token_data.refresh_token),
@@ -961,7 +961,7 @@ async def gusto_webhook_receiver(
         if matched_addon:
             metadata = dict(matched_addon.metadata_json or {})
             metadata.update({
-                "gusto_last_webhook_at": datetime.utcnow().isoformat(),
+                "gusto_last_webhook_at": datetime.now(timezone.utc).replace(tzinfo=None).isoformat(),
                 "gusto_last_event_type": event_type,
                 "gusto_last_event_payload": payload,
             })

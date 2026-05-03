@@ -4,7 +4,7 @@ Evalúa reglas de seguridad configurables por tenant/usuario.
 Detecta: sesiones concurrentes, viaje imposible, restricciones geo, etc.
 """
 import logging
-from datetime import datetime, timedelta
+from datetime import datetime, timedelta, timezone
 from typing import Any, Optional
 
 from sqlalchemy import select, and_, func, desc
@@ -229,7 +229,7 @@ def _check_impossible_travel(
         prev_event.geo_lat, prev_event.geo_lon,
         session.geo_lat, session.geo_lon,
     )
-    time_diff = datetime.utcnow() - (prev_event.event_at or datetime.utcnow())
+    time_diff = datetime.now(timezone.utc).replace(tzinfo=None) - (prev_event.event_at or datetime.now(timezone.utc).replace(tzinfo=None))
     hours_diff = time_diff.total_seconds() / 3600
 
     min_hours = DSAM_IMPOSSIBLE_TRAVEL_MIN_HOURS
@@ -306,7 +306,7 @@ def _check_time_restriction(
         from zoneinfo import ZoneInfo
         now = datetime.now(ZoneInfo(tz_name))
     except Exception:
-        now = datetime.utcnow()
+        now = datetime.now(timezone.utc).replace(tzinfo=None)
 
     start_h, start_m = map(int, start_str.split(":"))
     end_h, end_m = map(int, end_str.split(":"))

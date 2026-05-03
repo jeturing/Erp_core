@@ -19,6 +19,8 @@ Cuando se activa un dominio externo (ej: evolucionamujer.com) para un tenant
 """
 
 import logging
+import os
+import re
 import subprocess
 from typing import Dict, Any, Optional, Tuple
 
@@ -40,13 +42,21 @@ def _run_psql(
     Ejecuta SQL en la BD Odoo del tenant vía psql directo a CT105.
     Usa variables de entorno PGPASSWORD para autenticación.
     """
-    cmd = (
-        f"PGPASSWORD='{ODOO_DB_PASSWORD}' psql "
-        f"-h {ODOO_DB_HOST} -p {ODOO_DB_PORT} -U {ODOO_DB_USER} "
-        f"-d {tenant_db} -t -A -c \"{sql}\""
-    )
+    if not re.fullmatch(r"[a-z0-9_]{3,63}", tenant_db or ""):
+        return 1, "", "Tenant DB inválida"
+    env = {**os.environ, "PGPASSWORD": ODOO_DB_PASSWORD or ""}
+    cmd = [
+        "psql",
+        "-h", ODOO_DB_HOST,
+        "-p", ODOO_DB_PORT,
+        "-U", ODOO_DB_USER,
+        "-d", tenant_db,
+        "-t",
+        "-A",
+        "-c", sql,
+    ]
     r = subprocess.run(
-        cmd, shell=True, capture_output=True, text=True, timeout=15
+        cmd, env=env, capture_output=True, text=True, timeout=15
     )
     return r.returncode, r.stdout.strip(), r.stderr.strip()
 

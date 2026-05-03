@@ -4,7 +4,7 @@ Endpoints para monitorear sesiones activas, reglas de seguridad,
 geo-mapa, acciones de seguridad y auditoría de seats.
 """
 import logging
-from datetime import datetime, timedelta
+from datetime import datetime, timedelta, timezone
 from typing import Any, Optional
 
 from fastapi import APIRouter, Depends, HTTPException, Query, Request, Cookie
@@ -280,7 +280,7 @@ async def get_dashboard(
             "unresolved_alerts": unresolved.scalar() or 0,
             "critical_alerts": critical_unresolved.scalar() or 0,
         },
-        "meta": {"timestamp": datetime.utcnow().isoformat()},
+        "meta": {"timestamp": datetime.now(timezone.utc).replace(tzinfo=None).isoformat()},
     }
 
 
@@ -837,7 +837,7 @@ async def resolve_action(
         raise HTTPException(404, "Action not found")
 
     action.resolved = True
-    action.resolved_at = datetime.utcnow()
+    action.resolved_at = datetime.now(timezone.utc).replace(tzinfo=None)
     action.resolved_by = getattr(admin, "username", None) or getattr(admin, "email", "admin")
     action.resolution_note = body.resolution_note
     db.commit()

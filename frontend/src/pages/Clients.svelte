@@ -1,6 +1,6 @@
 <script lang="ts">
   import { onMount } from 'svelte';
-  import { Users, DollarSign, Shield, Edit3, Minus, Plus, RefreshCw, Search, CreditCard, Mail, KeyRound } from 'lucide-svelte';
+  import { Users, DollarSign, Shield, Edit3, Minus, Plus, RefreshCw, Search, CreditCard, Mail, KeyRound, Phone } from 'lucide-svelte';
   import { billingApi } from '../lib/api/billing';
   import { workOrdersApi } from '../lib/api/workOrders';
   import CredentialsModal from '../lib/components/CredentialsModal.svelte';
@@ -32,6 +32,7 @@
   let ncForm = $state({
     company_name: '',
     email: '',
+    phone: '',
     full_name: '',
     subdomain: '',
     plan_name: 'basic',
@@ -54,7 +55,7 @@
   async function openNewClient() {
     ncStep = 1; ncToast = '';
     selectedBlueprint = null;
-    ncForm = { company_name: '', email: '', full_name: '', subdomain: '', plan_name: 'basic', user_count: 1, partner_id: '', description: '' };
+    ncForm = { company_name: '', email: '', phone: '', full_name: '', subdomain: '', plan_name: 'basic', user_count: 1, partner_id: '', description: '' };
     showNewClient = true;
     if (blueprints.length === 0) {
       blueprintsLoading = true;
@@ -64,8 +65,8 @@
   }
 
   async function createClientWithWO() {
-    if (!ncForm.company_name || !ncForm.email || !ncForm.subdomain) {
-      ncToast = 'Empresa, email y subdominio son obligatorios'; return;
+    if (!ncForm.company_name || !ncForm.email || !ncForm.phone || !ncForm.subdomain) {
+      ncToast = 'Empresa, email, teléfono y subdominio son obligatorios'; return;
     }
     creatingClient = true; ncToast = '';
     try {
@@ -73,6 +74,7 @@
       const clientRes = await billingApi.createCustomer({
         company_name: ncForm.company_name,
         email: ncForm.email,
+        phone: ncForm.phone,
         full_name: ncForm.full_name,
         subdomain: ncForm.subdomain,
         plan_name: ncForm.plan_name,
@@ -127,7 +129,7 @@
   // Edit modal
   let showEdit = $state(false);
   let editCustomer: CustomerItem | null = $state(null);
-  let editForm = $state({ user_count: 1, plan_name: '', is_admin_account: false, company_name: '', stripe_customer_id: '', email: '', stripe_action: '' });
+  let editForm = $state({ user_count: 1, plan_name: '', is_admin_account: false, company_name: '', stripe_customer_id: '', email: '', phone: '', stripe_action: '' });
   let saving = $state(false);
 
   let filtered = $derived(
@@ -184,6 +186,7 @@
       is_admin_account: customer.is_admin_account,
       company_name: customer.company_name,
       email: customer.email,
+      phone: customer.phone || '',
       stripe_action: '',
       stripe_customer_id: customer.stripe_customer_id || '',
     };
@@ -192,6 +195,10 @@
 
   async function saveCustomer() {
     if (!editCustomer) return;
+    if (!editForm.phone.trim()) {
+      alert('El teléfono es obligatorio');
+      return;
+    }
     saving = true;
     try {
       await billingApi.updateCustomer(editCustomer.id, editForm);
@@ -448,6 +455,9 @@
                   <div>
                     <div class="font-medium text-text-light text-sm">{customer.company_name}</div>
                     <div class="text-xs text-gray-500">{customer.email}</div>
+                    {#if customer.phone}
+                      <div class="text-xs text-gray-500">{customer.phone}</div>
+                    {/if}
                     <div class="text-xs text-gray-600">{customer.subdomain}.sajet.us</div>
                   </div>
                 </div>
@@ -573,6 +583,14 @@
             <div>
               <label class="label" for="edit-email">Email</label>
               <input id="edit-email" type="email" class="input" bind:value={editForm.email} />
+            </div>
+          </div>
+
+          <div>
+            <label class="label" for="edit-phone">Teléfono *</label>
+            <div class="relative">
+              <Phone size={14} class="absolute left-3 top-1/2 -translate-y-1/2 text-gray-500" />
+              <input id="edit-phone" type="tel" class="input pl-9" bind:value={editForm.phone} placeholder="+1 809 555 1234" required />
             </div>
           </div>
 
@@ -713,6 +731,10 @@
               <input type="email" class="input w-full" bind:value={ncForm.email} placeholder="contacto@empresa.com" />
             </div>
             <div>
+              <label class="label">Teléfono *</label>
+              <input type="tel" class="input w-full" bind:value={ncForm.phone} placeholder="+1 809 555 1234" />
+            </div>
+            <div>
               <label class="label">Nombre completo</label>
               <input class="input w-full" bind:value={ncForm.full_name} placeholder="Juan Pérez" />
             </div>
@@ -785,6 +807,7 @@
               <div class="text-xs text-gray-400 uppercase tracking-widest mb-2">Datos del cliente</div>
               <div><span class="text-gray-400">Empresa:</span> <span class="text-text-light font-medium">{ncForm.company_name}</span></div>
               <div><span class="text-gray-400">Email:</span> <span class="text-text-light">{ncForm.email}</span></div>
+              <div><span class="text-gray-400">Teléfono:</span> <span class="text-text-light">{ncForm.phone}</span></div>
               <div><span class="text-gray-400">Subdominio:</span> <span class="text-blue-400 font-mono">{ncForm.subdomain}.sajet.us</span></div>
               <div><span class="text-gray-400">Plan:</span> <span class="text-text-light">{ncForm.plan_name}</span> — <span class="text-gray-400">{ncForm.user_count} usuario(s)</span></div>
             </div>
@@ -813,8 +836,8 @@
         {#if ncStep < 3}
           <button onclick={() => {
             ncToast = '';
-            if (ncStep === 1 && (!ncForm.company_name || !ncForm.email || !ncForm.subdomain)) {
-              ncToast = 'Empresa, email y subdominio son obligatorios'; return;
+            if (ncStep === 1 && (!ncForm.company_name || !ncForm.email || !ncForm.phone || !ncForm.subdomain)) {
+              ncToast = 'Empresa, email, teléfono y subdominio son obligatorios'; return;
             }
             ncStep++;
           }} class="btn-accent">Siguiente →</button>

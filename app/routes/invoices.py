@@ -13,7 +13,7 @@ from fastapi import APIRouter, HTTPException, Depends, Request, Cookie
 from pydantic import BaseModel
 from typing import Optional
 from sqlalchemy.orm import Session
-from datetime import date, datetime, time, timedelta
+from datetime import date, datetime, time, timedelta, timezone
 import logging
 
 from ..models.database import (
@@ -38,7 +38,7 @@ logger = logging.getLogger(__name__)
 
 def _next_invoice_number(db: Session) -> str:
     """Genera siguiente número de factura: INV-YYYY-NNNN."""
-    year = datetime.utcnow().year
+    year = datetime.now(timezone.utc).replace(tzinfo=None).year
     last = db.query(Invoice).filter(
         Invoice.invoice_number.like(f"INV-{year}-%")
     ).order_by(Invoice.id.desc()).first()
@@ -132,8 +132,8 @@ def generate_invoice_on_tenant_ready(
         currency=sub.currency or "USD",
         lines_json=lines,
         status=InvoiceStatus.issued,
-        issued_at=datetime.utcnow(),
-        due_date=datetime.utcnow() + timedelta(days=30),
+        issued_at=datetime.now(timezone.utc).replace(tzinfo=None),
+        due_date=datetime.now(timezone.utc).replace(tzinfo=None) + timedelta(days=30),
     )
     db.add(invoice)
     db.flush()
@@ -166,8 +166,8 @@ def generate_invoice_on_tenant_ready(
             currency=sub.currency or "USD",
             lines_json=ic_lines,
             status=InvoiceStatus.issued,
-            issued_at=datetime.utcnow(),
-            due_date=datetime.utcnow() + timedelta(days=30),
+            issued_at=datetime.now(timezone.utc).replace(tzinfo=None),
+            due_date=datetime.now(timezone.utc).replace(tzinfo=None) + timedelta(days=30),
         )
         db.add(ic_invoice)
         invoices_created.append({
@@ -333,7 +333,7 @@ def mark_invoice_paid(
     if not inv:
         raise HTTPException(404, "Invoice not found")
     inv.status = InvoiceStatus.paid
-    inv.paid_at = datetime.utcnow()
+    inv.paid_at = datetime.now(timezone.utc).replace(tzinfo=None)
     if payload.stripe_payment_intent_id:
         inv.stripe_payment_intent_id = payload.stripe_payment_intent_id
     if payload.notes:

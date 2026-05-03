@@ -39,7 +39,7 @@ import os
 
 _MED_DB_URL = os.getenv(
     "MED_DATABASE_URL",
-    "postgresql+psycopg2://jeturing:321Abcd@10.10.20.200:5432/med",
+    "",
 )
 _med_engine = None
 _MedSession = None
@@ -47,6 +47,8 @@ _MedSession = None
 
 def _get_med_db():
     global _med_engine, _MedSession
+    if not _MED_DB_URL:
+        raise HTTPException(status_code=503, detail="MedPrep database is not configured")
     if _MedSession is None:
         _med_engine = create_engine(_MED_DB_URL, pool_size=3, max_overflow=5, pool_pre_ping=True)
         _MedSession = sessionmaker(bind=_med_engine)
@@ -224,7 +226,7 @@ def live_sessions(
             r = _redis.Redis(
                 host=_os.getenv("REDIS_HOST", "10.10.20.203"),
                 port=int(_os.getenv("REDIS_PORT", "6379")),
-                password=_os.getenv("REDIS_PASSWORD", "JtrRedis2026!"),
+                password=_os.getenv("REDIS_PASSWORD", "") or None,
                 db=0,
                 socket_timeout=2,
                 decode_responses=True,

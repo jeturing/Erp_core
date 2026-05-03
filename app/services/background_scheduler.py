@@ -5,7 +5,7 @@ Usa asyncio nativo de FastAPI (sin dependencias externas).
 """
 import asyncio
 import logging
-from datetime import datetime
+from datetime import datetime, timezone
 from typing import Optional
 
 logger = logging.getLogger(__name__)
@@ -123,10 +123,10 @@ class BackgroundScheduler:
 
         while self._running:
             try:
-                start = datetime.utcnow()
+                start = datetime.now(timezone.utc).replace(tzinfo=None)
                 logger.info(f"⏰ Running task: {name}")
                 await asyncio.to_thread(func)
-                elapsed = (datetime.utcnow() - start).total_seconds()
+                elapsed = (datetime.now(timezone.utc).replace(tzinfo=None) - start).total_seconds()
                 logger.info(f"✅ Task '{name}' completed in {elapsed:.1f}s")
             except Exception as e:
                 logger.error(f"❌ Task '{name}' failed: {e}", exc_info=True)
@@ -146,9 +146,9 @@ class BackgroundScheduler:
 
         while self._running:
             try:
-                start = datetime.utcnow()
+                start = datetime.now(timezone.utc).replace(tzinfo=None)
                 await func()
-                elapsed = (datetime.utcnow() - start).total_seconds()
+                elapsed = (datetime.now(timezone.utc).replace(tzinfo=None) - start).total_seconds()
                 if elapsed > 1:
                     logger.info(f"✅ Task '{name}' completed in {elapsed:.1f}s")
             except Exception as e:
@@ -221,7 +221,7 @@ class BackgroundScheduler:
 
         db = SessionLocal()
         try:
-            cutoff = datetime.utcnow() - timedelta(days=30)
+            cutoff = datetime.now(timezone.utc).replace(tzinfo=None) - timedelta(days=30)
             deleted = db.query(StripeEvent).filter(
                 StripeEvent.processed == True,
                 StripeEvent.created_at < cutoff,
@@ -314,7 +314,7 @@ class BackgroundScheduler:
                         pass
 
                 # 3. Actualizar BD
-                now = datetime.utcnow()
+                now = datetime.now(timezone.utc).replace(tzinfo=None)
                 if is_healthy:
                     node.last_health_check = now
                     # Reset a online si estaba en maintenance check (no forzar si es maintenance manual)

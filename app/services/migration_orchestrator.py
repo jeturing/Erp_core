@@ -12,9 +12,10 @@ La BD NO se copia — solo cambia qué nodo sirve el runtime + se replica el fil
 """
 import asyncio
 import logging
+import shlex
 import subprocess
 import uuid
-from datetime import datetime, timedelta
+from datetime import datetime, timedelta, timezone
 from typing import Any, Dict, List, Optional, Tuple
 
 from sqlalchemy.orm import Session
@@ -191,7 +192,7 @@ class MigrationOrchestrator:
 
         job.state = MigrationState.failed
         job.error_log = f"{job.error_log or ''}\n[CANCELLED] {reason}".strip()
-        job.completed_at = datetime.utcnow()
+        job.completed_at = datetime.now(timezone.utc).replace(tzinfo=None)
 
         # Resetear deployment
         deployment = db.query(TenantDeployment).get(job.deployment_id)
@@ -332,7 +333,7 @@ class MigrationOrchestrator:
         )
 
         if ok:
-            job.filestore_synced_at = datetime.utcnow()
+            job.filestore_synced_at = datetime.now(timezone.utc).replace(tzinfo=None)
             if deployment:
                 deployment.migration_state = MigrationState.preparing_target
             logger.info(f"✅ Filestore bulk sync completed for job {job.id}")
@@ -409,7 +410,7 @@ class MigrationOrchestrator:
         """
         logger.info(f"⚡ CUTOVER starting for job {job.id} — DOWNTIME WINDOW")
         job.state = MigrationState.cutover
-        job.cutover_started_at = datetime.utcnow()
+        job.cutover_started_at = datetime.now(timezone.utc).replace(tzinfo=None)
 
         deployment = db.query(TenantDeployment).get(job.deployment_id)
         source_node = db.query(ProxmoxNode).get(job.source_node_id)
@@ -524,7 +525,7 @@ class MigrationOrchestrator:
                 )
                 logger.info(f"  ▶️ Resumed {len(paused_cron_ids)} crons for {db_name}")
 
-            job.cutover_ended_at = datetime.utcnow()
+            job.cutover_ended_at = datetime.now(timezone.utc).replace(tzinfo=None)
             duration = (job.cutover_ended_at - job.cutover_started_at).total_seconds()
             logger.info(f"✅ CUTOVER completed for job {job.id} in {duration:.1f}s")
 
@@ -532,7 +533,7 @@ class MigrationOrchestrator:
             return True
 
         except Exception as e:
-            job.cutover_ended_at = datetime.utcnow()
+            job.cutover_ended_at = datetime.now(timezone.utc).replace(tzinfo=None)
             # Intentar reactivar crons si fueron pausados
             if paused_cron_ids:
                 try:
@@ -599,7 +600,7 @@ class MigrationOrchestrator:
     async def _finalize_completed(self, db: Session, job: TenantMigrationJob) -> bool:
         """Marca la migración como completada."""
         job.state = MigrationState.completed
-        job.completed_at = datetime.utcnow()
+        job.completed_at = datetime.now(timezone.utc).replace(tzinfo=None)
 
         deployment = db.query(TenantDeployment).get(job.deployment_id)
         if deployment:
@@ -650,7 +651,7 @@ class MigrationOrchestrator:
                 job.append_error(f"Routing rollback failed: {e}")
 
         job.state = MigrationState.failed
-        job.completed_at = datetime.utcnow()
+        job.completed_at = datetime.now(timezone.utc).replace(tzinfo=None)
 
         self._audit(db, "migration_rollback", job.subdomain, {
             "job_id": str(job.id),
@@ -661,11 +662,10 @@ class MigrationOrchestrator:
 
     def _ssh_cmd(self, node_ip: str, cmd: str, timeout: int = 30) -> Tuple[int, str, str]:
         """Ejecuta comando SSH en un nodo."""
-        safe = cmd.replace("'", "'\\''")
-        full = f"ssh -o BatchMode=yes -o ConnectTimeout=5 root@{node_ip} '{safe}'"
+        full = ["ssh", "-o", "BatchMode=yes", "-o", "ConnectTimeout=5", f"root@{node_ip}", cmd]
         try:
             r = subprocess.run(
-                full, shell=True, capture_output=True, text=True, timeout=timeout
+                full, capture_output=True, text=True, timeout=timeout
             )
             return r.returncode, r.stdout.strip(), r.stderr.strip()
         except subprocess.TimeoutExpired:
@@ -741,15 +741,13 @@ class MigrationOrchestrator:
         
         Ejecutado desde PCT160 vía SSH al nodo origen, que hace rsync al destino.
         """
-        cmd = (
-            f"ssh -o BatchMode=yes -o ConnectTimeout=5 root@{source_ip} "
-            f"'rsync -az --delete "
-            f"{fs_path}/{db_name}/ "
-            f"root@{target_ip}:{fs_path}/{db_name}/'"
-        )
+        source_path = f"{fs_path.rstrip('/')}/{db_name}/"
+        target_path = f"root@{target_ip}:{fs_path.rstrip('/')}/{db_name}/"
+        remote_cmd = f"rsync -az --delete {shlex.quote(source_path)} {shlex.quote(target_path)}"
+        cmd = ["ssh", "-o", "BatchMode=yes", "-o", "ConnectTimeout=5", f"root@{source_ip}", remote_cmd]
         try:
             r = subprocess.run(
-                cmd, shell=True, capture_output=True, text=True, timeout=600  # 10 min max
+                cmd, capture_output=True, text=True, timeout=600  # 10 min max
             )
             if r.returncode == 0:
                 # Fix ownership en destino
@@ -846,7 +844,7 @@ class MigrationOrchestrator:
         """Transicionar job a estado failed."""
         job.state = MigrationState.failed
         job.append_error(msg)
-        job.completed_at = datetime.utcnow()
+        job.completed_at = datetime.now(timezone.utc).replace(tzinfo=None)
 
         deployment = db.query(TenantDeployment).get(job.deployment_id)
         if deployment:

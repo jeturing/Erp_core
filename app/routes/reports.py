@@ -3,7 +3,7 @@ Reports Routes — Endpoint consolidado de analítica y reportes para el Dashboa
 Agrega datos de: billing, customers, partners, leads, comisiones,
 settlements, work orders, seats, reconciliation, auditoría e infra.
 """
-from datetime import datetime, timedelta
+from datetime import datetime, timedelta, timezone
 from typing import Dict, Any
 
 from fastapi import APIRouter, Cookie, HTTPException, Request
@@ -55,7 +55,7 @@ async def get_overview(request: Request, access_token: str = Cookie(None)) -> Di
     _require_admin(request, access_token)
     db = SessionLocal()
     try:
-        now = datetime.utcnow()
+        now = datetime.now(timezone.utc).replace(tzinfo=None)
         month_start = now.replace(day=1, hour=0, minute=0, second=0, microsecond=0)
         prev_month_start = (month_start - timedelta(days=1)).replace(day=1)
         thirty_days_ago = now - timedelta(days=30)

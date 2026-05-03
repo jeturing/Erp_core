@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 import logging
-from datetime import datetime
+from datetime import datetime, timezone
 
 from sqlalchemy.orm import Session
 
@@ -14,7 +14,7 @@ logger = logging.getLogger(__name__)
 
 def cleanup_api_keys(db: Session) -> dict[str, int]:
     """Revokes rotating keys after grace period and expires stale records."""
-    now = datetime.utcnow()
+    now = datetime.now(timezone.utc).replace(tzinfo=None)
 
     revoked_rotating = (
         db.query(ApiKey)

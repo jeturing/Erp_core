@@ -16,7 +16,7 @@ Admin endpoints: CRUD completo bajo /api/onboarding-config/admin/
 from fastapi import APIRouter, HTTPException, Request, Cookie
 from pydantic import BaseModel
 from typing import Optional, List, Any
-from datetime import datetime
+from datetime import datetime, timezone
 import logging
 
 from ..models.database import (
@@ -285,7 +285,7 @@ async def update_config(
         for field, value in data.model_dump(exclude_none=True).items():
             setattr(cfg, field, value)
 
-        cfg.updated_at = datetime.utcnow()
+        cfg.updated_at = datetime.now(timezone.utc).replace(tzinfo=None)
         db.commit()
         db.refresh(cfg)
         logger.info(f"Onboarding config updated: {config_key}")
@@ -322,7 +322,7 @@ async def activate_config(config_key: str, request: Request, access_token: str =
         if not cfg:
             raise HTTPException(404, f"Configuración '{config_key}' no encontrada")
         cfg.is_active = not cfg.is_active
-        cfg.updated_at = datetime.utcnow()
+        cfg.updated_at = datetime.now(timezone.utc).replace(tzinfo=None)
         db.commit()
         return {"message": f"Configuración {'activada' if cfg.is_active else 'desactivada'}", "is_active": cfg.is_active}
     finally:

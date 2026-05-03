@@ -27,6 +27,7 @@ from ..config import (
     ODOO_DB_PASSWORD,
     ODOO_DB_PORT,
     ODOO_DB_USER,
+    REDIS_URL,
     PROXMOX_SSH_HOST,
     PROXMOX_SSH_KEY,
     PROXMOX_SSH_USER,
@@ -178,7 +179,7 @@ class DedicatedServiceManager:
             log_level = info
             addons_path = {addons_path}
             server_wide_modules = base,web,redis_session_store
-            session_redis_url = redis://:JtrRedis2026!@10.10.10.7:6379/0
+            session_redis_url = {REDIS_URL}
             session_redis_expire = 604800
             proxy_mode = True
             list_db = False

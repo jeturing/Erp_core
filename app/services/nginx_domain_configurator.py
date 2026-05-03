@@ -81,7 +81,7 @@ def _run_local(cmd: str, timeout: int = 15) -> Tuple[int, str, str]:
         return _run_admin_helper(_LOCAL_HELPER_COMMANDS[normalized], timeout=timeout)
 
     r = subprocess.run(
-        cmd, shell=True, capture_output=True, text=True, timeout=timeout
+        shlex.split(cmd), capture_output=True, text=True, timeout=timeout
     )
     return r.returncode, r.stdout.strip(), r.stderr.strip()
 

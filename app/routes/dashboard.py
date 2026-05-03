@@ -3,6 +3,7 @@ Dashboard Routes - Admin dashboard metrics and views
 """
 from fastapi import APIRouter, HTTPException, Request, Cookie
 from fastapi.responses import HTMLResponse, RedirectResponse
+from datetime import datetime, timezone
 import os
 from ..models.database import Customer, Subscription, SubscriptionStatus, SessionLocal
 from .roles import _require_admin as _require_admin_base, verify_token_with_role
@@ -292,7 +293,7 @@ async def dashboard_all(request: Request, access_token: str = Cookie(None)):
             },
             "tenants": tenants_data,
             "infrastructure": infrastructure_data,
-            "timestamp": __import__('datetime').datetime.utcnow().isoformat(),
+            "timestamp": datetime.now(timezone.utc).replace(tzinfo=None).isoformat(),
         }
     except Exception as e:
         import logging

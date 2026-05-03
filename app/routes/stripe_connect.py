@@ -245,12 +245,12 @@ async def execute_transfer(
         # Si hay commission_id, actualizar estado
         if payload.commission_id:
             from ..models.database import Commission, CommissionStatus
-            from datetime import datetime
+            from datetime import datetime, timezone
 
             commission = db.query(Commission).filter(Commission.id == payload.commission_id).first()
             if commission:
                 commission.status = CommissionStatus.paid
-                commission.paid_at = datetime.utcnow()
+                commission.paid_at = datetime.now(timezone.utc).replace(tzinfo=None)
                 commission.payment_reference = result["transfer_id"]
                 db.commit()
 

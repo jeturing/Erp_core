@@ -3,8 +3,9 @@ Proxmox Manager - Multi-node cluster management for distributed Odoo deployment
 """
 import subprocess
 import logging
+import shlex
 from typing import Dict, Any, List, Optional
-from datetime import datetime
+from datetime import datetime, timezone
 import os
 
 from ..models.database import (
@@ -176,16 +177,17 @@ class ProxmoxManager:
         """Ejecuta el script de provisioning en el nodo remoto"""
         try:
             # Comando para crear contenedor via pct
-            cmd = (
-                f"ssh -p {node.ssh_port} {node.ssh_user}@{node.hostname} "
-                f"'cd /root/Cloudflare && ./create_tenant.sh {subdomain}'"
-            )
+            cmd = [
+                "ssh",
+                "-p", str(node.ssh_port),
+                f"{node.ssh_user}@{node.hostname}",
+                f"cd /root/Cloudflare && ./create_tenant.sh {shlex.quote(subdomain)}",
+            ]
             
-            logger.info(f"Ejecutando provisioning: {cmd}")
+            logger.info("Ejecutando provisioning remoto para %s", subdomain)
             
             result = subprocess.run(
                 cmd,
-                shell=True,
                 capture_output=True,
                 text=True,
                 timeout=300
@@ -209,12 +211,14 @@ class ProxmoxManager:
     async def _get_container_ip(cls, node: ProxmoxNode, vmid: int) -> Optional[str]:
         """Obtiene la IP de un contenedor"""
         try:
-            cmd = (
-                f"ssh -p {node.ssh_port} {node.ssh_user}@{node.hostname} "
-                f"'pct exec {vmid} -- hostname -I | cut -d\" \" -f1'"
-            )
+            cmd = [
+                "ssh",
+                "-p", str(node.ssh_port),
+                f"{node.ssh_user}@{node.hostname}",
+                f"pct exec {vmid} -- hostname -I | cut -d' ' -f1",
+            ]
             
-            result = subprocess.run(cmd, shell=True, capture_output=True, text=True, timeout=30)
+            result = subprocess.run(cmd, capture_output=True, text=True, timeout=30)
             if result.returncode == 0:
                 return result.stdout.strip()
         except:
@@ -322,14 +326,20 @@ class ProxmoxManager:
             for node in nodes:
                 try:
                     # Ping simple
-                    cmd = f"ssh -p {node.ssh_port} -o ConnectTimeout=5 {node.ssh_user}@{node.hostname} 'echo ok'"
-                    result = subprocess.run(cmd, shell=True, capture_output=True, timeout=10)
+                    cmd = [
+                        "ssh",
+                        "-p", str(node.ssh_port),
+                        "-o", "ConnectTimeout=5",
+                        f"{node.ssh_user}@{node.hostname}",
+                        "echo ok",
+                    ]
+                    result = subprocess.run(cmd, capture_output=True, timeout=10)
                     
                     is_online = result.returncode == 0
                     
                     if is_online:
                         node.status = NodeStatus.online
-                        node.last_health_check = datetime.utcnow()
+                        node.last_health_check = datetime.now(timezone.utc).replace(tzinfo=None)
                     else:
                         node.status = NodeStatus.offline
                     

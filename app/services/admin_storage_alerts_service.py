@@ -10,7 +10,7 @@ import logging
 from sqlalchemy.orm import Session
 from sqlalchemy import text
 from typing import Dict, List, Tuple
-from datetime import datetime, timedelta
+from datetime import datetime, timedelta, timezone
 
 logger = logging.getLogger("admin_storage_service")
 
@@ -166,7 +166,7 @@ class AdminStorageAlertsService:
             if updated_by is not None:
                 updates["updated_by"] = updated_by
             
-            updates["updated_at"] = datetime.utcnow()
+            updates["updated_at"] = datetime.now(timezone.utc).replace(tzinfo=None)
             
             if not updates:
                 return False, "❌ No hay cambios para realizar"
@@ -323,7 +323,7 @@ class AdminStorageAlertsService:
                 WHERE id = :id
             """
             self.db.execute(text(query), {
-                "now": datetime.utcnow(),
+                "now": datetime.now(timezone.utc).replace(tzinfo=None),
                 "user": resolved_by or "system",
                 "id": alert_id
             })

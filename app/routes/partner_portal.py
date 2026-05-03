@@ -5,7 +5,7 @@ Incluye: onboarding, dashboard, leads, clientes, Stripe Connect self-service.
 import logging
 import hashlib
 import secrets
-from datetime import datetime
+from datetime import datetime, timezone
 from typing import Any, Dict, List, Optional
 
 from fastapi import APIRouter, Cookie, HTTPException, Request, status
@@ -76,7 +76,7 @@ def _apply_partner_stripe_status(partner: Partner, status_result: Dict[str, Any]
 
     if ready and partner.onboarding_step < 4:
         partner.onboarding_step = 4
-        partner.onboarding_completed_at = datetime.utcnow()
+        partner.onboarding_completed_at = datetime.now(timezone.utc).replace(tzinfo=None)
 
     return ready
 
@@ -138,7 +138,7 @@ async def admin_invite_partner(
         partner.portal_email = payload.portal_email or partner.contact_email
         partner.onboarding_step = 1  # Credenciales asignadas, pendiente completar perfil
         partner.portal_access = True
-        partner.invited_at = datetime.utcnow()
+        partner.invited_at = datetime.now(timezone.utc).replace(tzinfo=None)
 
         # Extraer admin username del token
         token = _extract_token(request, access_token)
@@ -411,7 +411,7 @@ async def onboarding_skip_stripe(
             )
         if partner.onboarding_step < 4:
             partner.onboarding_step = 4
-            partner.onboarding_completed_at = datetime.utcnow()
+            partner.onboarding_completed_at = datetime.now(timezone.utc).replace(tzinfo=None)
         db.commit()
         return {"message": "Onboarding completado (Stripe pendiente)", "onboarding_step": 4}
     finally:

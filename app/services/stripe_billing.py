@@ -46,7 +46,7 @@ def _app_url() -> str:
 
 def _normalize_period_start(value: Optional[datetime]) -> datetime:
     if value is None:
-        now = datetime.utcnow()
+        now = datetime.now(timezone.utc).replace(tzinfo=None)
         return datetime(now.year, now.month, 1)
     return value.replace(hour=0, minute=0, second=0, microsecond=0)
 
@@ -63,7 +63,7 @@ def _resolve_billing_period(
         period_end = subscription.current_period_end
 
     if period_start is None:
-        now = datetime.utcnow()
+        now = datetime.now(timezone.utc).replace(tzinfo=None)
         period_start = datetime(now.year, now.month, 1)
     else:
         period_start = _normalize_period_start(period_start)
@@ -335,7 +335,7 @@ def push_invoice_to_stripe(
         invoice.stripe_payment_intent_id = s_inv.get("payment_intent")
         if invoice.status == InvoiceStatus.draft:
             invoice.status = InvoiceStatus.issued
-            invoice.issued_at = datetime.utcnow()
+            invoice.issued_at = datetime.now(timezone.utc).replace(tzinfo=None)
         db.commit()
 
         logger.info(
@@ -472,7 +472,7 @@ def sync_subscription_quantity(
         # Actualizar BD local
         subscription.user_count = qty
         recalculate_subscription_monthly_amount(db, subscription, user_count=qty)
-        subscription.updated_at = datetime.utcnow()
+        subscription.updated_at = datetime.now(timezone.utc).replace(tzinfo=None)
         db.commit()
 
         logger.info(
@@ -538,7 +538,7 @@ def change_subscription_plan(
             plan=new_plan,
             user_count=subscription.user_count or 1,
         )
-        subscription.updated_at = datetime.utcnow()
+        subscription.updated_at = datetime.now(timezone.utc).replace(tzinfo=None)
         db.commit()
 
         logger.info(
@@ -622,7 +622,7 @@ def generate_consumption_invoice(
 
     lines = []
     total = 0.0
-    now = datetime.utcnow()
+    now = datetime.now(timezone.utc).replace(tzinfo=None)
     period_user_count, usage_source = _resolve_period_user_count(
         db,
         sub,

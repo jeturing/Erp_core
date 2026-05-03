@@ -74,6 +74,7 @@ export const billingApi = {
   async createCustomer(data: {
     company_name: string;
     email: string;
+    phone: string;
     full_name?: string;
     subdomain: string;
     plan_name?: string;
@@ -103,8 +104,9 @@ export const billingApi = {
     is_admin_account?: boolean;
     plan_name?: string;
     stripe_customer_id?: string;
-        email?: string;
-        stripe_action?: string;
+    email?: string;
+    phone?: string;
+    stripe_action?: string;
   }): Promise<{ message: string; changes: string[] }> {
     return api.put(`/api/customers/${id}`, data);
   },
@@ -129,8 +131,6 @@ export const billingApi = {
     success: boolean;
     already_exists: boolean;
     stripe_customer_id?: string;
-        email?: string;
-        stripe_action?: string;
     message: string;
   }> {
     return api.post(`/api/customers/${id}/create-stripe-customer`, {});

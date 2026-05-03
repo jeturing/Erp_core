@@ -6,7 +6,7 @@ Permite gestión de tokens, bypass de MFA, reseteo de TOTP y consulta de accesos
 from fastapi import APIRouter, HTTPException, Request, Depends
 from pydantic import BaseModel
 from typing import Optional, Literal
-from datetime import datetime, timedelta
+from datetime import datetime, timedelta, timezone
 import logging
 import secrets
 import hashlib
@@ -292,7 +292,7 @@ async def generate_manual_token(payload: GenerateTokenPayload, db=Depends(get_db
         token_hash=token_hash,
         user_type=token_user_type,
         user_id=user_id,
-        expires_at=datetime.utcnow() + timedelta(hours=2),
+        expires_at=datetime.now(timezone.utc).replace(tzinfo=None) + timedelta(hours=2),
         is_used=False,
     )
     db.add(new_token)

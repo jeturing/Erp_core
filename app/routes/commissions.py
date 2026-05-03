@@ -3,7 +3,7 @@ Commissions Routes — Tracking de comisiones 50/50
 Cláusula 8 del contrato: Split sobre Ingresos Netos
 """
 import json
-from datetime import datetime
+from datetime import datetime, timezone
 from typing import Optional
 
 from fastapi import APIRouter, Cookie, HTTPException, Request
@@ -221,7 +221,7 @@ async def update_commission(
                 try:
                     new_status = CommissionStatus(value)
                     if new_status == CommissionStatus.paid:
-                        c.paid_at = datetime.utcnow()
+                        c.paid_at = datetime.now(timezone.utc).replace(tzinfo=None)
                     value = new_status
                 except ValueError:
                     continue
@@ -297,7 +297,7 @@ async def mark_commission_paid(
             raise HTTPException(status_code=404, detail="Comisión no encontrada")
 
         c.status = CommissionStatus.paid
-        c.paid_at = datetime.utcnow()
+        c.paid_at = datetime.now(timezone.utc).replace(tzinfo=None)
         if payment_reference:
             c.payment_reference = payment_reference
         db.commit()

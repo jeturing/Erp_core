@@ -11,7 +11,7 @@ from pydantic import BaseModel
 from typing import Optional
 from sqlalchemy.orm import Session
 from sqlalchemy import func
-from datetime import datetime, timedelta
+from datetime import datetime, timedelta, timezone
 import stripe
 import logging
 
@@ -114,7 +114,7 @@ def record_seat_event(payload: SeatEventCreate, db: Session = Depends(get_db)):
         stripe_synced = _sync_stripe_quantity(sub, payload.user_count_after)
         if stripe_synced:
             hwm.stripe_qty_updated = True
-            hwm.stripe_qty_updated_at = datetime.utcnow()
+            hwm.stripe_qty_updated_at = datetime.now(timezone.utc).replace(tzinfo=None)
 
     db.commit()
 
@@ -134,7 +134,7 @@ def record_seat_event(payload: SeatEventCreate, db: Session = Depends(get_db)):
 @router.get("/hwm/{subscription_id}")
 def get_hwm(subscription_id: int, days: int = 30, db: Session = Depends(get_db)):
     """Obtiene historial de high-water mark."""
-    since = datetime.utcnow() - timedelta(days=days)
+    since = datetime.now(timezone.utc).replace(tzinfo=None) - timedelta(days=days)
     records = db.query(SeatHighWater).filter(
         SeatHighWater.subscription_id == subscription_id,
         SeatHighWater.period_date >= since,
@@ -188,7 +188,7 @@ def sync_stripe_all(db: Session = Depends(get_db)):
     Sincroniza HWM con Stripe quantity para todas las suscripciones Direct activas.
     Pensado para un cron diario como fallback del real-time.
     """
-    today = datetime.utcnow().replace(hour=0, minute=0, second=0, microsecond=0)
+    today = datetime.now(timezone.utc).replace(tzinfo=None).replace(hour=0, minute=0, second=0, microsecond=0)
     pending = db.query(SeatHighWater).filter(
         SeatHighWater.period_date == today,
         SeatHighWater.stripe_qty_updated == False,
@@ -203,7 +203,7 @@ def sync_stripe_all(db: Session = Depends(get_db)):
         ok = _sync_stripe_quantity(sub, hwm.hwm_count)
         if ok:
             hwm.stripe_qty_updated = True
-            hwm.stripe_qty_updated_at = datetime.utcnow()
+            hwm.stripe_qty_updated_at = datetime.now(timezone.utc).replace(tzinfo=None)
             results.append({"sub_id": sub.id, "qty": hwm.hwm_count, "synced": True})
         else:
             results.append({"sub_id": sub.id, "qty": hwm.hwm_count, "synced": False})
@@ -225,14 +225,14 @@ def seat_summary(subscription_id: int, db: Session = Depends(get_db)):
     ).order_by(SeatEvent.created_at.desc()).limit(10).all()
 
     # HWM del mes actual
-    month_start = datetime.utcnow().replace(day=1, hour=0, minute=0, second=0, microsecond=0)
+    month_start = datetime.now(timezone.utc).replace(tzinfo=None).replace(day=1, hour=0, minute=0, second=0, microsecond=0)
     max_hwm = db.query(func.max(SeatHighWater.hwm_count)).filter(
         SeatHighWater.subscription_id == subscription_id,
         SeatHighWater.period_date >= month_start,
     ).scalar() or 0
 
     # Contar usuarios en gracia activa (Épica 4)
-    now = datetime.utcnow()
+    now = datetime.now(timezone.utc).replace(tzinfo=None)
     grace_count = db.query(SeatEvent).filter(
         SeatEvent.subscription_id == subscription_id,
         SeatEvent.event_type == SeatEventType.FIRST_LOGIN,
@@ -344,12 +344,12 @@ def seats_overview(
             "items": [],
             "groups": [],
             "total": 0,
-            "generated_at": datetime.utcnow().isoformat(),
+            "generated_at": datetime.now(timezone.utc).replace(tzinfo=None).isoformat(),
         }
 
     subscription_ids = [sub.id for sub, _, _ in rows]
-    month_start = datetime.utcnow().replace(day=1, hour=0, minute=0, second=0, microsecond=0)
-    now = datetime.utcnow()
+    month_start = datetime.now(timezone.utc).replace(tzinfo=None).replace(day=1, hour=0, minute=0, second=0, microsecond=0)
+    now = datetime.now(timezone.utc).replace(tzinfo=None)
 
     hwm_rows = (
         db.query(SeatHighWater.subscription_id, func.max(SeatHighWater.hwm_count))
@@ -428,5 +428,5 @@ def seats_overview(
         "items": items,
         "groups": groups,
         "total": len(items),
-        "generated_at": datetime.utcnow().isoformat(),
+        "generated_at": datetime.now(timezone.utc).replace(tzinfo=None).isoformat(),
     }

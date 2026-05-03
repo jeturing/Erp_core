@@ -10,7 +10,7 @@ from fastapi import APIRouter, HTTPException, Request, Cookie, Depends
 from fastapi.responses import JSONResponse, StreamingResponse
 from pydantic import BaseModel
 from typing import Optional, List
-from datetime import datetime
+from datetime import datetime, timezone
 import hashlib
 import io
 import logging
@@ -274,7 +274,7 @@ async def update_template(
                 setattr(t, field, val)
 
         t.updated_by = payload.get("sub")
-        t.updated_at = datetime.utcnow()
+        t.updated_at = datetime.now(timezone.utc).replace(tzinfo=None)
         db.commit()
         return {"message": "Template actualizado"}
     except HTTPException:
@@ -422,7 +422,7 @@ async def sign_agreement(data: SignRequest, request: Request, access_token: str 
             raise HTTPException(400, "Este acuerdo ya fue firmado")
 
         # Render template with variables
-        now = datetime.utcnow()
+        now = datetime.now(timezone.utc).replace(tzinfo=None)
         variables = {
             "signer_name": data.signer_name,
             "signer_company": data.signer_company or "",

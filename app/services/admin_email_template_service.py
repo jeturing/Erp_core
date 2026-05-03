@@ -10,7 +10,7 @@ import logging
 from sqlalchemy.orm import Session
 from sqlalchemy import text
 from typing import Dict, List, Tuple, Optional
-from datetime import datetime
+from datetime import datetime, timezone
 import json
 
 logger = logging.getLogger("admin_email_service")
@@ -317,7 +317,7 @@ class AdminEmailTemplateService:
             
             # Incrementar versión y actualizar
             updates["version"] = template["version"] + 1
-            updates["updated_at"] = datetime.utcnow()
+            updates["updated_at"] = datetime.now(timezone.utc).replace(tzinfo=None)
             
             # Construir query dinámicamente
             set_clause = ", ".join([f"{k} = :{k}" for k in updates.keys()])
@@ -352,7 +352,7 @@ class AdminEmailTemplateService:
             self.db.execute(text(query), {
                 "active": is_active,
                 "user": updated_by,
-                "now": datetime.utcnow(),
+                "now": datetime.now(timezone.utc).replace(tzinfo=None),
                 "type": template_type
             })
             self.db.commit()

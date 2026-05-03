@@ -3,7 +3,7 @@ Billing Routes - API para métricas de facturación y pagos
 """
 from fastapi import APIRouter, HTTPException, Request, Cookie
 from typing import Dict, Any, List, Optional
-from datetime import datetime, timedelta
+from datetime import datetime, timedelta, timezone
 from ..models.database import (
     Customer, Subscription, SubscriptionStatus, 
     StripeEvent, Plan, SessionLocal
@@ -111,7 +111,7 @@ async def get_billing_metrics(
         pending_subs = db.query(Subscription).filter_by(status=SubscriptionStatus.pending).all()
         cancelled_30d = db.query(Subscription).filter(
             Subscription.status == SubscriptionStatus.cancelled,
-            Subscription.updated_at >= datetime.utcnow() - timedelta(days=30)
+            Subscription.updated_at >= datetime.now(timezone.utc).replace(tzinfo=None) - timedelta(days=30)
         ).count()
         
         # Calcular MRR por plan (dinámico desde BD)
@@ -203,7 +203,7 @@ async def get_billing_comparison(
     
     db = SessionLocal()
     try:
-        now = datetime.utcnow()
+        now = datetime.now(timezone.utc).replace(tzinfo=None)
         current_month_start = now.replace(day=1, hour=0, minute=0, second=0, microsecond=0)
         previous_month_start = (current_month_start - timedelta(days=1)).replace(day=1)
         
@@ -262,7 +262,7 @@ async def get_billing_comparison(
         }
     except Exception as e:
         logger.error(f"Error obteniendo comparación de billing: {e}")
-        now = datetime.utcnow()
+        now = datetime.now(timezone.utc).replace(tzinfo=None)
         return {
             "current_month": f"Febrero {now.year}",
             "previous_month": f"Enero {now.year}",

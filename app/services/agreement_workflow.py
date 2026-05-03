@@ -7,7 +7,7 @@ Reuses the existing agreements infrastructure (templates, signing, PDF generatio
 and adds workflow orchestration on top.
 """
 
-from datetime import datetime
+from datetime import datetime, timezone
 from typing import Optional
 import hashlib
 import logging
@@ -136,7 +136,7 @@ def create_app(
             app_id=app.id,
             template_id=tmpl.id,
             status="generated",
-            generated_at=datetime.utcnow(),
+            generated_at=datetime.now(timezone.utc).replace(tzinfo=None),
         )
         db.add(flow)
 
@@ -192,7 +192,7 @@ def transition_flow(
             f"Transiciones válidas: {VALID_TRANSITIONS.get(flow.status, [])}"
         )
 
-    now = datetime.utcnow()
+    now = datetime.now(timezone.utc).replace(tzinfo=None)
     flow.status = target_status
     flow.updated_at = now
 
@@ -249,7 +249,7 @@ def sign_developer_agreement(
     if not template:
         raise ValueError("Template no encontrado o inactivo")
 
-    now = datetime.utcnow()
+    now = datetime.now(timezone.utc).replace(tzinfo=None)
     variables = {
         "signer_name": signer_name,
         "signer_company": signer_company,
@@ -353,7 +353,7 @@ def _update_app_status_after_review(db: Session, app_id: int):
         if app:
             app.sandbox_access = True
             app.status = "sandbox_granted"
-            app.updated_at = datetime.utcnow()
+            app.updated_at = datetime.now(timezone.utc).replace(tzinfo=None)
             db.commit()
 
 
@@ -371,7 +371,7 @@ def generate_preview_pdf(db: Session, flow_id: int, signer_info: dict) -> str | 
     if not template:
         return None
 
-    now = datetime.utcnow()
+    now = datetime.now(timezone.utc).replace(tzinfo=None)
     variables = {
         "signer_name": signer_info.get("name", "[Nombre del Firmante]"),
         "signer_company": signer_info.get("company", "[Empresa]"),

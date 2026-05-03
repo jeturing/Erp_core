@@ -3,7 +3,7 @@ Servicios adicionales / add-ons comprables desde portal tenant y partner.
 """
 from __future__ import annotations
 
-from datetime import datetime, timedelta
+from datetime import datetime, timedelta, timezone
 from typing import Any, Dict, List, Optional
 import logging
 
@@ -103,7 +103,7 @@ def _item_allowed_for_country(item: ServiceCatalogItem, country_code: Optional[s
 
 
 def _next_invoice_number(db: Session) -> str:
-    year = datetime.utcnow().year
+    year = datetime.now(timezone.utc).replace(tzinfo=None).year
     last = (
         db.query(Invoice)
         .filter(Invoice.invoice_number.like(f"INV-{year}-%"))
@@ -325,7 +325,7 @@ def purchase_customer_addon(
         .first()
     )
 
-    now = datetime.utcnow()
+    now = datetime.now(timezone.utc).replace(tzinfo=None)
     if addon:
         addon.quantity += quantity
         addon.unit_price_monthly = offer["effective_price_monthly"]

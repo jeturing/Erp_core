@@ -28,7 +28,7 @@ Uso desde un tenant Odoo:
 El endpoint hace upsert por (tenant_id, source).
 """
 from typing import Any, Dict, Optional
-from datetime import datetime
+from datetime import datetime, timezone
 import logging
 
 from fastapi import APIRouter, Depends, Header, HTTPException, Request
@@ -153,7 +153,7 @@ async def sync_tenant_stripe_config(
         value = getattr(payload, field)
         if value is not None:
             setattr(config, field, value)
-    config.updated_at = datetime.utcnow()
+    config.updated_at = datetime.now(timezone.utc).replace(tzinfo=None)
 
     db.commit()
     db.refresh(config)

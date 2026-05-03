@@ -4,11 +4,11 @@ Resource Monitor - Monitoreo de recursos de nodos y contenedores
 import subprocess
 import logging
 import asyncio
-from datetime import datetime, timedelta
+from datetime import datetime, timedelta, timezone
 from typing import Dict, Any, List, Optional, cast
 
 from ..models.database import (
-    SessionLocal, ProxmoxNode, LXCContainer, ResourceMetric,
+    SessionLocal, db_session, ProxmoxNode, LXCContainer, ResourceMetric,
     NodeStatus, ContainerStatus
 )
 
@@ -23,35 +23,31 @@ class ResourceMonitor:
         """Actualiza métricas de un nodo específico"""
         try:
             # Obtener uso de CPU
-            cpu_cmd = (
-                f"ssh -p {node.ssh_port} -o ConnectTimeout=5 {node.ssh_user}@{node.hostname} "
-                f"\"grep 'cpu ' /proc/stat | awk '{{usage=($2+$4)*100/($2+$4+$5)}} END {{print usage}}'\""
-            )
+            ssh_base = [
+                "ssh",
+                "-p", str(node.ssh_port),
+                "-o", "ConnectTimeout=5",
+                f"{node.ssh_user}@{node.hostname}",
+            ]
+            cpu_cmd = [*ssh_base, "grep 'cpu ' /proc/stat | awk '{usage=($2+$4)*100/($2+$4+$5)} END {print usage}'"]
             
             # Obtener uso de RAM
-            ram_cmd = (
-                f"ssh -p {node.ssh_port} -o ConnectTimeout=5 {node.ssh_user}@{node.hostname} "
-                f"\"free -g | awk 'NR==2{{print $3}}'\""
-            )
+            ram_cmd = [*ssh_base, "free -g | awk 'NR==2{print $3}'"]
             
             # Obtener uso de disco
-            disk_cmd = (
-                f"ssh -p {node.ssh_port} -o ConnectTimeout=5 {node.ssh_user}@{node.hostname} "
-                f"\"df -BG /var/lib/vz | awk 'NR==2{{gsub(\\\"G\\\",\\\"\\\"); print $3}}'\""
-            )
+            disk_cmd = [*ssh_base, "df -BG /var/lib/vz | awk 'NR==2{gsub(\"G\",\"\"); print $3}'"]
             
             # Ejecutar comandos
-            cpu_result = subprocess.run(cpu_cmd, shell=True, capture_output=True, text=True, timeout=15)
-            ram_result = subprocess.run(ram_cmd, shell=True, capture_output=True, text=True, timeout=15)
-            disk_result = subprocess.run(disk_cmd, shell=True, capture_output=True, text=True, timeout=15)
+            cpu_result = subprocess.run(cpu_cmd, capture_output=True, text=True, timeout=15)
+            ram_result = subprocess.run(ram_cmd, capture_output=True, text=True, timeout=15)
+            disk_result = subprocess.run(disk_cmd, capture_output=True, text=True, timeout=15)
             
             cpu_percent = float(cpu_result.stdout.strip()) if cpu_result.returncode == 0 else 0
             ram_used = float(ram_result.stdout.strip()) if ram_result.returncode == 0 else 0
             disk_used = float(disk_result.stdout.strip()) if disk_result.returncode == 0 else 0
             
             # Actualizar en BD (usar update para evitar conflictos con tipos de Column)
-            db = SessionLocal()
-            try:
+            with db_session() as db:
                 db_node = db.query(ProxmoxNode).filter_by(id=node.id).first()
                 if db_node:
                     nid = getattr(db_node, "id")
@@ -59,7 +55,7 @@ class ResourceMonitor:
                         ProxmoxNode.used_cpu_percent: round(float(cpu_percent), 2),
                         ProxmoxNode.used_ram_gb: float(ram_used),
                         ProxmoxNode.used_storage_gb: float(disk_used),
-                        ProxmoxNode.last_health_check: datetime.utcnow(),
+                        ProxmoxNode.last_health_check: datetime.now(timezone.utc).replace(tzinfo=None),
                         ProxmoxNode.status: NodeStatus.online,
                     })
 
@@ -80,8 +76,6 @@ class ResourceMonitor:
                     "ram_used_gb": ram_used,
                     "disk_used_gb": disk_used
                 }
-            finally:
-                db.close()
                 
         except subprocess.TimeoutExpired:
             nid = getattr(node, "id", None)
@@ -98,16 +92,13 @@ class ResourceMonitor:
     @classmethod
     def _mark_node_offline(cls, node_id: Any):
         """Marca un nodo como offline"""
-        db = SessionLocal()
-        try:
+        with db_session() as db:
             # Usar update para evitar problemas de tipado en analizadores estáticos
             updated = db.query(ProxmoxNode).filter_by(id=node_id).update({
                 ProxmoxNode.status: NodeStatus.offline
             })
             if updated:
                 db.commit()
-        finally:
-            db.close()
     
     @classmethod
     async def update_container_metrics(cls, container: LXCContainer) -> Dict[str, Any]:
@@ -118,15 +109,20 @@ class ResourceMonitor:
                 return {"container": container.hostname, "status": "node_offline"}
             
             # Obtener métricas via pct
-            cmd = (
-                f"ssh -p {node.ssh_port} -o ConnectTimeout=5 {node.ssh_user}@{node.hostname} "
-                f"\"pct status {container.vmid} && pct exec {container.vmid} -- "
-                f"sh -c 'echo CPU:$(cat /proc/loadavg | cut -d\\\" \\\" -f1) "
-                f"RAM:$(free -m | awk \\'NR==2{{print $3}}\\') "
-                f"DISK:$(df -BM / | awk \\'NR==2{{gsub(\\\"M\\\",\\\"\\\"); print $3}}\\')'\""
-            )
+            cmd = [
+                "ssh",
+                "-p", str(node.ssh_port),
+                "-o", "ConnectTimeout=5",
+                f"{node.ssh_user}@{node.hostname}",
+                (
+                    f"pct status {container.vmid} && pct exec {container.vmid} -- "
+                    "sh -c 'echo CPU:$(cat /proc/loadavg | cut -d\" \" -f1) "
+                    "RAM:$(free -m | awk '\\''NR==2{print $3}'\\'') "
+                    "DISK:$(df -BM / | awk '\\''NR==2{gsub(\"M\",\"\"); print $3}'\\'')'"
+                ),
+            ]
             
-            result = subprocess.run(cmd, shell=True, capture_output=True, text=True, timeout=15)
+            result = subprocess.run(cmd, capture_output=True, text=True, timeout=15)
             
             if result.returncode == 0 and "running" in result.stdout.lower():
                 # Parsear salida
@@ -159,8 +155,7 @@ class ResourceMonitor:
                         pass
                 
                 # Actualizar en BD (usar update para evitar conflictos de tipado)
-                db = SessionLocal()
-                try:
+                with db_session() as db:
                     db_container = db.query(LXCContainer).filter_by(id=container.id).first()
                     if db_container:
                         cid = getattr(db_container, "id")
@@ -180,8 +175,6 @@ class ResourceMonitor:
                         )
                         db.add(metric)
                         db.commit()
-                finally:
-                    db.close()
                 
                 return {
                     "container": container.hostname,
@@ -192,14 +185,11 @@ class ResourceMonitor:
                 }
             else:
                 # Contenedor no está corriendo
-                db = SessionLocal()
-                try:
+                with db_session() as db:
                     db.query(LXCContainer).filter_by(id=container.id).update({
                         LXCContainer.status: ContainerStatus.stopped
                     })
                     db.commit()
-                finally:
-                    db.close()
                 
                 return {"container": container.hostname, "status": "stopped"}
                 
@@ -230,7 +220,7 @@ class ResourceMonitor:
                         container_results.append(container_result)
             
             return {
-                "timestamp": datetime.utcnow().isoformat(),
+                "timestamp": datetime.now(timezone.utc).replace(tzinfo=None).isoformat(),
                 "nodes_scanned": len(node_results),
                 "containers_scanned": len(container_results),
                 "node_results": node_results,
@@ -333,7 +323,7 @@ class ResourceMonitor:
         """Obtiene métricas históricas para gráficos"""
         db = SessionLocal()
         try:
-            since = datetime.utcnow() - timedelta(hours=hours)
+            since = datetime.now(timezone.utc).replace(tzinfo=None) - timedelta(hours=hours)
             
             query = db.query(ResourceMetric).filter(
                 ResourceMetric.recorded_at >= since
@@ -365,7 +355,7 @@ class ResourceMonitor:
         """Limpia métricas antiguas"""
         db = SessionLocal()
         try:
-            cutoff = datetime.utcnow() - timedelta(days=days)
+            cutoff = datetime.now(timezone.utc).replace(tzinfo=None) - timedelta(days=days)
             deleted = db.query(ResourceMetric).filter(
                 ResourceMetric.recorded_at < cutoff
             ).delete()

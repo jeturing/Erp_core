@@ -14,7 +14,9 @@ from ..config import (
     get_runtime_bool,
     get_runtime_int,
     get_runtime_setting,
+    require_config_secret,
 )
+from ..utils.runtime_security import utc_now, utc_now_naive
 
 logger = logging.getLogger(__name__)
 
@@ -25,7 +27,7 @@ def _db():
     return RefreshToken, SessionLocal()
 
 def _jwt_secret_key() -> str:
-    return get_runtime_setting("JWT_SECRET_KEY", "")
+    return require_config_secret("JWT_SECRET_KEY", get_runtime_setting("JWT_SECRET_KEY", ""), production_only=False)
 
 
 def _jwt_algorithm() -> str:
@@ -72,7 +74,7 @@ class TokenManager:
         if expires_delta is None:
             expires_delta = timedelta(minutes=_access_token_expire_minutes())
         
-        now = datetime.utcnow()
+        now = utc_now()
         expire = now + expires_delta
         
         payload = {
@@ -173,7 +175,7 @@ class RefreshTokenManager:
         """Crea un refresh token opaco de larga duración y lo persiste en BD."""
         token = secrets.token_urlsafe(64)
         token_hash = hashlib.sha256(token.encode()).hexdigest()
-        expires_at = datetime.utcnow() + timedelta(days=_refresh_token_expire_days())
+        expires_at = utc_now_naive() + timedelta(days=_refresh_token_expire_days())
 
         RefreshToken, session = _db()
         try:
@@ -212,7 +214,7 @@ class RefreshTokenManager:
             if record.revoked:
                 logger.warning(f"Attempted use of revoked token for {record.username}")
                 raise ValueError("Refresh token revocado")
-            if datetime.utcnow() > record.expires_at:
+            if utc_now_naive() > record.expires_at:
                 session.delete(record)
                 session.commit()
                 raise ValueError("Refresh token expirado")
@@ -309,7 +311,7 @@ class RefreshTokenManager:
         RefreshToken, session = _db()
         try:
             deleted = session.query(RefreshToken).filter(
-                RefreshToken.expires_at < datetime.utcnow()
+                RefreshToken.expires_at < utc_now_naive()
             ).delete()
             session.commit()
             if deleted:

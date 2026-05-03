@@ -14,7 +14,7 @@ GET    /api/api-keys/{key_id}/usage    → Histograma de uso por hora (api_keys:
 import hashlib
 import secrets
 import string
-from datetime import datetime, timedelta
+from datetime import datetime, timedelta, timezone
 from typing import Any, Dict, List, Optional
 
 from fastapi import APIRouter, Cookie, Depends, HTTPException, Request, status
@@ -236,7 +236,7 @@ def run_api_key_lifecycle_cleanup(
     return {
         "success": True,
         "result": result,
-        "executed_at": datetime.utcnow().isoformat(),
+        "executed_at": datetime.now(timezone.utc).replace(tzinfo=None).isoformat(),
     }
 
 
@@ -336,7 +336,7 @@ def create_api_key(
 
     expires_at = None
     if payload.expires_in_days:
-        expires_at = datetime.utcnow() + timedelta(days=payload.expires_in_days)
+        expires_at = datetime.now(timezone.utc).replace(tzinfo=None) + timedelta(days=payload.expires_in_days)
 
     new_key = ApiKey(
         key_id    = key_id,
@@ -419,7 +419,7 @@ def update_api_key(
     if payload.tags is not None:
         key.tags = payload.tags
     if payload.expires_in_days is not None:
-        key.expires_at = datetime.utcnow() + timedelta(days=payload.expires_in_days)
+        key.expires_at = datetime.now(timezone.utc).replace(tzinfo=None) + timedelta(days=payload.expires_in_days)
     if payload.requests_per_minute is not None:
         key.requests_per_minute = payload.requests_per_minute
     if payload.requests_per_day is not None:
@@ -427,7 +427,7 @@ def update_api_key(
     if payload.monthly_quota_tokens is not None:
         key.monthly_quota_tokens = payload.monthly_quota_tokens
 
-    key.updated_at = datetime.utcnow()
+    key.updated_at = datetime.now(timezone.utc).replace(tzinfo=None)
     db.commit()
     db.refresh(key)
 
@@ -491,7 +491,7 @@ def rotate_api_key(
                 status_code=403,
                 detail="verify_token inválido o ya usado. El tenant debe solicitar la rotación desde el módulo de correo.",
             )
-        if rot_req.expires_at < datetime.utcnow():
+        if rot_req.expires_at < datetime.now(timezone.utc).replace(tzinfo=None):
             rot_req.status = ApiKeyRotationStatus.expired
             db.commit()
             raise HTTPException(
@@ -501,12 +501,12 @@ def rotate_api_key(
         # Marcar el request como aprobado
         rot_req.status         = ApiKeyRotationStatus.approved
         rot_req.support_user_id = token_data.get("user_id")
-        rot_req.resolved_at    = datetime.utcnow()
+        rot_req.resolved_at    = datetime.now(timezone.utc).replace(tzinfo=None)
 
     # Marcar la clave vieja como "rotating" (grace 24h)
     old_key.status    = ApiKeyStatus.rotating
-    old_key.rotated_at = datetime.utcnow()
-    old_key.expires_at = datetime.utcnow() + timedelta(hours=24)
+    old_key.rotated_at = datetime.now(timezone.utc).replace(tzinfo=None)
+    old_key.expires_at = datetime.now(timezone.utc).replace(tzinfo=None) + timedelta(hours=24)
 
     # Crear la nueva clave heredando los atributos
     new_id, new_full, new_hash = _generate_key()
@@ -565,7 +565,7 @@ def revoke_api_key(
         )
 
     key.status = ApiKeyStatus.revoked
-    key.updated_at = datetime.utcnow()
+    key.updated_at = datetime.now(timezone.utc).replace(tzinfo=None)
     db.commit()
 
     return {"revoked": True, "key_id": key_id, "revoked_at": key.updated_at.isoformat()}
@@ -596,7 +596,7 @@ def get_key_usage(
     if not key:
         raise HTTPException(status_code=404, detail="API key no encontrada")
 
-    since = datetime.utcnow() - timedelta(days=days)
+    since = datetime.now(timezone.utc).replace(tzinfo=None) - timedelta(days=days)
     logs = (
         db.query(ApiKeyUsageLog)
         .filter(ApiKeyUsageLog.key_id == key_id, ApiKeyUsageLog.hour_bucket >= since)
@@ -674,7 +674,7 @@ def request_rotation(
     db.query(ApiKeyRotationRequest).filter(
         ApiKeyRotationRequest.key_id == key_id,
         ApiKeyRotationRequest.status == ApiKeyRotationStatus.pending,
-    ).update({"status": ApiKeyRotationStatus.expired, "resolved_at": datetime.utcnow()})
+    ).update({"status": ApiKeyRotationStatus.expired, "resolved_at": datetime.now(timezone.utc).replace(tzinfo=None)})
 
     verify_token = secrets.token_hex(32)
     rot_req = ApiKeyRotationRequest(
@@ -684,7 +684,7 @@ def request_rotation(
         verify_token       = verify_token,
         requested_by_email = token_data.get("email") or token_data.get("sub", "unknown"),
         reason             = body.reason,
-        expires_at         = datetime.utcnow() + timedelta(hours=24),
+        expires_at         = datetime.now(timezone.utc).replace(tzinfo=None) + timedelta(hours=24),
     )
     db.add(rot_req)
     db.commit()
@@ -784,7 +784,7 @@ def verify_api_key_detailed(
     if not key:
         return None, "invalid"
 
-    now = datetime.utcnow()
+    now = datetime.now(timezone.utc).replace(tzinfo=None)
 
     # Expiración dura
     if key.expires_at and key.expires_at < now:

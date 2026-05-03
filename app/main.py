@@ -209,8 +209,7 @@ app.add_middleware(DocsBasicAuthMiddleware)
 # Mount static files
 app.mount("/static", StaticFiles(directory=os.path.join(BASE_DIR, "static")), name="static")
 
-# Include routers - Legacy auth (backward compatibility)
-app.include_router(auth.router)
+# Legacy auth helpers are kept importable, but deprecated /api/admin auth routes are not mounted.
 app.include_router(roles.router)
 
 # Include new secure auth router
@@ -367,7 +366,11 @@ def _is_spa_path(path: str) -> bool:
     """Check if a URL path should be handled by the SPA router."""
     if any(path.startswith(p) for p in _SPA_SKIP_PREFIXES):
         return False
-    return path in _SPA_ROUTES or path.startswith("/plt/")
+    return (
+        path in _SPA_ROUTES
+        or path.startswith("/plt/")
+        or any(path.startswith(f"{route}/") for route in _SPA_ROUTES if route != "/")
+    )
 
 
 class _SPAFallbackASGI:

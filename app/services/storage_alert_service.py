@@ -2,7 +2,7 @@
 Storage Alert Service — Gestión de alertas de almacenamiento
 Envía notificaciones a clientes cuando se acercan a los límites
 """
-from datetime import datetime
+from datetime import datetime, timezone
 from typing import Dict, List, Optional, Any
 from sqlalchemy.orm import Session
 import logging
@@ -137,7 +137,7 @@ class StorageAlertService:
             
             alert.email_sent = email_sent
             if email_sent:
-                alert.email_sent_at = datetime.utcnow()
+                alert.email_sent_at = datetime.now(timezone.utc).replace(tzinfo=None)
             self.db.commit()
             
             return {
@@ -154,7 +154,7 @@ class StorageAlertService:
             self.db.query(StorageAlert).filter(
                 StorageAlert.customer_id == customer_id,
                 StorageAlert.resolved_at.is_(None)
-            ).update({"resolved_at": datetime.utcnow()})
+            ).update({"resolved_at": datetime.now(timezone.utc).replace(tzinfo=None)})
             self.db.commit()
             
             return {

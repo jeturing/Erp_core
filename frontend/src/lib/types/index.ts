@@ -439,6 +439,7 @@ export interface CustomerItem {
   id: number;
   company_name: string;
   email: string;
+  phone: string | null;
   full_name: string;
   subdomain: string;
   user_count: number;

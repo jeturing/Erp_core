@@ -13,7 +13,11 @@ DB_HOST="10.10.10.20"
 DB_PORT="5432"
 DB_NAME="erp_core_db"
 DB_USER="jeturing"
-DB_PASS="321Abcd"
+DB_PASS="${DB_PASSWORD:-${DB_PASS:-}}"
+if [[ -z "$DB_PASS" ]]; then
+    echo "DB_PASSWORD/DB_PASS no configurado" >&2
+    exit 1
+fi
 
 CF_API_TOKEN="${CF_API_TOKEN:-$(cat /root/.cf_credentials 2>/dev/null || echo '')}"
 CF_ZONE_ID="4a83b88793ac3688486ace69b6ae80f9"  # sajet.us

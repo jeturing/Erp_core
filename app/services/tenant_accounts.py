@@ -4,6 +4,8 @@ Tenant Accounts Service — snapshot reutilizable de usuarios vivos por instanci
 from __future__ import annotations
 
 import re
+import os
+from functools import lru_cache
 from typing import Optional
 from urllib.parse import quote_plus
 
@@ -43,14 +45,22 @@ def normalize_tenant_db_name(subdomain: str) -> str:
     return db_name
 
 
+@lru_cache(maxsize=64)
 def _odoo_engine_for_db(db_name: str):
+    db_name = normalize_tenant_db_name(db_name)
     host = quote_plus(_odoo_db_host() or "")
     user = quote_plus(_odoo_db_user() or "")
     pwd = quote_plus(_odoo_db_password() or "")
     if not host or not user:
         raise HTTPException(status_code=500, detail="Configuración ODOO_DB incompleta")
     url = f"postgresql+psycopg2://{user}:{pwd}@{host}:5432/{db_name}"
-    return create_engine(url, pool_pre_ping=True)
+    return create_engine(
+        url,
+        pool_pre_ping=True,
+        pool_size=int(os.getenv("ODOO_TENANT_DB_POOL_SIZE", "2")),
+        max_overflow=int(os.getenv("ODOO_TENANT_DB_MAX_OVERFLOW", "2")),
+        pool_recycle=int(os.getenv("ODOO_TENANT_DB_POOL_RECYCLE_SECONDS", "1800")),
+    )
 
 
 def fetch_tenant_accounts_snapshot(

@@ -2,7 +2,7 @@
 Leads Management Routes — Pipeline de prospectos por partner
 Cláusula 7 del contrato: Registro previo al cierre comercial.
 """
-from datetime import datetime
+from datetime import datetime, timezone
 from typing import Optional
 
 from fastapi import APIRouter, Cookie, HTTPException, Request
@@ -188,7 +188,7 @@ async def update_lead(
                 try:
                     new_status = LeadStatus(value)
                     if new_status == LeadStatus.won and not lead.converted_at:
-                        lead.converted_at = datetime.utcnow()
+                        lead.converted_at = datetime.now(timezone.utc).replace(tzinfo=None)
                     value = new_status
                 except ValueError:
                     continue
@@ -244,7 +244,7 @@ async def convert_lead(
             raise HTTPException(status_code=404, detail="Lead no encontrado")
 
         lead.status = LeadStatus.won
-        lead.converted_at = datetime.utcnow()
+        lead.converted_at = datetime.now(timezone.utc).replace(tzinfo=None)
         if customer_id:
             cust = db.query(Customer).filter(Customer.id == customer_id).first()
             if cust:

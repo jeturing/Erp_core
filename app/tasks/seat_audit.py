@@ -4,7 +4,7 @@ Compara sesiones activas en Redis vs suscripciones/asientos en la BD.
 Fallback para contabilizar seats cuando Odoo no reporta correctamente.
 """
 import logging
-from datetime import datetime
+from datetime import datetime, timezone
 from typing import Any
 
 from sqlalchemy import select, func, and_
@@ -52,7 +52,7 @@ async def run_seat_audit(db: Session) -> dict[str, Any]:
     subscriptions = subs_result.scalars().all()
 
     audit_results = []
-    now = datetime.utcnow()
+    now = datetime.now(timezone.utc).replace(tzinfo=None)
     for sub in subscriptions:
         customer = sub.customer
         tenant_db = customer.subdomain if customer and customer.subdomain else None
@@ -198,6 +198,6 @@ async def get_seat_reconciliation_report(
         })
 
     return {
-        "report_date": datetime.utcnow().isoformat(),
+        "report_date": datetime.now(timezone.utc).replace(tzinfo=None).isoformat(),
         "tenants": data,
     }

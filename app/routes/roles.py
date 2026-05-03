@@ -1,7 +1,7 @@
 """
 Role-based authentication - Admin y Tenant user roles
 """
-from datetime import datetime, timedelta
+from datetime import timedelta, timezone
 from typing import Any, Dict, List, Optional
 import json
 import jwt
@@ -14,7 +14,8 @@ from pydantic import BaseModel
 from ..models.database import Customer, SessionLocal, SystemConfig
 from ..services.spa_shell import render_spa_shell
 
-from ..config import get_runtime_setting
+from ..config import get_runtime_setting, require_config_secret
+from ..utils.runtime_security import utc_now
 
 router = APIRouter(tags=["Roles"])
 
@@ -26,7 +27,7 @@ BASE_DIR = os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__fil
 
 
 def _jwt_secret_key() -> str:
-    return get_runtime_setting("JWT_SECRET_KEY", "")
+    return require_config_secret("JWT_SECRET_KEY", get_runtime_setting("JWT_SECRET_KEY", ""), production_only=False)
 
 
 def _jwt_algorithm() -> str:
@@ -362,13 +363,14 @@ ROLE_PRESETS: Dict[str, Dict[str, Any]] = {
 
 def create_access_token(username: str, role: str, user_id: int = None, tenant_id: int = None) -> str:
     """Crea un token JWT con informacion de rol."""
+    now = utc_now()
     payload = {
         "sub": username,
         "role": role,
         "user_id": user_id,
         "tenant_id": tenant_id,
-        "exp": datetime.utcnow() + timedelta(hours=JWT_EXPIRATION_HOURS),
-        "iat": datetime.utcnow(),
+        "exp": now + timedelta(hours=JWT_EXPIRATION_HOURS),
+        "iat": now,
     }
     encoded_jwt = jwt.encode(payload, _jwt_secret_key(), algorithm=_jwt_algorithm())
     return encoded_jwt
@@ -558,7 +560,7 @@ async def create_role(payload: RolePayload, request: Request, access_token: Opti
             "description": payload.description.strip(),
             "permissions": [perm.strip() for perm in payload.permissions if perm.strip()],
             "system": False,
-            "updated_at": datetime.utcnow().isoformat(),
+            "updated_at": datetime.now(timezone.utc).replace(tzinfo=None).isoformat(),
             "color": payload.color or "#6b7280",
             "assigned_tenants": payload.assigned_tenants or [],
             "assigned_users": payload.assigned_users or [],
@@ -662,7 +664,7 @@ async def update_role(role_id: int, payload: RolePayload, request: Request, acce
         target["name"] = role_name
         target["description"] = payload.description.strip()
         target["permissions"] = [perm.strip() for perm in payload.permissions if perm.strip()]
-        target["updated_at"] = datetime.utcnow().isoformat()
+        target["updated_at"] = datetime.now(timezone.utc).replace(tzinfo=None).isoformat()
         target["color"] = payload.color or target.get("color", "#6b7280")
         target["assigned_tenants"] = payload.assigned_tenants if payload.assigned_tenants is not None else target.get("assigned_tenants", [])
         target["assigned_users"] = payload.assigned_users if payload.assigned_users is not None else target.get("assigned_users", [])
@@ -738,7 +740,7 @@ async def assign_users_to_role(
                 )
 
         target["assigned_users"] = list(set(payload.user_ids))
-        target["updated_at"] = datetime.utcnow().isoformat()
+        target["updated_at"] = datetime.now(timezone.utc).replace(tzinfo=None).isoformat()
         _save_roles(db, roles, updated_by=auth_data.get("sub", "admin"))
         return {"success": True, "role_id": role_id, "assigned_users": target["assigned_users"]}
     finally:
@@ -766,7 +768,7 @@ async def remove_user_from_role(
             raise HTTPException(status_code=404, detail="Usuario no asignado a este rol")
 
         target["assigned_users"] = [uid for uid in current if uid != user_id]
-        target["updated_at"] = datetime.utcnow().isoformat()
+        target["updated_at"] = datetime.now(timezone.utc).replace(tzinfo=None).isoformat()
         _save_roles(db, roles, updated_by=auth_data.get("sub", "admin"))
         return {"success": True, "role_id": role_id, "removed_user_id": user_id}
     finally:

@@ -12,13 +12,36 @@ import shutil
 import asyncio
 import secrets
 import string
+import re
 from pathlib import Path
 from typing import Dict, Any, List, Optional
-from datetime import datetime
+from datetime import datetime, timezone
 from dataclasses import dataclass
 from enum import Enum
 
 logger = logging.getLogger(__name__)
+
+
+def _valid_db_identifier(db_name: str) -> bool:
+    return bool(re.fullmatch(r"[a-z0-9_]{3,63}", db_name or ""))
+
+
+def _pct_psql_cmd(pct_id: int, db_name: str, sql: str, *, csv: bool = False) -> List[str]:
+    if not _valid_db_identifier(db_name):
+        raise ValueError("Nombre de base de datos inválido")
+    args = [
+        "pct", "exec", str(pct_id), "--",
+        "env", f"PGPASSWORD={DEFAULT_DB_PASSWORD or ''}",
+        "psql",
+        "-h", str(DEFAULT_DB_HOST),
+        "-p", str(DEFAULT_DB_PORT),
+        "-U", str(DEFAULT_DB_USER),
+        "-d", db_name,
+    ]
+    if csv:
+        args.extend(["-t", "-A", "-F", ","])
+    args.extend(["-c", sql])
+    return args
 
 
 # =====================================================
@@ -607,7 +630,7 @@ class OdooDatabaseManager:
                     "url": f"https://{db_name}.{BASE_DOMAIN}",
                     "admin_login": admin_login,
                     "admin_password": admin_password,
-                    "created_at": datetime.utcnow().isoformat()
+                    "created_at": datetime.now(timezone.utc).replace(tzinfo=None).isoformat()
                 }
             else:
                 return {
@@ -647,9 +670,8 @@ class OdooDatabaseManager:
             UPDATE ir_config_parameter SET value = '{db_name}.{BASE_DOMAIN}' WHERE key = 'mail.catchall.domain';
             """
             
-            cmd = f'''pct exec {self.server.pct_id} -- bash -c 'export PGPASSWORD="{DEFAULT_DB_PASSWORD}"; psql -h {DEFAULT_DB_HOST} -p {DEFAULT_DB_PORT} -U {DEFAULT_DB_USER} -d {db_name} -c "{sql_commands}"' '''
-            
-            result = subprocess.run(cmd, shell=True, capture_output=True, text=True, timeout=30)
+            cmd = _pct_psql_cmd(self.server.pct_id, db_name, sql_commands)
+            result = subprocess.run(cmd, capture_output=True, text=True, timeout=30)
             
             if result.returncode == 0:
                 logger.info(f"✅ Configurado web.base.url = {base_url}")
@@ -717,7 +739,7 @@ class OdooDatabaseManager:
                     "url": f"https://{new_db_name}.{BASE_DOMAIN}",
                     "admin_login": admin_login,
                     "admin_password": admin_password,
-                    "created_at": datetime.utcnow().isoformat()
+                    "created_at": datetime.now(timezone.utc).replace(tzinfo=None).isoformat()
                 }
             else:
                 return {
@@ -751,9 +773,8 @@ class OdooDatabaseManager:
             UPDATE ir_config_parameter SET value = 'False' WHERE key = 'web.base.url.freeze';
             """
             
-            cmd = f'''pct exec {self.server.pct_id} -- bash -c 'export PGPASSWORD="{DEFAULT_DB_PASSWORD}"; psql -h {DEFAULT_DB_HOST} -p {DEFAULT_DB_PORT} -U {DEFAULT_DB_USER} -d {db_name} -c "{sql_commands}"' '''
-            
-            result = subprocess.run(cmd, shell=True, capture_output=True, text=True, timeout=30)
+            cmd = _pct_psql_cmd(self.server.pct_id, db_name, sql_commands)
+            result = subprocess.run(cmd, capture_output=True, text=True, timeout=30)
             
             if result.returncode == 0:
                 logger.info(f"✅ Configuración reseteada para {db_name}")
@@ -854,7 +875,7 @@ class OdooDatabaseManager:
                         return {
                             "success": True,
                             "database": db_name,
-                            "deleted_at": datetime.utcnow().isoformat(),
+                            "deleted_at": datetime.now(timezone.utc).replace(tzinfo=None).isoformat(),
                             "attempts": attempt,
                             "active_connections_before_drop": last_active_connections,
                             "terminated_connections": total_terminated,
@@ -907,7 +928,7 @@ class OdooDatabaseManager:
             target_dir = backup_dir or os.getenv("TENANT_BACKUP_DIR", "/tmp/sajet_tenant_backups")
             Path(target_dir).mkdir(parents=True, exist_ok=True)
 
-            ts = datetime.utcnow().strftime("%Y%m%d_%H%M%S")
+            ts = datetime.now(timezone.utc).replace(tzinfo=None).strftime("%Y%m%d_%H%M%S")
             backup_file = f"{db_name}_{ts}.dump"
             backup_path = str(Path(target_dir) / backup_file)
 
@@ -946,7 +967,7 @@ class OdooDatabaseManager:
                 "backup_path": backup_path,
                 "backup_file": backup_file,
                 "backup_size": size,
-                "created_at": datetime.utcnow().isoformat(),
+                "created_at": datetime.now(timezone.utc).replace(tzinfo=None).isoformat(),
                 "server": self.server.id,
                 "server_name": self.server.name,
             }
@@ -965,9 +986,8 @@ class OdooDatabaseManager:
                 (SELECT count(*) FROM res_company) as companies
             """
             
-            cmd = f'''pct exec {self.server.pct_id} -- bash -c 'export PGPASSWORD="{DEFAULT_DB_PASSWORD}"; psql -h {DEFAULT_DB_HOST} -p {DEFAULT_DB_PORT} -U {DEFAULT_DB_USER} -d {db_name} -t -A -F"," -c "{sql}"' '''
-            
-            result = subprocess.run(cmd, shell=True, capture_output=True, text=True, timeout=30)
+            cmd = _pct_psql_cmd(self.server.pct_id, db_name, sql, csv=True)
+            result = subprocess.run(cmd, capture_output=True, text=True, timeout=30)
             
             if result.returncode == 0:
                 parts = result.stdout.strip().split(',')
@@ -1780,7 +1800,7 @@ async def create_tenant_from_template(
                 "admin_login": final_login,
                 "admin_password": final_password,
                 "template_db": resolved_template_db,
-                "created_at": datetime.utcnow().isoformat(),
+                "created_at": datetime.now(timezone.utc).replace(tzinfo=None).isoformat(),
             }
         
         # 2. Verificar template existe
@@ -2215,7 +2235,7 @@ async def create_tenant_from_template(
             "client_password": client_password if client_password else None,
             "partner_login": partner_login,
             "partner_password": partner_password,
-            "created_at": datetime.utcnow().isoformat()
+            "created_at": datetime.now(timezone.utc).replace(tzinfo=None).isoformat()
         }
         
     except Exception as e:

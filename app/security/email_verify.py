@@ -16,7 +16,7 @@ import hashlib
 import logging
 import secrets
 import string
-from datetime import datetime, timedelta
+from datetime import datetime, timedelta, timezone
 
 from ..models.database import EmailVerificationToken, SessionLocal
 
@@ -51,7 +51,7 @@ def create_verification_token(
     """
     token = generate_token()
     token_h = hash_token(token)
-    expires = datetime.utcnow() + timedelta(minutes=TOKEN_TTL_MINUTES)
+    expires = datetime.now(timezone.utc).replace(tzinfo=None) + timedelta(minutes=TOKEN_TTL_MINUTES)
 
     db = SessionLocal()
     try:
@@ -59,7 +59,7 @@ def create_verification_token(
         db.query(EmailVerificationToken).filter(
             EmailVerificationToken.email == email,
             EmailVerificationToken.is_used == False,
-        ).update({"is_used": True, "used_at": datetime.utcnow()})
+        ).update({"is_used": True, "used_at": datetime.now(timezone.utc).replace(tzinfo=None)})
 
         record = EmailVerificationToken(
             email=email,
@@ -96,14 +96,14 @@ def verify_token(email: str, token: str) -> bool:
             EmailVerificationToken.email == email,
             EmailVerificationToken.token_hash == token_h,
             EmailVerificationToken.is_used == False,
-            EmailVerificationToken.expires_at > datetime.utcnow(),
+            EmailVerificationToken.expires_at > datetime.now(timezone.utc).replace(tzinfo=None),
         ).first()
 
         if not record:
             return False
 
         record.is_used = True
-        record.used_at = datetime.utcnow()
+        record.used_at = datetime.now(timezone.utc).replace(tzinfo=None)
         db.commit()
         return True
     except Exception as e:

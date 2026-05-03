@@ -8,7 +8,7 @@ from pydantic import BaseModel
 from typing import Optional
 import json
 import stripe
-from datetime import datetime
+from datetime import datetime, timezone
 from sqlalchemy.exc import IntegrityError
 from ..models.database import (
     Customer, Subscription, StripeEvent, SubscriptionStatus, SessionLocal,
@@ -141,7 +141,7 @@ def _update_local_subscription_from_event(db, stripe_sub: dict) -> Optional[Subs
         local_sub.current_period_start = datetime.utcfromtimestamp(stripe_sub["current_period_start"])
     if stripe_sub.get("current_period_end"):
         local_sub.current_period_end = datetime.utcfromtimestamp(stripe_sub["current_period_end"])
-    local_sub.updated_at = datetime.utcnow()
+    local_sub.updated_at = datetime.now(timezone.utc).replace(tzinfo=None)
     return local_sub
 
 
@@ -768,7 +768,7 @@ async def stripe_webhook(request: Request, background_tasks: BackgroundTasks):
                         lead.status = LeadStatus.tenant_ready
                         lead.converted_customer_id = customer.id
                         if not lead.converted_at:
-                            lead.converted_at = datetime.utcnow()
+                            lead.converted_at = datetime.now(timezone.utc).replace(tzinfo=None)
                         db.commit()
 
                 # ═══ Provisionar tenant con motor maduro (background) ═══
@@ -808,7 +808,7 @@ async def stripe_webhook(request: Request, background_tasks: BackgroundTasks):
                 partner.stripe_onboarding_complete = onboarding_ready
                 if onboarding_ready and partner.onboarding_step < 4:
                     partner.onboarding_step = 4
-                    partner.onboarding_completed_at = datetime.utcnow()
+                    partner.onboarding_completed_at = datetime.now(timezone.utc).replace(tzinfo=None)
                 db.commit()
                 logger.info(
                     "Stripe Connect sync partner=%s account=%s ready=%s payouts=%s charges=%s",
@@ -895,10 +895,10 @@ async def stripe_webhook(request: Request, background_tasks: BackgroundTasks):
                         local_sub.status = SubscriptionStatus.active
                     elif event["type"] == "invoice.marked_uncollectible":
                         local_sub.status = SubscriptionStatus.past_due
-                    local_sub.updated_at = datetime.utcnow()
+                    local_sub.updated_at = datetime.now(timezone.utc).replace(tzinfo=None)
 
             if event["type"] == "invoice.paid" and local_invoice and local_invoice.paid_at is None:
-                local_invoice.paid_at = datetime.utcnow()
+                local_invoice.paid_at = datetime.now(timezone.utc).replace(tzinfo=None)
 
         # ═══ Suscripción cancelada — notificar al cliente ═══
         elif event["type"] == "customer.subscription.deleted":

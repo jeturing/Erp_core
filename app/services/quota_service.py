@@ -289,37 +289,48 @@ class QuotaService:
 
     def _get_odoo_usage(self, tenant_db: str) -> Dict[str, int]:
         """Consulta uso real desde la BD Odoo del tenant."""
+        import os
+        import re
         import subprocess
         from ..config import CT105_IP, ODOO_DB_USER, ODOO_DB_PASSWORD
 
         result = {"websites": 1, "companies": 1, "storage_mb": 0}
+        if not re.fullmatch(r"[a-z0-9_]{3,63}", tenant_db or ""):
+            logger.warning("Tenant DB inválida para consulta de cuotas")
+            return result
+
+        def _run_scalar(sql: str):
+            env = {**os.environ, "PGPASSWORD": ODOO_DB_PASSWORD or ""}
+            return subprocess.run(
+                [
+                    "psql",
+                    "-h", CT105_IP,
+                    "-p", "5432",
+                    "-U", ODOO_DB_USER,
+                    "-d", tenant_db,
+                    "-t",
+                    "-A",
+                    "-c", sql,
+                ],
+                env=env,
+                capture_output=True,
+                text=True,
+                timeout=5,
+            )
 
         try:
             # Websites count
-            cmd = (
-                f"PGPASSWORD='{ODOO_DB_PASSWORD}' psql "
-                f"-h {CT105_IP} -p 5432 -U {ODOO_DB_USER} "
-                f"-d {tenant_db} -t -A -c "
-                f"\"SELECT COUNT(*) FROM website;\""
-            )
-            r = subprocess.run(cmd, shell=True, capture_output=True, text=True, timeout=5)
+            r = _run_scalar("SELECT COUNT(*) FROM website;")
             if r.returncode == 0 and r.stdout.strip():
                 result["websites"] = int(r.stdout.strip())
 
             # Companies count
-            cmd_co = cmd.replace("SELECT COUNT(*) FROM website", "SELECT COUNT(*) FROM res_company")
-            r2 = subprocess.run(cmd_co, shell=True, capture_output=True, text=True, timeout=5)
+            r2 = _run_scalar("SELECT COUNT(*) FROM res_company;")
             if r2.returncode == 0 and r2.stdout.strip():
                 result["companies"] = int(r2.stdout.strip())
 
             # DB size in MB
-            cmd_sz = (
-                f"PGPASSWORD='{ODOO_DB_PASSWORD}' psql "
-                f"-h {CT105_IP} -p 5432 -U {ODOO_DB_USER} "
-                f"-d {tenant_db} -t -A -c "
-                f"\"SELECT pg_database_size(current_database()) / 1024 / 1024;\""
-            )
-            r3 = subprocess.run(cmd_sz, shell=True, capture_output=True, text=True, timeout=5)
+            r3 = _run_scalar("SELECT pg_database_size(current_database()) / 1024 / 1024;")
             if r3.returncode == 0 and r3.stdout.strip():
                 result["storage_mb"] = int(r3.stdout.strip())
 

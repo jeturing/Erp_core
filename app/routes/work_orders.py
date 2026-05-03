@@ -13,7 +13,7 @@ from fastapi import APIRouter, HTTPException, Depends, Request, Cookie
 from pydantic import BaseModel
 from typing import Optional, List
 from sqlalchemy.orm import Session
-from datetime import datetime
+from datetime import datetime, timezone
 import secrets
 import logging
 import os
@@ -78,7 +78,7 @@ def _require_admin(request: Request, access_token=None):
 
 
 def _next_order_number(db) -> str:
-    year = datetime.utcnow().year
+    year = datetime.now(timezone.utc).replace(tzinfo=None).year
     count = db.query(WorkOrder).count() + 1
     return f"WO-{year}-{count:04d}"
 
@@ -373,14 +373,14 @@ async def update_work_order_status(
         raise HTTPException(400, f"Estado inválido: {new}")
 
     actor = payload.completed_by or auth.get("sub", "admin")
-    ts = datetime.utcnow().strftime("%Y-%m-%d %H:%M")
+    ts = datetime.now(timezone.utc).replace(tzinfo=None).strftime("%Y-%m-%d %H:%M")
 
     if new == "approved":
         wo.approved_by = actor
-        wo.approved_at = datetime.utcnow()
+        wo.approved_at = datetime.now(timezone.utc).replace(tzinfo=None)
     elif new == "completed":
         wo.completed_by = actor
-        wo.completed_at = datetime.utcnow()
+        wo.completed_at = datetime.now(timezone.utc).replace(tzinfo=None)
         _send_completion_email(wo, db)
     elif new == "rejected":
         wo.approved_by = None
@@ -411,7 +411,7 @@ async def approve_modules(
     wo.approved_modules = payload.approved_modules
     wo.rejected_modules = payload.rejected_modules
     actor = payload.approved_by or auth.get("sub", "admin")
-    ts = datetime.utcnow().strftime("%Y-%m-%d %H:%M")
+    ts = datetime.now(timezone.utc).replace(tzinfo=None).strftime("%Y-%m-%d %H:%M")
     note = (f"\n[{ts}] Módulos aprobados: {len(payload.approved_modules)}, "
             f"rechazados: {len(payload.rejected_modules)} — {actor}")
     if payload.notes:

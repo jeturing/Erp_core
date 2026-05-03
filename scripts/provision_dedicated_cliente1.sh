@@ -28,10 +28,15 @@ NODE_IP="10.10.10.100"
 DB_HOST="10.10.10.137"
 DB_PORT=5432
 DB_USER="odoo17"
-DB_PASS="Jtr17Pg2025!"
+DB_PASS="${ODOO_DB_PASSWORD:-}"
 
 # Redis en PCT 149
-REDIS_URL="redis://:JtrRedis2026!@10.10.10.7:6379/0"
+REDIS_URL="${ODOO_REDIS_URL:-}"
+
+if [[ -z "$DB_PASS" || -z "$REDIS_URL" ]]; then
+    echo "ODOO_DB_PASSWORD and ODOO_REDIS_URL must be configured" >&2
+    exit 1
+fi
 
 NGINX_CONF="/etc/nginx/sites-enabled/odoo"
 TENANT_CONF="/etc/odoo/tenant-${SUBDOMAIN}.conf"

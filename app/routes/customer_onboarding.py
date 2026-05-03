@@ -17,7 +17,7 @@ from fastapi import APIRouter, HTTPException, Request, Cookie, Depends
 from fastapi.responses import JSONResponse
 from pydantic import BaseModel, field_validator
 from typing import Optional
-from datetime import datetime
+from datetime import datetime, timezone
 import hashlib, secrets, json, logging, re
 
 from ..models.database import (
@@ -359,7 +359,7 @@ async def complete_onboarding(request: Request, access_token: str = Cookie(None)
             raise HTTPException(404, "Cliente no encontrado")
 
         customer.onboarding_step = 4
-        customer.onboarding_completed_at = datetime.utcnow()
+        customer.onboarding_completed_at = datetime.now(timezone.utc).replace(tzinfo=None)
         db.commit()
 
         logger.info(f"Customer onboarding completed: {customer_id} ({customer.company_name})")
@@ -442,7 +442,7 @@ async def admin_advance_onboarding(customer_id: int, request: Request, access_to
 
         customer.onboarding_step += 1
         if customer.onboarding_step >= 4:
-            customer.onboarding_completed_at = datetime.utcnow()
+            customer.onboarding_completed_at = datetime.now(timezone.utc).replace(tzinfo=None)
 
         db.commit()
         return {
@@ -483,7 +483,7 @@ async def admin_toggle_onboarding_bypass(
         if payload.bypass:
             # Marcar como completado también
             if not customer.onboarding_completed_at:
-                customer.onboarding_completed_at = datetime.utcnow()
+                customer.onboarding_completed_at = datetime.now(timezone.utc).replace(tzinfo=None)
             customer.onboarding_step = 4
             logger.info(
                 f"Onboarding bypass ACTIVADO para customer {customer_id} "
@@ -567,7 +567,7 @@ async def admin_set_step(
 
         customer.onboarding_step = step
         if step >= 4 and not customer.onboarding_completed_at:
-            customer.onboarding_completed_at = datetime.utcnow()
+            customer.onboarding_completed_at = datetime.now(timezone.utc).replace(tzinfo=None)
 
         db.commit()
         return {

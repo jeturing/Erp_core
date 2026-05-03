@@ -5,7 +5,7 @@ from fastapi import APIRouter, HTTPException, Request, Response, status, Depends
 from fastapi.responses import JSONResponse
 from pydantic import BaseModel, EmailStr
 from typing import Optional
-from datetime import datetime
+from datetime import datetime, timezone
 
 from ..models.database import Customer, Partner, PartnerStatus, AdminUser, AdminUserRole, SessionLocal
 from ..security.tokens import TokenManager, RefreshTokenManager
@@ -14,7 +14,7 @@ from ..security.audit import AuditLogger, AuditEvent
 from ..security.totp import TOTPManager
 from ..security.email_verify import create_verification_token, verify_token, send_verification_email
 
-from ..config import get_runtime_setting
+from ..config import get_runtime_setting, require_config_secret
 
 router = APIRouter(prefix="/api/auth", tags=["Secure Authentication"])
 
@@ -24,7 +24,7 @@ def _admin_username() -> str:
 
 
 def _admin_password() -> str:
-    return get_runtime_setting("ADMIN_PASSWORD", "")
+    return require_config_secret("ADMIN_PASSWORD", get_runtime_setting("ADMIN_PASSWORD", ""), production_only=True)
 
 # Rate limiter instance (compartida)
 login_rate_limiter = RateLimiter(
@@ -123,6 +123,16 @@ async def secure_login(request: Request, login_data: LoginRequest):
 
         if is_admin_login:
             # Login de admin por env vars (fallback)
+            if not admin_password:
+                AuditLogger.log_login_failed(
+                    username=login_data.email,
+                    reason="Admin password not configured",
+                    request=request
+                )
+                raise HTTPException(
+                    status_code=status.HTTP_401_UNAUTHORIZED,
+                    detail="Credenciales inválidas"
+                )
             if login_data.email != admin_username or login_data.password != admin_password:
                 AuditLogger.log_login_failed(
                     username=login_data.email,
@@ -160,7 +170,7 @@ async def secure_login(request: Request, login_data: LoginRequest):
                     role = admin_user.role.value if admin_user.role else "admin"
                     user_id = admin_user.id
                     redirect_url = "/admin"
-                    admin_user.last_login_at = datetime.utcnow()
+                    admin_user.last_login_at = datetime.now(timezone.utc).replace(tzinfo=None)
                     admin_user.login_count = (admin_user.login_count or 0) + 1
                     db.commit()
                 else:
@@ -220,7 +230,7 @@ async def secure_login(request: Request, login_data: LoginRequest):
                             tenant_id = None
                             redirect_url = "/partner/portal"
                             partner_authenticated = True
-                            partner.last_login_at = datetime.utcnow()
+                            partner.last_login_at = datetime.now(timezone.utc).replace(tzinfo=None)
                             partner.login_count = (partner.login_count or 0) + 1
                             db.commit()
                         else:

@@ -3,7 +3,7 @@ Logs Routes - API para logs del sistema en tiempo real
 """
 from fastapi import APIRouter, HTTPException, Request, Cookie, Query
 from typing import Dict, Any, List, Optional
-from datetime import datetime, timedelta
+from datetime import datetime, timedelta, timezone
 import subprocess
 import os
 import logging
@@ -91,9 +91,9 @@ async def get_provisioning_logs(
             # Si no existe el archivo, crear uno vacío
             os.makedirs(LOG_DIR, exist_ok=True)
             with open(log_file, 'w') as f:
-                f.write(f"[{datetime.utcnow().isoformat()}] INFO: Log file initialized\n")
+                f.write(f"[{datetime.now(timezone.utc).replace(tzinfo=None).isoformat()}] INFO: Log file initialized\n")
             logs.append({
-                "line": f"[{datetime.utcnow().isoformat()}] INFO: Log file initialized",
+                "line": f"[{datetime.now(timezone.utc).replace(tzinfo=None).isoformat()}] INFO: Log file initialized",
                 "class": "text-emerald-400"
             })
         
@@ -284,7 +284,7 @@ async def write_log(
         os.makedirs(LOG_DIR, exist_ok=True)
         log_file = os.path.join(LOG_DIR, "provisioning.log")
         
-        timestamp = datetime.utcnow().strftime("%Y-%m-%d %H:%M:%S")
+        timestamp = datetime.now(timezone.utc).replace(tzinfo=None).strftime("%Y-%m-%d %H:%M:%S")
         log_line = f"[{timestamp}] {level.upper()} [{source}]: {message}\n"
         
         with open(log_file, 'a') as f:

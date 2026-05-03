@@ -8,7 +8,7 @@ from fastapi import APIRouter, HTTPException, Cookie, Request
 from fastapi.responses import JSONResponse
 from pydantic import BaseModel
 from typing import Optional, List
-from datetime import datetime
+from datetime import datetime, timezone
 
 from ..models.database import (
     SessionLocal, ProxmoxNode, LXCContainer, TenantDeployment,
@@ -567,7 +567,7 @@ async def get_node_live_stats(node_id: int, request: Request, access_token: str 
             node.used_storage_gb    = float(disk_used)
             node.total_storage_gb   = float(disk_total) if disk_total > 0 else node.total_storage_gb
             node.status             = NodeStatus.online
-            node.last_health_check  = datetime.utcnow()
+            node.last_health_check  = datetime.now(timezone.utc).replace(tzinfo=None)
             db.commit()
 
             return {
@@ -596,7 +596,7 @@ async def get_node_live_stats(node_id: int, request: Request, access_token: str 
                     "usage_percent": disk_pct
                 },
                 "uptime": uptime_str,
-                "last_updated": datetime.utcnow().isoformat()
+                "last_updated": datetime.now(timezone.utc).replace(tzinfo=None).isoformat()
             }
 
         except subprocess.TimeoutExpired:
@@ -639,7 +639,7 @@ async def run_health_check_all(request: Request, access_token: str = Cookie(None
                 is_online = r.returncode == 0
                 node.status = NodeStatus.online if is_online else NodeStatus.offline
                 if is_online:
-                    node.last_health_check = datetime.utcnow()
+                    node.last_health_check = datetime.now(timezone.utc).replace(tzinfo=None)
                 results.append({"node": node.name, "status": "online" if is_online else "offline"})
             except Exception as e:
                 node.status = NodeStatus.offline
@@ -691,7 +691,7 @@ async def receive_health_report(request: Request):
         if not node:
             raise HTTPException(status_code=404, detail=f"Nodo {hostname} no registrado")
 
-        now = datetime.utcnow()
+        now = datetime.now(timezone.utc).replace(tzinfo=None)
         node.last_health_check = now
 
         if status == "ok":

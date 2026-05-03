@@ -25,6 +25,7 @@ from __future__ import annotations
 
 import json
 import logging
+import os
 import re
 import secrets
 import string
@@ -52,10 +53,10 @@ LONGPOLLING_OFFSET = 500   # 9010 → 9510, etc.
 
 ODOO_PG_HOST = "10.10.20.200"
 ODOO_PG_USER = "Jeturing"
-ODOO_PG_PASSWORD = "321Abcd"
+ODOO_PG_PASSWORD = os.getenv("ODOO_DB_PASSWORD", "")
 TEMPLATE_DB = "template_tenant"
 
-REDIS_URL = "redis://:JtrRedis2026!@10.10.20.203:6379/0"
+REDIS_URL = os.getenv("ODOO_REDIS_URL", "")
 NGINX_CONF = "/etc/nginx/sites-available/odoo"
 ODOO_LOCAL_IP = "127.0.0.1"  # tenants viven en el mismo nodo que nginx
 

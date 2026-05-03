@@ -2,7 +2,7 @@
 Partners Management Routes — Gestión de socios comerciales
 Basado en el Acuerdo Global de Partnership (No Exclusivo)
 """
-from datetime import datetime
+from datetime import datetime, timezone
 from typing import List, Optional
 import secrets
 import string
@@ -257,7 +257,7 @@ async def update_partner(
                 try:
                     value = PartnerStatus(value)
                     if value == PartnerStatus.active and not partner.contract_signed_at:
-                        partner.contract_signed_at = datetime.utcnow()
+                        partner.contract_signed_at = datetime.now(timezone.utc).replace(tzinfo=None)
                 except ValueError:
                     continue
 
@@ -364,7 +364,7 @@ async def activate_partner(
 
         partner.status = PartnerStatus.active
         if not partner.contract_signed_at:
-            partner.contract_signed_at = datetime.utcnow()
+            partner.contract_signed_at = datetime.now(timezone.utc).replace(tzinfo=None)
         partner.portal_access = True
         db.commit()
         db.refresh(partner)

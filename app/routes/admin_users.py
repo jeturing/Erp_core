@@ -6,7 +6,7 @@ Solo accesible por admin.
 from fastapi import APIRouter, HTTPException, Request, status
 from pydantic import BaseModel, EmailStr
 from typing import Optional
-from datetime import datetime
+from datetime import datetime, timezone
 import bcrypt
 import logging
 
@@ -180,7 +180,7 @@ async def update_admin_user(user_id: int, payload: AdminUserUpdate, request: Req
         if payload.new_password:
             user.password_hash = bcrypt.hashpw(payload.new_password.encode(), bcrypt.gensalt()).decode()
 
-        user.updated_at = datetime.utcnow()
+        user.updated_at = datetime.now(timezone.utc).replace(tzinfo=None)
         db.commit()
         db.refresh(user)
 
@@ -211,7 +211,7 @@ async def delete_admin_user(user_id: int, request: Request):
             raise HTTPException(status_code=400, detail="No puedes desactivar tu propia cuenta")
 
         user.is_active = False
-        user.updated_at = datetime.utcnow()
+        user.updated_at = datetime.now(timezone.utc).replace(tzinfo=None)
         db.commit()
 
         logger.info(f"Admin user deactivated: {user.email} (id={user_id}) by {actor.get('sub')}")
