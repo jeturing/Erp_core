@@ -402,7 +402,13 @@ async def secure_login(request: Request, login_data: LoginRequest):
                     ip_address=client_ip,
                     user_agent=request.headers.get("User-Agent", "")[:500],
                 )
-                send_verification_email(username, token, role)
+                email_result = send_verification_email(username, token, role)
+                if not email_result.get("success"):
+                    logger.error(f"Failed to send verification email to {username}: {email_result.get('error')}")
+                    raise HTTPException(
+                        status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+                        detail=f"Error enviando código de verificación: {email_result.get('error', 'Desconocido')}"
+                    )
 
                 return LoginResponse(
                     message="Código de verificación enviado a tu email",

@@ -84,6 +84,7 @@ status = subprocess.check_output(["git", "status", "--porcelain"], cwd=repo, tex
 
 always_push = [
     "app/config.py",
+    "app/utils/runtime_security.py",
     "app/routes/tenants.py",
     "app/routes/provisioning.py",
     "app/routes/plans.py",

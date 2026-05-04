@@ -5,7 +5,9 @@ Incluye: onboarding, dashboard, leads, clientes, Stripe Connect self-service.
 import logging
 import hashlib
 import secrets
-from datetime import datetime, timezone
+import socket
+import xmlrpc.client
+from datetime import datetime, timedelta, timezone
 from typing import Any, Dict, List, Optional
 
 from fastapi import APIRouter, Cookie, HTTPException, Request, status
@@ -15,9 +17,11 @@ from pydantic import BaseModel, EmailStr
 from ..models.database import (
     Partner, Lead, Commission, Customer, Subscription, Quotation,
     PartnerPricingOverride, Plan, PartnerBrandingProfile,
+    PartnerDeployment, ModulePackage, TenantDeployment,
     SessionLocal, PartnerStatus, LeadStatus, QuotationStatus,
     BillingScenario, CommissionStatus, SubscriptionStatus,
-    Invoice, InvoiceStatus,
+    Invoice, InvoiceStatus, InvoiceType, InvoiceIssuer,
+    BillingMode, PayerType, CollectorType,
 )
 from ..services.stripe_connect import (
     create_connect_account,
@@ -43,6 +47,29 @@ from .roles import _extract_token, verify_token_with_role
 logger = logging.getLogger(__name__)
 
 router = APIRouter(prefix="/api/partner-portal", tags=["Partner Portal"])
+
+
+DEPLOYMENT_PHASES = [
+    {"key": "strategy", "label": "Alineacion", "week": 1, "target": 15},
+    {"key": "blueprint", "label": "Blueprint", "week": 2, "target": 30},
+    {"key": "provisioning", "label": "Tenant", "week": 2, "target": 50},
+    {"key": "validation", "label": "Validacion", "week": 3, "target": 68},
+    {"key": "training", "label": "Capacitacion", "week": 4, "target": 84},
+    {"key": "handoff", "label": "Activo", "week": 5, "target": 100},
+]
+
+
+DEFAULT_DEPLOYMENT_CHECKLIST = [
+    {"key": "strategy", "label": "Objetivos y alcance definidos", "phase": "strategy", "done": True},
+    {"key": "audit", "label": "Auditoria tecnica y migracion evaluada", "phase": "strategy", "done": False},
+    {"key": "kpis", "label": "KPIs de exito registrados", "phase": "strategy", "done": False},
+    {"key": "blueprint", "label": "Blueprint y paquetes Click-and-Go seleccionados", "phase": "blueprint", "done": False},
+    {"key": "tenant", "label": "Tenant real aprovisionado", "phase": "provisioning", "done": False},
+    {"key": "billing", "label": "Factura emitida o lista para pago", "phase": "provisioning", "done": False},
+    {"key": "validation", "label": "Validacion operativa completada", "phase": "validation", "done": False},
+    {"key": "training", "label": "Usuarios clave capacitados", "phase": "training", "done": False},
+    {"key": "handoff", "label": "Entrega formal y soporte activado", "phase": "handoff", "done": False},
+]
 
 
 # ── Auth Helper ──
@@ -79,6 +106,425 @@ def _apply_partner_stripe_status(partner: Partner, status_result: Dict[str, Any]
         partner.onboarding_completed_at = datetime.now(timezone.utc).replace(tzinfo=None)
 
     return ready
+
+
+def _serialize_partner_client(customer: Customer, sub: Subscription) -> Dict[str, Any]:
+    """Payload consistente para clientes visibles desde el portal partner."""
+    return {
+        "subscription_id": sub.id,
+        "customer_id": customer.id,
+        "company_name": customer.company_name,
+        "contact_name": customer.full_name,
+        "email": customer.email,
+        "phone": customer.phone,
+        "country": customer.country,
+        "notes": customer.notes,
+        "subdomain": customer.subdomain,
+        "plan": sub.plan_name,
+        "status": sub.status.value if sub.status else None,
+        "billing_mode": sub.billing_mode.value if sub.billing_mode else None,
+        "monthly_amount": sub.monthly_amount,
+        "user_count": sub.user_count,
+        "url": f"https://{customer.subdomain}.sajet.us" if customer.subdomain else None,
+        "created_at": sub.created_at.isoformat() if sub.created_at else None,
+        "updated_at": customer.updated_at.isoformat() if customer.updated_at else None,
+    }
+
+
+def _now_naive() -> datetime:
+    return datetime.now(timezone.utc).replace(tzinfo=None)
+
+
+def _normalize_partner_subdomain(value: str) -> str:
+    import re
+
+    subdomain = (value or "").strip().lower().replace("-", "_")
+    if not re.match(r"^[a-z0-9][a-z0-9_]{1,28}[a-z0-9]$", subdomain):
+        raise HTTPException(
+            status_code=400,
+            detail="Subdominio invalido. Solo letras minusculas, numeros y guiones bajos (3-30 chars).",
+        )
+    return subdomain
+
+
+def _append_deployment_event(deployment: PartnerDeployment, event: str, detail: Optional[dict] = None) -> None:
+    log = list(deployment.event_log or [])
+    log.append({
+        "event": event,
+        "detail": detail or {},
+        "at": _now_naive().isoformat(),
+    })
+    deployment.event_log = log[-80:]
+
+
+def _mark_checklist(deployment: PartnerDeployment, keys: List[str]) -> None:
+    wanted = set(keys)
+    items = []
+    for item in list(deployment.checklist_json or DEFAULT_DEPLOYMENT_CHECKLIST):
+        next_item = dict(item)
+        if next_item.get("key") in wanted:
+            next_item["done"] = True
+        items.append(next_item)
+    deployment.checklist_json = items
+
+
+def _next_partner_invoice_number(db) -> str:
+    year = _now_naive().year
+    last = db.query(Invoice).filter(
+        Invoice.invoice_number.like(f"INV-{year}-%")
+    ).order_by(Invoice.id.desc()).first()
+    seq = int(last.invoice_number.split("-")[-1]) + 1 if last and last.invoice_number else 1
+    return f"INV-{year}-{seq:04d}"
+
+
+def _serialize_deployment(dep: PartnerDeployment) -> Dict[str, Any]:
+    invoice = dep.invoice
+    invoice_urls = build_invoice_action_urls(
+        status=invoice.status if invoice else None,
+        pdf_url=None,
+        hosted_url=None,
+    )
+    if invoice and invoice.stripe_invoice_id:
+        try:
+            invoice_urls = fetch_stripe_invoice_links(invoice.stripe_invoice_id)
+        except Exception:
+            pass
+
+    return {
+        "id": dep.id,
+        "partner_id": dep.partner_id,
+        "lead_id": dep.lead_id,
+        "customer_id": dep.customer_id,
+        "subscription_id": dep.subscription_id,
+        "tenant_deployment_id": dep.tenant_deployment_id,
+        "invoice_id": dep.invoice_id,
+        "company_name": dep.company_name,
+        "contact_name": dep.contact_name,
+        "contact_email": dep.contact_email,
+        "phone": dep.phone,
+        "country_code": dep.country_code,
+        "subdomain": dep.subdomain,
+        "tenant_url": dep.tenant_url or (f"https://{dep.subdomain}.sajet.us" if dep.subdomain else None),
+        "plan_name": dep.plan_name,
+        "user_count": dep.user_count,
+        "billing_mode": dep.billing_mode,
+        "industry": dep.industry,
+        "blueprint_package_name": dep.blueprint_package_name,
+        "package_snapshot": dep.package_snapshot or {},
+        "kpis": dep.kpis_json or [],
+        "checklist": dep.checklist_json or [],
+        "events": dep.event_log or [],
+        "phase": dep.current_phase,
+        "week": dep.current_week,
+        "progress_percent": dep.progress_percent,
+        "status": dep.status,
+        "provisioning_status": dep.provisioning_status,
+        "invoice_status": dep.invoice_status,
+        "handoff_status": dep.handoff_status,
+        "last_error": dep.last_error,
+        "started_at": dep.started_at.isoformat() if dep.started_at else None,
+        "tenant_ready_at": dep.tenant_ready_at.isoformat() if dep.tenant_ready_at else None,
+        "invoiced_at": dep.invoiced_at.isoformat() if dep.invoiced_at else None,
+        "completed_at": dep.completed_at.isoformat() if dep.completed_at else None,
+        "invoice": {
+            "id": invoice.id,
+            "invoice_number": invoice.invoice_number,
+            "total": invoice.total,
+            "currency": invoice.currency,
+            "status": invoice.status.value if invoice.status else None,
+            "payment_url": invoice_urls.get("payment_url"),
+            "download_url": invoice_urls.get("download_url"),
+            "view_url": invoice_urls.get("view_url"),
+        } if invoice else None,
+        "phases": DEPLOYMENT_PHASES,
+    }
+
+
+def _ensure_deployment_invoice(db, deployment: PartnerDeployment, partner: Partner) -> Optional[Invoice]:
+    if deployment.invoice_id:
+        return db.query(Invoice).filter(Invoice.id == deployment.invoice_id).first()
+    if not deployment.subscription_id or not deployment.customer_id:
+        return None
+
+    existing = (
+        db.query(Invoice)
+        .filter(
+            Invoice.subscription_id == deployment.subscription_id,
+            Invoice.customer_id == deployment.customer_id,
+            Invoice.partner_id == partner.id,
+            Invoice.invoice_type.in_([InvoiceType.SUBSCRIPTION, InvoiceType.INTERCOMPANY]),
+        )
+        .order_by(Invoice.id.desc())
+        .first()
+    )
+    if existing:
+        deployment.invoice_id = existing.id
+        return existing
+
+    sub = db.query(Subscription).filter(Subscription.id == deployment.subscription_id).first()
+    if not sub:
+        return None
+    subtotal = float(sub.monthly_amount or 0)
+    invoice = Invoice(
+        invoice_number=_next_partner_invoice_number(db),
+        subscription_id=sub.id,
+        customer_id=deployment.customer_id,
+        partner_id=partner.id,
+        invoice_type=InvoiceType.INTERCOMPANY
+        if sub.billing_mode == BillingMode.PARTNER_PAYS_FOR_CLIENT
+        else InvoiceType.SUBSCRIPTION,
+        billing_mode=sub.billing_mode,
+        issuer=InvoiceIssuer.JETURING,
+        subtotal=subtotal,
+        tax_amount=0,
+        total=subtotal,
+        currency=sub.currency or "USD",
+        lines_json=[{
+            "description": f"Suscripcion mensual - {sub.plan_name}",
+            "qty": 1,
+            "unit_price": subtotal,
+            "subtotal": subtotal,
+        }],
+        status=InvoiceStatus.issued,
+        issued_at=_now_naive(),
+        due_date=_now_naive() + timedelta(days=30),
+        notes=f"Generada automaticamente desde despliegue partner #{deployment.id}",
+    )
+    db.add(invoice)
+    db.flush()
+    deployment.invoice_id = invoice.id
+    deployment.invoice_status = invoice.status.value
+    deployment.invoiced_at = invoice.issued_at
+    _mark_checklist(deployment, ["billing"])
+    _append_deployment_event(deployment, "invoice_issued", {"invoice_id": invoice.id, "total": invoice.total})
+    try:
+        push_invoice_to_stripe(db, invoice)
+        deployment.invoice_status = invoice.status.value if invoice.status else "issued"
+        _append_deployment_event(deployment, "invoice_pushed_to_stripe", {"invoice_id": invoice.id})
+    except Exception as exc:
+        logger.warning("Partner deployment invoice Stripe push failed: %s", exc)
+        _append_deployment_event(deployment, "invoice_stripe_pending", {"error": str(exc)})
+    return invoice
+
+
+async def _run_partner_deployment_provision(db, deployment: PartnerDeployment, partner: Partner) -> Dict[str, Any]:
+    from ..services.tenant_lifecycle import TenantSpec, orchestrator
+
+    deployment.status = "provisioning_running"
+    deployment.provisioning_status = "running"
+    deployment.current_phase = "provisioning"
+    deployment.current_week = 2
+    deployment.progress_percent = max(deployment.progress_percent or 0, 45)
+    deployment.last_error = None
+    _append_deployment_event(deployment, "provisioning_started")
+    db.commit()
+
+    spec = TenantSpec(
+        subdomain=deployment.subdomain,
+        company_name=deployment.company_name,
+        admin_email=deployment.contact_email,
+        plan_name=deployment.plan_name,
+        partner_id=partner.id,
+        country_code=deployment.country_code or "US",
+        blueprint_package_name=deployment.blueprint_package_name,
+        customer_id=deployment.customer_id,
+        subscription_id=deployment.subscription_id,
+        send_credentials_email=False,
+    )
+    result = await orchestrator.provision(spec, source="internal")
+
+    db.refresh(deployment)
+    if result.success:
+        deployment.customer_id = result.customer_id or deployment.customer_id
+        deployment.subscription_id = result.subscription_id or deployment.subscription_id
+        deployment.tenant_deployment_id = result.deployment_id or deployment.tenant_deployment_id
+        deployment.admin_login = result.admin_login or deployment.admin_login
+        deployment.admin_password = result.admin_password or deployment.admin_password
+        deployment.tenant_url = f"https://{deployment.subdomain}.sajet.us"
+        deployment.status = "invoiced"
+        deployment.provisioning_status = "ready"
+        deployment.current_phase = "validation"
+        deployment.current_week = 3
+        deployment.progress_percent = max(deployment.progress_percent or 0, 68)
+        deployment.tenant_ready_at = deployment.tenant_ready_at or _now_naive()
+        _mark_checklist(deployment, ["tenant", "blueprint"])
+        _append_deployment_event(deployment, "tenant_ready", result.as_dict())
+
+        if deployment.subscription_id:
+            sub = db.query(Subscription).filter(Subscription.id == deployment.subscription_id).first()
+            if sub:
+                sub.status = SubscriptionStatus.active
+                sub.tenant_provisioned = True
+        if deployment.lead_id:
+            lead = db.query(Lead).filter(Lead.id == deployment.lead_id).first()
+            if lead:
+                lead.status = LeadStatus.invoiced
+                lead.converted_customer_id = deployment.customer_id
+                lead.converted_at = lead.converted_at or _now_naive()
+        dep = (
+            db.query(TenantDeployment)
+            .filter(TenantDeployment.subdomain == deployment.subdomain)
+            .order_by(TenantDeployment.id.desc())
+            .first()
+        )
+        if dep and not deployment.tenant_deployment_id:
+            deployment.tenant_deployment_id = dep.id
+        _ensure_deployment_invoice(db, deployment, partner)
+        db.commit()
+        return {"success": True, "result": result.as_dict()}
+
+    deployment.status = "provisioning_failed"
+    deployment.provisioning_status = "failed"
+    deployment.last_error = result.error or "Provisioning failed"
+    deployment.progress_percent = max(deployment.progress_percent or 0, 45)
+    _append_deployment_event(deployment, "provisioning_failed", result.as_dict())
+    db.commit()
+    return {"success": False, "error": deployment.last_error, "result": result.as_dict()}
+
+
+async def _sync_partner_client_to_odoo(customer: Customer, sub: Subscription, partner: Partner) -> Dict[str, Any]:
+    """
+    Sincroniza cambios básicos del cliente hacia el tenant Odoo.
+
+    El write sobre res.company dispara el módulo jeturing_erp_sync dentro del tenant,
+    que luego reenvía el snapshot de vuelta a SAJET. Si Odoo no está disponible, no
+    bloqueamos la operación del socio: la BDA queda como source of truth.
+    """
+    if not customer.subdomain:
+        return {"success": False, "status": "skipped", "message": "Cliente sin subdominio"}
+
+    previous_timeout = socket.getdefaulttimeout()
+    socket.setdefaulttimeout(5)
+    try:
+        from ..services.odoo_database_manager import (
+            DEFAULT_ADMIN_LOGIN,
+            DEFAULT_ADMIN_PASSWORD,
+            ODOO_SERVERS,
+            OdooDatabaseManager,
+            refresh_odoo_servers,
+        )
+
+        refresh_odoo_servers()
+        target_server = None
+        for server in ODOO_SERVERS.values():
+            if not server:
+                continue
+            try:
+                async with OdooDatabaseManager(server) as manager:
+                    if await manager.database_exists(customer.subdomain):
+                        target_server = server
+                        break
+            except Exception:
+                continue
+
+        if not target_server:
+            return {
+                "success": False,
+                "status": "not_found",
+                "message": f"Tenant '{customer.subdomain}' no encontrado para sincronización",
+            }
+
+        url = f"http://{target_server.ip}:{target_server.port}"
+        common = xmlrpc.client.ServerProxy(f"{url}/xmlrpc/2/common", allow_none=True)
+        login_candidates = [
+            f"{customer.subdomain}@sajet.us",
+            customer.email,
+            DEFAULT_ADMIN_LOGIN,
+        ]
+        uid = None
+        for login in dict.fromkeys([item for item in login_candidates if item]):
+            try:
+                uid = common.authenticate(customer.subdomain, login, DEFAULT_ADMIN_PASSWORD, {})
+                if uid:
+                    break
+            except Exception:
+                continue
+
+        if not uid:
+            return {
+                "success": False,
+                "status": "auth_failed",
+                "message": "No se pudo autenticar en Odoo para sincronizar",
+                "server": target_server.id,
+            }
+
+        models = xmlrpc.client.ServerProxy(f"{url}/xmlrpc/2/object", allow_none=True)
+        company_ids = models.execute_kw(
+            customer.subdomain,
+            uid,
+            DEFAULT_ADMIN_PASSWORD,
+            "res.company",
+            "search",
+            [[]],
+            {"limit": 1},
+        )
+        if not company_ids:
+            return {
+                "success": False,
+                "status": "company_missing",
+                "message": "No se encontró res.company en el tenant",
+                "server": target_server.id,
+            }
+
+        company_vals: Dict[str, Any] = {
+            "name": customer.company_name or customer.subdomain,
+            "email": customer.email,
+            "phone": customer.phone or False,
+            "website": f"https://{customer.subdomain}.sajet.us",
+        }
+
+        country_name = (customer.country or "").strip()
+        if country_name:
+            country_domain = [["code", "=", country_name.upper()]] if len(country_name) == 2 else [["name", "ilike", country_name]]
+            country_ids = models.execute_kw(
+                customer.subdomain,
+                uid,
+                DEFAULT_ADMIN_PASSWORD,
+                "res.country",
+                "search",
+                [country_domain],
+                {"limit": 1},
+            )
+            if country_ids:
+                company_vals["country_id"] = country_ids[0]
+
+        models.execute_kw(
+            customer.subdomain,
+            uid,
+            DEFAULT_ADMIN_PASSWORD,
+            "res.company",
+            "write",
+            [company_ids, company_vals],
+        )
+
+        for key, value in {
+            "jeturing_erp_sync.plan_name": sub.plan_name,
+            "jeturing_erp_sync.billing_mode": sub.billing_mode.value if sub.billing_mode else "",
+            "jeturing_erp_sync.owner_partner_id": str(partner.id),
+        }.items():
+            try:
+                models.execute_kw(
+                    customer.subdomain,
+                    uid,
+                    DEFAULT_ADMIN_PASSWORD,
+                    "ir.config_parameter",
+                    "set_param",
+                    [key, value],
+                )
+            except Exception as param_err:
+                logger.warning("No se pudo sincronizar parámetro %s en %s: %s", key, customer.subdomain, param_err)
+
+        return {
+            "success": True,
+            "status": "synced",
+            "message": "Cliente sincronizado con Odoo; jeturing_erp_sync publicará snapshot",
+            "server": target_server.id,
+        }
+    except Exception as exc:
+        logger.warning("Partner client sync failed for %s: %s", customer.subdomain, exc)
+        return {"success": False, "status": "error", "message": str(exc)}
+    finally:
+        socket.setdefaulttimeout(previous_timeout)
 
 
 # ═══════════════════════════════════════════════
@@ -648,20 +1094,7 @@ async def list_partner_clients(
         for sub in subs:
             customer = db.query(Customer).filter(Customer.id == sub.customer_id).first()
             if customer:
-                clients.append({
-                    "subscription_id": sub.id,
-                    "customer_id": customer.id,
-                    "company_name": customer.company_name,
-                    "email": customer.email,
-                    "subdomain": customer.subdomain,
-                    "plan": sub.plan_name,
-                    "status": sub.status.value if sub.status else None,
-                    "billing_mode": sub.billing_mode.value if sub.billing_mode else None,
-                    "monthly_amount": sub.monthly_amount,
-                    "user_count": sub.user_count,
-                    "url": f"https://{customer.subdomain}.sajet.us" if customer.subdomain else None,
-                    "created_at": sub.created_at.isoformat() if sub.created_at else None,
-                })
+                clients.append(_serialize_partner_client(customer, sub))
 
         return {"items": clients, "total": len(clients)}
     finally:
@@ -678,11 +1111,362 @@ class PartnerClientCreate(BaseModel):
     user_count: int = 1
     contact_name: Optional[str] = None
     notes: Optional[str] = None
+    lead_id: Optional[int] = None
+    country_code: Optional[str] = None
+    industry: Optional[str] = None
+    blueprint_package_name: Optional[str] = None
+    billing_mode: str = "partner_direct"
+    kpis: Optional[List[Dict[str, Any]]] = None
+
+
+class PartnerDeploymentAutoStart(BaseModel):
+    company_name: str
+    contact_email: EmailStr
+    subdomain: str
+    plan_name: str = "basic"
+    user_count: int = 1
+    contact_name: Optional[str] = None
+    phone: Optional[str] = None
+    country_code: Optional[str] = "US"
+    industry: Optional[str] = None
+    notes: Optional[str] = None
+    lead_id: Optional[int] = None
+    blueprint_package_name: Optional[str] = None
+    billing_mode: str = "partner_direct"
+    kpis: Optional[List[Dict[str, Any]]] = None
+
+
+class PartnerClientUpdate(BaseModel):
+    company_name: Optional[str] = None
+    contact_email: Optional[EmailStr] = None
+    contact_name: Optional[str] = None
+    phone: Optional[str] = None
+    country: Optional[str] = None
+    notes: Optional[str] = None
+    plan_name: Optional[str] = None
+    user_count: Optional[int] = None
 
 
 class PartnerClientAddonPurchase(BaseModel):
     catalog_item_id: int
     quantity: int = 1
+
+
+def _resolve_deployment_billing_mode(value: str) -> tuple[BillingMode, PayerType, CollectorType, InvoiceIssuer]:
+    try:
+        mode = BillingMode(value)
+    except ValueError:
+        mode = BillingMode.PARTNER_DIRECT
+    if mode == BillingMode.PARTNER_PAYS_FOR_CLIENT:
+        return mode, PayerType.PARTNER, CollectorType.PARTNER_EXTERNAL, InvoiceIssuer.JETURING
+    return BillingMode.PARTNER_DIRECT, PayerType.CLIENT, CollectorType.STRIPE_CONNECT, InvoiceIssuer.PARTNER
+
+
+async def _create_partner_deployment_from_payload(
+    payload: PartnerDeploymentAutoStart,
+    request: Request,
+    access_token: Optional[str],
+) -> Dict[str, Any]:
+    auth = _require_partner(request, access_token)
+    db = SessionLocal()
+    try:
+        partner = _get_partner(db, auth)
+        if partner.status != PartnerStatus.active:
+            raise HTTPException(status_code=403, detail="Tu cuenta de partner no esta activa")
+
+        subdomain = _normalize_partner_subdomain(payload.subdomain)
+        if db.query(Customer).filter(Customer.subdomain == subdomain).first():
+            raise HTTPException(status_code=409, detail=f"El subdominio '{subdomain}' ya esta en uso")
+        if db.query(PartnerDeployment).filter(PartnerDeployment.subdomain == subdomain).first():
+            raise HTTPException(status_code=409, detail=f"Ya existe un despliegue para '{subdomain}'")
+
+        plan = db.query(Plan).filter(Plan.name == payload.plan_name, Plan.is_active == True).first()
+        if not plan:
+            raise HTTPException(status_code=400, detail=f"Plan '{payload.plan_name}' no existe o no esta activo")
+
+        package = None
+        package_snapshot: Dict[str, Any] = {}
+        if payload.blueprint_package_name:
+            package = (
+                db.query(ModulePackage)
+                .filter(
+                    ModulePackage.name == payload.blueprint_package_name,
+                    ModulePackage.is_active == True,
+                )
+                .first()
+            )
+            if not package:
+                raise HTTPException(status_code=400, detail=f"Blueprint '{payload.blueprint_package_name}' no existe o no esta activo")
+            package_snapshot = {
+                "id": package.id,
+                "name": package.name,
+                "display_name": package.display_name,
+                "description": package.description,
+                "module_list": package.module_list or [],
+                "module_count": len(package.module_list or []),
+                "base_price_monthly": package.base_price_monthly,
+            }
+
+        lead = None
+        if payload.lead_id:
+            lead = db.query(Lead).filter(Lead.id == payload.lead_id, Lead.partner_id == partner.id).first()
+            if not lead:
+                raise HTTPException(status_code=404, detail="Lead no encontrado")
+            lead.company_name = payload.company_name or lead.company_name
+            lead.contact_name = payload.contact_name or lead.contact_name
+            lead.contact_email = str(payload.contact_email) or lead.contact_email
+            lead.phone = payload.phone or lead.phone
+            lead.country = payload.country_code or lead.country
+            lead.status = LeadStatus.tenant_requested
+        else:
+            lead = Lead(
+                partner_id=partner.id,
+                company_name=payload.company_name,
+                contact_name=payload.contact_name,
+                contact_email=str(payload.contact_email),
+                phone=payload.phone,
+                country=payload.country_code,
+                notes=payload.notes,
+                estimated_monthly_value=plan.calculate_monthly(payload.user_count, partner.id),
+                status=LeadStatus.tenant_requested,
+            )
+            db.add(lead)
+            db.flush()
+
+        billing_mode, payer_type, collector, issuer = _resolve_deployment_billing_mode(payload.billing_mode)
+
+        customer = Customer(
+            email=str(payload.contact_email),
+            full_name=payload.contact_name or "",
+            company_name=payload.company_name,
+            subdomain=subdomain,
+            phone=payload.phone,
+            country=payload.country_code,
+            notes=payload.notes,
+            user_count=payload.user_count,
+            fair_use_enabled=True,
+            partner_id=partner.id,
+        )
+        db.add(customer)
+        db.flush()
+
+        monthly_amount = plan.calculate_monthly(payload.user_count, partner.id)
+        subscription = Subscription(
+            customer_id=customer.id,
+            plan_name=plan.name,
+            status=SubscriptionStatus.pending,
+            user_count=payload.user_count,
+            monthly_amount=monthly_amount,
+            owner_partner_id=partner.id,
+            billing_mode=billing_mode,
+            payer_type=payer_type,
+            collector=collector,
+            invoice_issuer=issuer,
+            package_id=package.id if package else None,
+        )
+        db.add(subscription)
+        db.flush()
+
+        lead.converted_customer_id = customer.id
+
+        kpis = payload.kpis or [
+            {"name": "ROI trimestre 1", "target": "Positivo", "unit": "estado"},
+            {"name": "Reduccion costos operativos", "target": 30, "unit": "%"},
+            {"name": "Tiempo de despliegue", "target": 5, "unit": "semanas"},
+        ]
+        deployment = PartnerDeployment(
+            partner_id=partner.id,
+            lead_id=lead.id,
+            customer_id=customer.id,
+            subscription_id=subscription.id,
+            company_name=payload.company_name,
+            contact_name=payload.contact_name,
+            contact_email=str(payload.contact_email),
+            phone=payload.phone,
+            country_code=payload.country_code,
+            subdomain=subdomain,
+            plan_name=plan.name,
+            user_count=payload.user_count,
+            billing_mode=billing_mode.value,
+            industry=payload.industry,
+            blueprint_package_name=package.name if package else None,
+            blueprint_package_id=package.id if package else None,
+            package_snapshot=package_snapshot,
+            kpis_json=kpis,
+            checklist_json=[dict(item) for item in DEFAULT_DEPLOYMENT_CHECKLIST],
+            event_log=[],
+            current_phase="blueprint" if package else "strategy",
+            current_week=2 if package else 1,
+            progress_percent=30 if package else 15,
+            status="tenant_requested",
+            provisioning_status="pending",
+            invoice_status="pending",
+            handoff_status="pending",
+        )
+        _mark_checklist(deployment, ["strategy", "kpis"] + (["blueprint"] if package else []))
+        _append_deployment_event(deployment, "deployment_created", {
+            "source": "partner_portal",
+            "blueprint": deployment.blueprint_package_name,
+        })
+        db.add(deployment)
+        db.commit()
+        db.refresh(deployment)
+
+        provision_result = await _run_partner_deployment_provision(db, deployment, partner)
+        db.refresh(deployment)
+        return {
+            "message": "Despliegue automatico iniciado",
+            "deployment": _serialize_deployment(deployment),
+            "provisioning": provision_result,
+            "tenant": {
+                "subdomain": deployment.subdomain,
+                "url": deployment.tenant_url,
+                "admin_login": deployment.admin_login,
+                "admin_password": deployment.admin_password,
+                "status": deployment.provisioning_status,
+            } if deployment.provisioning_status == "ready" else None,
+            "customer_id": deployment.customer_id,
+            "subscription_id": deployment.subscription_id,
+            "monthly_amount": monthly_amount,
+        }
+    except HTTPException:
+        db.rollback()
+        raise
+    except Exception as exc:
+        db.rollback()
+        logger.error("Error creando despliegue partner: %s", exc)
+        raise HTTPException(status_code=500, detail=str(exc))
+    finally:
+        db.close()
+
+
+@router.get("/deployments")
+async def list_partner_deployments(
+    request: Request,
+    access_token: Optional[str] = Cookie(None),
+):
+    """Cockpit visual: despliegues automatizados del partner."""
+    auth = _require_partner(request, access_token)
+    db = SessionLocal()
+    try:
+        partner = _get_partner(db, auth)
+        deployments = (
+            db.query(PartnerDeployment)
+            .filter(PartnerDeployment.partner_id == partner.id)
+            .order_by(PartnerDeployment.updated_at.desc(), PartnerDeployment.id.desc())
+            .all()
+        )
+        pipeline = {phase["key"]: 0 for phase in DEPLOYMENT_PHASES}
+        for dep in deployments:
+            pipeline[dep.current_phase] = pipeline.get(dep.current_phase, 0) + 1
+        total_progress = sum(dep.progress_percent or 0 for dep in deployments)
+        summary = {
+            "total": len(deployments),
+            "active": sum(1 for d in deployments if d.status == "active"),
+            "in_progress": sum(1 for d in deployments if d.status not in ("active", "provisioning_failed")),
+            "blocked": sum(1 for d in deployments if d.status == "provisioning_failed"),
+            "avg_progress": round(total_progress / len(deployments), 1) if deployments else 0,
+            "pipeline": pipeline,
+        }
+        return {
+            "items": [_serialize_deployment(dep) for dep in deployments],
+            "total": len(deployments),
+            "summary": summary,
+            "phases": DEPLOYMENT_PHASES,
+        }
+    finally:
+        db.close()
+
+
+@router.post("/deployments/auto-start")
+async def auto_start_partner_deployment(
+    payload: PartnerDeploymentAutoStart,
+    request: Request,
+    access_token: Optional[str] = Cookie(None),
+):
+    """Inicia el flujo automatico: lead, cliente, subscription, tenant y factura."""
+    return await _create_partner_deployment_from_payload(payload, request, access_token)
+
+
+@router.get("/deployments/{deployment_id}")
+async def get_partner_deployment(
+    deployment_id: int,
+    request: Request,
+    access_token: Optional[str] = Cookie(None),
+):
+    auth = _require_partner(request, access_token)
+    db = SessionLocal()
+    try:
+        partner = _get_partner(db, auth)
+        deployment = db.query(PartnerDeployment).filter(
+            PartnerDeployment.id == deployment_id,
+            PartnerDeployment.partner_id == partner.id,
+        ).first()
+        if not deployment:
+            raise HTTPException(status_code=404, detail="Despliegue no encontrado")
+        return _serialize_deployment(deployment)
+    finally:
+        db.close()
+
+
+@router.post("/deployments/{deployment_id}/retry-provisioning")
+async def retry_partner_deployment_provisioning(
+    deployment_id: int,
+    request: Request,
+    access_token: Optional[str] = Cookie(None),
+):
+    auth = _require_partner(request, access_token)
+    db = SessionLocal()
+    try:
+        partner = _get_partner(db, auth)
+        deployment = db.query(PartnerDeployment).filter(
+            PartnerDeployment.id == deployment_id,
+            PartnerDeployment.partner_id == partner.id,
+        ).first()
+        if not deployment:
+            raise HTTPException(status_code=404, detail="Despliegue no encontrado")
+        result = await _run_partner_deployment_provision(db, deployment, partner)
+        db.refresh(deployment)
+        return {"deployment": _serialize_deployment(deployment), "provisioning": result}
+    finally:
+        db.close()
+
+
+@router.post("/deployments/{deployment_id}/complete-handoff")
+async def complete_partner_deployment_handoff(
+    deployment_id: int,
+    request: Request,
+    access_token: Optional[str] = Cookie(None),
+):
+    auth = _require_partner(request, access_token)
+    db = SessionLocal()
+    try:
+        partner = _get_partner(db, auth)
+        deployment = db.query(PartnerDeployment).filter(
+            PartnerDeployment.id == deployment_id,
+            PartnerDeployment.partner_id == partner.id,
+        ).first()
+        if not deployment:
+            raise HTTPException(status_code=404, detail="Despliegue no encontrado")
+        if deployment.provisioning_status != "ready":
+            raise HTTPException(status_code=400, detail="El tenant aun no esta listo para handoff")
+        deployment.status = "active"
+        deployment.current_phase = "handoff"
+        deployment.current_week = 5
+        deployment.progress_percent = 100
+        deployment.handoff_status = "completed"
+        deployment.completed_at = deployment.completed_at or _now_naive()
+        _mark_checklist(deployment, ["validation", "training", "handoff"])
+        _append_deployment_event(deployment, "handoff_completed", {"partner_id": partner.id})
+        if deployment.lead_id:
+            lead = db.query(Lead).filter(Lead.id == deployment.lead_id).first()
+            if lead:
+                lead.status = LeadStatus.active
+        db.commit()
+        db.refresh(deployment)
+        return {"message": "Handoff completado", "deployment": _serialize_deployment(deployment)}
+    finally:
+        db.close()
 
 
 @router.post("/clients")
@@ -704,119 +1488,128 @@ async def create_partner_client(
     Esto cierra el gap: el partner puede crear clientes completos
     sin necesitar intervención del admin.
     """
+    result = await _create_partner_deployment_from_payload(
+        PartnerDeploymentAutoStart(
+            company_name=payload.company_name,
+            contact_email=payload.contact_email,
+            subdomain=payload.subdomain,
+            plan_name=payload.plan_name,
+            user_count=payload.user_count,
+            contact_name=payload.contact_name,
+            notes=payload.notes,
+            lead_id=payload.lead_id,
+            country_code=payload.country_code or "US",
+            industry=payload.industry,
+            blueprint_package_name=payload.blueprint_package_name,
+            billing_mode=payload.billing_mode,
+            kpis=payload.kpis,
+        ),
+        request,
+        access_token,
+    )
+    if result.get("tenant"):
+        result["message"] = f"Cliente '{payload.company_name}' creado + tenant provisionado"
+    return result
+
+
+@router.put("/clients/{customer_id}")
+async def update_partner_client(
+    customer_id: int,
+    payload: PartnerClientUpdate,
+    request: Request,
+    access_token: Optional[str] = Cookie(None),
+):
+    """
+    Permite al socio gestionar datos básicos del cliente.
+
+    Cambios permitidos:
+    - Datos comerciales/contacto del Customer
+    - Plan y cantidad de usuarios de la Subscription
+
+    Después intenta sincronizar hacia Odoo. Si Odoo falla, la BDA queda actualizada
+    y la respuesta informa el estado para que el portal no bloquee el alta ágil.
+    """
     auth = _require_partner(request, access_token)
     db = SessionLocal()
     try:
         partner = _get_partner(db, auth)
         if partner.status != PartnerStatus.active:
-            raise HTTPException(
-                status_code=403,
-                detail="Tu cuenta de partner no está activa. Contacta a soporte."
+            raise HTTPException(status_code=403, detail="Tu cuenta de partner no está activa")
+
+        customer = db.query(Customer).filter(Customer.id == customer_id).first()
+        sub = (
+            db.query(Subscription)
+            .filter(
+                Subscription.customer_id == customer_id,
+                Subscription.owner_partner_id == partner.id,
             )
-
-        # Validar subdominio
-        import re
-        subdomain = payload.subdomain.strip().lower().replace("-", "_")
-        if not re.match(r'^[a-z0-9][a-z0-9_]{1,28}[a-z0-9]$', subdomain):
-            raise HTTPException(
-                status_code=400,
-                detail="Subdominio inválido. Solo letras minúsculas, números y guiones bajos (3-30 chars)."
-            )
-
-        # Verificar que no exista
-        existing = db.query(Customer).filter(Customer.subdomain == subdomain).first()
-        if existing:
-            raise HTTPException(status_code=409, detail=f"El subdominio '{subdomain}' ya está en uso")
-
-        # Validar plan
-        plan = db.query(Plan).filter(Plan.name == payload.plan_name, Plan.is_active == True).first()
-        if not plan:
-            raise HTTPException(status_code=400, detail=f"Plan '{payload.plan_name}' no existe o no está activo")
-
-        from ..models.database import BillingMode, PayerType, CollectorType, InvoiceIssuer
-
-        # Crear cliente vinculado al partner
-        customer = Customer(
-            email=payload.contact_email,
-            full_name=payload.contact_name or "",
-            company_name=payload.company_name,
-            subdomain=subdomain,
-            user_count=payload.user_count,
-            fair_use_enabled=True,
-            partner_id=partner.id,
+            .order_by(Subscription.id.desc())
+            .first()
         )
-        db.add(customer)
-        db.flush()
+        if not customer or not sub:
+            raise HTTPException(status_code=404, detail="Cliente no encontrado")
 
-        # Crear suscripción con pricing override del partner
-        calculated_amount = plan.calculate_monthly(payload.user_count, partner.id)
-        sub = Subscription(
-            customer_id=customer.id,
-            plan_name=payload.plan_name,
-            status=SubscriptionStatus.active,
-            user_count=payload.user_count,
-            monthly_amount=calculated_amount,
-            owner_partner_id=partner.id,
-            billing_mode=BillingMode.PARTNER_DIRECT,
-            payer_type=PayerType.PARTNER,
-            collector=CollectorType.STRIPE_CONNECT,
-            invoice_issuer=InvoiceIssuer.JETURING,
-        )
-        db.add(sub)
+        data = payload.dict(exclude_unset=True)
+
+        if "company_name" in data and data["company_name"] is not None:
+            company_name = str(data["company_name"]).strip()
+            if not company_name:
+                raise HTTPException(status_code=400, detail="Nombre de empresa requerido")
+            customer.company_name = company_name
+
+        if "contact_email" in data and data["contact_email"] is not None:
+            customer.email = str(data["contact_email"]).strip().lower()
+
+        if "contact_name" in data:
+            customer.full_name = (data["contact_name"] or "").strip()
+
+        if "phone" in data:
+            customer.phone = (data["phone"] or "").strip() or None
+
+        if "country" in data:
+            customer.country = (data["country"] or "").strip() or None
+
+        if "notes" in data:
+            customer.notes = (data["notes"] or "").strip() or None
+
+        plan = None
+        if "plan_name" in data and data["plan_name"]:
+            plan = db.query(Plan).filter(
+                Plan.name == data["plan_name"],
+                Plan.is_active == True,
+            ).first()
+            if not plan:
+                raise HTTPException(status_code=400, detail=f"Plan '{data['plan_name']}' no existe o no está activo")
+            sub.plan_name = plan.name
+        else:
+            plan = db.query(Plan).filter(Plan.name == sub.plan_name, Plan.is_active == True).first()
+
+        if "user_count" in data and data["user_count"] is not None:
+            user_count = int(data["user_count"])
+            if user_count < 1 or user_count > 999:
+                raise HTTPException(status_code=400, detail="Usuarios debe estar entre 1 y 999")
+            customer.user_count = user_count
+            sub.user_count = user_count
+
+        if plan:
+            sub.monthly_amount = plan.calculate_monthly(sub.user_count or 1, partner.id)
+
         db.commit()
         db.refresh(customer)
         db.refresh(sub)
 
-        response = {
-            "success": True,
-            "customer_id": customer.id,
-            "subscription_id": sub.id,
-            "monthly_amount": calculated_amount,
-            "message": f"Cliente '{payload.company_name}' creado exitosamente",
+        sync_result = await _sync_partner_client_to_odoo(customer, sub, partner)
+
+        return {
+            "message": "Cliente actualizado",
+            "client": _serialize_partner_client(customer, sub),
+            "sync": sync_result,
         }
-
-        # Auto-provision tenant Odoo
-        try:
-            from .customers import _auto_provision_tenant
-            tenant_result = await _auto_provision_tenant(
-                subdomain=subdomain,
-                company_name=payload.company_name,
-                partner_id=partner.id,
-                plan_name=payload.plan_name,
-                subscription_id=sub.id,
-                customer_id=customer.id,
-            )
-            if tenant_result.get("success"):
-                response["tenant"] = {
-                    "subdomain": subdomain,
-                    "url": tenant_result.get("url", f"https://{subdomain}.sajet.us"),
-                    "admin_login": tenant_result.get("admin_login"),
-                    "admin_password": tenant_result.get("admin_password"),
-                    "status": "active",
-                }
-                response["message"] += " + Tenant provisionado"
-                logger.info(
-                    f"✅ Partner {partner.company_name} creó cliente+tenant '{subdomain}'"
-                )
-            else:
-                response["tenant_error"] = tenant_result.get("error")
-                response["message"] += " (tenant pendiente — contacta soporte)"
-                logger.warning(
-                    f"⚠️ Partner {partner.company_name}: cliente creado pero tenant falló: "
-                    f"{tenant_result.get('error')}"
-                )
-        except Exception as prov_err:
-            response["tenant_error"] = str(prov_err)
-            response["message"] += " (error en provisioning)"
-            logger.error(f"Error en auto-provision para partner: {prov_err}")
-
-        return response
-
     except HTTPException:
         raise
     except Exception as e:
         db.rollback()
-        logger.error(f"Error partner creando cliente: {e}")
+        logger.error("Error partner actualizando cliente %s: %s", customer_id, e)
         raise HTTPException(status_code=500, detail=str(e))
     finally:
         db.close()

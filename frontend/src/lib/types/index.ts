@@ -95,11 +95,119 @@ export interface PartnerLeadsResponse {
   pipeline: Record<string, number>;
 }
 
+export interface PartnerDeploymentPhase {
+  key: string;
+  label: string;
+  week: number;
+  target: number;
+}
+
+export interface PartnerDeploymentChecklistItem {
+  key: string;
+  label: string;
+  phase: string;
+  done: boolean;
+}
+
+export interface PartnerDeploymentEvent {
+  event: string;
+  detail: Record<string, unknown>;
+  at: string;
+}
+
+export interface PartnerDeploymentItem {
+  id: number;
+  lead_id: number | null;
+  customer_id: number | null;
+  subscription_id: number | null;
+  tenant_deployment_id: number | null;
+  invoice_id: number | null;
+  company_name: string;
+  contact_name: string | null;
+  contact_email: string;
+  phone: string | null;
+  country_code: string | null;
+  subdomain: string;
+  tenant_url: string | null;
+  plan_name: string;
+  user_count: number;
+  billing_mode: string;
+  industry: string | null;
+  blueprint_package_name: string | null;
+  package_snapshot: {
+    id?: number;
+    name?: string;
+    display_name?: string;
+    description?: string | null;
+    module_list?: string[];
+    module_count?: number;
+    base_price_monthly?: number;
+  };
+  kpis: Array<Record<string, unknown>>;
+  checklist: PartnerDeploymentChecklistItem[];
+  events: PartnerDeploymentEvent[];
+  phase: string;
+  week: number;
+  progress_percent: number;
+  status: string;
+  provisioning_status: string;
+  invoice_status: string;
+  handoff_status: string;
+  last_error: string | null;
+  started_at: string | null;
+  tenant_ready_at: string | null;
+  invoiced_at: string | null;
+  completed_at: string | null;
+  invoice: {
+    id: number;
+    invoice_number: string;
+    total: number;
+    currency: string;
+    status: string | null;
+    payment_url: string | null;
+    download_url: string | null;
+    view_url: string | null;
+  } | null;
+  phases: PartnerDeploymentPhase[];
+}
+
+export interface PartnerDeploymentsResponse {
+  items: PartnerDeploymentItem[];
+  total: number;
+  summary: {
+    total: number;
+    active: number;
+    in_progress: number;
+    blocked: number;
+    avg_progress: number;
+    pipeline: Record<string, number>;
+  };
+  phases: PartnerDeploymentPhase[];
+}
+
+export interface BlueprintPackageItem {
+  id: number;
+  name: string;
+  display_name: string;
+  description: string | null;
+  plan_type: string | null;
+  base_price_monthly: number;
+  is_default: boolean;
+  is_active: boolean;
+  module_list: string[];
+  module_count: number;
+  partner_allowed?: boolean;
+}
+
 export interface PartnerClientItem {
   subscription_id: number;
   customer_id: number;
   company_name: string;
+  contact_name?: string | null;
   email: string;
+  phone?: string | null;
+  country?: string | null;
+  notes?: string | null;
   subdomain?: string | null;
   plan: string;
   status: string | null;
@@ -107,6 +215,7 @@ export interface PartnerClientItem {
   monthly_amount: number;
   user_count: number;
   created_at: string | null;
+  updated_at?: string | null;
 }
 
 export interface PartnerCommissionItem {

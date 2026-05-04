@@ -886,6 +886,74 @@ class Lead(Base):
     converted_customer = relationship("Customer", foreign_keys=[converted_customer_id])
 
 
+class PartnerDeployment(Base):
+    """
+    Tracking operativo del despliegue guiado por partner.
+
+    Une el pipeline comercial con el alta tecnica real del tenant, la factura y
+    el handoff de 5 semanas sin depender de que cada paso externo responda.
+    """
+    __tablename__ = "partner_deployments"
+
+    id = Column(Integer, primary_key=True, index=True)
+    partner_id = Column(Integer, ForeignKey("partners.id", ondelete="CASCADE"), nullable=False, index=True)
+    lead_id = Column(Integer, ForeignKey("leads.id", ondelete="SET NULL"), nullable=True, index=True)
+    customer_id = Column(Integer, ForeignKey("customers.id", ondelete="SET NULL"), nullable=True, index=True)
+    subscription_id = Column(Integer, ForeignKey("subscriptions.id", ondelete="SET NULL"), nullable=True, index=True)
+    tenant_deployment_id = Column(Integer, ForeignKey("tenant_deployments.id", ondelete="SET NULL"), nullable=True, index=True)
+    invoice_id = Column(Integer, ForeignKey("invoices.id", ondelete="SET NULL"), nullable=True, index=True)
+
+    company_name = Column(String(200), nullable=False)
+    contact_name = Column(String(150), nullable=True)
+    contact_email = Column(String(200), nullable=False)
+    phone = Column(String(50), nullable=True)
+    country_code = Column(String(10), nullable=True)
+    subdomain = Column(String(100), nullable=False, index=True)
+    plan_name = Column(String(50), nullable=False, default="basic")
+    user_count = Column(Integer, nullable=False, default=1)
+    billing_mode = Column(String(60), nullable=False, default="partner_direct")
+
+    industry = Column(String(100), nullable=True)
+    blueprint_package_name = Column(String(150), nullable=True)
+    blueprint_package_id = Column(Integer, ForeignKey("module_packages.id", ondelete="SET NULL"), nullable=True)
+    package_snapshot = Column(JSON, default=dict)
+    kpis_json = Column(JSON, default=list)
+    checklist_json = Column(JSON, default=list)
+    event_log = Column(JSON, default=list)
+
+    current_phase = Column(String(40), nullable=False, default="strategy")
+    current_week = Column(Integer, nullable=False, default=1)
+    progress_percent = Column(Integer, nullable=False, default=10)
+    status = Column(String(40), nullable=False, default="tenant_requested", index=True)
+    provisioning_status = Column(String(40), nullable=False, default="pending")
+    invoice_status = Column(String(40), nullable=False, default="pending")
+    handoff_status = Column(String(40), nullable=False, default="pending")
+    last_error = Column(Text, nullable=True)
+
+    tenant_url = Column(String(255), nullable=True)
+    admin_login = Column(String(200), nullable=True)
+    admin_password = Column(String(255), nullable=True)
+    started_at = Column(DateTime, default=lambda: datetime.now(timezone.utc).replace(tzinfo=None), nullable=False)
+    tenant_ready_at = Column(DateTime, nullable=True)
+    invoiced_at = Column(DateTime, nullable=True)
+    completed_at = Column(DateTime, nullable=True)
+    created_at = Column(DateTime, default=lambda: datetime.now(timezone.utc).replace(tzinfo=None))
+    updated_at = Column(DateTime, default=lambda: datetime.now(timezone.utc).replace(tzinfo=None), onupdate=lambda: datetime.now(timezone.utc).replace(tzinfo=None))
+
+    partner = relationship("Partner", foreign_keys=[partner_id])
+    lead = relationship("Lead", foreign_keys=[lead_id])
+    customer = relationship("Customer", foreign_keys=[customer_id])
+    subscription = relationship("Subscription", foreign_keys=[subscription_id])
+    tenant_deployment = relationship("TenantDeployment", foreign_keys=[tenant_deployment_id])
+    invoice = relationship("Invoice", foreign_keys=[invoice_id])
+    blueprint_package = relationship("ModulePackage", foreign_keys=[blueprint_package_id])
+
+    __table_args__ = (
+        Index("ix_partner_deployments_partner_status", "partner_id", "status"),
+        Index("ix_partner_deployments_partner_phase", "partner_id", "current_phase"),
+    )
+
+
 class Commission(Base):
     """
     Comisiones — Cláusula 8: Split 50/50 sobre Ingresos Netos.

@@ -5,7 +5,7 @@
     UserCircle, Plus, TrendingUp, Building2, ExternalLink, RefreshCw,
     Package, FileText, Download, Palette,
     ChevronRight, ArrowUpRight, Loader2,
-    Globe, ChevronDown, ChevronUp, Link2
+    Globe, ChevronDown, ChevronUp, Link2, Rocket, Target, CheckCircle2, AlertTriangle
   } from 'lucide-svelte';
   import { auth, currentUser } from '../lib/stores';
   import { Spinner } from '../lib/components';
@@ -16,18 +16,21 @@
     AddonSubscriptionItem,
     PartnerOnboardingStatus, PartnerDashboard, PartnerLeadsResponse,
     PartnerLeadItem, PartnerProfile, PartnerClientItem, PartnerCommissionItem, PartnerPortalInvoiceItem, ServiceCatalogItemType,
+    PartnerDeploymentsResponse, PartnerDeploymentItem, BlueprintPackageItem,
   } from '../lib/types';
   import { formatDate } from '../lib/utils/formatters';
 
   // State
   let loading = true;
   let error = '';
-  let activeTab: 'dashboard' | 'leads' | 'clients' | 'services' | 'invoices' | 'commissions' | 'stripe' | 'branding' | 'profile' = 'dashboard';
+  let activeTab: 'dashboard' | 'deployments' | 'leads' | 'clients' | 'services' | 'invoices' | 'commissions' | 'stripe' | 'branding' | 'profile' = 'dashboard';
 
   // Data
   let onboardingStatus: PartnerOnboardingStatus | null = null;
   let dashboard: PartnerDashboard | null = null;
   let leads: PartnerLeadsResponse | null = null;
+  let deployments: PartnerDeploymentsResponse | null = null;
+  let blueprintPackages: BlueprintPackageItem[] = [];
   let clients: { items: PartnerClientItem[]; total: number } | null = null;
   let invoices: { items: PartnerPortalInvoiceItem[]; total: number; summary: { total_billed: number; total_paid: number; total_pending: number } } | null = null;
   let commissions: { items: PartnerCommissionItem[]; total: number; summary: { total_earned: number; pending: number; paid: number } } | null = null;
@@ -36,6 +39,7 @@
 
   // Client services
   let selectedServiceClientId: number | null = null;
+  let selectedServiceClientValue = '';
   let clientServiceCatalog: ServiceCatalogItemType[] = [];
   let clientServiceSubscriptions: AddonSubscriptionItem[] = [];
   let servicesLoading = false;
@@ -43,6 +47,17 @@
   let servicesMessage = '';
   let servicesMessageType: 'success' | 'error' = 'success';
   let purchasingServiceId: number | null = null;
+  let savingClientSettings = false;
+  let clientEditForm = {
+    company_name: '',
+    contact_email: '',
+    contact_name: '',
+    phone: '',
+    country: '',
+    plan_name: 'basic',
+    user_count: 1,
+    notes: '',
+  };
 
   // New Lead form
   let showNewLead = false;
@@ -51,10 +66,31 @@
 
   // New Client form
   let showNewClient = false;
-  let newClient = { company_name: '', contact_email: '', subdomain: '', plan_name: 'standard', user_count: 1, contact_name: '', notes: '' };
+  let newClient = { company_name: '', contact_email: '', subdomain: '', plan_name: 'basic', user_count: 1, contact_name: '', notes: '' };
   let savingClient = false;
   let clientCredentials: { admin_login: string; admin_password: string; subdomain: string; url: string } | null = null;
   let showClientCredentials = false;
+
+  // Automated deployment wizard
+  let showDeploymentWizard = false;
+  let savingDeployment = false;
+  let selectedDeployment: PartnerDeploymentItem | null = null;
+  let deploymentWizardStep = 1;
+  let deploymentForm = {
+    lead_id: '',
+    company_name: '',
+    contact_name: '',
+    contact_email: '',
+    phone: '',
+    country_code: 'US',
+    industry: 'retail',
+    blueprint_package_name: '',
+    subdomain: '',
+    plan_name: 'basic',
+    user_count: 1,
+    billing_mode: 'partner_direct',
+    notes: '',
+  };
 
   // Client domains (expandable)
   let expandedClientId: number | null = null;
@@ -96,6 +132,10 @@
       case 'qualified': case 'in_qualification': return 'bg-amber-100 text-amber-700';
       case 'proposal': return 'bg-purple-100 text-purple-700';
       case 'won': return 'bg-green-100 text-green-700';
+      case 'tenant_requested': return 'bg-orange-100 text-orange-700';
+      case 'provisioning_running': return 'bg-sky-100 text-sky-700';
+      case 'provisioning_failed': return 'bg-red-100 text-red-700';
+      case 'tenant_ready': case 'invoiced': return 'bg-teal-100 text-teal-700';
       case 'lost': return 'bg-red-100 text-red-700';
       case 'active': return 'bg-green-100 text-green-700';
       case 'pending': return 'bg-amber-100 text-amber-700';
@@ -103,6 +143,55 @@
       case 'void': return 'bg-red-100 text-red-700';
       case 'issued': case 'open': case 'overdue': case 'past_due': return 'bg-amber-100 text-amber-700';
       default: return 'bg-gray-100 text-gray-700';
+    }
+  }
+
+  function phaseLabel(phase: string): string {
+    const phaseMap: Record<string, string> = {
+      strategy: 'Alineacion',
+      blueprint: 'Blueprint',
+      provisioning: 'Tenant',
+      validation: 'Validacion',
+      training: 'Capacitacion',
+      handoff: 'Activo',
+    };
+    return phaseMap[phase] || phase;
+  }
+
+  function deploymentStatusLabel(status: string): string {
+    const statusMap: Record<string, string> = {
+      tenant_requested: 'Solicitado',
+      provisioning_running: 'Provisioning',
+      provisioning_failed: 'Bloqueado',
+      invoiced: 'Facturado',
+      active: 'Activo',
+    };
+    return statusMap[status] || status;
+  }
+
+  function applyLeadToDeploymentForm() {
+    const leadId = Number(deploymentForm.lead_id || 0);
+    const lead = leads?.items?.find((item) => Number(item.id) === leadId);
+    if (!lead) return;
+    deploymentForm = {
+      ...deploymentForm,
+      company_name: lead.company_name || deploymentForm.company_name,
+      contact_name: lead.contact_name || deploymentForm.contact_name,
+      contact_email: lead.contact_email || deploymentForm.contact_email,
+      phone: lead.phone || deploymentForm.phone,
+      country_code: lead.country || deploymentForm.country_code,
+      notes: lead.notes || deploymentForm.notes,
+    };
+  }
+
+  function suggestBlueprintForIndustry() {
+    const industry = deploymentForm.industry.toLowerCase();
+    const match = blueprintPackages.find((pkg) => {
+      const haystack = `${pkg.name} ${pkg.display_name} ${pkg.description || ''}`.toLowerCase();
+      return haystack.includes(industry);
+    }) || blueprintPackages.find((pkg) => pkg.is_default) || blueprintPackages[0];
+    if (match && !deploymentForm.blueprint_package_name) {
+      deploymentForm = { ...deploymentForm, blueprint_package_name: match.name };
     }
   }
 
@@ -135,11 +224,33 @@
   }
 
   function getSelectedServiceClient(): PartnerClientItem | null {
-    return clients?.items?.find((client) => client.customer_id === selectedServiceClientId) || null;
+    const id = Number(selectedServiceClientId);
+    return clients?.items?.find((client) => Number(client.customer_id) === id) || null;
   }
 
-  $: emailProfileCatalog = clientServiceCatalog.filter((item) => isEmailPackage(item));
-  $: activeEmailProfiles = clientServiceSubscriptions.filter((addon) => addon.catalog_item && isEmailPackage(addon.catalog_item));
+  $: availableClientServices = clientServiceCatalog;
+  $: activeClientServices = clientServiceSubscriptions;
+
+  function hydrateClientEditForm() {
+    const client = getSelectedServiceClient();
+    if (!client) return;
+    clientEditForm = {
+      company_name: client.company_name || '',
+      contact_email: client.email || '',
+      contact_name: client.contact_name || '',
+      phone: client.phone || '',
+      country: client.country || '',
+      plan_name: client.plan || 'basic',
+      user_count: Number(client.user_count || 1),
+      notes: client.notes || '',
+    };
+  }
+
+  function selectServiceClient(customerId: number | null) {
+    selectedServiceClientId = customerId;
+    selectedServiceClientValue = customerId ? String(customerId) : '';
+    hydrateClientEditForm();
+  }
 
   async function loadData() {
     loading = true;
@@ -160,7 +271,13 @@
     try {
       switch (activeTab) {
         case 'dashboard':
-          dashboard = await partnerPortalApi.getDashboard();
+          [dashboard, deployments] = await Promise.all([
+            partnerPortalApi.getDashboard(),
+            partnerPortalApi.getDeployments(),
+          ]);
+          break;
+        case 'deployments':
+          await loadDeploymentCockpit();
           break;
         case 'leads':
           leads = await partnerPortalApi.getLeads();
@@ -209,8 +326,12 @@
     if (!clients) {
       clients = await partnerPortalApi.getClients();
     }
-    if (!selectedServiceClientId && clients.items.length > 0) {
-      selectedServiceClientId = clients.items[0].customer_id;
+    const currentExists = clients.items.some((client) => Number(client.customer_id) === Number(selectedServiceClientId));
+    if ((!selectedServiceClientId || !currentExists) && clients.items.length > 0) {
+      selectServiceClient(clients.items[0].customer_id);
+    } else if (selectedServiceClientId) {
+      selectedServiceClientValue = String(selectedServiceClientId);
+      hydrateClientEditForm();
     }
   }
 
@@ -230,6 +351,7 @@
       ]);
       clientServiceCatalog = catalogRes.items ?? [];
       clientServiceSubscriptions = subscriptionsRes.items ?? [];
+      hydrateClientEditForm();
     } catch (err) {
       servicesError = err instanceof Error ? err.message : 'Error al cargar servicios del cliente';
     } finally {
@@ -237,11 +359,58 @@
     }
   }
 
+  async function handleServiceClientChange() {
+    const nextId = selectedServiceClientValue ? Number(selectedServiceClientValue) : null;
+    selectServiceClient(nextId);
+    await loadClientServices(nextId);
+  }
+
   async function switchTab(tab: typeof activeTab) {
     activeTab = tab;
     error = '';
     brandingMessage = '';
     await loadTabData();
+  }
+
+  async function loadDeploymentCockpit() {
+    const [deploymentRes, leadRes, packageRes, clientRes] = await Promise.all([
+      partnerPortalApi.getDeployments(),
+      partnerPortalApi.getLeads(),
+      partnerPortalApi.getBlueprintPackages(),
+      partnerPortalApi.getClients(),
+    ]);
+    deployments = deploymentRes;
+    leads = leadRes;
+    blueprintPackages = packageRes.items ?? [];
+    clients = clientRes;
+    suggestBlueprintForIndustry();
+  }
+
+  function resetDeploymentForm() {
+    deploymentForm = {
+      lead_id: '',
+      company_name: '',
+      contact_name: '',
+      contact_email: '',
+      phone: '',
+      country_code: 'US',
+      industry: 'retail',
+      blueprint_package_name: blueprintPackages.find((pkg) => pkg.is_default)?.name || blueprintPackages[0]?.name || '',
+      subdomain: '',
+      plan_name: 'basic',
+      user_count: 1,
+      billing_mode: 'partner_direct',
+      notes: '',
+    };
+    deploymentWizardStep = 1;
+  }
+
+  async function openDeploymentWizard() {
+    showDeploymentWizard = !showDeploymentWizard;
+    if (showDeploymentWizard) {
+      await loadDeploymentCockpit();
+      resetDeploymentForm();
+    }
   }
 
   async function saveBrandingProfile() {
@@ -296,16 +465,84 @@
         };
         showClientCredentials = true;
       }
-      newClient = { company_name: '', contact_email: '', subdomain: '', plan_name: 'standard', user_count: 1, contact_name: '', notes: '' };
+      newClient = { company_name: '', contact_email: '', subdomain: '', plan_name: 'basic', user_count: 1, contact_name: '', notes: '' };
       showNewClient = false;
       clients = await partnerPortalApi.getClients();
-      if (!selectedServiceClientId && clients.items.length > 0) {
-        selectedServiceClientId = clients.items[0].customer_id;
+      if (clients.items.length > 0) {
+        const createdClient = clients.items.find((client) => client.subdomain === clientCredentials?.subdomain) || clients.items[0];
+        selectServiceClient(createdClient.customer_id);
       }
     } catch (err) {
       error = err instanceof Error ? err.message : 'Error al crear cliente';
     } finally {
       savingClient = false;
+    }
+  }
+
+  async function startDeployment() {
+    if (!deploymentForm.company_name.trim() || !deploymentForm.contact_email.trim() || !deploymentForm.subdomain.trim()) return;
+    savingDeployment = true;
+    error = '';
+    try {
+      const result = await partnerPortalApi.startDeployment({
+        company_name: deploymentForm.company_name,
+        contact_email: deploymentForm.contact_email,
+        subdomain: deploymentForm.subdomain,
+        plan_name: deploymentForm.plan_name,
+        user_count: Number(deploymentForm.user_count || 1),
+        contact_name: deploymentForm.contact_name,
+        phone: deploymentForm.phone,
+        country_code: deploymentForm.country_code,
+        industry: deploymentForm.industry,
+        notes: deploymentForm.notes,
+        lead_id: deploymentForm.lead_id ? Number(deploymentForm.lead_id) : null,
+        blueprint_package_name: deploymentForm.blueprint_package_name,
+        billing_mode: deploymentForm.billing_mode,
+      });
+      if (result.tenant?.admin_login) {
+        clientCredentials = {
+          admin_login: result.tenant.admin_login,
+          admin_password: result.tenant.admin_password,
+          subdomain: result.tenant.subdomain,
+          url: result.tenant.url,
+        };
+        showClientCredentials = true;
+      }
+      showDeploymentWizard = false;
+      selectedDeployment = result.deployment;
+      await loadDeploymentCockpit();
+    } catch (err) {
+      error = err instanceof Error ? err.message : 'No se pudo iniciar el despliegue';
+    } finally {
+      savingDeployment = false;
+    }
+  }
+
+  async function retryDeployment(dep: PartnerDeploymentItem) {
+    savingDeployment = true;
+    error = '';
+    try {
+      const result = await partnerPortalApi.retryDeploymentProvisioning(dep.id);
+      selectedDeployment = result.deployment;
+      await loadDeploymentCockpit();
+    } catch (err) {
+      error = err instanceof Error ? err.message : 'No se pudo reintentar el provisioning';
+    } finally {
+      savingDeployment = false;
+    }
+  }
+
+  async function completeHandoff(dep: PartnerDeploymentItem) {
+    savingDeployment = true;
+    error = '';
+    try {
+      const result = await partnerPortalApi.completeDeploymentHandoff(dep.id);
+      selectedDeployment = result.deployment;
+      await loadDeploymentCockpit();
+    } catch (err) {
+      error = err instanceof Error ? err.message : 'No se pudo completar el handoff';
+    } finally {
+      savingDeployment = false;
     }
   }
 
@@ -315,17 +552,48 @@
     servicesMessage = '';
     try {
       const result = await partnerPortalApi.purchaseClientService(selectedServiceClientId, item.id, 1);
-      servicesMessage = result.message || `Perfil ${item.name} asignado al tenant`;
+      servicesMessage = result.message || `Servicio ${item.name} asignado al tenant`;
       servicesMessageType = 'success';
       await loadClientServices(selectedServiceClientId);
       if (result.invoice?.payment_url) {
         window.open(result.invoice.payment_url, '_blank', 'noopener,noreferrer');
       }
     } catch (err) {
-      servicesMessage = err instanceof Error ? err.message : 'No se pudo asignar el perfil de correo al tenant';
+      servicesMessage = err instanceof Error ? err.message : 'No se pudo asignar el servicio al tenant';
       servicesMessageType = 'error';
     } finally {
       purchasingServiceId = null;
+    }
+  }
+
+  async function saveClientSettings() {
+    const customerId = selectedServiceClientId;
+    if (!customerId) return;
+    savingClientSettings = true;
+    servicesMessage = '';
+    servicesError = '';
+    try {
+      const result = await partnerPortalApi.updateClient(customerId, {
+        company_name: clientEditForm.company_name,
+        contact_email: clientEditForm.contact_email,
+        contact_name: clientEditForm.contact_name,
+        phone: clientEditForm.phone,
+        country: clientEditForm.country,
+        plan_name: clientEditForm.plan_name,
+        user_count: Number(clientEditForm.user_count || 1),
+        notes: clientEditForm.notes,
+      });
+      clients = await partnerPortalApi.getClients();
+      selectServiceClient(result.client.customer_id);
+      await loadClientServices(result.client.customer_id);
+      servicesMessage = result.sync?.success
+        ? 'Cliente actualizado y sincronizado con Odoo.'
+        : `Cliente actualizado en SAJET. Sincronización pendiente: ${result.sync?.message || 'Odoo no respondió'}`;
+      servicesMessageType = result.sync?.success ? 'success' : 'error';
+    } catch (err) {
+      servicesError = err instanceof Error ? err.message : 'No se pudo actualizar el cliente';
+    } finally {
+      savingClientSettings = false;
     }
   }
 
@@ -443,6 +711,7 @@
       <div class="max-w-7xl mx-auto px-6 flex gap-0">
         {#each [
           { key: 'dashboard', label: 'Dashboard', icon: LayoutDashboard },
+          { key: 'deployments', label: 'Despliegues', icon: Rocket },
           { key: 'leads', label: 'Leads', icon: Briefcase },
           { key: 'clients', label: 'Clientes', icon: Users },
           { key: 'services', label: 'Servicios', icon: Package },
@@ -496,6 +765,37 @@
           </div>
         </div>
 
+        {#if deployments}
+          <div class="bg-white rounded-xl border border-gray-200 p-5 mb-6">
+            <div class="flex items-center justify-between gap-3 mb-4">
+              <div>
+                <h2 class="text-sm font-bold text-[#1a1a1a]">Cockpit de despliegues</h2>
+                <p class="text-xs text-gray-500 mt-1">Pipeline automatico desde lead hasta tenant activo.</p>
+              </div>
+              <button
+                class="bg-[#1a1a1a] text-white text-sm font-semibold px-4 py-2 rounded-lg hover:bg-[#333] transition-colors flex items-center gap-1.5"
+                on:click={() => switchTab('deployments')}
+              >
+                <Rocket class="w-4 h-4" /> Abrir cockpit
+              </button>
+            </div>
+            <div class="grid grid-cols-2 md:grid-cols-6 gap-2">
+              {#each deployments.phases as phase}
+                <div class="rounded-lg border border-gray-200 bg-gray-50 p-3 min-h-[92px]">
+                  <div class="flex items-center justify-between">
+                    <span class="text-[10px] font-semibold text-gray-500 uppercase tracking-wider">Semana {phase.week}</span>
+                    <span class="text-xs font-bold text-[#C05A3C]">{deployments.summary.pipeline[phase.key] || 0}</span>
+                  </div>
+                  <p class="text-sm font-semibold text-[#1a1a1a] mt-2">{phase.label}</p>
+                  <div class="h-1.5 rounded-full bg-gray-200 mt-3 overflow-hidden">
+                    <div class="h-full bg-[#C05A3C]" style={`width: ${Math.min(100, phase.target)}%`}></div>
+                  </div>
+                </div>
+              {/each}
+            </div>
+          </div>
+        {/if}
+
         <!-- Revenue Cards -->
         <div class="grid grid-cols-1 lg:grid-cols-3 gap-4 mb-6">
           <div class="bg-white rounded-xl border border-gray-200 p-5">
@@ -544,9 +844,16 @@
             <div class="space-y-2">
               <button
                 class="w-full text-left px-3 py-2.5 rounded-lg border border-gray-200 hover:border-[#C05A3C] transition-colors flex items-center justify-between text-sm"
+                on:click={openDeploymentWizard}
+              >
+                <span class="flex items-center gap-2"><Rocket class="w-4 h-4 text-[#C05A3C]" /> Iniciar despliegue automatico</span>
+                <ChevronRight class="w-4 h-4 text-gray-400" />
+              </button>
+              <button
+                class="w-full text-left px-3 py-2.5 rounded-lg border border-gray-200 hover:border-[#C05A3C] transition-colors flex items-center justify-between text-sm"
                 on:click={() => { switchTab('leads'); showNewLead = true; }}
               >
-                <span class="flex items-center gap-2"><Plus class="w-4 h-4 text-[#C05A3C]" /> Registrar nuevo lead</span>
+                <span class="flex items-center gap-2"><Plus class="w-4 h-4 text-[#C05A3C]" /> Registrar lead manual</span>
                 <ChevronRight class="w-4 h-4 text-gray-400" />
               </button>
               <button
@@ -559,6 +866,260 @@
             </div>
           </div>
         </div>
+
+      <!-- ═══ DEPLOYMENTS ═══ -->
+      {:else if activeTab === 'deployments'}
+        <div class="flex flex-col lg:flex-row lg:items-center lg:justify-between gap-3 mb-4">
+          <div>
+            <h2 class="text-lg font-bold text-[#1a1a1a]">Despliegues Automáticos</h2>
+            <p class="text-sm text-gray-500 mt-1">Pipeline visual, tenant real, factura y handoff en un solo flujo.</p>
+          </div>
+          <button
+            class="bg-[#C05A3C] text-white text-sm font-semibold px-4 py-2 rounded-lg hover:bg-[#a94e33] transition-colors flex items-center gap-1.5"
+            on:click={openDeploymentWizard}
+          >
+            <Rocket class="w-4 h-4" /> Nuevo despliegue
+          </button>
+        </div>
+
+        {#if deployments}
+          <div class="grid grid-cols-2 lg:grid-cols-4 gap-4 mb-4">
+            <div class="bg-white rounded-xl border border-gray-200 p-4">
+              <span class="text-[10px] font-semibold text-gray-500 uppercase tracking-wider">En proceso</span>
+              <p class="text-2xl font-bold text-[#1a1a1a] mt-1">{deployments.summary.in_progress}</p>
+            </div>
+            <div class="bg-white rounded-xl border border-gray-200 p-4">
+              <span class="text-[10px] font-semibold text-gray-500 uppercase tracking-wider">Activos</span>
+              <p class="text-2xl font-bold text-[#4A7C59] mt-1">{deployments.summary.active}</p>
+            </div>
+            <div class="bg-white rounded-xl border border-gray-200 p-4">
+              <span class="text-[10px] font-semibold text-gray-500 uppercase tracking-wider">Bloqueos</span>
+              <p class="text-2xl font-bold text-red-600 mt-1">{deployments.summary.blocked}</p>
+            </div>
+            <div class="bg-white rounded-xl border border-gray-200 p-4">
+              <span class="text-[10px] font-semibold text-gray-500 uppercase tracking-wider">Avance promedio</span>
+              <p class="text-2xl font-bold text-[#C05A3C] mt-1">{deployments.summary.avg_progress}%</p>
+            </div>
+          </div>
+
+          <div class="grid grid-cols-2 md:grid-cols-6 gap-2 mb-4">
+            {#each deployments.phases as phase}
+              <div class="bg-white rounded-xl border border-gray-200 p-3">
+                <div class="flex items-center justify-between">
+                  <span class="text-[10px] font-semibold text-gray-500 uppercase tracking-wider">S{phase.week}</span>
+                  <span class="text-sm font-bold text-[#C05A3C]">{deployments.summary.pipeline[phase.key] || 0}</span>
+                </div>
+                <p class="text-sm font-semibold text-[#1a1a1a] mt-2">{phase.label}</p>
+              </div>
+            {/each}
+          </div>
+        {/if}
+
+        {#if showDeploymentWizard}
+          <div class="bg-white rounded-xl border border-gray-200 p-5 mb-4">
+            <div class="flex items-center justify-between mb-4">
+              <div>
+                <h3 class="text-sm font-bold text-[#1a1a1a]">Wizard de despliegue automático</h3>
+                <p class="text-xs text-gray-500 mt-1">Paso {deploymentWizardStep} de 3</p>
+              </div>
+              <div class="flex items-center gap-2">
+                {#each [1, 2, 3] as step}
+                  <span class="w-8 h-1.5 rounded-full {deploymentWizardStep >= step ? 'bg-[#C05A3C]' : 'bg-gray-200'}"></span>
+                {/each}
+              </div>
+            </div>
+
+            {#if deploymentWizardStep === 1}
+              <div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-3">
+                <select bind:value={deploymentForm.lead_id} on:change={applyLeadToDeploymentForm}
+                  class="px-3 py-2 border border-gray-300 rounded-lg text-sm bg-white focus:ring-2 focus:ring-[#C05A3C] focus:border-transparent outline-none">
+                  <option value="">Crear desde cero</option>
+                  {#each leads?.items || [] as lead}
+                    <option value={lead.id}>{lead.company_name} · {lead.status || 'new'}</option>
+                  {/each}
+                </select>
+                <input type="text" bind:value={deploymentForm.company_name} placeholder="Empresa *"
+                  class="px-3 py-2 border border-gray-300 rounded-lg text-sm focus:ring-2 focus:ring-[#C05A3C] focus:border-transparent outline-none" />
+                <input type="email" bind:value={deploymentForm.contact_email} placeholder="Email contacto *"
+                  class="px-3 py-2 border border-gray-300 rounded-lg text-sm focus:ring-2 focus:ring-[#C05A3C] focus:border-transparent outline-none" />
+                <input type="text" bind:value={deploymentForm.contact_name} placeholder="Contacto"
+                  class="px-3 py-2 border border-gray-300 rounded-lg text-sm focus:ring-2 focus:ring-[#C05A3C] focus:border-transparent outline-none" />
+                <input type="text" bind:value={deploymentForm.phone} placeholder="Teléfono"
+                  class="px-3 py-2 border border-gray-300 rounded-lg text-sm focus:ring-2 focus:ring-[#C05A3C] focus:border-transparent outline-none" />
+                <input type="text" bind:value={deploymentForm.country_code} placeholder="País (US, DO...)"
+                  class="px-3 py-2 border border-gray-300 rounded-lg text-sm focus:ring-2 focus:ring-[#C05A3C] focus:border-transparent outline-none" />
+              </div>
+            {:else if deploymentWizardStep === 2}
+              <div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-3">
+                <select bind:value={deploymentForm.industry} on:change={suggestBlueprintForIndustry}
+                  class="px-3 py-2 border border-gray-300 rounded-lg text-sm bg-white focus:ring-2 focus:ring-[#C05A3C] focus:border-transparent outline-none">
+                  <option value="retail">Retail / POS</option>
+                  <option value="finance">Finanzas</option>
+                  <option value="services">Servicios</option>
+                  <option value="restaurant">Restaurante</option>
+                  <option value="ecommerce">Ecommerce</option>
+                </select>
+                <select bind:value={deploymentForm.blueprint_package_name}
+                  class="px-3 py-2 border border-gray-300 rounded-lg text-sm bg-white focus:ring-2 focus:ring-[#C05A3C] focus:border-transparent outline-none">
+                  <option value="">Blueprint estándar</option>
+                  {#each blueprintPackages as pkg}
+                    <option value={pkg.name}>{pkg.display_name} · {pkg.module_count} módulos</option>
+                  {/each}
+                </select>
+                <select bind:value={deploymentForm.plan_name}
+                  class="px-3 py-2 border border-gray-300 rounded-lg text-sm bg-white focus:ring-2 focus:ring-[#C05A3C] focus:border-transparent outline-none">
+                  <option value="basic">Basic</option>
+                  <option value="pro">Professional</option>
+                  <option value="enterprise">Enterprise</option>
+                </select>
+                <input type="number" min="1" max="999" bind:value={deploymentForm.user_count} placeholder="Usuarios"
+                  class="px-3 py-2 border border-gray-300 rounded-lg text-sm focus:ring-2 focus:ring-[#C05A3C] focus:border-transparent outline-none" />
+                <select bind:value={deploymentForm.billing_mode}
+                  class="px-3 py-2 border border-gray-300 rounded-lg text-sm bg-white focus:ring-2 focus:ring-[#C05A3C] focus:border-transparent outline-none">
+                  <option value="partner_direct">Partner cobra vía Connect</option>
+                  <option value="partner_pays_for_client">Partner cobra externo y paga a Jeturing</option>
+                </select>
+                <div class="flex items-center gap-1">
+                  <input type="text" bind:value={deploymentForm.subdomain} placeholder="subdominio *"
+                    class="flex-1 px-3 py-2 border border-gray-300 rounded-lg text-sm focus:ring-2 focus:ring-[#C05A3C] focus:border-transparent outline-none" />
+                  <span class="text-xs text-gray-400 whitespace-nowrap">.sajet.us</span>
+                </div>
+              </div>
+            {:else}
+              <div class="grid grid-cols-1 lg:grid-cols-[1fr,0.9fr] gap-4">
+                <div class="rounded-xl border border-gray-200 p-4">
+                  <h4 class="text-sm font-bold text-[#1a1a1a] mb-3">Resumen automático</h4>
+                  <div class="grid grid-cols-2 gap-3 text-sm">
+                    <div><span class="text-gray-400 block text-xs">Cliente</span>{deploymentForm.company_name || '—'}</div>
+                    <div><span class="text-gray-400 block text-xs">Tenant</span>{deploymentForm.subdomain || '—'}.sajet.us</div>
+                    <div><span class="text-gray-400 block text-xs">Plan</span>{deploymentForm.plan_name}</div>
+                    <div><span class="text-gray-400 block text-xs">Blueprint</span>{deploymentForm.blueprint_package_name || 'estándar'}</div>
+                  </div>
+                </div>
+                <div class="rounded-xl border border-gray-200 p-4">
+                  <h4 class="text-sm font-bold text-[#1a1a1a] mb-3">KPIs iniciales</h4>
+                  <div class="space-y-2 text-sm text-gray-600">
+                    <div class="flex items-center gap-2"><Target class="w-4 h-4 text-[#C05A3C]" /> ROI positivo en trimestre 1</div>
+                    <div class="flex items-center gap-2"><Target class="w-4 h-4 text-[#C05A3C]" /> 30% reducción de costos operativos</div>
+                    <div class="flex items-center gap-2"><Target class="w-4 h-4 text-[#C05A3C]" /> Despliegue en 5 semanas</div>
+                  </div>
+                </div>
+              </div>
+            {/if}
+
+            <div class="flex justify-between mt-4">
+              <button class="text-sm text-gray-500 px-4 py-2 hover:text-gray-700" on:click={() => showDeploymentWizard = false}>Cancelar</button>
+              <div class="flex gap-2">
+                {#if deploymentWizardStep > 1}
+                  <button class="text-sm px-4 py-2 rounded-lg border border-gray-300" on:click={() => deploymentWizardStep -= 1}>Atrás</button>
+                {/if}
+                {#if deploymentWizardStep < 3}
+                  <button class="bg-[#1a1a1a] text-white text-sm font-semibold px-5 py-2 rounded-lg" on:click={() => deploymentWizardStep += 1}>Continuar</button>
+                {:else}
+                  <button
+                    class="bg-[#4A7C59] text-white text-sm font-semibold px-5 py-2 rounded-lg hover:bg-[#3d6a4b] transition-colors flex items-center gap-1.5 disabled:opacity-60"
+                    on:click={startDeployment}
+                    disabled={savingDeployment || !deploymentForm.company_name || !deploymentForm.contact_email || !deploymentForm.subdomain}
+                  >
+                    {#if savingDeployment}<Loader2 class="w-4 h-4 animate-spin" />{:else}<Rocket class="w-4 h-4" />{/if}
+                    Provisionar ahora
+                  </button>
+                {/if}
+              </div>
+            </div>
+          </div>
+        {/if}
+
+        {#if deployments?.items && deployments.items.length > 0}
+          <div class="grid grid-cols-1 xl:grid-cols-[1fr,0.75fr] gap-4">
+            <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
+              {#each deployments.items as dep}
+                <button
+                  class="text-left bg-white rounded-xl border {selectedDeployment?.id === dep.id ? 'border-[#C05A3C]' : 'border-gray-200'} p-4 hover:border-[#C05A3C] transition-colors"
+                  on:click={() => selectedDeployment = dep}
+                >
+                  <div class="flex items-start justify-between gap-2">
+                    <div>
+                      <h3 class="text-sm font-bold text-[#1a1a1a]">{dep.company_name}</h3>
+                      <p class="text-xs text-gray-500 mt-1">{dep.subdomain}.sajet.us · {dep.plan_name}</p>
+                    </div>
+                    <span class="px-2 py-0.5 rounded-full text-xs font-semibold {statusColor(dep.status)}">{deploymentStatusLabel(dep.status)}</span>
+                  </div>
+                  <div class="mt-4">
+                    <div class="flex items-center justify-between text-xs text-gray-500 mb-1">
+                      <span>{phaseLabel(dep.phase)} · Semana {dep.week}</span>
+                      <span>{dep.progress_percent}%</span>
+                    </div>
+                    <div class="h-2 rounded-full bg-gray-100 overflow-hidden">
+                      <div class="h-full bg-[#C05A3C]" style={`width: ${dep.progress_percent}%`}></div>
+                    </div>
+                  </div>
+                  <div class="grid grid-cols-3 gap-2 mt-4 text-xs">
+                    <span class="flex items-center gap-1 {dep.provisioning_status === 'ready' ? 'text-[#4A7C59]' : dep.provisioning_status === 'failed' ? 'text-red-600' : 'text-gray-500'}">
+                      {#if dep.provisioning_status === 'failed'}<AlertTriangle class="w-3 h-3" />{:else}<CheckCircle2 class="w-3 h-3" />{/if} Tenant
+                    </span>
+                    <span class="flex items-center gap-1 {dep.invoice ? 'text-[#4A7C59]' : 'text-gray-500'}"><FileText class="w-3 h-3" /> Factura</span>
+                    <span class="flex items-center gap-1 {dep.handoff_status === 'completed' ? 'text-[#4A7C59]' : 'text-gray-500'}"><Users class="w-3 h-3" /> Handoff</span>
+                  </div>
+                </button>
+              {/each}
+            </div>
+
+            <div class="bg-white rounded-xl border border-gray-200 p-5">
+              {#if selectedDeployment || deployments.items[0]}
+                {@const dep = selectedDeployment || deployments.items[0]}
+                <div class="flex items-start justify-between gap-2">
+                  <div>
+                    <h3 class="text-sm font-bold text-[#1a1a1a]">{dep.company_name}</h3>
+                    <p class="text-xs text-gray-500 mt-1">{phaseLabel(dep.phase)} · Semana {dep.week}</p>
+                  </div>
+                  <span class="px-2 py-0.5 rounded-full text-xs font-semibold {statusColor(dep.status)}">{deploymentStatusLabel(dep.status)}</span>
+                </div>
+
+                <div class="mt-4 space-y-2">
+                  {#each dep.checklist as item}
+                    <div class="flex items-start gap-2 text-sm">
+                      <CheckCircle2 class="w-4 h-4 mt-0.5 {item.done ? 'text-[#4A7C59]' : 'text-gray-300'}" />
+                      <span class={item.done ? 'text-gray-700' : 'text-gray-400'}>{item.label}</span>
+                    </div>
+                  {/each}
+                </div>
+
+                {#if dep.last_error}
+                  <div class="mt-4 rounded-lg border border-red-200 bg-red-50 px-3 py-2 text-xs text-red-700">{dep.last_error}</div>
+                {/if}
+
+                <div class="flex flex-wrap gap-2 mt-4">
+                  {#if dep.tenant_url}
+                    <a href={dep.tenant_url} target="_blank" rel="noreferrer" class="px-3 py-2 rounded-lg bg-[#1a1a1a] text-white text-xs font-semibold flex items-center gap-1">
+                      <ExternalLink class="w-3 h-3" /> Ver tenant
+                    </a>
+                  {/if}
+                  {#if dep.invoice?.payment_url}
+                    <a href={dep.invoice.payment_url} target="_blank" rel="noreferrer" class="px-3 py-2 rounded-lg bg-[#C05A3C] text-white text-xs font-semibold flex items-center gap-1">
+                      <CreditCard class="w-3 h-3" /> Pagar factura
+                    </a>
+                  {/if}
+                  {#if dep.provisioning_status === 'failed'}
+                    <button class="px-3 py-2 rounded-lg border border-gray-300 text-xs font-semibold flex items-center gap-1" on:click={() => retryDeployment(dep)} disabled={savingDeployment}>
+                      <RefreshCw class="w-3 h-3" /> Reintentar
+                    </button>
+                  {/if}
+                  {#if dep.provisioning_status === 'ready' && dep.handoff_status !== 'completed'}
+                    <button class="px-3 py-2 rounded-lg border border-gray-300 text-xs font-semibold flex items-center gap-1" on:click={() => completeHandoff(dep)} disabled={savingDeployment}>
+                      <CheckCircle2 class="w-3 h-3" /> Completar handoff
+                    </button>
+                  {/if}
+                </div>
+              {/if}
+            </div>
+          </div>
+        {:else}
+          <div class="py-14 text-center bg-white rounded-xl border border-gray-200">
+            <Rocket class="w-10 h-10 text-gray-300 mx-auto mb-3" />
+            <p class="text-sm text-gray-500">No hay despliegues todavía. Inicia el primero desde el wizard automático.</p>
+          </div>
+        {/if}
 
       <!-- ═══ LEADS ═══ -->
       {:else if activeTab === 'leads'}
@@ -698,8 +1259,8 @@
                 class="px-3 py-2 border border-gray-300 rounded-lg text-sm focus:ring-2 focus:ring-[#C05A3C] focus:border-transparent outline-none" />
               <select bind:value={newClient.plan_name}
                 class="px-3 py-2 border border-gray-300 rounded-lg text-sm focus:ring-2 focus:ring-[#C05A3C] focus:border-transparent outline-none bg-white">
-                <option value="standard">Standard</option>
-                <option value="professional">Professional</option>
+                <option value="basic">Basic</option>
+                <option value="pro">Professional</option>
                 <option value="enterprise">Enterprise</option>
               </select>
               <input type="number" bind:value={newClient.user_count} min="1" max="999" placeholder="# Usuarios"
@@ -853,8 +1414,8 @@
         <div class="space-y-4">
           <div class="flex flex-col lg:flex-row lg:items-center lg:justify-between gap-3">
             <div>
-              <h2 class="text-lg font-bold text-[#1a1a1a]">Perfiles de Correo por Tenant</h2>
-              <p class="text-sm text-gray-500">Asigna perfiles de correo a tus tenants. El cargo se agrega automáticamente a facturación.</p>
+              <h2 class="text-lg font-bold text-[#1a1a1a]">Servicios y Gestión del Cliente</h2>
+              <p class="text-sm text-gray-500">Cambia de cliente, actualiza datos básicos y asigna servicios facturables al tenant.</p>
             </div>
 
             <div class="w-full lg:w-80">
@@ -862,14 +1423,14 @@
               <select
                 id="partner-service-client"
                 class="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm bg-white focus:ring-2 focus:ring-[#C05A3C] focus:border-transparent outline-none"
-                bind:value={selectedServiceClientId}
-                on:change={() => loadClientServices(selectedServiceClientId)}
+                bind:value={selectedServiceClientValue}
+                on:change={handleServiceClientChange}
               >
                 {#if !clients?.items?.length}
                   <option value="">Sin clientes disponibles</option>
                 {:else}
                   {#each clients.items as client}
-                    <option value={client.customer_id}>{client.company_name}</option>
+                    <option value={String(client.customer_id)}>{client.company_name}</option>
                   {/each}
                 {/if}
               </select>
@@ -902,10 +1463,79 @@
               </div>
               <div class="bg-white rounded-xl border border-gray-200 p-4">
                 <span class="text-[10px] font-semibold text-gray-500 uppercase tracking-wider">Servicios activos</span>
-                <p class="text-lg font-bold text-[#1a1a1a] mt-1">{activeEmailProfiles.length}</p>
-                <p class="text-xs text-gray-400 mt-1">Perfiles de correo activos</p>
+                <p class="text-lg font-bold text-[#1a1a1a] mt-1">{activeClientServices.length}</p>
+                <p class="text-xs text-gray-400 mt-1">Add-ons activos</p>
               </div>
             </div>
+
+            <form on:submit|preventDefault={saveClientSettings} class="bg-white rounded-xl border border-gray-200 p-5">
+              <div class="flex flex-col lg:flex-row lg:items-start lg:justify-between gap-3 mb-4">
+                <div>
+                  <h3 class="text-sm font-bold text-[#1a1a1a]">Gestionar datos del cliente</h3>
+                  <p class="text-xs text-gray-500 mt-1">Se actualiza SAJET y se intenta sincronizar al tenant Odoo vía jeturing_erp_sync.</p>
+                </div>
+                <button
+                  type="submit"
+                  class="bg-[#1a1a1a] text-white text-sm font-semibold px-4 py-2 rounded-lg hover:bg-[#333] transition-colors disabled:opacity-60 flex items-center justify-center gap-2"
+                  disabled={savingClientSettings || servicesLoading}
+                >
+                  {#if savingClientSettings}<Loader2 class="w-4 h-4 animate-spin" />{/if}
+                  Guardar y sincronizar
+                </button>
+              </div>
+
+              <div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-3">
+                <div>
+                  <label for="client-company-name" class="text-[10px] font-semibold text-gray-500 uppercase tracking-wider block mb-1">Empresa</label>
+                  <input id="client-company-name" bind:value={clientEditForm.company_name} required
+                    class="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm focus:ring-2 focus:ring-[#C05A3C] focus:border-transparent outline-none" />
+                </div>
+                <div>
+                  <label for="client-contact-email" class="text-[10px] font-semibold text-gray-500 uppercase tracking-wider block mb-1">Email</label>
+                  <input id="client-contact-email" type="email" bind:value={clientEditForm.contact_email} required
+                    class="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm focus:ring-2 focus:ring-[#C05A3C] focus:border-transparent outline-none" />
+                </div>
+                <div>
+                  <label for="client-contact-name" class="text-[10px] font-semibold text-gray-500 uppercase tracking-wider block mb-1">Contacto</label>
+                  <input id="client-contact-name" bind:value={clientEditForm.contact_name}
+                    class="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm focus:ring-2 focus:ring-[#C05A3C] focus:border-transparent outline-none" />
+                </div>
+                <div>
+                  <label for="client-phone" class="text-[10px] font-semibold text-gray-500 uppercase tracking-wider block mb-1">Teléfono</label>
+                  <input id="client-phone" bind:value={clientEditForm.phone}
+                    class="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm focus:ring-2 focus:ring-[#C05A3C] focus:border-transparent outline-none" />
+                </div>
+                <div>
+                  <label for="client-country" class="text-[10px] font-semibold text-gray-500 uppercase tracking-wider block mb-1">País</label>
+                  <input id="client-country" bind:value={clientEditForm.country} placeholder="DO, US..."
+                    class="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm focus:ring-2 focus:ring-[#C05A3C] focus:border-transparent outline-none" />
+                </div>
+                <div>
+                  <label for="client-plan" class="text-[10px] font-semibold text-gray-500 uppercase tracking-wider block mb-1">Plan</label>
+                  <select id="client-plan" bind:value={clientEditForm.plan_name}
+                    class="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm bg-white focus:ring-2 focus:ring-[#C05A3C] focus:border-transparent outline-none">
+                    <option value="basic">Basic</option>
+                    <option value="pro">Professional</option>
+                    <option value="enterprise">Enterprise</option>
+                  </select>
+                </div>
+                <div>
+                  <label for="client-users" class="text-[10px] font-semibold text-gray-500 uppercase tracking-wider block mb-1">Usuarios</label>
+                  <input id="client-users" type="number" min="1" max="999" bind:value={clientEditForm.user_count}
+                    class="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm focus:ring-2 focus:ring-[#C05A3C] focus:border-transparent outline-none" />
+                </div>
+                <div>
+                  <label for="client-subdomain" class="text-[10px] font-semibold text-gray-500 uppercase tracking-wider block mb-1">Subdominio</label>
+                  <input id="client-subdomain" value={serviceClient?.subdomain ? `${serviceClient.subdomain}.sajet.us` : 'Sin subdominio'} disabled
+                    class="w-full px-3 py-2 border border-gray-200 bg-gray-50 rounded-lg text-sm text-gray-500" />
+                </div>
+                <div class="md:col-span-2 lg:col-span-4">
+                  <label for="client-notes" class="text-[10px] font-semibold text-gray-500 uppercase tracking-wider block mb-1">Notas internas del socio</label>
+                  <textarea id="client-notes" bind:value={clientEditForm.notes} rows="2"
+                    class="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm focus:ring-2 focus:ring-[#C05A3C] focus:border-transparent outline-none resize-none"></textarea>
+                </div>
+              </div>
+            </form>
 
             {#if servicesLoading}
               <div class="py-12 flex justify-center">
@@ -914,16 +1544,16 @@
             {:else}
               <div class="grid grid-cols-1 xl:grid-cols-[0.9fr,1.1fr] gap-6">
                 <div class="bg-white rounded-xl border border-gray-200 p-5">
-                  <h3 class="text-sm font-bold text-[#1a1a1a] mb-4">Perfiles de correo activos</h3>
+                  <h3 class="text-sm font-bold text-[#1a1a1a] mb-4">Servicios activos</h3>
 
-                  {#if activeEmailProfiles.length === 0}
+                  {#if activeClientServices.length === 0}
                     <div class="py-10 text-center">
                       <Package class="w-8 h-8 text-gray-300 mx-auto mb-2" />
-                      <p class="text-sm text-gray-500">Este cliente no tiene perfiles de correo activos.</p>
+                      <p class="text-sm text-gray-500">Este cliente no tiene servicios adicionales activos.</p>
                     </div>
                   {:else}
                     <div class="space-y-3">
-                      {#each activeEmailProfiles as addon}
+                      {#each activeClientServices as addon}
                         <div class="rounded-lg border border-gray-200 bg-gray-50 p-4">
                           <div class="flex items-start justify-between gap-3">
                             <div>
@@ -931,6 +1561,8 @@
                                 <p class="text-sm font-semibold text-[#1a1a1a]">{addon.catalog_item?.name || addon.service_code || 'Servicio adicional'}</p>
                                 {#if addon.catalog_item && isEmailPackage(addon.catalog_item)}
                                   <span class="px-2 py-0.5 rounded-full text-[10px] font-semibold bg-blue-100 text-blue-700">Correo</span>
+                                {:else if addon.catalog_item?.category}
+                                  <span class="px-2 py-0.5 rounded-full text-[10px] font-semibold bg-gray-100 text-gray-600">{addon.catalog_item.category}</span>
                                 {/if}
                               </div>
                               {#if addon.catalog_item?.description}
@@ -958,6 +1590,21 @@
                                 <p class="text-sm font-semibold text-amber-900">{formatCurrency(Number(addon.catalog_item.metadata_json?.email_overage_price || 0))}</p>
                               </div>
                             </div>
+                          {:else if addon.catalog_item}
+                            <div class="grid grid-cols-1 sm:grid-cols-3 gap-3 mt-4">
+                              <div class="rounded border border-gray-200 bg-white px-3 py-2">
+                                <p class="text-[10px] uppercase tracking-widest text-gray-500">Categoría</p>
+                                <p class="text-sm font-semibold text-gray-800">{addon.catalog_item.category || 'Servicio'}</p>
+                              </div>
+                              <div class="rounded border border-gray-200 bg-white px-3 py-2">
+                                <p class="text-[10px] uppercase tracking-widest text-gray-500">Unidad</p>
+                                <p class="text-sm font-semibold text-gray-800">{addon.catalog_item.unit}</p>
+                              </div>
+                              <div class="rounded border border-gray-200 bg-white px-3 py-2">
+                                <p class="text-[10px] uppercase tracking-widest text-gray-500">Adquirido vía</p>
+                                <p class="text-sm font-semibold text-gray-800">{addon.acquired_via}</p>
+                              </div>
+                            </div>
                           {/if}
                         </div>
                       {/each}
@@ -966,16 +1613,16 @@
                 </div>
 
                 <div class="bg-white rounded-xl border border-gray-200 p-5">
-                  <h3 class="text-sm font-bold text-[#1a1a1a] mb-4">Catálogo de perfiles de correo</h3>
+                  <h3 class="text-sm font-bold text-[#1a1a1a] mb-4">Catálogo de servicios disponibles</h3>
 
-                  {#if emailProfileCatalog.length === 0}
+                  {#if availableClientServices.length === 0}
                     <div class="py-10 text-center">
                       <Package class="w-8 h-8 text-gray-300 mx-auto mb-2" />
-                      <p class="text-sm text-gray-500">No hay perfiles de correo configurados.</p>
+                      <p class="text-sm text-gray-500">No hay servicios adicionales configurados para este cliente.</p>
                     </div>
                   {:else}
                     <div class="space-y-4">
-                      {#each emailProfileCatalog as item}
+                      {#each availableClientServices as item}
                         <div class="rounded-xl border border-gray-200 p-4">
                           <div class="flex flex-col lg:flex-row lg:items-start lg:justify-between gap-4">
                             <div class="flex-1">
@@ -989,6 +1636,8 @@
                                 {/if}
                                 {#if isEmailPackage(item)}
                                   <span class="px-2 py-0.5 rounded-full text-[10px] font-semibold bg-blue-100 text-blue-700">Correo</span>
+                                {:else if item.category}
+                                  <span class="px-2 py-0.5 rounded-full text-[10px] font-semibold bg-gray-100 text-gray-600">{item.category}</span>
                                 {/if}
                               </div>
 
@@ -1009,6 +1658,21 @@
                                   <div class="rounded border border-amber-100 bg-amber-50 px-3 py-2">
                                     <p class="text-[10px] uppercase tracking-widest text-amber-700">Sobreuso</p>
                                     <p class="text-sm font-semibold text-amber-900">{formatCurrency(Number(item.metadata_json?.email_overage_price || 0))}</p>
+                                  </div>
+                                </div>
+                              {:else}
+                                <div class="grid grid-cols-1 sm:grid-cols-3 gap-3 mt-4">
+                                  <div class="rounded border border-gray-200 bg-gray-50 px-3 py-2">
+                                    <p class="text-[10px] uppercase tracking-widest text-gray-500">Categoría</p>
+                                    <p class="text-sm font-semibold text-gray-800">{item.category || 'Servicio'}</p>
+                                  </div>
+                                  <div class="rounded border border-gray-200 bg-gray-50 px-3 py-2">
+                                    <p class="text-[10px] uppercase tracking-widest text-gray-500">Unidad</p>
+                                    <p class="text-sm font-semibold text-gray-800">{item.unit}</p>
+                                  </div>
+                                  <div class="rounded border border-gray-200 bg-gray-50 px-3 py-2">
+                                    <p class="text-[10px] uppercase tracking-widest text-gray-500">Cantidad mínima</p>
+                                    <p class="text-sm font-semibold text-gray-800">{item.min_quantity || 1}</p>
                                   </div>
                                 </div>
                               {/if}
@@ -1033,7 +1697,7 @@
                                 {#if purchasingServiceId === item.id}
                                   <Loader2 class="w-4 h-4 animate-spin" />
                                 {/if}
-                                {item.is_included_in_plan ? 'Incluido' : item.active_quantity && item.active_quantity > 0 ? 'Asignar otro perfil' : 'Asignar perfil'}
+                                {item.is_included_in_plan ? 'Incluido' : item.active_quantity && item.active_quantity > 0 ? 'Asignar otro' : 'Asignar servicio'}
                               </button>
                             </div>
                           </div>

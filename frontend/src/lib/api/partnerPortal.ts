@@ -5,6 +5,9 @@ import type {
   PartnerDashboard,
   PartnerLeadsResponse,
   PartnerLeadItem,
+  PartnerDeploymentsResponse,
+  PartnerDeploymentItem,
+  BlueprintPackageItem,
   PartnerProfile,
   PartnerClientItem,
   PartnerCommissionItem,
@@ -75,6 +78,56 @@ export const partnerPortalApi = {
     return api.put(`${BASE}/leads/${leadId}`, data);
   },
 
+  // ── Deployments ──
+  async getDeployments(): Promise<PartnerDeploymentsResponse> {
+    return api.get(`${BASE}/deployments`);
+  },
+
+  async startDeployment(data: {
+    company_name: string;
+    contact_email: string;
+    subdomain: string;
+    plan_name?: string;
+    user_count?: number;
+    contact_name?: string;
+    phone?: string;
+    country_code?: string;
+    industry?: string;
+    notes?: string;
+    lead_id?: number | null;
+    blueprint_package_name?: string;
+    billing_mode?: string;
+    kpis?: Array<Record<string, unknown>>;
+  }): Promise<{
+    message: string;
+    deployment: PartnerDeploymentItem;
+    provisioning: Record<string, unknown>;
+    tenant?: {
+      admin_login: string;
+      admin_password: string;
+      subdomain: string;
+      url: string;
+      status: string;
+    } | null;
+    customer_id: number;
+    subscription_id: number;
+    monthly_amount: number;
+  }> {
+    return api.post(`${BASE}/deployments/auto-start`, data);
+  },
+
+  async retryDeploymentProvisioning(deploymentId: number): Promise<{ deployment: PartnerDeploymentItem; provisioning: Record<string, unknown> }> {
+    return api.post(`${BASE}/deployments/${deploymentId}/retry-provisioning`);
+  },
+
+  async completeDeploymentHandoff(deploymentId: number): Promise<{ message: string; deployment: PartnerDeploymentItem }> {
+    return api.post(`${BASE}/deployments/${deploymentId}/complete-handoff`);
+  },
+
+  async getBlueprintPackages(): Promise<{ total: number; items: BlueprintPackageItem[] }> {
+    return api.get('/api/blueprints/packages?active_only=true');
+  },
+
   // ── Clients ──
   async getClients(): Promise<{ items: PartnerClientItem[]; total: number }> {
     return api.get(`${BASE}/clients`);
@@ -103,6 +156,23 @@ export const partnerPortalApi = {
     tenant_error?: string;
   }> {
     return api.post(`${BASE}/clients`, data);
+  },
+
+  async updateClient(customerId: number, data: {
+    company_name?: string;
+    contact_email?: string;
+    contact_name?: string;
+    phone?: string;
+    country?: string;
+    notes?: string;
+    plan_name?: string;
+    user_count?: number;
+  }): Promise<{
+    message: string;
+    client: PartnerClientItem;
+    sync: { success: boolean; status: string; message: string; server?: string };
+  }> {
+    return api.put(`${BASE}/clients/${customerId}`, data);
   },
 
   async getClientServiceCatalog(customerId: number): Promise<{ items: ServiceCatalogItemType[]; total: number }> {
