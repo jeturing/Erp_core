@@ -213,6 +213,30 @@ async def secure_login(request: Request, login_data: LoginRequest):
 
                 partner_authenticated = False
                 if partner:
+                    now_dt = datetime.now(timezone.utc).replace(tzinfo=None)
+                    partner_temp_expired = bool(
+                        partner.partner_temp_access_enabled
+                        and partner.partner_temp_access_expires_at
+                        and partner.partner_temp_access_expires_at <= now_dt
+                    )
+                    if partner_temp_expired:
+                        scope_values = {
+                            value.strip()
+                            for value in (partner.partner_temp_access_scope or "").split(",")
+                            if value.strip()
+                        }
+                        if "portal_access" in scope_values:
+                            partner.portal_access = False
+                        if "onboarding_bypass" in scope_values:
+                            partner.onboarding_bypass = False
+
+                        partner.partner_temp_access_enabled = False
+                        partner.partner_temp_access_expires_at = None
+                        partner.partner_temp_access_scope = None
+                        partner.partner_temp_access_reason = None
+                        partner.partner_temp_access_ticket = None
+                        db.commit()
+
                     partner_can_authenticate = (
                         bool(partner.password_hash)
                         and partner.portal_access
@@ -245,8 +269,12 @@ async def secure_login(request: Request, login_data: LoginRequest):
                             )
                     elif customers_count == 0:
                         if not partner.portal_access:
-                            reason = "Partner portal disabled"
-                            detail = "El acceso al portal de partners está deshabilitado para esta cuenta."
+                            if partner_temp_expired:
+                                reason = "Partner temporary access expired"
+                                detail = "El acceso temporal del partner expiró. Solicita una nueva activación al administrador."
+                            else:
+                                reason = "Partner portal disabled"
+                                detail = "El acceso al portal de partners está deshabilitado para esta cuenta."
                         elif partner.status not in (PartnerStatus.active, PartnerStatus.pending):
                             reason = f"Partner inactive ({partner.status.value if partner.status else 'unknown'})"
                             detail = "Tu cuenta de partner no está activa. Contacte al administrador."

@@ -66,6 +66,17 @@ class BypassMfaPayload(BaseModel):
     action: Optional[str] = None
 
 
+class PartnerTemporaryActivationPayload(BaseModel):
+    user_id: int
+    action: Literal["activate", "deactivate", "extend"] = "activate"
+    duration: Literal["24h", "7d"] = "24h"
+    extension_duration: Optional[Literal["24h", "7d"]] = None
+    enable_onboarding_bypass: bool = True
+    enable_portal_access: bool = True
+    justification: str
+    external_ticket: str
+
+
 def _normalize_user_type(user_type: str) -> str:
     if user_type == "tenant":
         return "customer"
@@ -424,6 +435,128 @@ async def toggle_bypass_mfa(payload: BypassMfaPayload, db=Depends(get_db), auth=
         },
         "meta": {},
     }
+
+def _duration_to_timedelta(duration: str) -> timedelta:
+    if duration == "7d":
+        return timedelta(days=7)
+    return timedelta(hours=24)
+
+
+@router.post("/partner/temporary-activation")
+async def set_partner_temporary_activation(
+    payload: PartnerTemporaryActivationPayload,
+    request: Request,
+    db=Depends(get_db),
+    auth=Depends(_require_admin),
+):
+    """
+    Activa/desactiva/extiende acceso temporal de partner.
+    Scope C: controla flags separados `onboarding_bypass` y `portal_access`.
+    Política temporal: 24h o 7d, con extensión auditable.
+    """
+    partner = db.query(Partner).filter(Partner.id == payload.user_id).first()
+    if not partner:
+        raise HTTPException(status_code=404, detail="Partner no encontrado")
+
+    justification = (payload.justification or "").strip()
+    external_ticket = (payload.external_ticket or "").strip()
+
+    if len(justification) < 20:
+        raise HTTPException(status_code=400, detail="justification debe tener al menos 20 caracteres")
+    if len(external_ticket) < 3:
+        raise HTTPException(status_code=400, detail="external_ticket es obligatorio")
+
+    action = payload.action
+    now = datetime.now(timezone.utc).replace(tzinfo=None)
+    previous_state = {
+        "portal_access": bool(partner.portal_access),
+        "onboarding_bypass": bool(partner.onboarding_bypass),
+        "temp_enabled": bool(partner.partner_temp_access_enabled),
+        "expires_at": partner.partner_temp_access_expires_at.isoformat() if partner.partner_temp_access_expires_at else None,
+        "scope": partner.partner_temp_access_scope,
+    }
+
+    if action == "deactivate":
+        partner.partner_temp_access_enabled = False
+        partner.partner_temp_access_expires_at = None
+        partner.partner_temp_access_scope = None
+        partner.partner_temp_access_reason = justification
+        partner.partner_temp_access_ticket = external_ticket
+        partner.portal_access = False
+        partner.onboarding_bypass = False
+    else:
+        selected_duration = payload.extension_duration if action == "extend" and payload.extension_duration else payload.duration
+        delta = _duration_to_timedelta(selected_duration)
+        if action == "extend":
+            if not partner.partner_temp_access_enabled:
+                raise HTTPException(status_code=400, detail="No hay una activación temporal activa para extender")
+            base = partner.partner_temp_access_expires_at or now
+            if base < now:
+                base = now
+            expires_at = base + delta
+            partner.partner_temp_access_last_extended_at = now
+            partner.partner_temp_access_last_extended_by = auth.get("sub")
+        else:
+            expires_at = now + delta
+
+        selected_scope = []
+        partner.portal_access = bool(payload.enable_portal_access)
+        partner.onboarding_bypass = bool(payload.enable_onboarding_bypass)
+
+        if partner.portal_access:
+            selected_scope.append("portal_access")
+        if partner.onboarding_bypass:
+            selected_scope.append("onboarding_bypass")
+        if not selected_scope:
+            raise HTTPException(status_code=400, detail="Debe habilitar al menos un flag temporal")
+
+        partner.partner_temp_access_enabled = True
+        partner.partner_temp_access_expires_at = expires_at
+        partner.partner_temp_access_scope = ",".join(selected_scope)
+        partner.partner_temp_access_reason = justification
+        partner.partner_temp_access_ticket = external_ticket
+
+    audit = AuditEventRecord(
+        event_type="partner_temporary_activation",
+        actor_username=auth.get("sub"),
+        action=action,
+        resource=f"partner:{partner.id}",
+        details={
+            "partner_id": partner.id,
+            "partner_email": partner.portal_email or partner.contact_email,
+            "external_ticket": external_ticket,
+            "justification": justification,
+            "previous_state": previous_state,
+            "new_state": {
+                "portal_access": bool(partner.portal_access),
+                "onboarding_bypass": bool(partner.onboarding_bypass),
+                "temp_enabled": bool(partner.partner_temp_access_enabled),
+                "expires_at": partner.partner_temp_access_expires_at.isoformat() if partner.partner_temp_access_expires_at else None,
+                "scope": partner.partner_temp_access_scope,
+            },
+        }
+    )
+
+    db.add(audit)
+    db.commit()
+
+    return {
+        "success": True,
+        "data": {
+            "partner_id": partner.id,
+            "portal_access": bool(partner.portal_access),
+            "onboarding_bypass": bool(partner.onboarding_bypass),
+            "temporary_access_enabled": bool(partner.partner_temp_access_enabled),
+            "temporary_access_expires_at": partner.partner_temp_access_expires_at.isoformat() if partner.partner_temp_access_expires_at else None,
+            "temporary_access_scope": partner.partner_temp_access_scope,
+            "temporary_access_ticket": partner.partner_temp_access_ticket,
+        },
+        "meta": {
+            "action": action,
+            "processed_at": now.isoformat(),
+        },
+    }
+
 
 # ── Gestión de Otras Apps (Segrd/Foren/etc) ──
 

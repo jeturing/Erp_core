@@ -1,9 +1,9 @@
 <script lang="ts">
-  import { onMount } from 'svelte';
+  import { onDestroy, onMount } from 'svelte';
   import {
     LogOut, LayoutDashboard, Users, Briefcase, DollarSign, CreditCard,
     UserCircle, Plus, TrendingUp, Building2, ExternalLink, RefreshCw,
-    Package, FileText, Download, Palette,
+    Package, FileText, Download, Palette, Pencil, Trash2,
     ChevronRight, ArrowUpRight, Loader2,
     Globe, ChevronDown, ChevronUp, Link2, Rocket, Target, CheckCircle2, AlertTriangle
   } from 'lucide-svelte';
@@ -35,6 +35,9 @@
   let invoices: { items: PartnerPortalInvoiceItem[]; total: number; summary: { total_billed: number; total_paid: number; total_pending: number } } | null = null;
   let commissions: { items: PartnerCommissionItem[]; total: number; summary: { total_earned: number; pending: number; paid: number } } | null = null;
   let profile: PartnerProfile | null = null;
+  let editingProfile = false;
+  let savingProfile = false;
+  let profileForm = { company_name: '', legal_name: '', tax_id: '', contact_name: '', phone: '', country: '', address: '' };
   let showOnboarding = false;
 
   // Client services
@@ -61,6 +64,7 @@
 
   // New Lead form
   let showNewLead = false;
+  let editingLeadId: number | null = null;
   let newLead = { company_name: '', contact_name: '', contact_email: '', phone: '', country: '', notes: '', estimated_monthly_value: 0 };
   let savingLead = false;
 
@@ -75,6 +79,7 @@
   let showDeploymentWizard = false;
   let savingDeployment = false;
   let selectedDeployment: PartnerDeploymentItem | null = null;
+  let deploymentPollHandle: ReturnType<typeof setTimeout> | null = null;
   let deploymentWizardStep = 1;
   let deploymentForm = {
     lead_id: '',
@@ -231,6 +236,120 @@
   $: availableClientServices = clientServiceCatalog;
   $: activeClientServices = clientServiceSubscriptions;
 
+  function clearDeploymentPolling() {
+    if (deploymentPollHandle) {
+      clearTimeout(deploymentPollHandle);
+      deploymentPollHandle = null;
+    }
+  }
+
+  function isDeploymentProcessing(dep: PartnerDeploymentItem | null | undefined): boolean {
+    if (!dep) return false;
+    return dep.is_running || dep.provisioning_status === 'pending' || dep.provisioning_status === 'running';
+  }
+
+  function syncSelectedDeployment() {
+    if (!deployments?.items?.length) {
+      selectedDeployment = null;
+      return;
+    }
+    if (!selectedDeployment) {
+      selectedDeployment = deployments.items[0];
+      return;
+    }
+    const updated = deployments.items.find((item) => item.id === selectedDeployment?.id);
+    if (updated) {
+      selectedDeployment = updated;
+    }
+  }
+
+  function upsertDeployment(dep: PartnerDeploymentItem) {
+    if (!deployments) return;
+    const items = [...deployments.items];
+    const index = items.findIndex((item) => item.id === dep.id);
+    if (index >= 0) {
+      items[index] = dep;
+    } else {
+      items.unshift(dep);
+    }
+    deployments = {
+      ...deployments,
+      items,
+      total: items.length,
+      summary: {
+        ...deployments.summary,
+        total: items.length,
+      },
+    };
+    selectedDeployment = dep;
+  }
+
+  function getDeploymentHeadline(dep: PartnerDeploymentItem | null | undefined): string {
+    if (!dep) return 'Preparando despliegue';
+    if (dep.provisioning_status === 'failed') return 'El provisioning encontró un bloqueo';
+    if (isDeploymentProcessing(dep)) return 'Estamos creando la cuenta y validando disponibilidad';
+    if (dep.handoff_status === 'completed') return 'Tenant entregado y activo';
+    return 'Tenant listo para handoff comercial';
+  }
+
+  function getDeploymentSupportText(dep: PartnerDeploymentItem | null | undefined): string {
+    if (!dep) return 'El flujo se reflejará aquí en tiempo real.';
+    if (dep.provisioning_status === 'failed') return dep.last_error || 'Revisa el detalle y reintenta el provisioning.';
+    if (isDeploymentProcessing(dep)) return 'Puedes seguir trabajando mientras SAJET crea el tenant, publica la ruta y prueba el acceso.';
+    if (dep.availability_test?.ok === false) return 'La cuenta fue creada, pero la validación pública quedó pendiente. Revisa el detalle antes del handoff.';
+    if (dep.handoff_status === 'completed') return 'El cliente ya puede operar con el tenant entregado.';
+    return 'La cuenta fue creada correctamente y ya puedes coordinar el handoff con el cliente.';
+  }
+
+  function getPhaseVisualState(dep: PartnerDeploymentItem, phase: { key: string; target: number }): 'done' | 'current' | 'upcoming' {
+    const progress = Number(dep.progress_percent || 0);
+    if (progress >= phase.target) return 'done';
+    const currentPhase = dep.phases.find((item) => progress < item.target);
+    return currentPhase?.key === phase.key ? 'current' : 'upcoming';
+  }
+
+  function getAvailabilityBadge(dep: PartnerDeploymentItem | null | undefined) {
+    const test = dep?.availability_test;
+    if (!test) {
+      return { label: 'Pendiente', tone: 'bg-gray-100 text-gray-600 border-gray-200' };
+    }
+    if (test.ok) {
+      return { label: 'Validado', tone: 'bg-green-100 text-green-700 border-green-200' };
+    }
+    return { label: 'Revisión manual', tone: 'bg-amber-100 text-amber-700 border-amber-200' };
+  }
+
+  async function pollDeployment(deploymentId: number, immediate = false) {
+    clearDeploymentPolling();
+    const execute = async () => {
+      try {
+        const deployment = await partnerPortalApi.getDeployment(deploymentId);
+        upsertDeployment(deployment);
+        if (deployment.provisioning_status === 'ready' && deployment.tenant_url) {
+          clients = await partnerPortalApi.getClients();
+        }
+        if (!isDeploymentProcessing(deployment)) {
+          await loadDeploymentCockpit();
+          return;
+        }
+      } catch (err) {
+        error = err instanceof Error ? err.message : 'No se pudo refrescar el despliegue';
+      }
+      deploymentPollHandle = window.setTimeout(() => {
+        void pollDeployment(deploymentId, true);
+      }, 2500);
+    };
+
+    if (immediate) {
+      await execute();
+      return;
+    }
+
+    deploymentPollHandle = window.setTimeout(() => {
+      void execute();
+    }, 800);
+  }
+
   function hydrateClientEditForm() {
     const client = getSelectedServiceClient();
     if (!client) return;
@@ -366,10 +485,16 @@
   }
 
   async function switchTab(tab: typeof activeTab) {
+    if (tab !== 'deployments') {
+      clearDeploymentPolling();
+    }
     activeTab = tab;
     error = '';
     brandingMessage = '';
     await loadTabData();
+    if (tab === 'deployments' && selectedDeployment && isDeploymentProcessing(selectedDeployment)) {
+      await pollDeployment(selectedDeployment.id);
+    }
   }
 
   async function loadDeploymentCockpit() {
@@ -383,7 +508,11 @@
     leads = leadRes;
     blueprintPackages = packageRes.items ?? [];
     clients = clientRes;
+    syncSelectedDeployment();
     suggestBlueprintForIndustry();
+    if (selectedDeployment && isDeploymentProcessing(selectedDeployment)) {
+      await pollDeployment(selectedDeployment.id);
+    }
   }
 
   function resetDeploymentForm() {
@@ -434,19 +563,80 @@
     }
   }
 
-  async function createLead() {
+  async function saveProfile() {
+    if (!profile) return;
+    savingProfile = true;
+    try {
+      await partnerPortalApi.saveProfile(profileForm);
+      // Actualizar el objeto profile con los datos guardados
+      Object.assign(profile, profileForm);
+      editingProfile = false;
+      // toasts.success('Perfil actualizado exitosamente');
+    } catch (err) {
+      error = err instanceof Error ? err.message : 'Error al guardar perfil';
+    } finally {
+      savingProfile = false;
+    }
+  }
+
+  function startEditProfile() {
+    if (!profile) return;
+    profileForm = {
+      company_name: profile.company_name || '',
+      legal_name: profile.legal_name || '',
+      tax_id: profile.tax_id || '',
+      contact_name: profile.contact_name || '',
+      phone: profile.phone || '',
+      country: profile.country || '',
+      address: profile.address || '',
+    };
+    editingProfile = true;
+  }
+
+  function cancelEditProfile() {
+    editingProfile = false;
+  }
+
+  async function saveLead() {
     if (!newLead.company_name.trim()) return;
     savingLead = true;
     try {
-      await partnerPortalApi.createLead(newLead);
+      if (editingLeadId) {
+        await partnerPortalApi.updateLead(editingLeadId, newLead);
+      } else {
+        await partnerPortalApi.createLead(newLead);
+      }
       newLead = { company_name: '', contact_name: '', contact_email: '', phone: '', country: '', notes: '', estimated_monthly_value: 0 };
+      editingLeadId = null;
       showNewLead = false;
       leads = await partnerPortalApi.getLeads();
     } catch (err) {
-      error = err instanceof Error ? err.message : 'Error al crear lead';
+      error = err instanceof Error ? err.message : 'Error al guardar lead';
     } finally {
       savingLead = false;
     }
+  }
+
+  function startEditLead(lead: PartnerLeadItem) {
+    editingLeadId = lead.id;
+    newLead = { ...lead };
+    showNewLead = true;
+  }
+
+  async function deleteLead(leadId: number, company: string) {
+    if (!confirm(`¿Eliminar el lead "${company}"?`)) return;
+    try {
+      await partnerPortalApi.deleteLead(leadId);
+      leads = await partnerPortalApi.getLeads();
+    } catch (err) {
+      error = err instanceof Error ? err.message : 'Error al eliminar lead';
+    }
+  }
+
+  function closeLeadForm() {
+    showNewLead = false;
+    editingLeadId = null;
+    newLead = { company_name: '', contact_name: '', contact_email: '', phone: '', country: '', notes: '', estimated_monthly_value: 0 };
   }
 
   async function createClient() {
@@ -455,23 +645,12 @@
     error = '';
     try {
       const result = await partnerPortalApi.createClient(newClient);
-      // Mostrar credenciales si el tenant fue creado
-      if (result.tenant && result.tenant.admin_login) {
-        clientCredentials = {
-          admin_login: result.tenant.admin_login,
-          admin_password: result.tenant.admin_password,
-          subdomain: newClient.subdomain,
-          url: result.tenant.url || `https://${newClient.subdomain}.sajet.us`,
-        };
-        showClientCredentials = true;
-      }
       newClient = { company_name: '', contact_email: '', subdomain: '', plan_name: 'basic', user_count: 1, contact_name: '', notes: '' };
       showNewClient = false;
-      clients = await partnerPortalApi.getClients();
-      if (clients.items.length > 0) {
-        const createdClient = clients.items.find((client) => client.subdomain === clientCredentials?.subdomain) || clients.items[0];
-        selectServiceClient(createdClient.customer_id);
-      }
+      activeTab = 'deployments';
+      selectedDeployment = result.deployment;
+      await loadDeploymentCockpit();
+      await pollDeployment(result.deployment.id);
     } catch (err) {
       error = err instanceof Error ? err.message : 'Error al crear cliente';
     } finally {
@@ -499,18 +678,11 @@
         blueprint_package_name: deploymentForm.blueprint_package_name,
         billing_mode: deploymentForm.billing_mode,
       });
-      if (result.tenant?.admin_login) {
-        clientCredentials = {
-          admin_login: result.tenant.admin_login,
-          admin_password: result.tenant.admin_password,
-          subdomain: result.tenant.subdomain,
-          url: result.tenant.url,
-        };
-        showClientCredentials = true;
-      }
       showDeploymentWizard = false;
+      activeTab = 'deployments';
       selectedDeployment = result.deployment;
       await loadDeploymentCockpit();
+      await pollDeployment(result.deployment.id);
     } catch (err) {
       error = err instanceof Error ? err.message : 'No se pudo iniciar el despliegue';
     } finally {
@@ -661,6 +833,7 @@
   }
 
   onMount(loadData);
+  onDestroy(clearDeploymentPolling);
 </script>
 
 {#if loading}
@@ -1005,6 +1178,20 @@
                   </div>
                 </div>
               </div>
+              <div class="mt-4 rounded-xl border border-[#F3D8CF] bg-[#FFF8F5] p-4">
+                <div class="flex items-start gap-3">
+                  <div class="w-10 h-10 rounded-full bg-[#C05A3C]/10 flex items-center justify-center flex-shrink-0">
+                    <Rocket class="w-5 h-5 text-[#C05A3C]" />
+                  </div>
+                  <div>
+                    <h4 class="text-sm font-bold text-[#1a1a1a]">Seguimiento visual en vivo</h4>
+                    <p class="text-sm text-gray-600 mt-1">
+                      Al confirmar, el portal te mostrará una barra de progreso con las fases de creación,
+                      publicación y prueba de disponibilidad del tenant para que el socio no quede a ciegas.
+                    </p>
+                  </div>
+                </div>
+              </div>
             {/if}
 
             <div class="flex justify-between mt-4">
@@ -1068,12 +1255,94 @@
             <div class="bg-white rounded-xl border border-gray-200 p-5">
               {#if selectedDeployment || deployments.items[0]}
                 {@const dep = selectedDeployment || deployments.items[0]}
-                <div class="flex items-start justify-between gap-2">
+                <div class="flex items-start justify-between gap-3">
                   <div>
-                    <h3 class="text-sm font-bold text-[#1a1a1a]">{dep.company_name}</h3>
-                    <p class="text-xs text-gray-500 mt-1">{phaseLabel(dep.phase)} · Semana {dep.week}</p>
+                    <div class="flex items-center gap-2 flex-wrap">
+                      <h3 class="text-base font-bold text-[#1a1a1a]">{dep.company_name}</h3>
+                      <span class="px-2 py-0.5 rounded-full text-xs font-semibold {statusColor(dep.status)}">{deploymentStatusLabel(dep.status)}</span>
+                    </div>
+                    <p class="text-xs text-gray-500 mt-1">{dep.subdomain}.sajet.us · {phaseLabel(dep.phase)} · Semana {dep.week}</p>
                   </div>
-                  <span class="px-2 py-0.5 rounded-full text-xs font-semibold {statusColor(dep.status)}">{deploymentStatusLabel(dep.status)}</span>
+                  {#if isDeploymentProcessing(dep)}
+                    <div class="inline-flex items-center gap-2 rounded-full border border-[#F3D8CF] bg-[#FFF8F5] px-3 py-1 text-xs font-semibold text-[#C05A3C]">
+                      <Loader2 class="w-3.5 h-3.5 animate-spin" /> En curso
+                    </div>
+                  {/if}
+                </div>
+
+                <div class="mt-4 rounded-2xl border border-[#F3D8CF] bg-gradient-to-br from-[#FFF8F5] to-white p-4">
+                  <div class="flex items-start justify-between gap-4">
+                    <div>
+                      <p class="text-xs font-semibold uppercase tracking-[0.16em] text-[#C05A3C]">Flujo guiado</p>
+                      <h4 class="text-lg font-bold text-[#1a1a1a] mt-1">{getDeploymentHeadline(dep)}</h4>
+                      <p class="text-sm text-gray-600 mt-1">{getDeploymentSupportText(dep)}</p>
+                    </div>
+                    <div class="text-right min-w-[72px]">
+                      <p class="text-2xl font-bold text-[#C05A3C]">{dep.progress_percent}%</p>
+                      <p class="text-[11px] text-gray-500">avance total</p>
+                    </div>
+                  </div>
+
+                  <div class="mt-4 h-3 rounded-full bg-white border border-[#F3D8CF] overflow-hidden">
+                    <div class="h-full bg-gradient-to-r from-[#C05A3C] to-[#E38A68] transition-all duration-500" style={`width: ${dep.progress_percent}%`}></div>
+                  </div>
+
+                  <div class="grid grid-cols-2 md:grid-cols-3 gap-3 mt-4">
+                    {#each dep.phases as phase}
+                      {@const state = getPhaseVisualState(dep, phase)}
+                      <div class="rounded-xl border px-3 py-3 transition-colors
+                        {state === 'done'
+                          ? 'border-green-200 bg-green-50'
+                          : state === 'current'
+                            ? 'border-[#F3D8CF] bg-white'
+                            : 'border-gray-200 bg-gray-50'}">
+                        <div class="flex items-center gap-2">
+                          <span class="w-7 h-7 rounded-full flex items-center justify-center text-xs font-bold
+                            {state === 'done'
+                              ? 'bg-green-600 text-white'
+                              : state === 'current'
+                                ? 'bg-[#C05A3C] text-white'
+                                : 'bg-gray-200 text-gray-500'}">
+                            {#if state === 'done'}
+                              <CheckCircle2 class="w-4 h-4" />
+                            {:else}
+                              {phase.week}
+                            {/if}
+                          </span>
+                          <div>
+                            <p class="text-[10px] uppercase tracking-widest text-gray-500">Semana {phase.week}</p>
+                            <p class="text-sm font-semibold text-[#1a1a1a]">{phase.label}</p>
+                          </div>
+                        </div>
+                      </div>
+                    {/each}
+                  </div>
+
+                  <div class="grid grid-cols-1 sm:grid-cols-3 gap-3 mt-4">
+                    <div class="rounded-xl border border-gray-200 bg-white px-3 py-3">
+                      <p class="text-[10px] uppercase tracking-widest text-gray-500">Tenant</p>
+                      <p class="text-sm font-semibold mt-1 {dep.provisioning_status === 'failed' ? 'text-red-600' : dep.provisioning_status === 'ready' ? 'text-[#4A7C59]' : 'text-[#1a1a1a]'}">
+                        {dep.provisioning_status === 'failed' ? 'Bloqueado' : dep.provisioning_status === 'ready' ? 'Creado' : 'Creándose'}
+                      </p>
+                    </div>
+                    <div class="rounded-xl border {getAvailabilityBadge(dep).tone} px-3 py-3">
+                      <p class="text-[10px] uppercase tracking-widest">Disponibilidad</p>
+                      <p class="text-sm font-semibold mt-1">{getAvailabilityBadge(dep).label}</p>
+                      {#if dep.availability_test?.status_code}
+                        <p class="text-[11px] mt-1">HTTP {dep.availability_test.status_code}</p>
+                      {/if}
+                    </div>
+                    <div class="rounded-xl border border-gray-200 bg-white px-3 py-3">
+                      <p class="text-[10px] uppercase tracking-widest text-gray-500">Siguiente paso</p>
+                      <p class="text-sm font-semibold text-[#1a1a1a] mt-1">
+                        {dep.handoff_status === 'completed'
+                          ? 'Operación activa'
+                          : dep.provisioning_status === 'ready'
+                            ? 'Coordinar handoff'
+                            : 'Esperar validación'}
+                      </p>
+                    </div>
+                  </div>
                 </div>
 
                 <div class="mt-4 space-y-2">
@@ -1087,6 +1356,15 @@
 
                 {#if dep.last_error}
                   <div class="mt-4 rounded-lg border border-red-200 bg-red-50 px-3 py-2 text-xs text-red-700">{dep.last_error}</div>
+                {/if}
+
+                {#if dep.availability_test && dep.availability_test.ok === false}
+                  <div class="mt-4 rounded-lg border border-amber-200 bg-amber-50 px-3 py-3 text-xs text-amber-700">
+                    La prueba pública quedó pendiente.
+                    {#if dep.availability_test.error}
+                      <span class="block mt-1">Detalle: {dep.availability_test.error}</span>
+                    {/if}
+                  </div>
                 {/if}
 
                 <div class="flex flex-wrap gap-2 mt-4">
@@ -1243,6 +1521,10 @@
         {#if showNewClient}
           <div class="bg-white rounded-xl border border-gray-200 p-5 mb-4">
             <h3 class="text-sm font-bold text-[#1a1a1a] mb-3">Crear Cliente y Aprovisionar Tenant</h3>
+            <div class="mb-4 rounded-xl border border-[#F3D8CF] bg-[#FFF8F5] px-4 py-3 text-sm text-gray-600">
+              Este flujo ahora crea la cuenta y te mueve al cockpit visual para seguir el progreso,
+              la publicación y la prueba de disponibilidad del tenant en tiempo real.
+            </div>
             <div class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3">
               <input type="text" bind:value={newClient.company_name} placeholder="Empresa *"
                 class="px-3 py-2 border border-gray-300 rounded-lg text-sm focus:ring-2 focus:ring-[#C05A3C] focus:border-transparent outline-none" />
@@ -1275,7 +1557,7 @@
                 on:click={createClient} disabled={savingClient || !newClient.company_name || !newClient.contact_email || !newClient.subdomain}
               >
                 {#if savingClient}<Loader2 class="w-4 h-4 animate-spin" />{/if}
-                Crear y Aprovisionar
+                Crear cuenta y seguir progreso
               </button>
             </div>
           </div>
@@ -2068,53 +2350,124 @@
 
       <!-- ═══ PROFILE ═══ -->
       {:else if activeTab === 'profile' && profile}
-        <h2 class="text-lg font-bold text-[#1a1a1a] mb-4">Mi Perfil</h2>
-        <div class="bg-white rounded-xl border border-gray-200 p-6">
-          <div class="grid grid-cols-1 sm:grid-cols-2 gap-4">
-            <div>
-              <span class="text-[10px] font-semibold text-gray-500 uppercase tracking-wider">Empresa</span>
-              <p class="text-sm font-medium text-[#1a1a1a]">{profile.company_name}</p>
-            </div>
-            <div>
-              <span class="text-[10px] font-semibold text-gray-500 uppercase tracking-wider">Razón Social</span>
-              <p class="text-sm text-gray-600">{profile.legal_name || '—'}</p>
-            </div>
-            <div>
-              <span class="text-[10px] font-semibold text-gray-500 uppercase tracking-wider">Email de Portal</span>
-              <p class="text-sm text-gray-600">{profile.portal_email || profile.contact_email}</p>
-            </div>
-            <div>
-              <span class="text-[10px] font-semibold text-gray-500 uppercase tracking-wider">Contacto</span>
-              <p class="text-sm text-gray-600">{profile.contact_name || '—'}</p>
-            </div>
-            <div>
-              <span class="text-[10px] font-semibold text-gray-500 uppercase tracking-wider">Teléfono</span>
-              <p class="text-sm text-gray-600">{profile.phone || '—'}</p>
-            </div>
-            <div>
-              <span class="text-[10px] font-semibold text-gray-500 uppercase tracking-wider">País</span>
-              <p class="text-sm text-gray-600">{profile.country || '—'}</p>
-            </div>
-            <div>
-              <span class="text-[10px] font-semibold text-gray-500 uppercase tracking-wider">Tasa de Comisión</span>
-              <p class="text-sm font-bold text-[#C05A3C]">{(profile.commission_rate * 100).toFixed(0)}%</p>
-            </div>
-            <div>
-              <span class="text-[10px] font-semibold text-gray-500 uppercase tracking-wider">Estado</span>
-              <span class="px-2 py-0.5 rounded-full text-xs font-semibold {statusColor(profile.status)}">
-                {profile.status}
-              </span>
-            </div>
-            <div>
-              <span class="text-[10px] font-semibold text-gray-500 uppercase tracking-wider">Stripe Connect</span>
-              <p class="text-sm">{profile.stripe_charges_enabled ? '✅ Activo' : '❌ No configurado'}</p>
-            </div>
-            <div>
-              <span class="text-[10px] font-semibold text-gray-500 uppercase tracking-wider">Contrato</span>
-              <p class="text-sm text-gray-600">{profile.contract_reference || '—'}</p>
+        <div class="flex items-center justify-between mb-4">
+          <h2 class="text-lg font-bold text-[#1a1a1a]">Mi Perfil</h2>
+          <button
+            class="text-sm font-semibold px-4 py-2 rounded-lg transition-colors {editingProfile ? 'bg-gray-200 text-gray-700 hover:bg-gray-300' : 'bg-[#C05A3C] text-white hover:bg-[#a94e33]'}"
+            on:click={() => editingProfile ? cancelEditProfile() : startEditProfile()}
+          >
+            {editingProfile ? 'Cancelar' : 'Editar Perfil'}
+          </button>
+        </div>
+
+        {#if !editingProfile}
+          <div class="bg-white rounded-xl border border-gray-200 p-6">
+            <div class="grid grid-cols-1 sm:grid-cols-2 gap-4">
+              <div>
+                <span class="text-[10px] font-semibold text-gray-500 uppercase tracking-wider">Empresa</span>
+                <p class="text-sm font-medium text-[#1a1a1a]">{profile.company_name}</p>
+              </div>
+              <div>
+                <span class="text-[10px] font-semibold text-gray-500 uppercase tracking-wider">Razón Social</span>
+                <p class="text-sm text-gray-600">{profile.legal_name || '—'}</p>
+              </div>
+              <div>
+                <span class="text-[10px] font-semibold text-gray-500 uppercase tracking-wider">Email de Portal</span>
+                <p class="text-sm text-gray-600">{profile.portal_email || profile.contact_email}</p>
+              </div>
+              <div>
+                <span class="text-[10px] font-semibold text-gray-500 uppercase tracking-wider">Contacto</span>
+                <p class="text-sm text-gray-600">{profile.contact_name || '—'}</p>
+              </div>
+              <div>
+                <span class="text-[10px] font-semibold text-gray-500 uppercase tracking-wider">Teléfono</span>
+                <p class="text-sm text-gray-600">{profile.phone || '—'}</p>
+              </div>
+              <div>
+                <span class="text-[10px] font-semibold text-gray-500 uppercase tracking-wider">País</span>
+                <p class="text-sm text-gray-600">{profile.country || '—'}</p>
+              </div>
+              <div>
+                <span class="text-[10px] font-semibold text-gray-500 uppercase tracking-wider">Dirección</span>
+                <p class="text-sm text-gray-600">{profile.address || '—'}</p>
+              </div>
+              <div>
+                <span class="text-[10px] font-semibold text-gray-500 uppercase tracking-wider">RNC/Tax ID</span>
+                <p class="text-sm text-gray-600">{profile.tax_id || '—'}</p>
+              </div>
+              <div>
+                <span class="text-[10px] font-semibold text-gray-500 uppercase tracking-wider">Tasa de Comisión</span>
+                <p class="text-sm font-bold text-[#C05A3C]">{profile.commission_rate ? (profile.commission_rate * 100).toFixed(1) : '0'}%</p>
+              </div>
+              <div>
+                <span class="text-[10px] font-semibold text-gray-500 uppercase tracking-wider">Estado</span>
+                <span class="px-2 py-0.5 rounded-full text-xs font-semibold {statusColor(profile.status)}">
+                  {profile.status}
+                </span>
+              </div>
+              <div>
+                <span class="text-[10px] font-semibold text-gray-500 uppercase tracking-wider">Stripe Connect</span>
+                <p class="text-sm">{profile.stripe_charges_enabled ? '✅ Activo' : '❌ No configurado'}</p>
+              </div>
+              <div>
+                <span class="text-[10px] font-semibold text-gray-500 uppercase tracking-wider">Contrato</span>
+                <p class="text-sm text-gray-600">{profile.contract_reference || '—'}</p>
+              </div>
             </div>
           </div>
-        </div>
+        {:else}
+          <div class="bg-white rounded-xl border border-gray-200 p-6">
+            <form on:submit|preventDefault={saveProfile} class="space-y-4">
+              <div class="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                <div>
+                  <label class="text-[10px] font-semibold text-gray-500 uppercase tracking-wider block mb-1">Empresa *</label>
+                  <input type="text" bind:value={profileForm.company_name} required
+                    class="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm focus:ring-2 focus:ring-[#C05A3C] focus:border-transparent outline-none" />
+                </div>
+                <div>
+                  <label class="text-[10px] font-semibold text-gray-500 uppercase tracking-wider block mb-1">Razón Social</label>
+                  <input type="text" bind:value={profileForm.legal_name}
+                    class="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm focus:ring-2 focus:ring-[#C05A3C] focus:border-transparent outline-none" />
+                </div>
+                <div>
+                  <label class="text-[10px] font-semibold text-gray-500 uppercase tracking-wider block mb-1">RNC/Tax ID</label>
+                  <input type="text" bind:value={profileForm.tax_id}
+                    class="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm focus:ring-2 focus:ring-[#C05A3C] focus:border-transparent outline-none" />
+                </div>
+                <div>
+                  <label class="text-[10px] font-semibold text-gray-500 uppercase tracking-wider block mb-1">Contacto</label>
+                  <input type="text" bind:value={profileForm.contact_name}
+                    class="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm focus:ring-2 focus:ring-[#C05A3C] focus:border-transparent outline-none" />
+                </div>
+                <div>
+                  <label class="text-[10px] font-semibold text-gray-500 uppercase tracking-wider block mb-1">Teléfono</label>
+                  <input type="text" bind:value={profileForm.phone}
+                    class="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm focus:ring-2 focus:ring-[#C05A3C] focus:border-transparent outline-none" />
+                </div>
+                <div>
+                  <label class="text-[10px] font-semibold text-gray-500 uppercase tracking-wider block mb-1">País</label>
+                  <input type="text" bind:value={profileForm.country}
+                    class="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm focus:ring-2 focus:ring-[#C05A3C] focus:border-transparent outline-none" />
+                </div>
+                <div class="sm:col-span-2">
+                  <label class="text-[10px] font-semibold text-gray-500 uppercase tracking-wider block mb-1">Dirección</label>
+                  <textarea bind:value={profileForm.address} rows="2"
+                    class="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm focus:ring-2 focus:ring-[#C05A3C] focus:border-transparent outline-none resize-none"></textarea>
+                </div>
+              </div>
+              <div class="flex gap-2 justify-end pt-4 border-t border-gray-200">
+                <button type="button" class="text-sm text-gray-500 px-4 py-2 hover:text-gray-700" on:click={cancelEditProfile}>
+                  Cancelar
+                </button>
+                <button type="submit" disabled={savingProfile}
+                  class="text-sm font-semibold px-5 py-2 bg-[#4A7C59] text-white rounded-lg hover:bg-[#3d6a4b] transition-colors flex items-center gap-1.5">
+                  {#if savingProfile}<Loader2 class="w-4 h-4 animate-spin" />{/if}
+                  Guardar Cambios
+                </button>
+              </div>
+            </form>
+          </div>
+        {/if}
       {/if}
     </main>
   </div>

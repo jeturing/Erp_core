@@ -70,15 +70,22 @@ class ApiClient {
       headers.Authorization = `Bearer ${this.token}`;
     }
     const controller = new AbortController();
-    const timeoutId = setTimeout(() => controller.abort(), 1e4);
+    const timeoutId = setTimeout(() => controller.abort(), 3e4);
     let response;
     try {
-      response = await fetch(`${this.baseUrl}${endpoint}`, {
-        ...options,
-        headers,
-        credentials: "include",
-        signal: options.signal ?? controller.signal
-      });
+      try {
+        response = await fetch(`${this.baseUrl}${endpoint}`, {
+          ...options,
+          headers,
+          credentials: "include",
+          signal: options.signal ?? controller.signal
+        });
+      } catch (err) {
+        if (err?.name === "AbortError") {
+          throw new Error("La solicitud tardó demasiado. Intenta de nuevo.");
+        }
+        throw err;
+      }
     } finally {
       clearTimeout(timeoutId);
     }

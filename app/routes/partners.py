@@ -290,6 +290,12 @@ async def delete_partner(
 
         partner.status = PartnerStatus.terminated
         partner.portal_access = False
+        partner.onboarding_bypass = False
+        partner.partner_temp_access_enabled = False
+        partner.partner_temp_access_expires_at = None
+        partner.partner_temp_access_scope = None
+        partner.partner_temp_access_reason = None
+        partner.partner_temp_access_ticket = None
         db.commit()
 
         return {"message": f"Partner '{partner.company_name}' desactivado"}
@@ -366,6 +372,11 @@ async def activate_partner(
         if not partner.contract_signed_at:
             partner.contract_signed_at = datetime.now(timezone.utc).replace(tzinfo=None)
         partner.portal_access = True
+        partner.partner_temp_access_enabled = False
+        partner.partner_temp_access_expires_at = None
+        partner.partner_temp_access_scope = None
+        partner.partner_temp_access_reason = None
+        partner.partner_temp_access_ticket = None
         db.commit()
         db.refresh(partner)
 

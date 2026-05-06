@@ -629,6 +629,87 @@ async def admin_assign_email_package_to_tenant(
         db.close()
 
 
+class BulkAssignFreeRequest(BaseModel):
+    catalog_item_id: int
+
+
+@router.post("/admin/email-packages/bulk-assign-free")
+async def admin_bulk_assign_free_email_package(
+    payload: BulkAssignFreeRequest,
+    request: Request,
+    access_token: Optional[str] = Cookie(None),
+):
+    """
+    Asigna un perfil de correo Free (price_monthly=0) a todos los tenants
+    activos que aún no tienen ningún perfil de correo asignado.
+    No genera facturas porque el precio es $0.
+    """
+    _require_admin(request, access_token)
+    db = SessionLocal()
+    try:
+        item = (
+            db.query(ServiceCatalogItem)
+            .filter(
+                ServiceCatalogItem.id == payload.catalog_item_id,
+                ServiceCatalogItem.service_code == EMAIL_PACKAGE_SERVICE_CODE,
+                ServiceCatalogItem.is_active == True,
+            )
+            .first()
+        )
+        if not item:
+            raise HTTPException(status_code=404, detail="Paquete de correo no encontrado")
+        if item.price_monthly and float(item.price_monthly) > 0:
+            raise HTTPException(
+                status_code=400,
+                detail="bulk-assign-free solo aplica a paquetes con precio $0.00. Use el endpoint de asignación individual para paquetes de pago.",
+            )
+
+        # Tenants que ya tienen perfil activo de correo
+        already_assigned_ids = {
+            row.customer_id
+            for row in db.query(CustomerAddonSubscription.customer_id)
+            .filter(
+                CustomerAddonSubscription.service_code == EMAIL_PACKAGE_SERVICE_CODE,
+                CustomerAddonSubscription.status == "active",
+            )
+            .all()
+        }
+
+        customers = db.query(Customer).all()
+        assigned = 0
+        skipped = 0
+        errors = 0
+
+        for customer in customers:
+            if customer.id in already_assigned_ids:
+                skipped += 1
+                continue
+            try:
+                purchase_customer_addon(
+                    db=db,
+                    customer_id=customer.id,
+                    catalog_item_id=item.id,
+                    quantity=1,
+                    acquired_via="admin_bulk_free",
+                    notes="Asignación masiva Free desde consola admin",
+                )
+                assigned += 1
+            except Exception as exc:
+                logger.warning("bulk-assign-free: error en customer %s: %s", customer.id, exc)
+                db.rollback()
+                errors += 1
+
+        return {
+            "message": f"Asignación masiva completada: {assigned} asignados, {skipped} ya tenían perfil, {errors} errores",
+            "assigned": assigned,
+            "skipped": skipped,
+            "errors": errors,
+            "package": _email_pkg_to_dict(item),
+        }
+    finally:
+        db.close()
+
+
 @router.put("/admin/email-packages/tenant-subscriptions/{addon_id}")
 async def admin_update_tenant_email_subscription(
     addon_id: int,

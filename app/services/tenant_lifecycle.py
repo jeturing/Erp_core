@@ -382,11 +382,15 @@ class TenantLifecycleOrchestrator:
 
             # 7. Cloudflared (PCT 205)
             def _configure_cloudflared() -> StepResult:
+                from ..config import get_runtime_setting, get_runtime_int
+
+                tunnel_edge_host = get_runtime_setting("TUNNEL_EDGE_HOST", "10.10.20.205")
+                tunnel_edge_port = get_runtime_int("TUNNEL_EDGE_PORT", 80)
                 gate = add_tenant_route(
                     subdomain=spec.subdomain,
-                    node_ip=backend_host,
-                    http_port=http_port,
-                    chat_port=chat_port,
+                    node_ip=tunnel_edge_host,
+                    http_port=tunnel_edge_port,
+                    chat_port=tunnel_edge_port,
                     base_domain=spec.base_domain,
                 )
                 ok = bool(gate.get("success"))

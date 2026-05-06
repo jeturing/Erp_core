@@ -39,6 +39,7 @@
  */
 declare module '$env/static/private' {
 	export const VITE_API_URL: string;
+	export const VITE_PROVISIONING_API_KEY: string;
 	export const PYTHON_BASIC_REPL: string;
 	export const USER: string;
 	export const SSH_CLIENT: string;
@@ -189,6 +190,7 @@ declare module '$env/static/public' {
 declare module '$env/dynamic/private' {
 	export const env: {
 		VITE_API_URL: string;
+		VITE_PROVISIONING_API_KEY: string;
 		PYTHON_BASIC_REPL: string;
 		USER: string;
 		SSH_CLIENT: string;

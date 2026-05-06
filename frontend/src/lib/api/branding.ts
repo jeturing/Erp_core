@@ -32,7 +32,39 @@ export const brandingApi = {
   },
 
   async resolveByDomain(domain: string): Promise<BrandingProfile> {
-    return api.get(`/api/branding/resolve?domain=${encodeURIComponent(domain)}`);
+    return api.get(`/api/branding/resolve/${encodeURIComponent(domain)}`);
+  },
+
+  async uploadAsset(profileId: number, assetType: 'logo' | 'favicon' | 'og', file: File): Promise<{
+    success: boolean;
+    data: {
+      profile_id: number;
+      asset_type: string;
+      asset_url: string;
+      updated_field?: string | null;
+    };
+    meta: {
+      content_type?: string;
+      size: number;
+    };
+  }> {
+    const formData = new FormData();
+    formData.append('file', file);
+
+    const token = api.getToken();
+    const response = await fetch(`${import.meta.env.VITE_API_URL || ''}/api/branding/profiles/${profileId}/assets/${assetType}`, {
+      method: 'POST',
+      body: formData,
+      credentials: 'include',
+      headers: token ? { Authorization: `Bearer ${token}` } : undefined,
+    });
+
+    if (!response.ok) {
+      const error = await response.json().catch(() => ({ detail: `HTTP ${response.status}` }));
+      throw new Error(error.detail || `HTTP ${response.status}`);
+    }
+
+    return response.json();
   },
 };
 

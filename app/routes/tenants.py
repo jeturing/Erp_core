@@ -5,6 +5,7 @@ Integrado con OdooDatabaseManager para provisioning real
 from fastapi import APIRouter, Cookie, HTTPException, Header, Query, Request
 from pydantic import BaseModel, Field, field_validator
 from typing import Optional, List
+import asyncio
 import re
 from ..models.database import Customer, Subscription, SubscriptionStatus, SessionLocal, Partner, Plan, BillingMode, PayerType, CollectorType, InvoiceIssuer
 from ..models.database import CustomDomain, DomainVerificationStatus, TenantDeployment
@@ -747,7 +748,11 @@ async def list_tenants(request: Request, access_token: str = Cookie(None)):
     """Listado de tenants desde todos los servidores"""
     _require_admin_base(request, access_token)
     try:
-        items = await get_all_tenants_from_servers()
+        try:
+            items = await asyncio.wait_for(get_all_tenants_from_servers(), timeout=8.0)
+        except asyncio.TimeoutError:
+            logger.warning("Timeout listando tenants desde Odoo remoto; usando fallback de BD local")
+            items = []
         if not items:
             logger.warning("No se detectaron tenants desde Odoo; usando fallback de BD local")
             items = await get_all_tenants_from_local_db()

@@ -29,6 +29,8 @@ from ..services.pricing import (
 
 logger = logging.getLogger(__name__)
 
+JETURING_INTERNAL_EMAILS = {"admin@sajet.us"}
+
 
 def _configure_stripe() -> str:
     stripe.api_key = get_runtime_setting("STRIPE_SECRET_KEY", "")
@@ -107,6 +109,13 @@ def _find_partner_by_email(db: Session, email: str) -> Optional[Partner]:
     if not email:
         return None
     return db.query(Partner).filter(Partner.contact_email == email).first()
+
+
+def _is_jeturing_associated_customer(customer: Optional[Customer]) -> bool:
+    if not customer:
+        return False
+    email = (customer.email or "").strip().lower()
+    return bool(customer.is_admin_account) or email in JETURING_INTERNAL_EMAILS
 
 
 def _next_invoice_number(db: Session) -> str:
@@ -391,6 +400,18 @@ def upsert_stripe_subscription(
         })
         return
 
+    if _is_jeturing_associated_customer(local_customer):
+        results["skipped"] += 1
+        results["details"].append({
+            "action": "skipped",
+            "stripe_sub_id": stripe_sub_id,
+            "stripe_email": stripe_email,
+            "reason": "jeturing_associated_customer_excluded_from_stripe_billing",
+            "customer_id": local_customer.id,
+            "subdomain": local_customer.subdomain,
+        })
+        return
+
     # ── Actualizar stripe_customer_id si falta ──
     if not local_customer.stripe_customer_id and stripe_cust_id:
         linked_customer_id = reserved_customer_links.get(stripe_cust_id)
@@ -648,6 +669,17 @@ def upsert_stripe_invoice(
         results["skipped_no_match"] += 1
         return
 
+    if _is_jeturing_associated_customer(local_customer):
+        results["skipped_no_match"] += 1
+        results["details"].append({
+            "action": "skipped",
+            "stripe_invoice_id": stripe_inv_id,
+            "reason": "jeturing_associated_customer_excluded_from_stripe_billing",
+            "customer_id": local_customer.id,
+            "subdomain": local_customer.subdomain,
+        })
+        return
+
     # ── Match subscription ──
     stripe_sub_ref = s_inv.get("subscription")
     stripe_sub_id = None
@@ -769,6 +801,15 @@ def sync_stripe_customers(db: Session) -> Dict[str, Any]:
 
     for customer in customers_without:
         try:
+            if _is_jeturing_associated_customer(customer):
+                results["not_found"] += 1
+                results["details"].append({
+                    "customer": customer.company_name,
+                    "customer_id": customer.id,
+                    "reason": "jeturing_associated_customer_excluded_from_stripe_billing",
+                })
+                continue
+
             normalized_email = (customer.email or "").strip().lower()
             if not normalized_email:
                 results["not_found"] += 1

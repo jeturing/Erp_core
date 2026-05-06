@@ -3,6 +3,7 @@ Partner Portal Routes — Endpoints accesibles por partners autenticados.
 Incluye: onboarding, dashboard, leads, clientes, Stripe Connect self-service.
 """
 import logging
+import httpx
 import hashlib
 import secrets
 import socket
@@ -10,7 +11,7 @@ import xmlrpc.client
 from datetime import datetime, timedelta, timezone
 from typing import Any, Dict, List, Optional
 
-from fastapi import APIRouter, Cookie, HTTPException, Request, status
+from fastapi import APIRouter, BackgroundTasks, Cookie, HTTPException, Request, status
 from fastapi.responses import JSONResponse
 from pydantic import BaseModel, EmailStr
 
@@ -168,6 +169,14 @@ def _mark_checklist(deployment: PartnerDeployment, keys: List[str]) -> None:
     deployment.checklist_json = items
 
 
+def _latest_deployment_event(deployment: PartnerDeployment, *event_names: str) -> Optional[Dict[str, Any]]:
+    wanted = set(event_names)
+    for item in reversed(list(deployment.event_log or [])):
+        if item.get("event") in wanted:
+            return item
+    return None
+
+
 def _next_partner_invoice_number(db) -> str:
     year = _now_naive().year
     last = db.query(Invoice).filter(
@@ -178,6 +187,12 @@ def _next_partner_invoice_number(db) -> str:
 
 
 def _serialize_deployment(dep: PartnerDeployment) -> Dict[str, Any]:
+    availability_event = _latest_deployment_event(
+        dep,
+        "availability_check_passed",
+        "availability_check_warning",
+        "availability_check_skipped",
+    )
     invoice = dep.invoice
     invoice_urls = build_invoice_action_urls(
         status=invoice.status if invoice else None,
@@ -207,6 +222,7 @@ def _serialize_deployment(dep: PartnerDeployment) -> Dict[str, Any]:
         "tenant_url": dep.tenant_url or (f"https://{dep.subdomain}.sajet.us" if dep.subdomain else None),
         "plan_name": dep.plan_name,
         "user_count": dep.user_count,
+        "is_running": dep.provisioning_status in ("pending", "running"),
         "billing_mode": dep.billing_mode,
         "industry": dep.industry,
         "blueprint_package_name": dep.blueprint_package_name,
@@ -226,6 +242,10 @@ def _serialize_deployment(dep: PartnerDeployment) -> Dict[str, Any]:
         "tenant_ready_at": dep.tenant_ready_at.isoformat() if dep.tenant_ready_at else None,
         "invoiced_at": dep.invoiced_at.isoformat() if dep.invoiced_at else None,
         "completed_at": dep.completed_at.isoformat() if dep.completed_at else None,
+        "availability_test": {
+            "status": availability_event.get("event"),
+            **(availability_event.get("detail") or {}),
+        } if availability_event else None,
         "invoice": {
             "id": invoice.id,
             "invoice_number": invoice.invoice_number,
@@ -239,6 +259,90 @@ def _serialize_deployment(dep: PartnerDeployment) -> Dict[str, Any]:
         "phases": DEPLOYMENT_PHASES,
     }
 
+
+
+async def _run_partner_deployment_validation_checks(db, deployment: PartnerDeployment) -> Dict[str, Any]:
+    tenant_url = deployment.tenant_url or (f"https://{deployment.subdomain}.sajet.us" if deployment.subdomain else None)
+    probe_url = f"{tenant_url.rstrip('/')}/web/login" if tenant_url else None
+
+    deployment.current_phase = "validation"
+    deployment.current_week = 3
+    deployment.progress_percent = max(deployment.progress_percent or 0, 72)
+    _append_deployment_event(deployment, "availability_check_started", {"url": probe_url})
+    db.commit()
+
+    if not probe_url:
+        _append_deployment_event(deployment, "availability_check_skipped", {"reason": "tenant_url_missing"})
+        deployment.provisioning_status = "ready"
+        db.commit()
+        return {"success": False, "skipped": True, "reason": "tenant_url_missing"}
+
+    try:
+        async with httpx.AsyncClient(
+            timeout=httpx.Timeout(15.0, connect=8.0),
+            follow_redirects=True,
+            verify=False,
+        ) as client:
+            response = await client.get(probe_url)
+        ok = response.status_code < 500
+        detail = {
+            "url": probe_url,
+            "ok": ok,
+            "status_code": response.status_code,
+        }
+    except Exception as exc:
+        ok = False
+        detail = {
+            "url": probe_url,
+            "ok": False,
+            "error": str(exc),
+        }
+
+    _append_deployment_event(
+        deployment,
+        "availability_check_passed" if ok else "availability_check_warning",
+        detail,
+    )
+    if ok:
+        _mark_checklist(deployment, ["validation"])
+        deployment.current_phase = "training"
+        deployment.current_week = 4
+        deployment.progress_percent = max(deployment.progress_percent or 0, 84)
+    else:
+        deployment.current_phase = "validation"
+        deployment.current_week = 3
+        deployment.progress_percent = max(deployment.progress_percent or 0, 72)
+    deployment.provisioning_status = "ready"
+    db.commit()
+    return {"success": ok, **detail}
+
+
+async def _background_partner_deployment_run(deployment_id: int, partner_id: int) -> None:
+    db = SessionLocal()
+    try:
+        deployment = db.query(PartnerDeployment).filter(PartnerDeployment.id == deployment_id).first()
+        partner = db.query(Partner).filter(Partner.id == partner_id).first()
+        if not deployment or not partner:
+            return
+
+        provision_result = await _run_partner_deployment_provision(db, deployment, partner)
+        db.refresh(deployment)
+        if provision_result.get("success"):
+            await _run_partner_deployment_validation_checks(db, deployment)
+    except Exception as exc:
+        logger.exception("Error en background provisioning partner #%s: %s", deployment_id, exc)
+        try:
+            deployment = db.query(PartnerDeployment).filter(PartnerDeployment.id == deployment_id).first()
+            if deployment:
+                deployment.status = "provisioning_failed"
+                deployment.provisioning_status = "failed"
+                deployment.last_error = str(exc)
+                _append_deployment_event(deployment, "background_provisioning_failed", {"error": str(exc)})
+                db.commit()
+        except Exception:
+            db.rollback()
+    finally:
+        db.close()
 
 def _ensure_deployment_invoice(db, deployment: PartnerDeployment, partner: Partner) -> Optional[Invoice]:
     if deployment.invoice_id:
@@ -342,7 +446,7 @@ async def _run_partner_deployment_provision(db, deployment: PartnerDeployment, p
         deployment.admin_password = result.admin_password or deployment.admin_password
         deployment.tenant_url = f"https://{deployment.subdomain}.sajet.us"
         deployment.status = "invoiced"
-        deployment.provisioning_status = "ready"
+        deployment.provisioning_status = "running"
         deployment.current_phase = "validation"
         deployment.current_week = 3
         deployment.progress_percent = max(deployment.progress_percent or 0, 68)
@@ -1066,7 +1170,47 @@ async def update_partner_lead(
             setattr(lead, field, value)
 
         db.commit()
-        return {"message": "Lead actualizado"}
+        db.refresh(lead)
+
+        return {
+            "message": "Lead actualizado",
+            "lead": {
+                "id": lead.id,
+                "company_name": lead.company_name,
+                "contact_name": lead.contact_name,
+                "contact_email": lead.contact_email,
+                "phone": lead.phone,
+                "country": lead.country,
+                "status": lead.status.value if lead.status else None,
+                "estimated_monthly_value": lead.estimated_monthly_value,
+                "notes": lead.notes,
+                "updated_at": lead.updated_at.isoformat() if lead.updated_at else None,
+            }
+        }
+    finally:
+        db.close()
+
+
+@router.delete("/leads/{lead_id}")
+async def delete_partner_lead(
+    lead_id: int,
+    request: Request,
+    access_token: Optional[str] = Cookie(None),
+):
+    """El partner elimina uno de sus leads."""
+    auth = _require_partner(request, access_token)
+    db = SessionLocal()
+    try:
+        partner = _get_partner(db, auth)
+        lead = db.query(Lead).filter(Lead.id == lead_id, Lead.partner_id == partner.id).first()
+        if not lead:
+            raise HTTPException(status_code=404, detail="Lead no encontrado")
+
+        company_name = lead.company_name
+        db.delete(lead)
+        db.commit()
+
+        return {"message": f"Lead '{company_name}' eliminado exitosamente"}
     finally:
         db.close()
 
@@ -1166,6 +1310,7 @@ async def _create_partner_deployment_from_payload(
     payload: PartnerDeploymentAutoStart,
     request: Request,
     access_token: Optional[str],
+    background_tasks: Optional[BackgroundTasks] = None,
 ) -> Dict[str, Any]:
     auth = _require_partner(request, access_token)
     db = SessionLocal()
@@ -1312,7 +1457,28 @@ async def _create_partner_deployment_from_payload(
         db.commit()
         db.refresh(deployment)
 
+        if background_tasks is not None:
+            _append_deployment_event(deployment, "provisioning_queued", {"mode": "background"})
+            db.commit()
+            db.refresh(deployment)
+            background_tasks.add_task(_background_partner_deployment_run, deployment.id, partner.id)
+            return {
+                "message": "Despliegue automatico iniciado",
+                "deployment": _serialize_deployment(deployment),
+                "provisioning": {
+                    "success": True,
+                    "queued": True,
+                    "message": "Provisioning ejecutándose en segundo plano",
+                },
+                "tenant": None,
+                "customer_id": deployment.customer_id,
+                "subscription_id": deployment.subscription_id,
+                "monthly_amount": monthly_amount,
+            }
+
         provision_result = await _run_partner_deployment_provision(db, deployment, partner)
+        if provision_result.get("success"):
+            await _run_partner_deployment_validation_checks(db, deployment)
         db.refresh(deployment)
         return {
             "message": "Despliegue automatico iniciado",
@@ -1382,10 +1548,11 @@ async def list_partner_deployments(
 async def auto_start_partner_deployment(
     payload: PartnerDeploymentAutoStart,
     request: Request,
+    background_tasks: BackgroundTasks,
     access_token: Optional[str] = Cookie(None),
 ):
     """Inicia el flujo automatico: lead, cliente, subscription, tenant y factura."""
-    return await _create_partner_deployment_from_payload(payload, request, access_token)
+    return await _create_partner_deployment_from_payload(payload, request, access_token, background_tasks)
 
 
 @router.get("/deployments/{deployment_id}")
@@ -1473,6 +1640,7 @@ async def complete_partner_deployment_handoff(
 async def create_partner_client(
     payload: PartnerClientCreate,
     request: Request,
+    background_tasks: BackgroundTasks,
     access_token: Optional[str] = Cookie(None),
 ):
     """
@@ -1506,9 +1674,12 @@ async def create_partner_client(
         ),
         request,
         access_token,
+        background_tasks,
     )
     if result.get("tenant"):
         result["message"] = f"Cliente '{payload.company_name}' creado + tenant provisionado"
+    else:
+        result["message"] = f"Cliente '{payload.company_name}' creado. Provisioning en curso"
     return result
 
 

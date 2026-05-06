@@ -54,6 +54,14 @@ class QuotationUpdate(BaseModel):
     valid_until: Optional[str] = None
 
 
+class QuotationInvoicePreviewRequest(BaseModel):
+    lines: List[QuotationLineItem]
+    partner_margin: float = 0
+    currency: str = "USD"
+    tax_percent: float = 0
+    due_days: int = 30
+
+
 class CatalogItemCreate(BaseModel):
     category: str
     name: str
@@ -609,6 +617,59 @@ async def create_quotation(
         return {"message": f"Cotización {quote_number} creada", "quotation": _quotation_to_dict(qt)}
     finally:
         db.close()
+
+
+@router.post("/api/quotations/preview/invoice")
+async def preview_quotation_invoice(
+    payload: QuotationInvoicePreviewRequest,
+    request: Request,
+    access_token: Optional[str] = Cookie(None),
+):
+    """Genera preview de factura mensual a partir de líneas de cotización."""
+    _require_admin(request, access_token)
+
+    normalized_lines = []
+    subtotal = 0.0
+    for line in payload.lines:
+        qty = max(1, int(line.quantity or 1))
+        unit_price = float(line.unit_price or 0)
+        line_subtotal = round(qty * unit_price, 2)
+        normalized_lines.append({
+            "service_id": line.service_id,
+            "name": line.name,
+            "unit": line.unit,
+            "quantity": qty,
+            "unit_price": unit_price,
+            "subtotal": line_subtotal,
+        })
+        subtotal += line_subtotal
+
+    subtotal = round(subtotal, 2)
+    margin = round(float(payload.partner_margin or 0), 2)
+    taxable_base = round(subtotal + margin, 2)
+    tax_amount = round(max(0.0, float(payload.tax_percent or 0)) * taxable_base / 100.0, 2)
+    total = round(taxable_base + tax_amount, 2)
+    now = datetime.now(timezone.utc).replace(tzinfo=None)
+
+    return {
+        "success": True,
+        "data": {
+            "invoice_preview": {
+                "issued_at": now.isoformat(),
+                "due_at": (now + timedelta(days=max(1, int(payload.due_days or 30)))).isoformat(),
+                "currency": payload.currency,
+                "lines": normalized_lines,
+                "subtotal": subtotal,
+                "partner_margin": margin,
+                "tax_percent": float(payload.tax_percent or 0),
+                "tax_amount": tax_amount,
+                "total": total,
+            }
+        },
+        "meta": {
+            "lines": len(normalized_lines),
+        },
+    }
 
 
 @router.put("/api/quotations/{quote_id}")

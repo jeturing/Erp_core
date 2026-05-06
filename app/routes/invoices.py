@@ -18,8 +18,8 @@ import logging
 
 from ..models.database import (
     Invoice, InvoiceStatus, InvoiceType, InvoiceIssuer,
-    Subscription, Customer, Partner, Plan, BillingMode,
-    get_db
+    Subscription, Customer, Partner, Plan, BillingMode, SubscriptionStatus,
+    AuditEventRecord, CustomerAddonSubscription, SeatHighWater, SeatEvent, get_db
 )
 from ..services.stripe_billing import (
     push_invoice_to_stripe,
@@ -30,10 +30,74 @@ from ..services.stripe_billing import (
     build_invoice_action_urls,
     fetch_stripe_invoice_links,
 )
+from ..services.pricing import get_effective_plan_snapshot
 from .roles import _require_admin as _require_admin_base
 
 router = APIRouter(prefix="/api/invoices", tags=["Invoices"])
 logger = logging.getLogger(__name__)
+
+INTERNAL_BILLING_EMAIL_DOMAINS = {"sajet.us", "jeturing.com"}
+
+
+def _is_internal_billing_email(value: Optional[str]) -> bool:
+    email = (value or "").strip().lower()
+    if "@" not in email:
+        return False
+    return email.split("@", 1)[1] in INTERNAL_BILLING_EMAIL_DOMAINS
+
+
+def _resolve_preview_user_count(
+    db: Session,
+    sub: Subscription,
+    customer: Optional[Customer],
+    period_start: datetime,
+    period_end: datetime,
+) -> tuple[int, str, dict]:
+    hwm = (
+        db.query(SeatHighWater)
+        .filter(
+            SeatHighWater.subscription_id == sub.id,
+            SeatHighWater.period_date >= period_start,
+            SeatHighWater.period_date < period_end,
+        )
+        .order_by(SeatHighWater.hwm_count.desc(), SeatHighWater.period_date.desc())
+        .first()
+    )
+
+    base_count = 1
+    source = "live_user_count"
+    if hwm and hwm.hwm_count is not None:
+        base_count = max(1, int(hwm.hwm_count))
+        source = "seat_high_water"
+    else:
+        base_count = max(1, int(sub.user_count or (customer.user_count if customer else 1) or 1))
+
+    usage_meta = {
+        "fallback_count": int(base_count),
+        "internal_accounts_detected": 0,
+    }
+
+    if sub.owner_partner_id or sub.billing_mode in {BillingMode.PARTNER_DIRECT, BillingMode.PARTNER_PAYS_FOR_CLIENT}:
+        internal_logins = (
+            db.query(SeatEvent.odoo_login)
+            .filter(
+                SeatEvent.subscription_id == sub.id,
+                SeatEvent.created_at >= period_start,
+                SeatEvent.created_at < period_end,
+                SeatEvent.odoo_login.isnot(None),
+            )
+            .all()
+        )
+        internal_unique = {
+            login.lower().strip()
+            for (login,) in internal_logins
+            if _is_internal_billing_email(login)
+        }
+        usage_meta["internal_accounts_detected"] = len(internal_unique)
+        base_count = max(1, base_count - len(internal_unique))
+        source = "partner_excluding_internal_domains"
+
+    return base_count, source, usage_meta
 
 
 def _next_invoice_number(db: Session) -> str:
@@ -58,6 +122,8 @@ class InvoiceGenerateRequest(BaseModel):
 class InvoiceMarkPaid(BaseModel):
     stripe_payment_intent_id: Optional[str] = None
     notes: Optional[str] = None
+    mode: Optional[str] = "stripe_only"  # stripe_only | auditable_override
+    override_reason: Optional[str] = None
 
 
 @router.post("/generate-on-ready")
@@ -328,18 +394,100 @@ def mark_invoice_paid(
     db: Session = Depends(get_db),
 ):
     """Marca una factura como pagada."""
-    _require_admin_base(request, access_token)
+    actor = _require_admin_base(request, access_token)
     inv = db.query(Invoice).filter(Invoice.id == invoice_id).first()
     if not inv:
         raise HTTPException(404, "Invoice not found")
+
+    mode = (payload.mode or "stripe_only").strip().lower()
+    if mode not in {"stripe_only", "auditable_override"}:
+        raise HTTPException(400, "mode inválido. Usa stripe_only o auditable_override")
+
+    if mode == "stripe_only" and not (payload.stripe_payment_intent_id or inv.stripe_payment_intent_id or inv.stripe_invoice_id):
+        raise HTTPException(400, "Stripe-only mode requiere stripe_payment_intent_id o stripe_invoice_id")
+
+    if mode == "auditable_override" and not (payload.override_reason or "").strip():
+        raise HTTPException(400, "override_reason es obligatorio en auditable_override")
+
     inv.status = InvoiceStatus.paid
     inv.paid_at = datetime.now(timezone.utc).replace(tzinfo=None)
     if payload.stripe_payment_intent_id:
         inv.stripe_payment_intent_id = payload.stripe_payment_intent_id
+    note_parts = []
     if payload.notes:
-        inv.notes = payload.notes
+        note_parts.append(payload.notes.strip())
+    if mode == "auditable_override":
+        note_parts.append(f"auditable_override_reason={payload.override_reason}")
+    if note_parts:
+        merged = " | ".join([p for p in note_parts if p])
+        inv.notes = f"{(inv.notes or '').strip()} {merged}".strip()
+
+    db.add(AuditEventRecord(
+        event_type="invoice_mark_paid",
+        actor_username=(actor or {}).get("sub", "admin"),
+        actor_role=(actor or {}).get("role", "admin"),
+        ip_address=request.client.host if request.client else None,
+        user_agent=request.headers.get("user-agent"),
+        resource=f"invoice:{inv.id}",
+        action=mode,
+        status="success",
+        details={
+            "invoice_id": inv.id,
+            "invoice_number": inv.invoice_number,
+            "mode": mode,
+            "override_reason": payload.override_reason,
+            "stripe_payment_intent_id": payload.stripe_payment_intent_id or inv.stripe_payment_intent_id,
+        },
+    ))
+
     db.commit()
-    return {"invoice_number": inv.invoice_number, "status": "paid"}
+    return {
+        "success": True,
+        "data": {
+            "invoice_number": inv.invoice_number,
+            "status": "paid",
+            "mode": mode,
+        },
+        "meta": {},
+    }
+
+
+@router.get("/reconciliation/summary")
+def reconciliation_summary(
+    request: Request,
+    access_token: str = Cookie(None),
+    db: Session = Depends(get_db),
+):
+    """Resumen de conciliación: Stripe automático vs pago manual/override."""
+    _require_admin_base(request, access_token)
+
+    total = db.query(Invoice).count()
+    stripe_backed = db.query(Invoice).filter(Invoice.stripe_invoice_id.isnot(None)).count()
+    paid = db.query(Invoice).filter(Invoice.status == InvoiceStatus.paid).count()
+    paid_without_stripe = db.query(Invoice).filter(
+        Invoice.status == InvoiceStatus.paid,
+        Invoice.stripe_invoice_id.is_(None),
+        Invoice.stripe_payment_intent_id.is_(None),
+    ).count()
+    auditable_overrides = db.query(Invoice).filter(
+        Invoice.status == InvoiceStatus.paid,
+        Invoice.notes.ilike("%auditable_override_reason=%"),
+    ).count()
+
+    return {
+        "success": True,
+        "data": {
+            "total_invoices": total,
+            "stripe_backed_invoices": stripe_backed,
+            "manual_invoices": max(0, total - stripe_backed),
+            "paid_invoices": paid,
+            "paid_without_stripe_trace": paid_without_stripe,
+            "auditable_overrides": auditable_overrides,
+        },
+        "meta": {
+            "generated_at": datetime.now(timezone.utc).replace(tzinfo=None).isoformat(),
+        },
+    }
 
 
 # ═══════════════════════════════════════════════════════════════
@@ -456,6 +604,184 @@ class ConsumptionInvoiceRequest(BaseModel):
     period_end: Optional[date] = None
 
 
+class PartnerMonthlyInvoiceRequest(BaseModel):
+    partner_id: int
+    period_start: Optional[date] = None
+    period_end: Optional[date] = None
+
+
+@router.post("/generate-partner-monthly-preview")
+def preview_partner_monthly_invoice(
+    payload: PartnerMonthlyInvoiceRequest,
+    request: Request,
+    access_token: str = Cookie(None),
+    db: Session = Depends(get_db),
+):
+    """Preview consolidado mensual del partner sin emitir facturas."""
+    _require_admin_base(request, access_token)
+
+    partner = db.query(Partner).filter(Partner.id == payload.partner_id).first()
+    if not partner:
+        raise HTTPException(404, "Partner not found")
+
+    period_start_dt = datetime.combine(payload.period_start, time.min) if payload.period_start else datetime.now(timezone.utc).replace(tzinfo=None).replace(day=1, hour=0, minute=0, second=0, microsecond=0)
+    period_end_dt = datetime.combine(payload.period_end, time.min) if payload.period_end else (period_start_dt + timedelta(days=32)).replace(day=1)
+
+    subscriptions = db.query(Subscription).filter(
+        Subscription.owner_partner_id == partner.id,
+        Subscription.status.in_([
+            SubscriptionStatus.active,
+            SubscriptionStatus.trialing,
+            SubscriptionStatus.past_due,
+        ]),
+    ).all()
+
+    if not subscriptions:
+        return {
+            "success": True,
+            "data": {
+                "partner_id": partner.id,
+                "partner_name": partner.company_name,
+                "tenants": [],
+                "totals": {
+                    "subtotal": 0,
+                    "tax": 0,
+                    "total": 0,
+                    "currency": "USD",
+                },
+            },
+            "meta": {
+                "period_start": period_start_dt.isoformat(),
+                "period_end": period_end_dt.isoformat(),
+                "tenants_count": 0,
+            },
+        }
+
+    tenants = []
+    consolidated_total = 0.0
+
+    for sub in subscriptions:
+        customer = db.query(Customer).filter(Customer.id == sub.customer_id).first()
+        if not customer:
+            continue
+
+        plan = db.query(Plan).filter(Plan.name == sub.plan_name, Plan.is_active == True).first()
+        user_count, usage_source, usage_meta = _resolve_preview_user_count(
+            db,
+            sub,
+            customer,
+            period_start_dt,
+            period_end_dt,
+        )
+
+        pricing_snapshot = get_effective_plan_snapshot(
+            db,
+            sub,
+            customer=customer,
+            plan=plan,
+            user_count=user_count,
+        )
+
+        lines = []
+        tenant_total = 0.0
+
+        if plan:
+            base = float(pricing_snapshot.get("base_price") or 0)
+            lines.append({
+                "component": "base_plan",
+                "description": f"Plan {plan.name} — base mensual",
+                "qty": 1,
+                "unit_price": round(base, 2),
+                "subtotal": round(base, 2),
+            })
+            tenant_total += base
+
+            extra = int(pricing_snapshot.get("extra_users") or 0)
+            ppu = float(pricing_snapshot.get("price_per_user") or 0)
+            if extra > 0 and ppu > 0:
+                extra_total = round(extra * ppu, 2)
+                lines.append({
+                    "component": "extra_users",
+                    "description": f"Usuarios adicionales ({extra} × ${ppu}/u)",
+                    "qty": extra,
+                    "unit_price": round(ppu, 2),
+                    "subtotal": extra_total,
+                })
+                tenant_total += extra_total
+        else:
+            monthly = float(sub.monthly_amount or 0)
+            lines.append({
+                "component": "subscription_fallback",
+                "description": f"Suscripción mensual — {sub.plan_name}",
+                "qty": 1,
+                "unit_price": round(monthly, 2),
+                "subtotal": round(monthly, 2),
+            })
+            tenant_total += monthly
+
+        addon_rows = (
+            db.query(CustomerAddonSubscription)
+            .filter(
+                CustomerAddonSubscription.customer_id == customer.id,
+                CustomerAddonSubscription.status == "active",
+            )
+            .all()
+        )
+        for addon in addon_rows:
+            qty = max(1, int(addon.quantity or 1))
+            unit_price = float(addon.unit_price_monthly or 0)
+            line_total = round(qty * unit_price, 2)
+            item_name = addon.catalog_item.name if addon.catalog_item else (addon.service_code or "Add-on")
+            lines.append({
+                "component": "addon",
+                "description": f"Servicio adicional — {item_name}",
+                "qty": qty,
+                "unit_price": round(unit_price, 2),
+                "subtotal": line_total,
+                "service_code": addon.service_code,
+            })
+            tenant_total += line_total
+
+        tenant_total = round(tenant_total, 2)
+        consolidated_total += tenant_total
+
+        tenants.append({
+            "subscription_id": sub.id,
+            "customer_id": customer.id,
+            "customer_name": customer.company_name or customer.full_name or customer.subdomain,
+            "subdomain": customer.subdomain,
+            "currency": sub.currency or "USD",
+            "resolved_user_count": int(pricing_snapshot.get("user_count") or user_count),
+            "usage_source": usage_source,
+            "usage_meta": usage_meta,
+            "pricing_source": pricing_snapshot.get("pricing_source"),
+            "lines": lines,
+            "tenant_total": tenant_total,
+        })
+
+    consolidated_total = round(consolidated_total, 2)
+
+    return {
+        "success": True,
+        "data": {
+            "partner_id": partner.id,
+            "partner_name": partner.company_name,
+            "tenants": tenants,
+            "totals": {
+                "subtotal": consolidated_total,
+                "tax": 0,
+                "total": consolidated_total,
+                "currency": "USD",
+            },
+        },
+        "meta": {
+            "period_start": period_start_dt.isoformat(),
+            "period_end": period_end_dt.isoformat(),
+            "tenants_count": len(tenants),
+        },
+    }
+
+
 @router.post("/generate-consumption")
 def generate_consumption(
     payload: ConsumptionInvoiceRequest,
@@ -483,6 +809,113 @@ def generate_consumption(
     except Exception as e:
         logger.error(f"Error generating consumption invoice: {e}")
         raise HTTPException(500, f"Error generando factura: {str(e)}")
+
+
+@router.post("/generate-partner-monthly")
+def generate_partner_monthly_invoice(
+    payload: PartnerMonthlyInvoiceRequest,
+    request: Request,
+    access_token: str = Cookie(None),
+    db: Session = Depends(get_db),
+):
+    """
+    Cierre mensual consolidado para partner:
+    - genera/actualiza facturas por tenant (local)
+    - crea factura consolidada partner (intercompany)
+    """
+    _require_admin_base(request, access_token)
+
+    partner = db.query(Partner).filter(Partner.id == payload.partner_id).first()
+    if not partner:
+        raise HTTPException(404, "Partner not found")
+
+    period_start_dt = datetime.combine(payload.period_start, time.min) if payload.period_start else None
+    period_end_dt = datetime.combine(payload.period_end, time.min) if payload.period_end else None
+
+    subscriptions = db.query(Subscription).filter(
+        Subscription.owner_partner_id == partner.id,
+        Subscription.status.in_([
+            SubscriptionStatus.active,
+            SubscriptionStatus.trialing,
+            SubscriptionStatus.past_due,
+        ]),
+    ).all()
+
+    if not subscriptions:
+        raise HTTPException(400, "El partner no tiene suscripciones activas para facturar")
+
+    tenant_lines = []
+    total = 0.0
+    generated_invoice_ids = []
+
+    for sub in subscriptions:
+        result = generate_consumption_invoice(
+            db,
+            sub.id,
+            period_start=period_start_dt,
+            period_end=period_end_dt,
+        )
+
+        customer = db.query(Customer).filter(Customer.id == sub.customer_id).first()
+        company_label = (customer.company_name if customer else None) or (customer.subdomain if customer else None) or f"tenant-{sub.id}"
+        line_total = round(float(result.get("total") or 0), 2)
+        total += line_total
+        generated_invoice_ids.append(result.get("invoice_id"))
+        tenant_lines.append({
+            "description": f"Tenant {company_label} ({customer.subdomain if customer else 'n/a'})",
+            "qty": 1,
+            "unit_price": line_total,
+            "subtotal": line_total,
+            "metadata": {
+                "subscription_id": sub.id,
+                "tenant_invoice_id": result.get("invoice_id"),
+                "resolved_user_count": result.get("resolved_user_count"),
+                "usage_source": result.get("usage_source"),
+                "usage_meta": result.get("usage_meta") or {},
+            },
+        })
+
+    customer_id_for_invoice = partner.customer_id or subscriptions[0].customer_id
+
+    consolidated = Invoice(
+        invoice_number=_next_invoice_number(db),
+        subscription_id=None,
+        customer_id=customer_id_for_invoice,
+        partner_id=partner.id,
+        invoice_type=InvoiceType.INTERCOMPANY,
+        billing_mode=BillingMode.PARTNER_PAYS_FOR_CLIENT,
+        issuer=InvoiceIssuer.JETURING,
+        subtotal=round(total, 2),
+        tax_amount=0,
+        total=round(total, 2),
+        currency="USD",
+        lines_json=tenant_lines,
+        status=InvoiceStatus.issued,
+        issued_at=datetime.now(timezone.utc).replace(tzinfo=None),
+        due_date=datetime.now(timezone.utc).replace(tzinfo=None) + timedelta(days=15),
+        notes="partner_monthly_consolidated_invoice",
+    )
+    db.add(consolidated)
+    db.commit()
+    db.refresh(consolidated)
+
+    return {
+        "success": True,
+        "data": {
+            "partner_id": partner.id,
+            "partner_name": partner.company_name,
+            "consolidated_invoice_id": consolidated.id,
+            "consolidated_invoice_number": consolidated.invoice_number,
+            "total": consolidated.total,
+            "currency": consolidated.currency,
+            "tenant_invoice_ids": [inv_id for inv_id in generated_invoice_ids if inv_id],
+            "tenants_count": len(tenant_lines),
+        },
+        "meta": {
+            "period_start": period_start_dt.isoformat() if period_start_dt else None,
+            "period_end": period_end_dt.isoformat() if period_end_dt else None,
+        },
+    }
 
 
 # ═══════════════════════════════════════════════════════════════

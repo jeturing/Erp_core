@@ -56,6 +56,23 @@ export const partnerPortalApi = {
     return api.get<PartnerDashboard>(`${BASE}/dashboard`);
   },
 
+  // ── Profile ──
+  async getProfile(): Promise<PartnerProfile> {
+    return api.get<PartnerProfile>(`${BASE}/profile`);
+  },
+
+  async saveProfile(data: {
+    company_name?: string;
+    legal_name?: string;
+    tax_id?: string;
+    contact_name?: string;
+    phone?: string;
+    country?: string;
+    address?: string;
+  }): Promise<{ message: string }> {
+    return api.put(`${BASE}/profile`, data);
+  },
+
   // ── Leads ──
   async getLeads(status?: string): Promise<PartnerLeadsResponse> {
     const qs = status ? `?status_filter=${status}` : '';
@@ -83,6 +100,10 @@ export const partnerPortalApi = {
     return api.get(`${BASE}/deployments`);
   },
 
+  async getDeployment(deploymentId: number): Promise<PartnerDeploymentItem> {
+    return api.get(`${BASE}/deployments/${deploymentId}`);
+  },
+
   async startDeployment(data: {
     company_name: string;
     contact_email: string;
@@ -101,7 +122,7 @@ export const partnerPortalApi = {
   }): Promise<{
     message: string;
     deployment: PartnerDeploymentItem;
-    provisioning: Record<string, unknown>;
+    provisioning: { success?: boolean; queued?: boolean; message?: string } & Record<string, unknown>;
     tenant?: {
       admin_login: string;
       admin_password: string;
@@ -145,6 +166,8 @@ export const partnerPortalApi = {
     message: string;
     customer_id: number;
     subscription_id: number;
+    deployment: PartnerDeploymentItem;
+    provisioning: { success?: boolean; queued?: boolean; message?: string } & Record<string, unknown>;
     tenant?: {
       admin_login: string;
       admin_password: string;

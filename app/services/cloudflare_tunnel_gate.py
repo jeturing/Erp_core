@@ -27,6 +27,7 @@ from ..config import (
     PROXMOX_SSH_HOST,
     PROXMOX_SSH_KEY,
     PROXMOX_SSH_USER,
+    get_runtime_setting,
 )
 
 logger = logging.getLogger(__name__)
@@ -38,6 +39,25 @@ PROXMOX_ADMIN_HELPER = os.getenv("PROXMOX_ADMIN_HELPER", "/usr/local/bin/sajet-p
 # PCT del NPM/cloudflared sidecar
 NPM_PCT_ID = int(os.getenv("NPM_PCT_ID", "205"))
 GATE_SCRIPT = "/usr/local/bin/tenant-web-gate.py"
+
+
+def _tunnels_via_pct205() -> bool:
+    return str(get_runtime_setting("TUNNELS_VIA_PCT205", "true")).strip().lower() == "true"
+
+
+def _tunnel_edge_host() -> str:
+    return get_runtime_setting("TUNNEL_EDGE_HOST", "10.10.20.205")
+
+
+def _tunnel_edge_port() -> int:
+    try:
+        return int(get_runtime_setting("TUNNEL_EDGE_PORT", "80"))
+    except Exception:
+        return 80
+
+
+def _tunnel_remote_config_enabled() -> bool:
+    return str(get_runtime_setting("TUNNEL_REMOTE_CONFIG", "true")).strip().lower() == "true"
 
 
 def _should_use_proxmox_helper() -> bool:
@@ -139,12 +159,37 @@ def add_tenant_route(
     Añade entries HTTP + websocket/longpolling al cloudflared/config.yml para un tenant nuevo.
     Idempotente: si el hostname ya existe, no duplica. Reinicia cloudflared al final.
     """
+    effective_node_ip = node_ip
+    effective_http_port = int(http_port)
+    effective_chat_port = int(chat_port)
+
+    # Política operativa: el tunnel debe salir por PCT205 (Cloudflare + NPM).
+    # El backend final lo resuelve NPM Proxy Host.
+    if _tunnels_via_pct205():
+        effective_node_ip = _tunnel_edge_host()
+        edge_port = _tunnel_edge_port()
+        effective_http_port = edge_port
+        effective_chat_port = edge_port
+
+    if _tunnel_remote_config_enabled():
+        try:
+            from .cloudflare_tunnel_api import add_tenant_routes
+            return add_tenant_routes(
+                subdomain=subdomain,
+                node_ip=str(effective_node_ip),
+                http_port=int(effective_http_port),
+                ws_port=int(effective_chat_port),
+                base_domain=base_domain,
+            )
+        except Exception as exc:
+            logger.warning("cloudflare_tunnel_api add_tenant_routes falló, fallback a gate local: %s", exc)
+
     return _run_gate(
         "add",
         subdomain,
-        "--node-ip", str(node_ip),
-        "--http-port", str(http_port),
-        "--chat-port", str(chat_port),
+        "--node-ip", str(effective_node_ip),
+        "--http-port", str(effective_http_port),
+        "--chat-port", str(effective_chat_port),
         "--base-domain", base_domain,
         timeout=45,
     )
@@ -152,6 +197,13 @@ def add_tenant_route(
 
 def remove_tenant_route(subdomain: str, *, base_domain: str = "sajet.us") -> Dict[str, Any]:
     """Elimina TODOS los entries (http + ws + lp) del tenant en cloudflared/config.yml."""
+    if _tunnel_remote_config_enabled():
+        try:
+            from .cloudflare_tunnel_api import remove_tenant_routes
+            return remove_tenant_routes(subdomain=subdomain, base_domain=base_domain)
+        except Exception as exc:
+            logger.warning("cloudflare_tunnel_api remove_tenant_routes falló, fallback a gate local: %s", exc)
+
     return _run_gate(
         "remove",
         subdomain,

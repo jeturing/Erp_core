@@ -7,6 +7,8 @@
 
   let loading = true
   let saving = false
+  let bulkAssigning = false
+  let bulkResult: { assigned: number; skipped: number; errors: number } | null = null
   let assigningCustomerId: number | null = null
   let search = ''
 
@@ -68,8 +70,8 @@
       toasts.error('Nombre requerido')
       return
     }
-    if (createForm.price_monthly <= 0 || createForm.email_quota_monthly <= 0) {
-      toasts.error('Precio y cuota mensual deben ser mayores a 0')
+    if (createForm.email_quota_monthly <= 0) {
+      toasts.error('La cuota mensual de correos debe ser mayor a 0')
       return
     }
 
@@ -89,8 +91,8 @@
         name: '',
         description: '',
         price_monthly: 0,
-        email_quota_monthly: 0,
-        email_burst_limit_60m: 0,
+        email_quota_monthly: 100,
+        email_burst_limit_60m: 500,
         email_overage_price: 0.0002,
         sort_order: 0,
       }
@@ -166,6 +168,27 @@
     }
   }
 
+  async function bulkAssignFree() {
+    const freePkg = packages.find((p) => p.is_active && p.price_monthly === 0)
+    if (!freePkg) {
+      toasts.error('No hay ningún perfil con precio $0.00 activo. Crea uno primero.')
+      return
+    }
+    if (!confirm(`¿Asignar el perfil "${freePkg.name}" (Free) a todos los tenants sin perfil de correo activo?`)) return
+    bulkAssigning = true
+    bulkResult = null
+    try {
+      const res = await postalAdminApi.bulkAssignFree(freePkg.id)
+      bulkResult = { assigned: res.assigned, skipped: res.skipped, errors: res.errors }
+      toasts.success(`✅ Free asignado: ${res.assigned} tenants | omitidos: ${res.skipped}`)
+      await loadData()
+    } catch (e: any) {
+      toasts.error(e.message || 'Error en asignación masiva')
+    } finally {
+      bulkAssigning = false
+    }
+  }
+
   async function removeProfile(tenant: TenantEmailOverviewItem) {
     const addonId = tenant.active_email_profile?.addon_id
     if (!addonId) {
@@ -217,6 +240,7 @@
         Crear perfil
       </button>
     </div>
+    <p class="mt-2 text-xs text-gray-500">💡 Un precio de <b>$0.00</b> crea un perfil <b>Free</b> que no genera factura.</p>
 
     <div class="mt-5 overflow-x-auto">
       <table class="w-full text-sm">
@@ -262,8 +286,20 @@
   <div class="card">
     <div class="flex flex-col sm:flex-row gap-3 sm:items-center sm:justify-between mb-4">
       <h2 class="section-heading">Asignación por tenant + cobros</h2>
-      <input class="input w-full sm:w-80" placeholder="Buscar por empresa, subdominio o email" bind:value={search} on:keydown={(e) => e.key === 'Enter' && loadData()} />
+      <div class="flex flex-col sm:flex-row gap-2 sm:items-center">
+        <button class="btn btn-secondary btn-sm whitespace-nowrap" on:click={bulkAssignFree} disabled={bulkAssigning}>
+          {#if bulkAssigning}<RefreshCw size={13} class="animate-spin" /> Aplicando...
+          {:else}<Plus size={13} /> Free a todos sin perfil{/if}
+        </button>
+        <input class="input w-full sm:w-80" placeholder="Buscar por empresa, subdominio o email" bind:value={search} on:keydown={(e) => e.key === 'Enter' && loadData()} />
+      </div>
     </div>
+
+    {#if bulkResult}
+      <div class="mb-3 text-xs text-gray-400 bg-surface-2 rounded px-3 py-2">
+        Última asignación masiva — asignados: <b class="text-emerald-400">{bulkResult.assigned}</b> · ya tenían: <b>{bulkResult.skipped}</b> · errores: <b class="text-red-400">{bulkResult.errors}</b>
+      </div>
+    {/if}
 
     <div class="overflow-x-auto">
       <table class="w-full text-sm min-w-[1200px]">

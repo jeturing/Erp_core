@@ -69,5 +69,34 @@ export const neuralUsersApi = {
       user_id: userId
     });
     return res;
+  },
+
+  setPartnerTemporaryActivation: async (data: {
+    user_id: number;
+    action?: 'activate' | 'deactivate' | 'extend';
+    duration?: '24h' | '7d';
+    extension_duration?: '24h' | '7d';
+    enable_onboarding_bypass?: boolean;
+    enable_portal_access?: boolean;
+    justification: string;
+    external_ticket: string;
+  }) => {
+    const res = await api.post<{
+      success: boolean;
+      data: {
+        partner_id: number;
+        portal_access: boolean;
+        onboarding_bypass: boolean;
+        temporary_access_enabled: boolean;
+        temporary_access_expires_at: string | null;
+        temporary_access_scope: string | null;
+        temporary_access_ticket: string | null;
+      };
+      meta: {
+        action: string;
+        processed_at: string;
+      };
+    }>(`/api/neural-users/partner/temporary-activation`, data);
+    return res;
   }
 };

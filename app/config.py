@@ -380,7 +380,7 @@ def smtp_is_configured() -> bool:
 # ═══════════════════════════════════════════════════════
 # Application
 # ═══════════════════════════════════════════════════════
-APP_URL = os.getenv("APP_URL", "http://localhost:4443")
+APP_URL = os.getenv("APP_URL", "https://sajet.us")
 ENVIRONMENT = os.getenv("ENVIRONMENT", "development")
 FORCE_HTTPS = os.getenv("FORCE_HTTPS", "false").lower() == "true"
 ENABLE_WAF = os.getenv("ENABLE_WAF", "true").lower() == "true"

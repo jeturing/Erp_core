@@ -766,6 +766,13 @@ class Partner(Base):
     onboarding_step = Column(Integer, default=0)         # 0=invited, 1=credentials, 2=profile, 3=stripe_kyc, 4=complete
     onboarding_completed_at = Column(DateTime, nullable=True)
     onboarding_bypass = Column(Boolean, default=False)   # True = salta onboarding, va directo al portal
+    partner_temp_access_enabled = Column(Boolean, default=False, nullable=False, server_default="false")
+    partner_temp_access_expires_at = Column(DateTime, nullable=True)
+    partner_temp_access_scope = Column(String(100), nullable=True)  # onboarding_bypass,portal_access
+    partner_temp_access_reason = Column(Text, nullable=True)
+    partner_temp_access_ticket = Column(String(120), nullable=True)
+    partner_temp_access_last_extended_at = Column(DateTime, nullable=True)
+    partner_temp_access_last_extended_by = Column(String(150), nullable=True)
     last_login_at = Column(DateTime, nullable=True)
     login_count = Column(Integer, default=0)
     invited_at = Column(DateTime, nullable=True)

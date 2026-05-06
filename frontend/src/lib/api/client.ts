@@ -86,15 +86,22 @@ class ApiClient {
     }
 
     const controller = new AbortController();
-    const timeoutId = setTimeout(() => controller.abort(), 10000);
+    const timeoutId = setTimeout(() => controller.abort(), 30000);
     let response: Response;
     try {
-      response = await fetch(`${this.baseUrl}${endpoint}`, {
-        ...options,
-        headers,
-        credentials: 'include',
-        signal: options.signal ?? controller.signal,
-      });
+      try {
+        response = await fetch(`${this.baseUrl}${endpoint}`, {
+          ...options,
+          headers,
+          credentials: 'include',
+          signal: options.signal ?? controller.signal,
+        });
+      } catch (err: any) {
+        if (err?.name === 'AbortError') {
+          throw new Error('La solicitud tardó demasiado. Intenta de nuevo.');
+        }
+        throw err;
+      }
     } finally {
       clearTimeout(timeoutId);
     }

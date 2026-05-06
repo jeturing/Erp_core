@@ -1,0 +1,60 @@
+                                                Table "public.proxmox_nodes"
+           Column           |            Type             | Collation | Nullable |                  Default                  
+----------------------------+-----------------------------+-----------+----------+-------------------------------------------
+ id                         | integer                     |           | not null | nextval('proxmox_nodes_id_seq'::regclass)
+ name                       | character varying(100)      |           | not null | 
+ hostname                   | character varying(255)      |           | not null | 
+ api_port                   | integer                     |           |          | 
+ ssh_port                   | integer                     |           |          | 
+ proxmox_version            | character varying(20)       |           |          | 
+ total_cpu_cores            | integer                     |           |          | 
+ total_ram_gb               | double precision            |           |          | 
+ total_storage_gb           | double precision            |           |          | 
+ used_cpu_percent           | double precision            |           |          | 
+ used_ram_gb                | double precision            |           |          | 
+ used_storage_gb            | double precision            |           |          | 
+ max_containers             | integer                     |           |          | 
+ current_containers         | integer                     |           |          | 
+ status                     | nodestatus                  |           |          | 
+ is_database_node           | boolean                     |           |          | 
+ priority                   | integer                     |           |          | 
+ region                     | character varying(50)       |           |          | 
+ api_token_id               | character varying(255)      |           |          | 
+ api_token_secret           | text                        |           |          | 
+ ssh_user                   | character varying(50)       |           |          | 
+ created_at                 | timestamp without time zone |           |          | 
+ updated_at                 | timestamp without time zone |           |          | 
+ last_health_check          | timestamp without time zone |           |          | 
+ ssh_password               | character varying(255)      |           |          | 
+ vmid                       | integer                     |           |          | 
+ odoo_port                  | integer                     |           |          | 8069
+ can_host_tenants           | boolean                     |           | not null | false
+ cpu_threshold_warning      | double precision            |           | not null | 70
+ cpu_threshold_critical     | double precision            |           | not null | 90
+ ram_threshold_warning      | double precision            |           | not null | 75
+ ram_threshold_critical     | double precision            |           | not null | 90
+ storage_threshold_warning  | double precision            |           | not null | 70
+ storage_threshold_critical | double precision            |           | not null | 85
+ tenant_ram_mb              | integer                     |           | not null | 800
+ system_overhead_mb         | integer                     |           | not null | 1200
+ max_tenants_override       | integer                     |           |          | 
+ storage_type               | character varying(20)       |           | not null | 'loop'::character varying
+ io_max_tenants             | integer                     |           | not null | 8
+ auto_drain                 | boolean                     |           | not null | false
+ capacity_score             | double precision            |           | not null | 0
+ stagger_delay_sec          | integer                     |           | not null | 12
+Indexes:
+    "proxmox_nodes_pkey" PRIMARY KEY, btree (id)
+    "ix_proxmox_nodes_id" btree (id)
+    "proxmox_nodes_name_key" UNIQUE CONSTRAINT, btree (name)
+Referenced by:
+    TABLE "lxc_containers" CONSTRAINT "lxc_containers_node_id_fkey" FOREIGN KEY (node_id) REFERENCES proxmox_nodes(id)
+    TABLE "node_capacity_alerts" CONSTRAINT "node_capacity_alerts_node_id_fkey" FOREIGN KEY (node_id) REFERENCES proxmox_nodes(id) ON DELETE CASCADE
+    TABLE "resource_metrics" CONSTRAINT "resource_metrics_node_id_fkey" FOREIGN KEY (node_id) REFERENCES proxmox_nodes(id)
+    TABLE "tenant_deployments" CONSTRAINT "tenant_deployments_active_node_id_fkey" FOREIGN KEY (active_node_id) REFERENCES proxmox_nodes(id) ON DELETE SET NULL
+    TABLE "tenant_deployments" CONSTRAINT "tenant_deployments_desired_node_id_fkey" FOREIGN KEY (desired_node_id) REFERENCES proxmox_nodes(id) ON DELETE SET NULL
+    TABLE "tenant_migration_jobs" CONSTRAINT "tenant_migration_jobs_source_node_id_fkey" FOREIGN KEY (source_node_id) REFERENCES proxmox_nodes(id)
+    TABLE "tenant_migration_jobs" CONSTRAINT "tenant_migration_jobs_target_node_id_fkey" FOREIGN KEY (target_node_id) REFERENCES proxmox_nodes(id)
+Triggers:
+    trg_audit_del_proxmox_nodes BEFORE DELETE ON proxmox_nodes FOR EACH ROW EXECUTE FUNCTION fn_audit_delete_to_remote()
+

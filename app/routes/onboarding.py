@@ -31,7 +31,7 @@ from ..services.email_service import (
     send_subscription_cancelled_email,
     send_tenant_credentials,
 )
-from ..services.stripe_connect import compute_application_fee_percent, should_use_on_behalf_of
+from ..services.stripe_connect import compute_application_fee_percent, should_use_on_behalf_of, compute_onboarding_state
 from ..config import get_runtime_setting
 import logging
 
@@ -803,6 +803,7 @@ async def stripe_webhook(request: Request, background_tasks: BackgroundTasks):
                     and not disabled_reason
                     and (payouts_enabled or charges_enabled)
                 )
+                onboarding_state = compute_onboarding_state(account)
 
                 partner.stripe_charges_enabled = charges_enabled
                 partner.stripe_onboarding_complete = onboarding_ready
@@ -811,10 +812,11 @@ async def stripe_webhook(request: Request, background_tasks: BackgroundTasks):
                     partner.onboarding_completed_at = datetime.now(timezone.utc).replace(tzinfo=None)
                 db.commit()
                 logger.info(
-                    "Stripe Connect sync partner=%s account=%s ready=%s payouts=%s charges=%s",
+                    "Stripe Connect sync partner=%s account=%s ready=%s state=%s payouts=%s charges=%s",
                     partner.id,
                     account.get("id"),
                     onboarding_ready,
+                    onboarding_state,
                     payouts_enabled,
                     charges_enabled,
                 )

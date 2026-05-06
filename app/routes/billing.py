@@ -15,6 +15,13 @@ import logging
 router = APIRouter(prefix="/api/billing", tags=["Billing"])
 logger = logging.getLogger(__name__)
 
+JETURING_INTERNAL_EMAILS = {"admin@sajet.us"}
+
+
+def _is_jeturing_associated_customer(customer: Customer) -> bool:
+    email = (customer.email or "").strip().lower()
+    return bool(customer.is_admin_account) or email in JETURING_INTERNAL_EMAILS
+
 
 def _get_plan_prices(db) -> dict:
     """Obtiene precios de planes desde la BD. Delega a pricing service."""
@@ -38,6 +45,8 @@ def _verify_admin(token: str):
 
 def _subscription_rows(db, *, limit: int, offset: int, status: Optional[str] = None) -> Dict[str, Any]:
     query = db.query(Subscription).join(Customer)
+    query = query.filter(Customer.is_admin_account == False)
+    query = query.filter(~Customer.email.in_(JETURING_INTERNAL_EMAILS))
 
     if status == "paid":
         query = query.filter(Subscription.status == SubscriptionStatus.active)
@@ -107,11 +116,32 @@ async def get_billing_metrics(
     db = SessionLocal()
     try:
         # Conteos por estado y plan
-        active_subs = db.query(Subscription).filter_by(status=SubscriptionStatus.active).all()
-        pending_subs = db.query(Subscription).filter_by(status=SubscriptionStatus.pending).all()
+        active_subs = (
+            db.query(Subscription)
+            .join(Customer)
+            .filter(
+                Subscription.status == SubscriptionStatus.active,
+                Customer.is_admin_account == False,
+                ~Customer.email.in_(JETURING_INTERNAL_EMAILS),
+            )
+            .all()
+        )
+        pending_subs = (
+            db.query(Subscription)
+            .join(Customer)
+            .filter(
+                Subscription.status == SubscriptionStatus.pending,
+                Customer.is_admin_account == False,
+                ~Customer.email.in_(JETURING_INTERNAL_EMAILS),
+            )
+            .all()
+        )
         cancelled_30d = db.query(Subscription).filter(
             Subscription.status == SubscriptionStatus.cancelled,
             Subscription.updated_at >= datetime.now(timezone.utc).replace(tzinfo=None) - timedelta(days=30)
+        ).join(Customer).filter(
+            Customer.is_admin_account == False,
+            ~Customer.email.in_(JETURING_INTERNAL_EMAILS),
         ).count()
         
         # Calcular MRR por plan (dinámico desde BD)
@@ -208,19 +238,25 @@ async def get_billing_comparison(
         previous_month_start = (current_month_start - timedelta(days=1)).replace(day=1)
         
         # Suscripciones activas actuales
-        current_active = db.query(Subscription).filter(
-            Subscription.status == SubscriptionStatus.active
+        current_active = db.query(Subscription).join(Customer).filter(
+            Subscription.status == SubscriptionStatus.active,
+            Customer.is_admin_account == False,
+            ~Customer.email.in_(JETURING_INTERNAL_EMAILS),
         ).all()
         
         # Nuevos clientes este mes
         new_customers = db.query(Customer).filter(
-            Customer.created_at >= current_month_start
+            Customer.created_at >= current_month_start,
+            Customer.is_admin_account == False,
+            ~Customer.email.in_(JETURING_INTERNAL_EMAILS),
         ).count()
         
         # Cancelaciones este mes
-        lost_customers = db.query(Subscription).filter(
+        lost_customers = db.query(Subscription).join(Customer).filter(
             Subscription.status == SubscriptionStatus.cancelled,
-            Subscription.updated_at >= current_month_start
+            Subscription.updated_at >= current_month_start,
+            Customer.is_admin_account == False,
+            ~Customer.email.in_(JETURING_INTERNAL_EMAILS),
         ).count()
         
         # Calcular MRR actual (dinámico con user_count)

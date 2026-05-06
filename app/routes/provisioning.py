@@ -525,6 +525,8 @@ async def _configure_public_routing(
     """Configura NPM/PCT205 + Cloudflare y valida salud sin bloquear con excepciones."""
     fqdn = f"{subdomain}.{domain}"
     node_ip = server_config["ip"]
+    tunnel_edge_host = get_runtime_setting("TUNNEL_EDGE_HOST", "10.10.20.205")
+    tunnel_edge_port = get_runtime_int("TUNNEL_EDGE_PORT", 80)
     result: dict = {"domain": fqdn, "node_ip": node_ip, "http_port": http_port, "chat_port": chat_port}
 
     try:
@@ -546,9 +548,9 @@ async def _configure_public_routing(
         from ..services.cloudflare_tunnel_gate import add_tenant_route
         gate_result = add_tenant_route(
             subdomain=subdomain,
-            node_ip=node_ip,
-            http_port=http_port,
-            chat_port=chat_port,
+            node_ip=tunnel_edge_host,
+            http_port=tunnel_edge_port,
+            chat_port=tunnel_edge_port,
             base_domain=domain,
         )
         result["pct205_gate"] = gate_result

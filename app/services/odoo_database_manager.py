@@ -368,7 +368,10 @@ def _parse_server_status(value: Any) -> ServerStatus:
     try:
         if not value:
             return ServerStatus.online
-        normalized = str(value).strip().lower()
+        if hasattr(value, "value"):
+            normalized = str(value.value).strip().lower()
+        else:
+            normalized = str(value).strip().lower()
         return ServerStatus(normalized)
     except Exception:
         return ServerStatus.online
@@ -467,9 +470,19 @@ def refresh_odoo_servers() -> Dict[str, OdooServer]:
         # NodeRegistry es async, pero refresh es sync context.
         # Actualizamos desde BD directamente.
         servers = registry._load_from_db()
-        if servers:
+        has_online_hosting = any(
+            getattr(server, "can_host_tenants", False)
+            and _parse_server_status(getattr(server, "status", ServerStatus.online)) == ServerStatus.online
+            for server in servers.values()
+        ) if servers else False
+
+        if servers and has_online_hosting:
             ODOO_SERVERS = servers
         else:
+            if servers and not has_online_hosting:
+                logger.warning(
+                    "NodeRegistry devolvió nodos sin capacidad online para tenants; usando fallback de configuración"
+                )
             ODOO_SERVERS = _build_odoo_servers()
     except Exception:
         ODOO_SERVERS = _build_odoo_servers()
@@ -1061,36 +1074,46 @@ async def select_best_server() -> Optional[OdooServer]:
     try:
         from .node_registry import get_node_registry
         registry = get_node_registry()
-        return await registry.select_best_for_tenant()
+        selected = await registry.select_best_for_tenant()
+        if selected:
+            return selected
+        logger.warning("NodeRegistry no devolvió servidor elegible; usando fallback legacy")
     except Exception as e:
         logger.warning(f"NodeRegistry no disponible, usando fallback legacy: {e}")
-        # Fallback legacy para compatibilidad
-        refresh_odoo_servers()
-        best_server = None
-        best_score = -1
 
-        for server in _iter_tenant_hosting_servers():
-            if server.status != ServerStatus.online:
-                continue
+    # Fallback legacy para compatibilidad
+    refresh_odoo_servers()
+    best_server = None
+    best_score = -1
 
-            try:
-                async with OdooDatabaseManager(server) as manager:
-                    databases = await manager.list_databases()
-                    server.current_databases = len(databases)
+    for server in _iter_tenant_hosting_servers():
+        if server.status != ServerStatus.online:
+            continue
 
-                    if server.available_slots <= 0:
-                        continue
+        try:
+            async with OdooDatabaseManager(server) as manager:
+                databases = await manager.list_databases()
+                server.current_databases = len(databases)
 
-                    score = server.priority * server.available_slots
+                if server.available_slots <= 0:
+                    continue
 
-                    if score > best_score:
-                        best_score = score
-                        best_server = server
-            except Exception as ex:
-                logger.warning(f"Servidor {server.id} no disponible: {ex}")
-                continue
+                score = server.priority * server.available_slots
 
-        return best_server
+                if score > best_score:
+                    best_score = score
+                    best_server = server
+        except Exception as ex:
+            # Modo degradado: para fast-path SQL no necesitamos HTTP /web/database/list.
+            # Si el nodo está marcado online y puede hostear tenants, lo mantenemos elegible.
+            logger.warning(f"Servidor {server.id} no disponible por HTTP ({ex}); usando score degradado")
+            degraded_score = max(server.priority, 1)
+            if degraded_score > best_score:
+                best_score = degraded_score
+                best_server = server
+            continue
+
+    return best_server
 
 
 async def provision_tenant(

@@ -115,4 +115,8 @@ export const postalAdminApi = {
   async deactivateTenantSubscription(addonId: number): Promise<{ message: string; addon_id: number }> {
     return api.delete(`${BASE}/tenant-subscriptions/${addonId}`)
   },
+
+    async bulkAssignFree(catalogItemId: number): Promise<{ message: string; assigned: number; skipped: number; errors: number }> {
+      return api.post(`${BASE}/bulk-assign-free`, { catalog_item_id: catalogItemId })
+    },
 }

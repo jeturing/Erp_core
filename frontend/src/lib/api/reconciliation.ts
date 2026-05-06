@@ -20,7 +20,12 @@ export const reconciliationApi = {
     if (params?.limit) qs.set('limit', String(params.limit));
     if (params?.offset) qs.set('offset', String(params.offset));
     const q = qs.toString();
-    return api.get<ReconciliationListResponse>(`/api/reconciliation/runs${q ? '?' + q : ''}`);
+
+    const raw = await api.get<{ total: number; runs: ReconciliationRun[] }>(`/api/reconciliation/runs${q ? '?' + q : ''}`);
+    return {
+      items: raw.runs || [],
+      total: raw.total || 0,
+    };
   },
 
   async get(id: number): Promise<ReconciliationRun> {

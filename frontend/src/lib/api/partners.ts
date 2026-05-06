@@ -48,6 +48,10 @@ export const partnersApi = {
     return api.post(`/api/partners/${id}/activate`);
   },
 
+  async setWhiteLabel(partnerId: number, enabled: boolean): Promise<{ success: boolean; message: string }> {
+    return api.post('/api/branding/admin/enable-whitelabel', { partner_id: partnerId, enabled });
+  },
+
   // ── Leads ──
   async getLeads(partnerId?: number, statusFilter?: string): Promise<LeadsResponse> {
     const params = new URLSearchParams();

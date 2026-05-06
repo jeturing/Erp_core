@@ -32,7 +32,12 @@ def _configure_stripe() -> str:
 
 
 def _app_url() -> str:
-    return get_runtime_setting("APP_URL", "https://sajet.us")
+    """Retorna la URL base de la app, siempre en HTTPS.
+    En producción, fuerza HTTPS si config tiene HTTP."""
+    url = get_runtime_setting("APP_URL", "https://sajet.us")
+    if url and url.startswith("http://"):
+        url = url.replace("http://", "https://", 1)
+    return url
 
 
 def _platform_country() -> str:
@@ -93,6 +98,28 @@ def _read_value(container: Any, field: str, default: Any = None) -> Any:
     return getattr(container, field, default)
 
 
+def compute_onboarding_state(account: Any) -> str:
+    """Calcula estado resumido de onboarding para alinear API + webhooks."""
+    requirements = _read_value(account, "requirements", {}) or {}
+    currently_due = list(_read_value(requirements, "currently_due", []) or [])
+    past_due = list(_read_value(requirements, "past_due", []) or [])
+    disabled_reason = _read_value(requirements, "disabled_reason")
+
+    details_submitted = bool(_read_value(account, "details_submitted", False))
+    charges_enabled = bool(_read_value(account, "charges_enabled", False))
+    payouts_enabled = bool(_read_value(account, "payouts_enabled", False))
+
+    if disabled_reason:
+        return "blocked"
+    if not details_submitted:
+        return "pending_details"
+    if currently_due or past_due:
+        return "requirements_due"
+    if charges_enabled or payouts_enabled:
+        return "ready"
+    return "pending_capabilities"
+
+
 def serialize_account_status(account: Any) -> Dict[str, Any]:
     requirements = _read_value(account, "requirements", {}) or {}
     capabilities = _read_value(account, "capabilities", {}) or {}
@@ -112,6 +139,7 @@ def serialize_account_status(account: Any) -> Dict[str, Any]:
         and not disabled_reason
         and (payouts_enabled or charges_enabled)
     )
+    onboarding_state = compute_onboarding_state(account)
 
     settlement_mode = "cross_border" if is_cross_border_country(country) else "domestic"
 
@@ -132,6 +160,7 @@ def serialize_account_status(account: Any) -> Dict[str, Any]:
         "transfers_status": _read_value(capabilities, "transfers"),
         "card_payments_status": _read_value(capabilities, "card_payments"),
         "onboarding_ready": onboarding_ready,
+        "onboarding_state": onboarding_state,
         "settlement_mode": settlement_mode,
         "supports_self_serve_cross_border": supports_self_serve_cross_border(country),
     }
@@ -154,7 +183,7 @@ async def create_connect_account(
     _configure_stripe()
     try:
         normalized_country = normalize_country_code(partner_country, "US")
-        capabilities = {
+        capabilities: Dict[str, Any] = {
             "transfers": {"requested": True},
         }
         if should_request_card_payments(normalized_country):
@@ -166,7 +195,7 @@ async def create_connect_account(
             country=normalized_country,
             business_type="company",
             company={"name": partner_company},
-            capabilities=capabilities,
+            capabilities=capabilities,  # type: ignore[arg-type]
             metadata={
                 "platform": "sajet",
                 "partner_email": partner_email,
@@ -181,7 +210,7 @@ async def create_connect_account(
             "account_id": account.id,
         }
 
-    except stripe.error.StripeError as e:
+    except Exception as e:
         logger.error(f"Error creando Connect account: {e}")
         return {"success": False, "error": str(e)}
 
@@ -209,7 +238,7 @@ async def create_onboarding_link(
             "expires_at": link.expires_at,
         }
 
-    except stripe.error.StripeError as e:
+    except Exception as e:
         logger.error(f"Error creando onboarding link: {e}")
         return {"success": False, "error": str(e)}
 
@@ -223,7 +252,7 @@ async def create_login_link(account_id: str) -> Dict[str, Any]:
     try:
         link = stripe.Account.create_login_link(account_id)
         return {"success": True, "url": link.url}
-    except stripe.error.StripeError as e:
+    except Exception as e:
         logger.error(f"Error creando login link: {e}")
         return {"success": False, "error": str(e)}
 
@@ -237,7 +266,7 @@ async def get_account_status(account_id: str) -> Dict[str, Any]:
         account = stripe.Account.retrieve(account_id)
         return serialize_account_status(account)
 
-    except stripe.error.StripeError as e:
+    except Exception as e:
         logger.error(f"Error consultando Connect account: {e}")
         return {"success": False, "error": str(e)}
 
@@ -282,7 +311,7 @@ async def create_transfer(
             "destination": destination_account_id,
         }
 
-    except stripe.error.StripeError as e:
+    except Exception as e:
         logger.error(f"Error en transfer: {e}")
         return {"success": False, "error": str(e)}
 
@@ -292,8 +321,8 @@ async def create_checkout_with_split(
     price_id: str,
     partner_account_id: str,
     partner_commission_pct: float = 50.0,
-    success_url: str = None,
-    cancel_url: str = None,
+    success_url: Optional[str] = None,
+    cancel_url: Optional[str] = None,
     metadata: Optional[dict] = None,
 ) -> Dict[str, Any]:
     """
@@ -315,9 +344,6 @@ async def create_checkout_with_split(
             customer=customer_stripe_id,
             mode="subscription",
             line_items=[{"price": price_id, "quantity": 1}],
-            payment_intent_data={
-                "application_fee_amount": None,  # Se calcula con subscription_data
-            },
             subscription_data={
                 "application_fee_percent": jeturing_pct,
                 "transfer_data": {
@@ -340,7 +366,7 @@ async def create_checkout_with_split(
             "jeturing_pct": jeturing_pct,
         }
 
-    except stripe.error.StripeError as e:
+    except Exception as e:
         logger.error(f"Error creando checkout con split: {e}")
         return {"success": False, "error": str(e)}
 
@@ -363,7 +389,7 @@ async def get_partner_balance(account_id: str) -> Dict[str, Any]:
             "currency": balance.available[0].currency if balance.available else "usd",
         }
 
-    except stripe.error.StripeError as e:
+    except Exception as e:
         logger.error(f"Error consultando balance: {e}")
         return {"success": False, "error": str(e)}
 

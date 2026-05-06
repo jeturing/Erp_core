@@ -47,8 +47,62 @@ export const invoicesApi = {
 
   async markPaid(id: number, data?: {
     stripe_payment_intent_id?: string;
-  }): Promise<{ message: string; invoice: InvoiceItem }> {
+    notes?: string;
+    mode?: 'stripe_only' | 'auditable_override';
+    override_reason?: string;
+  }): Promise<{
+    success: boolean;
+    data: {
+      invoice_number: string;
+      status: string;
+      mode: string;
+    };
+    meta: Record<string, unknown>;
+  }> {
     return api.post(`/api/invoices/${id}/mark-paid`, data || {});
+  },
+
+  async reconciliationSummary(): Promise<{
+    success: boolean;
+    data: {
+      total_invoices: number;
+      stripe_backed_invoices: number;
+      manual_invoices: number;
+      paid_invoices: number;
+      paid_without_stripe_trace: number;
+      auditable_overrides: number;
+    };
+    meta: {
+      generated_at: string;
+    };
+  }> {
+    return api.get('/api/invoices/reconciliation/summary');
+  },
+
+  async previewPartnerMonthly(data: {
+    partner_id: number;
+    period_start?: string;
+    period_end?: string;
+  }): Promise<{
+    success: boolean;
+    data: {
+      partner_id: number;
+      partner_name: string;
+      tenants: Array<Record<string, unknown>>;
+      totals: {
+        subtotal: number;
+        tax: number;
+        total: number;
+        currency: string;
+      };
+    };
+    meta: {
+      period_start: string;
+      period_end: string;
+      tenants_count: number;
+    };
+  }> {
+    return api.post('/api/invoices/generate-partner-monthly-preview', data);
   },
 };
 

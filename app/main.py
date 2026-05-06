@@ -63,6 +63,7 @@ from .security.middleware import SecurityMiddleware, WAFMiddleware
 from .security.cors_dynamic import DynamicCORSMiddleware, refresh_cors_cache
 from .security.gateway_auth import gateway_api_key_dependency
 from .security.api_scopes import ApiAccessLevel
+from starlette.middleware.trustedhost import TrustedHostMiddleware
 
 import sentry_sdk
 from sentry_sdk.integrations.fastapi import FastApiIntegration
@@ -196,6 +197,10 @@ class DocsBasicAuthMiddleware(BaseHTTPMiddleware):
 # Origins are cached in-memory with 60s TTL. Zero latency on requests.
 # Refresh cache manually: POST /api/admin/cors/refresh
 app.add_middleware(DynamicCORSMiddleware)
+
+# TrustedHost middleware — respeta X-Forwarded-Proto del proxy nginx
+# Crítico para que Starlette construya URLs correctas (HTTPS vs HTTP)
+app.add_middleware(TrustedHostMiddleware, allowed_hosts=["localhost", "127.0.0.1", "sajet.us", "*.sajet.us", "10.10.20.202"])
 
 # Security Middleware (HTTPS enforcement, security headers)
 app.add_middleware(SecurityMiddleware, force_https=FORCE_HTTPS)

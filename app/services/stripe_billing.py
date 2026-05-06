@@ -22,7 +22,7 @@ from sqlalchemy.orm import Session
 from ..models.database import (
     Customer, Subscription, SubscriptionStatus, Plan,
     Invoice, InvoiceStatus, InvoiceType, InvoiceIssuer,
-    BillingMode, Partner, SessionLocal, CustomerAddonSubscription, SeatHighWater,
+    BillingMode, Partner, SessionLocal, CustomerAddonSubscription, SeatHighWater, SeatEvent,
 )
 from ..config import get_runtime_setting
 from ..services.pricing import (
@@ -33,6 +33,26 @@ from ..services.pricing import (
 logger = logging.getLogger(__name__)
 
 PAYABLE_INVOICE_STATUSES = {"draft", "issued", "open", "overdue", "past_due"}
+INTERNAL_BILLING_EMAIL_DOMAINS = {"sajet.us", "jeturing.com"}
+
+
+def _is_internal_billing_email(value: Optional[str]) -> bool:
+    email = (value or "").strip().lower()
+    if "@" not in email:
+        return False
+    domain = email.split("@", 1)[1]
+    return domain in INTERNAL_BILLING_EMAIL_DOMAINS
+
+
+def _is_partner_billed_subscription(subscription: Subscription) -> bool:
+    mode = subscription.billing_mode
+    return bool(
+        subscription.owner_partner_id
+        or mode in {
+            BillingMode.PARTNER_DIRECT,
+            BillingMode.PARTNER_PAYS_FOR_CLIENT,
+        }
+    )
 
 
 def _configure_stripe() -> str:
@@ -162,6 +182,42 @@ def _resolve_period_user_count(
 
     live_count = getattr(subscription, "user_count", None) or (customer.user_count if customer else None) or 1
     return max(1, int(live_count)), "live_user_count"
+
+
+def _resolve_partner_billable_user_count(
+    db: Session,
+    subscription: Subscription,
+    *,
+    period_start: datetime,
+    period_end: datetime,
+    fallback_count: int,
+) -> tuple[int, str, dict]:
+    """
+    Estimación de seats billables para partner:
+    - Parte del HWM/live count.
+    - Descuenta cuentas internas detectadas por dominio (@sajet.us, @jeturing.com)
+      en eventos del período.
+    """
+    internal_logins = (
+        db.query(SeatEvent.odoo_login)
+        .filter(
+            SeatEvent.subscription_id == subscription.id,
+            SeatEvent.created_at >= period_start,
+            SeatEvent.created_at < period_end,
+            SeatEvent.odoo_login.isnot(None),
+        )
+        .all()
+    )
+    internal_unique = {
+        login.lower().strip()
+        for (login,) in internal_logins
+        if _is_internal_billing_email(login)
+    }
+    discounted = max(1, int(fallback_count) - len(internal_unique))
+    return discounted, "partner_excluding_internal_domains", {
+        "fallback_count": int(fallback_count),
+        "internal_accounts_detected": len(internal_unique),
+    }
 
 
 def _invoice_has_metered_addons(invoice: Invoice) -> bool:
@@ -630,6 +686,17 @@ def generate_consumption_invoice(
         period_start=period_start,
         period_end=period_end,
     )
+
+    usage_meta = {}
+    if _is_partner_billed_subscription(sub):
+        period_user_count, usage_source, usage_meta = _resolve_partner_billable_user_count(
+            db,
+            sub,
+            period_start=period_start,
+            period_end=period_end,
+            fallback_count=period_user_count,
+        )
+
     pricing_snapshot = get_effective_plan_snapshot(
         db,
         sub,
@@ -738,11 +805,24 @@ def generate_consumption_invoice(
     )
 
     # Push a Stripe
-    try:
-        stripe_result = push_invoice_to_stripe(db, invoice)
-    except Exception as e:
-        stripe_result = {"error": str(e), "stripe_invoice_id": None}
-        logger.error(f"Error pushing invoice to Stripe: {e}")
+    if _is_partner_billed_subscription(sub):
+        if invoice.status == InvoiceStatus.draft:
+            invoice.status = InvoiceStatus.issued
+            invoice.issued_at = datetime.now(timezone.utc).replace(tzinfo=None)
+        note = "partner_billing_local_invoice_only"
+        if note not in (invoice.notes or ""):
+            invoice.notes = f"{(invoice.notes or '').strip()} {note}".strip()
+        stripe_result = {
+            "skipped": True,
+            "reason": "partner_billed_subscription",
+            "stripe_invoice_id": None,
+        }
+    else:
+        try:
+            stripe_result = push_invoice_to_stripe(db, invoice)
+        except Exception as e:
+            stripe_result = {"error": str(e), "stripe_invoice_id": None}
+            logger.error(f"Error pushing invoice to Stripe: {e}")
 
     db.commit()
 
@@ -756,6 +836,7 @@ def generate_consumption_invoice(
         "period_end": period_end.isoformat() if period_end else None,
         "pricing_source": pricing_snapshot["pricing_source"],
         "usage_source": usage_source,
+        "usage_meta": usage_meta,
         "resolved_user_count": pricing_snapshot["user_count"],
         "stripe_result": stripe_result,
     }

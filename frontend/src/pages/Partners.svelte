@@ -8,7 +8,7 @@ import { fly, fade, slide } from 'svelte/transition';
     Handshake, Plus, Search, Building2, Mail, Phone, Globe,
     CheckCircle, Clock, XCircle, Pencil, Trash2, UserCheck, DollarSign,
     KeyRound, Eye, EyeOff, Copy, ShieldCheck, Loader2, RefreshCw, Users,
-    Link2, Unlink, ArrowRightLeft, Hash,
+    Link2, Unlink, ArrowRightLeft, Hash, Palette,
   } from 'lucide-svelte';
   import { billingApi } from '../lib/api/billing';
   import type { PartnerPricingOverrideItem } from '../lib/types';
@@ -409,6 +409,18 @@ import { fly, fade, slide } from 'svelte/transition';
     }
   }
 
+  async function toggleWhiteLabel(p: any) {
+    const newVal = !p.white_label_enabled;
+    try {
+      const res = await partnersApi.setWhiteLabel(p.id, newVal);
+      toasts.success(res.message || `Marca Blanca ${newVal ? 'habilitada' : 'deshabilitada'}`);
+      p.white_label_enabled = newVal;
+      partners = [...partners]; // trigger reactivity
+    } catch (e: any) {
+      toasts.error(e.message || 'Error actualizando Marca Blanca');
+    }
+  }
+
   $: filtered = partners.filter(p =>
     p.company_name.toLowerCase().includes(search.toLowerCase()) ||
     p.contact_email.toLowerCase().includes(search.toLowerCase()) ||
@@ -599,6 +611,11 @@ import { fly, fade, slide } from 'svelte/transition';
                     <KeyRound size={14} />
                   </button>
                   <button class="btn-sm btn-secondary" title="Tarifario" on:click={() => togglePricing(p.id)}><DollarSign size={14} /></button>
+                  <button
+                    class="btn-sm {p.white_label_enabled ? 'btn-accent' : 'btn-secondary'}"
+                    title="{p.white_label_enabled ? 'Deshabilitar' : 'Habilitar'} Marca Blanca"
+                    on:click={() => toggleWhiteLabel(p)}
+                  ><Palette size={14} /></button>
                   <button class="btn-sm btn-secondary" title="Editar" on:click={() => editPartner(p)}><Pencil size={14} /></button>
                   {#if p.status === 'pending'}
                     <button class="btn-sm btn-accent" title="Activar" on:click={() => activatePartner(p.id)}><UserCheck size={14} /></button>

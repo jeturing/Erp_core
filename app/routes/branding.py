@@ -8,13 +8,16 @@ Branding Routes — Épica 10: Partner White-Label Branding Profiles
 - GET  /api/branding/tenant/{subdomain} → Resolver branding por subdomain del tenant
 - POST /api/branding/admin/enable-whitelabel → Admin habilita WL para partner
 """
-from fastapi import APIRouter, HTTPException, Depends
+from fastapi import APIRouter, HTTPException, Depends, UploadFile, File, Request, Cookie
 from pydantic import BaseModel
 from typing import Optional
 from sqlalchemy.orm import Session
 import logging
+from pathlib import Path
+from uuid import uuid4
 
 from ..models.database import PartnerBrandingProfile, Partner, Customer, get_db
+from .roles import _require_admin
 
 router = APIRouter(prefix="/api/branding", tags=["Branding"])
 logger = logging.getLogger(__name__)
@@ -315,4 +318,98 @@ def admin_enable_whitelabel(
         "company_name": partner.company_name,
         "white_label_enabled": partner.white_label_enabled,
         "message": f"Marca Blanca {'habilitada' if payload.enabled else 'deshabilitada'} para {partner.company_name}",
+    }
+
+
+@router.post("/profiles/{profile_id}/assets/{asset_type}")
+async def upload_branding_asset(
+    profile_id: int,
+    asset_type: str,
+    request: Request,
+    access_token: Optional[str] = Cookie(None),
+    file: UploadFile = File(...),
+    db: Session = Depends(get_db),
+):
+    """Sube assets de branding: logo, favicon y og image."""
+    _require_admin(request, access_token)
+
+    profile = db.query(PartnerBrandingProfile).filter(PartnerBrandingProfile.id == profile_id).first()
+    if not profile:
+        raise HTTPException(404, "Branding profile not found")
+
+    normalized_type = (asset_type or "").strip().lower()
+    if normalized_type not in {"logo", "favicon", "og"}:
+        raise HTTPException(400, "asset_type inválido. Usa: logo | favicon | og")
+
+    allowed_mime_by_asset = {
+        "logo": {"image/png", "image/jpeg", "image/webp", "image/svg+xml"},
+        "favicon": {"image/png", "image/x-icon", "image/vnd.microsoft.icon", "image/svg+xml"},
+        "og": {"image/png", "image/jpeg", "image/webp"},
+    }
+    max_size_by_asset = {
+        "logo": 3 * 1024 * 1024,
+        "favicon": 1 * 1024 * 1024,
+        "og": 5 * 1024 * 1024,
+    }
+
+    ext = Path(file.filename or "").suffix.lower() if file.filename else ""
+    if not ext:
+        ext = {
+            "image/png": ".png",
+            "image/jpeg": ".jpg",
+            "image/webp": ".webp",
+            "image/svg+xml": ".svg",
+            "image/x-icon": ".ico",
+            "image/vnd.microsoft.icon": ".ico",
+        }.get(file.content_type or "", "")
+
+    allowed_ext_by_asset = {
+        "logo": {".png", ".jpg", ".jpeg", ".webp", ".svg"},
+        "favicon": {".png", ".ico", ".svg"},
+        "og": {".png", ".jpg", ".jpeg", ".webp"},
+    }
+    if ext not in allowed_ext_by_asset[normalized_type]:
+        raise HTTPException(400, f"Formato no soportado para {normalized_type}: {sorted(allowed_ext_by_asset[normalized_type])}")
+
+    if file.content_type and file.content_type not in allowed_mime_by_asset[normalized_type]:
+        raise HTTPException(400, f"MIME no soportado para {normalized_type}: {file.content_type}")
+
+    base_dir = Path("/opt/Erp_core/static/branding/partners") / str(profile.partner_id)
+    base_dir.mkdir(parents=True, exist_ok=True)
+    filename = f"{normalized_type}-{uuid4().hex}{ext}"
+    target = base_dir / filename
+
+    content = await file.read()
+    if not content:
+        raise HTTPException(400, "Archivo vacío")
+
+    max_size = max_size_by_asset[normalized_type]
+    if len(content) > max_size:
+        raise HTTPException(400, f"Archivo excede {max_size // (1024 * 1024)}MB para {normalized_type}")
+
+    target.write_bytes(content)
+    asset_url = f"/static/branding/partners/{profile.partner_id}/{filename}"
+
+    updated_field = None
+    if normalized_type == "logo":
+        profile.logo_url = asset_url
+        updated_field = "logo_url"
+    elif normalized_type == "favicon":
+        profile.favicon_url = asset_url
+        updated_field = "favicon_url"
+
+    db.commit()
+
+    return {
+        "success": True,
+        "data": {
+            "profile_id": profile.id,
+            "asset_type": normalized_type,
+            "asset_url": asset_url,
+            "updated_field": updated_field,
+        },
+        "meta": {
+            "content_type": file.content_type,
+            "size": len(content),
+        },
     }

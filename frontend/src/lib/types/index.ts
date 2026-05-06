@@ -131,6 +131,7 @@ export interface PartnerDeploymentItem {
   tenant_url: string | null;
   plan_name: string;
   user_count: number;
+  is_running: boolean;
   billing_mode: string;
   industry: string | null;
   blueprint_package_name: string | null;
@@ -158,6 +159,14 @@ export interface PartnerDeploymentItem {
   tenant_ready_at: string | null;
   invoiced_at: string | null;
   completed_at: string | null;
+  availability_test: {
+    status: string;
+    ok?: boolean;
+    url?: string;
+    status_code?: number;
+    error?: string;
+    reason?: string;
+  } | null;
   invoice: {
     id: number;
     invoice_number: string;
@@ -953,6 +962,7 @@ export interface PartnerItem {
   margin_cap: number;
   status: PartnerStatusType;
   portal_access: boolean;
+  white_label_enabled: boolean;
   partner_code: string | null;
   stripe_account_id: string | null;
   contract_signed_at: string | null;
