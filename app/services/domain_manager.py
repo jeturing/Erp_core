@@ -6,7 +6,7 @@ Flujo:
 1. Cliente registra dominio externo (www.impulse-max.com)
 2. Sistema lo vincula al subdominio SAJET del tenant (ej: techeels.sajet.us)
 3. Sistema crea/asegura el CNAME interno en Cloudflare para el subdominio SAJET
-4. Cliente configura su dominio externo hacia la IP pública de PCT160
+4. Cliente configura su dominio externo hacia la IP pública/gateway que termina en PCT205
 5. Sistema verifica y activa el dominio
 """
 
@@ -22,6 +22,7 @@ from sqlalchemy.exc import IntegrityError
 from ..config import get_runtime_setting
 from ..models.database import CustomDomain, Customer, TenantDeployment, DomainVerificationStatus
 from .nginx_domain_configurator import NginxDomainConfigurator
+from .npm_proxy_manager import create_custom_domain_proxy_host_sync, delete_proxy_host_by_domain_sync
 from .odoo_website_configurator import OdooWebsiteConfigurator
 
 logger = logging.getLogger("domain_manager")
@@ -787,7 +788,12 @@ class DomainManager:
         return {"tenant_db": tenant_db, "tenant_subdomain": tenant_subdomain}
 
     def _configure_nginx_for_domain(self, domain: CustomDomain) -> Dict[str, Any]:
-        """Configura nginx en PCT160 y CT105 para un dominio."""
+        """Configura el proxy host en NPM/PCT205 para un dominio.
+
+        El flag historico `nginx_configured` se conserva por compatibilidad de
+        API/UI. Desde la estandarizacion PCT205 la ruta normal es Nginx Proxy
+        Manager via sidecar, no nginx legacy en PCT160/CT105.
+        """
         try:
             info = self._resolve_tenant_info(domain)
             node_ip = _effective_target_node_ip(
@@ -797,54 +803,42 @@ class DomainManager:
                 domain.target_node_ip = node_ip
                 self.db.commit()
 
-            configurator = NginxDomainConfigurator()
-            result = configurator.configure_domain(
+            result = create_custom_domain_proxy_host_sync(
                 external_domain=domain.external_domain,
-                tenant_db=info["tenant_db"],
                 tenant_subdomain=info["tenant_subdomain"],
-                node_ip=node_ip,
+                forward_host=node_ip,
+                forward_port=domain.target_port or 80,
+                ssl_forced=False,
+                allow_websocket_upgrade=True,
             )
 
             if result["success"]:
                 domain.nginx_configured = True
                 self.db.commit()
-                logger.info(f"Nginx configurado para {domain.external_domain}")
+                logger.info(f"NPM/PCT205 configurado para {domain.external_domain}")
             else:
-                logger.error(f"Nginx falló para {domain.external_domain}: {result.get('error')}")
+                logger.error(f"NPM/PCT205 falló para {domain.external_domain}: {result.get('error')}")
 
             return result
         except Exception as e:
-            logger.error(f"Error configurando nginx para {domain.external_domain}: {e}")
+            logger.error(f"Error configurando NPM/PCT205 para {domain.external_domain}: {e}")
             return {"success": False, "error": str(e)}
 
     def _remove_nginx_for_domain(self, domain: CustomDomain) -> Dict[str, Any]:
-        """Elimina configuración nginx de PCT160 y nodo Odoo para un dominio."""
+        """Elimina configuración del proxy host en NPM/PCT205 para un dominio."""
         try:
-            info = self._resolve_tenant_info(domain)
-            node_ip = _effective_target_node_ip(
-                domain.target_node_ip or get_runtime_setting("ODOO_PRIMARY_IP", "")
-            )
-            if node_ip != domain.target_node_ip:
-                domain.target_node_ip = node_ip
-                self.db.commit()
-
-            configurator = NginxDomainConfigurator()
-            result = configurator.remove_domain(
-                external_domain=domain.external_domain,
-                tenant_subdomain=info["tenant_subdomain"],
-                node_ip=node_ip,
-            )
+            result = delete_proxy_host_by_domain_sync(domain.external_domain)
 
             if result["success"]:
                 domain.nginx_configured = False
                 self.db.commit()
-                logger.info(f"Nginx eliminado para {domain.external_domain}")
+                logger.info(f"NPM/PCT205 eliminado para {domain.external_domain}")
             else:
-                logger.error(f"Nginx remove falló para {domain.external_domain}: {result.get('error')}")
+                logger.error(f"NPM/PCT205 remove falló para {domain.external_domain}: {result.get('error')}")
 
             return result
         except Exception as e:
-            logger.error(f"Error eliminando nginx para {domain.external_domain}: {e}")
+            logger.error(f"Error eliminando NPM/PCT205 para {domain.external_domain}: {e}")
             return {"success": False, "error": str(e)}
 
     def configure_nginx_manual(self, domain_id: int) -> Dict[str, Any]:

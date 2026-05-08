@@ -61,6 +61,7 @@ declare module '$env/static/private' {
 	export const SSL_CERT_FILE: string;
 	export const npm_config_userconfig: string;
 	export const npm_config_local_prefix: string;
+	export const SERVER_PATH: string;
 	export const PYDEVD_DISABLE_FILE_VALIDATION: string;
 	export const BUNDLED_DEBUGPY_PATH: string;
 	export const VSCODE_PYTHON_AUTOACTIVATE_GUARD: string;
@@ -71,6 +72,7 @@ declare module '$env/static/private' {
 	export const _: string;
 	export const npm_config_prefix: string;
 	export const npm_config_npm_version: string;
+	export const APP_SERVICE: string;
 	export const CLAUDE_CODE_SSE_PORT: string;
 	export const XDG_SESSION_CLASS: string;
 	export const TERM: string;
@@ -91,6 +93,8 @@ declare module '$env/static/private' {
 	export const SHELL: string;
 	export const npm_package_version: string;
 	export const npm_lifecycle_event: string;
+	export const SERVER_HOST: string;
+	export const SERVER_USER: string;
 	export const VSCODE_GIT_ASKPASS_EXTRA_ARGS: string;
 	export const GIT_PAGER: string;
 	export const npm_config_globalconfig: string;
@@ -212,6 +216,7 @@ declare module '$env/dynamic/private' {
 		SSL_CERT_FILE: string;
 		npm_config_userconfig: string;
 		npm_config_local_prefix: string;
+		SERVER_PATH: string;
 		PYDEVD_DISABLE_FILE_VALIDATION: string;
 		BUNDLED_DEBUGPY_PATH: string;
 		VSCODE_PYTHON_AUTOACTIVATE_GUARD: string;
@@ -222,6 +227,7 @@ declare module '$env/dynamic/private' {
 		_: string;
 		npm_config_prefix: string;
 		npm_config_npm_version: string;
+		APP_SERVICE: string;
 		CLAUDE_CODE_SSE_PORT: string;
 		XDG_SESSION_CLASS: string;
 		TERM: string;
@@ -242,6 +248,8 @@ declare module '$env/dynamic/private' {
 		SHELL: string;
 		npm_package_version: string;
 		npm_lifecycle_event: string;
+		SERVER_HOST: string;
+		SERVER_USER: string;
 		VSCODE_GIT_ASKPASS_EXTRA_ARGS: string;
 		GIT_PAGER: string;
 		npm_config_globalconfig: string;

@@ -7,10 +7,13 @@ Dual-stack authentication:
 
 from __future__ import annotations
 
-from datetime import UTC, datetime
+from datetime import datetime, timezone
 import hmac
 import logging
 from typing import Any, Callable
+
+# Python 3.11+ compatibility
+UTC = timezone.utc
 
 from fastapi import Depends, Header, HTTPException, Request, status
 from sqlalchemy.orm import Session
