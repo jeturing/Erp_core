@@ -32,6 +32,7 @@ class QuotationLineItem(BaseModel):
 
 class QuotationCreate(BaseModel):
     partner_id: Optional[int] = None
+    provider_id: Optional[int] = None
     customer_id: Optional[int] = None
     prospect_name: Optional[str] = None
     prospect_email: Optional[str] = None
@@ -91,6 +92,7 @@ def _quotation_to_dict(q: Quotation) -> dict:
         "id": q.id,
         "quote_number": q.quote_number,
         "created_by_partner_id": q.created_by_partner_id,
+        "provider_id": q.created_by_partner_id,
         "created_by_admin": q.created_by_admin,
         "customer_id": q.customer_id,
         "prospect_name": q.prospect_name,
@@ -488,6 +490,7 @@ async def list_quotations(
     request: Request,
     access_token: Optional[str] = Cookie(None),
     partner_id: Optional[int] = None,
+    provider_id: Optional[int] = None,
     status_filter: Optional[str] = None,
 ):
     """Lista cotizaciones con filtros."""
@@ -495,8 +498,9 @@ async def list_quotations(
     db = SessionLocal()
     try:
         q = db.query(Quotation)
-        if partner_id:
-            q = q.filter(Quotation.created_by_partner_id == partner_id)
+        effective_partner_id = partner_id or provider_id
+        if effective_partner_id:
+            q = q.filter(Quotation.created_by_partner_id == effective_partner_id)
         if status_filter:
             try:
                 q = q.filter(Quotation.status == QuotationStatus(status_filter))
@@ -510,8 +514,10 @@ async def list_quotations(
             if qt.created_by_partner_id:
                 p = db.query(Partner).filter(Partner.id == qt.created_by_partner_id).first()
                 d["partner_name"] = p.company_name if p else "—"
+                d["provider_name"] = d["partner_name"]
             else:
                 d["partner_name"] = None
+                d["provider_name"] = None
             items.append(d)
 
         total_value = sum(i["total_monthly"] or 0 for i in items)
@@ -547,6 +553,9 @@ async def get_quotation(
         if qt.created_by_partner_id:
             p = db.query(Partner).filter(Partner.id == qt.created_by_partner_id).first()
             data["partner_name"] = p.company_name if p else "—"
+            data["provider_name"] = data["partner_name"]
+        else:
+            data["provider_name"] = None
         return data
     finally:
         db.close()
@@ -562,6 +571,8 @@ async def create_quotation(
     _require_admin(request, access_token)
     db = SessionLocal()
     try:
+        effective_partner_id = payload.partner_id or payload.provider_id
+
         # Calcular líneas
         lines = []
         subtotal = 0
@@ -578,8 +589,8 @@ async def create_quotation(
             subtotal += sub
 
         # Validar margen del partner (≤30% del subtotal según cláusula 8.7)
-        if payload.partner_id:
-            partner = db.query(Partner).filter(Partner.id == payload.partner_id).first()
+        if effective_partner_id:
+            partner = db.query(Partner).filter(Partner.id == effective_partner_id).first()
             if partner:
                 max_margin = subtotal * (partner.margin_cap / 100)
                 if payload.partner_margin > max_margin:
@@ -593,8 +604,8 @@ async def create_quotation(
 
         qt = Quotation(
             quote_number=quote_number,
-            created_by_partner_id=payload.partner_id,
-            created_by_admin=payload.partner_id is None,
+            created_by_partner_id=effective_partner_id,
+            created_by_admin=effective_partner_id is None,
             customer_id=payload.customer_id,
             prospect_name=payload.prospect_name,
             prospect_email=payload.prospect_email,

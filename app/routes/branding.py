@@ -209,12 +209,17 @@ def resolve_branding_by_subdomain(subdomain: str, db: Session = Depends(get_db))
         ).first()
 
         if not profile:
-            # Partner existe pero no tiene branding profile → check campos Partner
+            # Partner existe pero no tiene branding profile → usar datos del owner del tenant
             partner = db.query(Partner).filter(Partner.id == customer.partner_id).first()
-            if partner and partner.brand_name:
+            if partner:
+                brand_name = (
+                    partner.brand_name
+                    or partner.company_name
+                    or JETURING_DEFAULTS["brand_name"]
+                )
                 return {
-                    "brand_name": partner.brand_name or JETURING_DEFAULTS["brand_name"],
-                    "product_name": partner.brand_name or JETURING_DEFAULTS["product_name"],
+                    "brand_name": brand_name,
+                    "product_name": brand_name,
                     "logo_url": partner.logo_url or JETURING_DEFAULTS["logo_url"],
                     "favicon_url": JETURING_DEFAULTS["favicon_url"],
                     "primary_color": partner.brand_color_primary or JETURING_DEFAULTS["primary_color"],

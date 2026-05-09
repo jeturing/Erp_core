@@ -1053,8 +1053,10 @@ export interface QuotationItem {
   id: number;
   quote_number: string;
   created_by_partner_id: number | null;
+  provider_id: number | null;
   created_by_admin: boolean;
   partner_name: string | null;
+  provider_name?: string | null;
   customer_id: number | null;
   prospect_name: string | null;
   prospect_email: string | null;

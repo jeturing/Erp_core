@@ -141,6 +141,7 @@ export const partnersApi = {
 
   async createQuotation(data: {
     partner_id?: number;
+    provider_id?: number;
     customer_id?: number;
     prospect_name?: string;
     prospect_email?: string;

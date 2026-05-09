@@ -137,7 +137,8 @@
   $: filtered = quotations.filter(q =>
     (q.quote_number || '').toLowerCase().includes(search.toLowerCase()) ||
     (q.prospect_name || '').toLowerCase().includes(search.toLowerCase()) ||
-    (q.prospect_company || '').toLowerCase().includes(search.toLowerCase())
+    (q.prospect_company || '').toLowerCase().includes(search.toLowerCase()) ||
+    (q.partner_name || q.provider_name || '').toLowerCase().includes(search.toLowerCase())
   );
 
   onMount(loadData);
@@ -231,7 +232,7 @@
       <form on:submit|preventDefault={handleSubmit} class="space-y-4">
         <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
           <div>
-            <label class="label">Partner (opcional)</label>
+            <label class="label">Partner / Proveedor (opcional)</label>
             <select bind:value={form.partner_id} class="input w-full">
               <option value={null}>— Admin directo —</option>
               {#each partners as p}
@@ -297,7 +298,7 @@
             <div class="text-lg font-mono font-bold text-text-light">${subtotal.toLocaleString('en-US', { minimumFractionDigits: 2 })}</div>
           </div>
           <div>
-            <label class="text-xs text-gray-500">Margen partner $</label>
+            <label class="text-xs text-gray-500">Margen partner/proveedor $</label>
             <input type="number" bind:value={form.partner_margin} min="0" step="0.01" class="input w-24 text-sm" />
           </div>
           <div class="text-right">
@@ -337,7 +338,7 @@
           <tr>
             <th>N°</th>
             <th>Prospecto</th>
-            <th>Partner</th>
+            <th>Partner / Proveedor</th>
             <th>Líneas</th>
             <th>Total</th>
             <th>Estado</th>
@@ -353,7 +354,7 @@
                 <div class="text-sm font-semibold text-text-light">{q.prospect_company || q.prospect_name || '—'}</div>
                 {#if q.prospect_email}<div class="text-xs text-gray-500">{q.prospect_email}</div>{/if}
               </td>
-              <td class="text-sm">{q.partner_name || 'Admin'}</td>
+              <td class="text-sm">{q.partner_name || q.provider_name || 'Admin'}</td>
               <td class="font-mono text-sm">{q.lines.length}</td>
               <td class="font-mono text-sm font-semibold text-emerald-400">${q.total_monthly.toLocaleString()}/mes</td>
               <td>

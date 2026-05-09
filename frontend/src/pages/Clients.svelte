@@ -179,10 +179,11 @@
   }
 
   function openEdit(customer: CustomerItem) {
+    const defaultPlan = customer.subscription?.plan_name || plans[0]?.name || 'basic';
     editCustomer = customer;
     editForm = {
       user_count: customer.user_count,
-      plan_name: customer.subscription?.plan_name || '',
+      plan_name: defaultPlan,
       is_admin_account: customer.is_admin_account,
       company_name: customer.company_name,
       email: customer.email,
@@ -197,6 +198,10 @@
     if (!editCustomer) return;
     if (!editForm.phone.trim()) {
       alert('El teléfono es obligatorio');
+      return;
+    }
+    if (!editForm.plan_name?.trim()) {
+      alert('Debe seleccionar un plan válido');
       return;
     }
     saving = true;

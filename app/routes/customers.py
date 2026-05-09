@@ -7,7 +7,8 @@ from typing import Optional, Dict, Any, List
 from datetime import datetime, timezone
 from ..models.database import (
     Customer, Subscription, SubscriptionStatus, Plan,
-    TenantDeployment, CustomDomain, SessionLocal
+    TenantDeployment, CustomDomain, SessionLocal,
+    BillingMode, PayerType, CollectorType, InvoiceIssuer,
 )
 from .roles import verify_token_with_role
 from ..config import get_runtime_setting
@@ -277,26 +278,50 @@ async def update_customer(
                     sub.monthly_amount = new_amount
                     messages.append(f"Monto: ${old_amount:.2f} → ${new_amount:.2f}")
 
-        # Cambiar plan
+        # Cambiar plan (si no hay suscripción activa, crear una nueva)
         if payload.plan_name is not None:
+            requested_plan_name = (payload.plan_name or "").strip()
+            if not requested_plan_name:
+                raise HTTPException(status_code=400, detail="Debe seleccionar un plan válido")
+
+            new_plan = db.query(Plan).filter(
+                Plan.name == requested_plan_name,
+                Plan.is_active == True
+            ).first()
+            if not new_plan:
+                raise HTTPException(status_code=404, detail=f"Plan '{requested_plan_name}' no encontrado")
+
             sub = db.query(Subscription).filter(
                 Subscription.customer_id == customer.id,
                 Subscription.status == SubscriptionStatus.active
             ).first()
-            if sub:
-                new_plan = db.query(Plan).filter(
-                    Plan.name == payload.plan_name,
-                    Plan.is_active == True
-                ).first()
-                if not new_plan:
-                    raise HTTPException(status_code=404, detail=f"Plan '{payload.plan_name}' no encontrado")
 
+            if sub:
                 old_plan = sub.plan_name
                 sub.plan_name = new_plan.name
                 user_count = customer.user_count or sub.user_count or 1
                 effective_pid = sub.owner_partner_id or customer.partner_id
                 sub.monthly_amount = new_plan.calculate_monthly(user_count, partner_id=effective_pid)
                 messages.append(f"Plan: {old_plan} → {new_plan.name} (${sub.monthly_amount:.2f}/mes)")
+            else:
+                user_count = customer.user_count or 1
+                partner_id = customer.partner_id
+                calculated_amount = new_plan.calculate_monthly(user_count, partner_id=partner_id)
+
+                new_sub = Subscription(
+                    customer_id=customer.id,
+                    plan_name=new_plan.name,
+                    status=SubscriptionStatus.active,
+                    user_count=user_count,
+                    monthly_amount=calculated_amount,
+                    owner_partner_id=partner_id,
+                    billing_mode=BillingMode.PARTNER_DIRECT if partner_id else BillingMode.JETURING_DIRECT_SUBSCRIPTION,
+                    payer_type=PayerType.PARTNER if partner_id else PayerType.CLIENT,
+                    collector=CollectorType.STRIPE_CONNECT if partner_id else CollectorType.STRIPE_DIRECT,
+                    invoice_issuer=InvoiceIssuer.JETURING,
+                )
+                db.add(new_sub)
+                messages.append(f"Suscripción creada con plan {new_plan.name} (${calculated_amount:.2f}/mes)")
 
         db.commit()
         return {
