@@ -1,14 +1,16 @@
 """
 Customers Management Routes - Mantenimiento de clientes, montos y user_count
 """
-from fastapi import APIRouter, HTTPException, Request, Cookie
+from fastapi import APIRouter, HTTPException, Request, Cookie, Query
 from pydantic import BaseModel
 from typing import Optional, Dict, Any, List
 from datetime import datetime, timezone
+import uuid
 from ..models.database import (
-    Customer, Subscription, SubscriptionStatus, Plan,
+    Customer, Subscription, SubscriptionStatus, Plan, CustomerStatus,
     TenantDeployment, CustomDomain, SessionLocal,
     BillingMode, PayerType, CollectorType, InvoiceIssuer,
+    ProvisioningAuditLog,
 )
 from .roles import verify_token_with_role
 from ..config import get_runtime_setting
@@ -20,10 +22,332 @@ import secrets
 router = APIRouter(prefix="/api/customers", tags=["Customers"])
 logger = logging.getLogger(__name__)
 
+PROVISIONING_PENDING_CUSTOMER_MESSAGE = (
+    "Tu orden será trabajada por el equipo interno. "
+    "Te notificaremos por correo cuando el tenant esté completado."
+)
+
+
+def _append_customer_note(customer: Customer, note: str) -> None:
+    now = datetime.now(timezone.utc).replace(tzinfo=None).isoformat(timespec="seconds")
+    marker = f"[{now}] {note}"
+    previous = (customer.notes or "").strip()
+    if not previous:
+        customer.notes = marker
+        return
+    lines = previous.splitlines()
+    lines.append(marker)
+    customer.notes = "\n".join(lines[-20:])
+
+
+def _add_provisioning_audit(
+    db,
+    *,
+    trace_id: str,
+    subdomain: str,
+    customer_id: Optional[int],
+    subscription_id: Optional[int],
+    source: str,
+    action: str,
+    status: str,
+    message: str,
+    error_detail: Optional[str] = None,
+    payload: Optional[dict] = None,
+) -> None:
+    db.add(
+        ProvisioningAuditLog(
+            trace_id=trace_id,
+            subdomain=subdomain,
+            customer_id=customer_id,
+            subscription_id=subscription_id,
+            source=source,
+            action=action,
+            status=status,
+            message=message,
+            error_detail=error_detail,
+            payload=payload or {},
+        )
+    )
+
+
+def _persist_lifecycle_audit(
+    db,
+    *,
+    trace_id: str,
+    subdomain: str,
+    customer_id: Optional[int],
+    subscription_id: Optional[int],
+    source: str,
+    prefix: str,
+    op_result,
+) -> None:
+    _add_provisioning_audit(
+        db,
+        trace_id=trace_id,
+        subdomain=subdomain,
+        customer_id=customer_id,
+        subscription_id=subscription_id,
+        source=source,
+        action=f"{prefix}.summary",
+        status="success" if op_result.success else "failed",
+        message="Operación completada" if op_result.success else "Operación fallida",
+        error_detail=op_result.error,
+        payload=op_result.as_dict(),
+    )
+
+    for step in (op_result.steps or []):
+        _add_provisioning_audit(
+            db,
+            trace_id=trace_id,
+            subdomain=subdomain,
+            customer_id=customer_id,
+            subscription_id=subscription_id,
+            source=source,
+            action=f"{prefix}.{step.name}",
+            status="success" if step.success else "failed",
+            message="Paso completado" if step.success else "Paso fallido",
+            error_detail=step.error,
+            payload=step.detail or {},
+        )
+
+    for step in (op_result.compensations or []):
+        _add_provisioning_audit(
+            db,
+            trace_id=trace_id,
+            subdomain=subdomain,
+            customer_id=customer_id,
+            subscription_id=subscription_id,
+            source=source,
+            action=f"{prefix}.{step.name}",
+            status="rolled_back" if step.success else "rollback_failed",
+            message="Compensación ejecutada" if step.success else "Compensación fallida",
+            error_detail=step.error,
+            payload=step.detail or {},
+        )
+
+
+def _has_blocking_provisioning_failure(op_result) -> bool:
+    required_steps = {
+        "create_database",
+        "write_deployment",
+        "configure_nginx",
+        "configure_cloudflared",
+    }
+    failed_required = {
+        step.name for step in (op_result.steps or []) if (not step.success and step.name in required_steps)
+    }
+    return (not op_result.success) or bool(failed_required)
+
+
+async def _run_provisioning_flow(
+    db,
+    *,
+    customer: Customer,
+    subscription: Subscription,
+    source: str,
+    send_credentials_email: bool,
+) -> Dict[str, Any]:
+    from ..services.tenant_lifecycle import orchestrator, TenantSpec
+
+    trace_id = str(uuid.uuid4())
+    _add_provisioning_audit(
+        db,
+        trace_id=trace_id,
+        subdomain=customer.subdomain,
+        customer_id=customer.id,
+        subscription_id=subscription.id,
+        source=source,
+        action="provision.started",
+        status="started",
+        message="Inicio de provisioning",
+        payload={
+            "plan": subscription.plan_name,
+            "partner_id": subscription.owner_partner_id,
+            "country_code": customer.country,
+        },
+    )
+    db.commit()
+
+    spec = TenantSpec(
+        subdomain=customer.subdomain,
+        company_name=customer.company_name,
+        admin_email=customer.email,
+        plan_name=subscription.plan_name or "basic",
+        partner_id=subscription.owner_partner_id,
+        country_code=customer.country,
+        customer_id=customer.id,
+        subscription_id=subscription.id,
+        send_credentials_email=send_credentials_email,
+    )
+    op = await orchestrator.provision(spec, source="customers_api")
+    _persist_lifecycle_audit(
+        db,
+        trace_id=trace_id,
+        subdomain=customer.subdomain,
+        customer_id=customer.id,
+        subscription_id=subscription.id,
+        source=source,
+        prefix="provision",
+        op_result=op,
+    )
+
+    if _has_blocking_provisioning_failure(op):
+        rollback = await orchestrator.deprovision(
+            customer.subdomain,
+            source="internal",
+            backup=False,
+            purge_local=False,
+        )
+        _persist_lifecycle_audit(
+            db,
+            trace_id=trace_id,
+            subdomain=customer.subdomain,
+            customer_id=customer.id,
+            subscription_id=subscription.id,
+            source=source,
+            prefix="rollback",
+            op_result=rollback,
+        )
+
+        subscription.status = SubscriptionStatus.pending
+        subscription.tenant_provisioned = False
+        _append_customer_note(
+            customer,
+            (
+                f"Provisioning fallido (trace={trace_id}). "
+                f"Error: {op.error or 'Fallo en uno o más pasos requeridos'}."
+            ),
+        )
+        _add_provisioning_audit(
+            db,
+            trace_id=trace_id,
+            subdomain=customer.subdomain,
+            customer_id=customer.id,
+            subscription_id=subscription.id,
+            source=source,
+            action="provision.mark_failed",
+            status="failed",
+            message="Suscripción marcada en estado pendiente por fallo de provisioning",
+            error_detail=op.error,
+        )
+        db.commit()
+
+        return {
+            "success": False,
+            "trace_id": trace_id,
+            "error": op.error or "Fallo en provisioning",
+            "user_message": PROVISIONING_PENDING_CUSTOMER_MESSAGE,
+            "steps": op.as_dict().get("steps", []),
+            "rollback": rollback.as_dict(),
+        }
+
+    subscription.status = SubscriptionStatus.active
+    subscription.tenant_provisioned = True
+    _add_provisioning_audit(
+        db,
+        trace_id=trace_id,
+        subdomain=customer.subdomain,
+        customer_id=customer.id,
+        subscription_id=subscription.id,
+        source=source,
+        action="provision.completed",
+        status="success",
+        message="Provisioning completado",
+        payload={
+            "deployment_id": op.deployment_id,
+            "backend_host": op.backend_host,
+            "http_port": op.http_port,
+            "chat_port": op.chat_port,
+        },
+    )
+    db.commit()
+
+    return {
+        "success": True,
+        "trace_id": trace_id,
+        "url": f"https://{customer.subdomain}.sajet.us",
+        "admin_login": op.admin_login,
+        "admin_password": op.admin_password,
+        "server": op.backend_host or "primary",
+        "deployment_id": op.deployment_id,
+        "steps": op.as_dict().get("steps", []),
+    }
+
 
 def _configure_stripe() -> str:
     stripe.api_key = get_runtime_setting("STRIPE_SECRET_KEY", "")
     return stripe.api_key
+
+
+def _auto_link_customer_to_existing_stripe_by_email(
+    db,
+    customer: Customer,
+    *,
+    create_if_missing: bool = False,
+) -> Optional[Dict[str, Any]]:
+    """
+    Vincula automáticamente el customer local con Stripe usando el email.
+
+    - Si ya tiene `stripe_customer_id`, no hace nada.
+    - Si encuentra una cuenta existente en Stripe con el mismo email, la vincula.
+    - Si `create_if_missing=True`, crea una nueva cuenta solo cuando no existe.
+    """
+    if customer.stripe_customer_id:
+        return {
+            "stripe_customer_id": customer.stripe_customer_id,
+            "linked": True,
+            "created": False,
+            "source": "existing_local_link",
+        }
+
+    stripe_key = _configure_stripe()
+    if not stripe_key:
+        logger.warning("Stripe no configurado; se omite auto-vinculación para customer %s", customer.id)
+        return None
+
+    email = (customer.email or "").strip()
+    if not email:
+        return None
+
+    try:
+        stripe_customers = stripe.Customer.list(email=email, limit=1)
+        if stripe_customers.data:
+            stripe_cust_id = stripe_customers.data[0].id
+            customer.stripe_customer_id = stripe_cust_id
+            db.flush()
+            logger.info("Stripe auto-link por email: %s → %s", email, stripe_cust_id)
+            return {
+                "stripe_customer_id": stripe_cust_id,
+                "linked": True,
+                "created": False,
+                "source": "matched_by_email",
+            }
+
+        if not create_if_missing:
+            return None
+
+        stripe_cust = stripe.Customer.create(
+            name=customer.company_name or customer.full_name,
+            email=email,
+            phone=customer.phone,
+            metadata={
+                "sajet_customer_id": str(customer.id),
+                "subdomain": customer.subdomain or "",
+                "platform": "sajet",
+            },
+        )
+        customer.stripe_customer_id = stripe_cust.id
+        db.flush()
+        logger.info("Stripe customer creado automáticamente: %s → %s", email, stripe_cust.id)
+        return {
+            "stripe_customer_id": stripe_cust.id,
+            "linked": True,
+            "created": True,
+            "source": "created",
+        }
+    except stripe.error.StripeError as e:
+        logger.warning("No se pudo auto-vincular customer %s en Stripe: %s", customer.id, e)
+        return None
 
 
 def _verify_admin(request: Request, token: str = None):
@@ -47,6 +371,115 @@ class CustomerUpdate(BaseModel):
     plan_name: Optional[str] = None  # Cambiar plan de la suscripción
     stripe_customer_id: Optional[str] = None
     stripe_action: Optional[str] = None  # 'link' (buscar/crear en Stripe) o 'unlink'
+    discount_pct: Optional[float] = None
+    discount_reason: Optional[str] = None
+    partner_id: Optional[int] = -1  # -1 = no change, 0 = unassign, >0 = assign
+
+
+class StripeCustomerLinkRequest(BaseModel):
+    stripe_customer_id: str
+
+
+def _apply_subscription_discount(base_amount: float, discount_pct: Optional[float]) -> tuple[float, float]:
+    pct = max(0.0, min(100.0, float(discount_pct or 0.0)))
+    discount_amount = round(base_amount * (pct / 100.0), 2)
+    final_amount = round(base_amount - discount_amount, 2)
+    return final_amount, discount_amount
+
+
+@router.get("/stripe/search")
+async def search_stripe_customers(
+    request: Request,
+    q: str = Query(..., min_length=2, description="Texto a buscar (email, nombre o id)"),
+    limit: int = Query(10, ge=1, le=25),
+    access_token: str = Cookie(None),
+) -> Dict[str, Any]:
+    """Buscar cuentas de Stripe para vincularlas a clientes existentes."""
+    _configure_stripe()
+    _verify_admin(request, access_token)
+
+    query = q.strip()
+    query_l = query.lower()
+    items: List[Dict[str, Any]] = []
+
+    try:
+        # Intentar Stripe Search API (más precisa)
+        try:
+            escaped = query.replace("'", "\\'")
+            search_q = (
+                f"name:'{escaped}' OR email:'{escaped}' OR id:'{escaped}' OR "
+                f"metadata['erp_customer_id']:'{escaped}'"
+            )
+            result = stripe.Customer.search(query=search_q, limit=limit)
+            customers = result.data or []
+        except Exception:
+            # Fallback universal: listar y filtrar localmente
+            sample = stripe.Customer.list(limit=min(max(limit * 10, 20), 100))
+            customers = [
+                c for c in (sample.data or [])
+                if query_l in (getattr(c, "id", "") or "").lower()
+                or query_l in (getattr(c, "email", "") or "").lower()
+                or query_l in (getattr(c, "name", "") or "").lower()
+            ][:limit]
+
+        for c in customers:
+            items.append({
+                "id": c.id,
+                "email": getattr(c, "email", None),
+                "name": getattr(c, "name", None),
+                "phone": getattr(c, "phone", None),
+                "created": getattr(c, "created", None),
+                "metadata": getattr(c, "metadata", {}) or {},
+            })
+
+        return {
+            "success": True,
+            "query": query,
+            "items": items,
+            "total": len(items),
+        }
+    except stripe.error.StripeError as e:
+        raise HTTPException(status_code=400, detail=f"Error Stripe: {e}")
+
+
+@router.post("/{customer_id}/stripe/link")
+async def link_existing_stripe_customer(
+    customer_id: int,
+    payload: StripeCustomerLinkRequest,
+    request: Request,
+    access_token: str = Cookie(None),
+) -> Dict[str, Any]:
+    """Vincula manualmente un cliente local a un Stripe Customer existente."""
+    _configure_stripe()
+    _verify_admin(request, access_token)
+    db = SessionLocal()
+    try:
+        customer = db.query(Customer).filter(Customer.id == customer_id).first()
+        if not customer:
+            raise HTTPException(status_code=404, detail="Cliente no encontrado")
+
+        stripe_customer_id = (payload.stripe_customer_id or "").strip()
+        if not stripe_customer_id:
+            raise HTTPException(status_code=400, detail="stripe_customer_id es requerido")
+
+        try:
+            stripe_customer = stripe.Customer.retrieve(stripe_customer_id)
+            if getattr(stripe_customer, "deleted", False):
+                raise HTTPException(status_code=400, detail="La cuenta Stripe está eliminada")
+        except stripe.error.StripeError as e:
+            raise HTTPException(status_code=400, detail=f"No se pudo validar la cuenta Stripe: {e}")
+
+        customer.stripe_customer_id = stripe_customer_id
+        db.commit()
+
+        return {
+            "success": True,
+            "message": f"Cliente vinculado a Stripe ({stripe_customer_id})",
+            "customer_id": customer_id,
+            "stripe_customer_id": stripe_customer_id,
+        }
+    finally:
+        db.close()
 
 
 class UserCountUpdate(BaseModel):
@@ -76,7 +509,7 @@ async def list_customers(
                 db.query(Subscription)
                 .filter(
                     Subscription.customer_id.in_(customer_ids),
-                    Subscription.status == SubscriptionStatus.active,
+                    Subscription.status.in_([SubscriptionStatus.active, SubscriptionStatus.suspended]),
                 )
                 .order_by(Subscription.customer_id.asc(), Subscription.created_at.desc())
                 .all()
@@ -142,13 +575,18 @@ async def list_customers(
                 "subdomain": c.subdomain,
                 "user_count": c.user_count or 1,
                 "is_admin_account": c.is_admin_account or False,
+                "status": c.status.value if c.status else "active",
                 "stripe_customer_id": c.stripe_customer_id,
+                "partner_id": c.partner_id,
                 "subscription": {
                     "id": sub.id,
                     "plan_name": sub.plan_name,
                     "status": sub.status.value if sub.status else None,
                     "monthly_amount": sub.monthly_amount,
                     "calculated_amount": calculated_amount,
+                    "discount_pct": sub.discount_pct or 0,
+                    "discount_amount": sub.discount_amount or 0,
+                    "discount_reason": sub.discount_reason,
                     "user_count": sub.user_count or 1,
                     "start_date": sub.current_period_start.isoformat() if sub.current_period_start else (sub.created_at.isoformat() if sub.created_at else None),
                 } if sub else None,
@@ -200,12 +638,14 @@ async def update_customer(
             raise HTTPException(status_code=404, detail="Cliente no encontrado")
 
         messages = []
+        email_changed = False
 
         # Actualizar email
         if payload.email is not None:
             old_email = customer.email
             customer.email = payload.email
             messages.append(f"Email: {old_email} → {payload.email}")
+            email_changed = (old_email or "").strip().lower() != (payload.email or "").strip().lower()
 
         if payload.phone is not None:
             old_phone = customer.phone or ""
@@ -221,6 +661,27 @@ async def update_customer(
             customer.is_admin_account = payload.is_admin_account
             if payload.is_admin_account:
                 messages.append("Marcado como cuenta admin (exento de facturación)")
+
+        # Reasignar partner
+        if payload.partner_id is not None and payload.partner_id != -1:
+            old_pid = customer.partner_id
+            if payload.partner_id == 0:
+                customer.partner_id = None
+                messages.append("Partner desvinculado")
+            else:
+                from ..models.database import Partner
+                partner = db.query(Partner).filter(Partner.id == payload.partner_id).first()
+                if not partner:
+                    raise HTTPException(status_code=404, detail=f"Partner {payload.partner_id} no encontrado")
+                customer.partner_id = partner.id
+                messages.append(f"Partner: {old_pid or 'ninguno'} → {partner.company_name} (#{partner.id})")
+                # Update subscription owner too
+                sub = db.query(Subscription).filter(
+                    Subscription.customer_id == customer.id,
+                    Subscription.status.in_([SubscriptionStatus.active, SubscriptionStatus.suspended]),
+                ).first()
+                if sub:
+                    sub.owner_partner_id = partner.id
 
         # Manejo de Stripe: buscar/crear/vincular cliente
         if payload.stripe_action == "link":
@@ -256,6 +717,16 @@ async def update_customer(
             customer.stripe_customer_id = payload.stripe_customer_id.strip() or None
             if customer.stripe_customer_id:
                 messages.append(f"Vinculado a Stripe Customer: {customer.stripe_customer_id}")
+        elif email_changed and not customer.stripe_customer_id:
+            auto_link_result = _auto_link_customer_to_existing_stripe_by_email(
+                db,
+                customer,
+                create_if_missing=False,
+            )
+            if auto_link_result:
+                messages.append(
+                    f"Vinculado automáticamente por email a Stripe Customer: {auto_link_result['stripe_customer_id']}"
+                )
 
         # Actualizar user_count y recalcular
         if payload.user_count is not None:
@@ -273,9 +744,11 @@ async def update_customer(
                 plan = db.query(Plan).filter(Plan.name == sub.plan_name).first()
                 if plan:
                     effective_pid = sub.owner_partner_id or customer.partner_id
-                    new_amount = plan.calculate_monthly(payload.user_count, partner_id=effective_pid)
+                    base_amount = plan.calculate_monthly(payload.user_count, partner_id=effective_pid)
+                    new_amount, discount_amount = _apply_subscription_discount(base_amount, sub.discount_pct)
                     old_amount = sub.monthly_amount or 0
                     sub.monthly_amount = new_amount
+                    sub.discount_amount = discount_amount
                     messages.append(f"Monto: ${old_amount:.2f} → ${new_amount:.2f}")
 
         # Cambiar plan (si no hay suscripción activa, crear una nueva)
@@ -301,7 +774,10 @@ async def update_customer(
                 sub.plan_name = new_plan.name
                 user_count = customer.user_count or sub.user_count or 1
                 effective_pid = sub.owner_partner_id or customer.partner_id
-                sub.monthly_amount = new_plan.calculate_monthly(user_count, partner_id=effective_pid)
+                base_amount = new_plan.calculate_monthly(user_count, partner_id=effective_pid)
+                discounted_total, discount_amount = _apply_subscription_discount(base_amount, sub.discount_pct)
+                sub.monthly_amount = discounted_total
+                sub.discount_amount = discount_amount
                 messages.append(f"Plan: {old_plan} → {new_plan.name} (${sub.monthly_amount:.2f}/mes)")
             else:
                 user_count = customer.user_count or 1
@@ -314,6 +790,8 @@ async def update_customer(
                     status=SubscriptionStatus.active,
                     user_count=user_count,
                     monthly_amount=calculated_amount,
+                    discount_pct=0,
+                    discount_amount=0,
                     owner_partner_id=partner_id,
                     billing_mode=BillingMode.PARTNER_DIRECT if partner_id else BillingMode.JETURING_DIRECT_SUBSCRIPTION,
                     payer_type=PayerType.PARTNER if partner_id else PayerType.CLIENT,
@@ -321,7 +799,42 @@ async def update_customer(
                     invoice_issuer=InvoiceIssuer.JETURING,
                 )
                 db.add(new_sub)
+                db.flush()  # Ensure new subscription is visible for subsequent queries
                 messages.append(f"Suscripción creada con plan {new_plan.name} (${calculated_amount:.2f}/mes)")
+
+        # Aplicar descuento especial (solo si hay suscripción activa)
+        # Skip if both values are effectively empty (frontend sends 0 and '' by default)
+        has_real_discount = (
+            (payload.discount_pct is not None and payload.discount_pct != 0)
+            or (payload.discount_reason is not None and payload.discount_reason.strip())
+        )
+        if has_real_discount:
+            sub = db.query(Subscription).filter(
+                Subscription.customer_id == customer.id,
+                Subscription.status == SubscriptionStatus.active
+            ).first()
+            if not sub:
+                raise HTTPException(status_code=400, detail="El cliente no tiene suscripción activa para aplicar descuento")
+
+            if payload.discount_pct is not None:
+                if payload.discount_pct < 0 or payload.discount_pct > 100:
+                    raise HTTPException(status_code=400, detail="discount_pct debe estar entre 0 y 100")
+                sub.discount_pct = payload.discount_pct
+
+            if payload.discount_reason is not None:
+                sub.discount_reason = payload.discount_reason.strip() or None
+
+            plan_for_discount = db.query(Plan).filter(Plan.name == sub.plan_name).first()
+            if plan_for_discount:
+                user_count = customer.user_count or sub.user_count or 1
+                effective_pid = sub.owner_partner_id or customer.partner_id
+                base_amount = plan_for_discount.calculate_monthly(user_count, partner_id=effective_pid)
+                discounted_total, discount_amount = _apply_subscription_discount(base_amount, sub.discount_pct)
+                sub.monthly_amount = discounted_total
+                sub.discount_amount = discount_amount
+                messages.append(
+                    f"Descuento aplicado: {sub.discount_pct or 0:.2f}% (−${discount_amount:.2f})"
+                )
 
         db.commit()
         return {
@@ -335,6 +848,97 @@ async def update_customer(
     except Exception as e:
         db.rollback()
         logger.error(f"Error actualizando cliente {customer_id}: {e}")
+        raise HTTPException(status_code=500, detail=str(e))
+    finally:
+        db.close()
+
+
+class CustomerStatusAction(BaseModel):
+    action: str  # suspend_account, suspend_billing, reactivate
+    reason: Optional[str] = None
+
+
+@router.put("/{customer_id}/status")
+async def update_customer_status(
+    customer_id: int,
+    request: Request,
+    payload: CustomerStatusAction,
+    access_token: str = Cookie(None),
+) -> Dict[str, Any]:
+    """
+    Acciones de cuenta:
+    - suspend_account: suspende cuenta + suscripción
+    - suspend_billing: suspende solo la suscripción (cuenta sigue activa)
+    - reactivate: reactiva cuenta + suscripción
+    """
+    _verify_admin(request, access_token)
+    db = SessionLocal()
+    try:
+        customer = db.query(Customer).filter(Customer.id == customer_id).first()
+        if not customer:
+            raise HTTPException(status_code=404, detail="Cliente no encontrado")
+
+        sub = db.query(Subscription).filter(
+            Subscription.customer_id == customer_id,
+            Subscription.status.in_([
+                SubscriptionStatus.active,
+                SubscriptionStatus.suspended,
+                SubscriptionStatus.past_due,
+            ])
+        ).first()
+
+        messages = []
+        action = payload.action
+
+        if action == "suspend_account":
+            if customer.status == CustomerStatus.suspended:
+                raise HTTPException(status_code=400, detail="La cuenta ya está suspendida")
+            customer.status = CustomerStatus.suspended
+            messages.append("Cuenta suspendida")
+            if sub and sub.status == SubscriptionStatus.active:
+                sub.suspension_previous_status = sub.status.value
+                sub.status = SubscriptionStatus.suspended
+                messages.append("Suscripción suspendida")
+
+        elif action == "suspend_billing":
+            if not sub:
+                raise HTTPException(status_code=400, detail="No hay suscripción activa para suspender")
+            if sub.status == SubscriptionStatus.suspended:
+                raise HTTPException(status_code=400, detail="La suscripción ya está suspendida")
+            sub.suspension_previous_status = sub.status.value
+            sub.status = SubscriptionStatus.suspended
+            messages.append("Suscripción suspendida (cuenta sigue activa)")
+
+        elif action == "reactivate":
+            if customer.status == CustomerStatus.suspended:
+                customer.status = CustomerStatus.active
+                messages.append("Cuenta reactivada")
+            if sub and sub.status == SubscriptionStatus.suspended:
+                prev = sub.suspension_previous_status or "active"
+                sub.status = SubscriptionStatus(prev)
+                sub.suspension_previous_status = None
+                messages.append("Suscripción reactivada")
+            if not messages:
+                raise HTTPException(status_code=400, detail="La cuenta y suscripción ya están activas")
+
+        else:
+            raise HTTPException(status_code=400, detail=f"Acción no válida: {action}")
+
+        if payload.reason:
+            customer.notes = (customer.notes or "") + f"\n[{datetime.now(timezone.utc).strftime('%Y-%m-%d')}] {action}: {payload.reason}"
+
+        db.commit()
+        return {
+            "message": ", ".join(messages),
+            "customer_id": customer_id,
+            "customer_status": customer.status.value,
+            "subscription_status": sub.status.value if sub else None,
+        }
+    except HTTPException:
+        raise
+    except Exception as e:
+        db.rollback()
+        logger.error(f"Error en acción {payload.action} para cliente {customer_id}: {e}")
         raise HTTPException(status_code=500, detail=str(e))
     finally:
         db.close()
@@ -381,8 +985,10 @@ async def update_user_count(
             if plan:
                 old_amount = sub.monthly_amount or 0
                 effective_pid = sub.owner_partner_id or (customer.partner_id if customer else None)
-                new_amount = plan.calculate_monthly(payload.user_count, partner_id=effective_pid)
+                base_amount = plan.calculate_monthly(payload.user_count, partner_id=effective_pid)
+                new_amount, discount_amount = _apply_subscription_discount(base_amount, sub.discount_pct)
                 sub.monthly_amount = new_amount
+                sub.discount_amount = discount_amount
 
                 extra_users = max(0, payload.user_count - plan.included_users)
                 result.update({
@@ -434,6 +1040,7 @@ async def create_customer(
     3. Provisiona subdominio en nginx
     4. Devuelve credenciales del tenant en la respuesta
     """
+    _configure_stripe()
     _verify_admin(request, access_token)
     db = SessionLocal()
     try:
@@ -485,6 +1092,13 @@ async def create_customer(
             invoice_issuer=InvoiceIssuer.JETURING,
         )
         db.add(sub)
+
+        auto_link_result = _auto_link_customer_to_existing_stripe_by_email(
+            db,
+            customer,
+            create_if_missing=False,
+        )
+
         db.commit()
         db.refresh(customer)
         db.refresh(sub)
@@ -496,6 +1110,11 @@ async def create_customer(
             "welcome_email_sent": False,
             "message": f"Cliente '{payload.company_name}' creado exitosamente",
         }
+
+        if auto_link_result:
+            response["stripe_customer_id"] = auto_link_result["stripe_customer_id"]
+            response["stripe_auto_linked"] = True
+            response["message"] += " + Stripe vinculado por correo"
 
         try:
             from ..services.email_service import send_customer_registration_acknowledgement
@@ -516,14 +1135,12 @@ async def create_customer(
         # ── Auto-provision tenant Odoo ──
         if payload.auto_provision and payload.subdomain:
             try:
-                tenant_result = await _auto_provision_tenant(
-                    subdomain=payload.subdomain,
-                    company_name=payload.company_name,
-                    partner_id=partner_id,
-                    country_code=effective_country,
-                    plan_name=payload.plan_name,
-                    subscription_id=sub.id,
-                    customer_id=customer.id,
+                tenant_result = await _run_provisioning_flow(
+                    db,
+                    customer=customer,
+                    subscription=sub,
+                    source="customers_create",
+                    send_credentials_email=True,
                 )
                 if tenant_result.get("success"):
                     response["tenant"] = {
@@ -533,16 +1150,28 @@ async def create_customer(
                         "admin_password": tenant_result.get("admin_password"),
                         "server": tenant_result.get("server"),
                         "status": "active",
+                        "trace_id": tenant_result.get("trace_id"),
                     }
                     response["message"] += " + Tenant Odoo provisionado"
                     logger.info(f"✅ Cliente + Tenant '{payload.subdomain}' creado exitosamente")
                 else:
                     response["tenant_error"] = tenant_result.get("error", "Error provisionando tenant")
-                    response["message"] += " (tenant NO provisionado — requiere acción manual)"
-                    logger.warning(f"⚠️ Cliente creado pero tenant falló: {tenant_result.get('error')}")
+                    response["tenant_trace_id"] = tenant_result.get("trace_id")
+                    response["tenant_status"] = "provisioning_failed"
+                    response["retry_available"] = True
+                    response["tenant_user_message"] = tenant_result.get("user_message", PROVISIONING_PENDING_CUSTOMER_MESSAGE)
+                    response["message"] += " (provisioning fallido — orden enviada al equipo interno)"
+                    logger.warning(
+                        "⚠️ Cliente creado pero tenant falló (%s): %s",
+                        tenant_result.get("trace_id"),
+                        tenant_result.get("error"),
+                    )
             except Exception as prov_err:
                 response["tenant_error"] = str(prov_err)
-                response["message"] += " (error en provisioning — cliente creado sin tenant)"
+                response["tenant_user_message"] = PROVISIONING_PENDING_CUSTOMER_MESSAGE
+                response["tenant_status"] = "provisioning_failed"
+                response["retry_available"] = True
+                response["message"] += " (error en provisioning — orden enviada al equipo interno)"
                 logger.error(f"Error en auto-provision de '{payload.subdomain}': {prov_err}")
 
         return response
@@ -667,6 +1296,101 @@ async def _auto_provision_tenant(
     }
 
 
+@router.post("/{customer_id}/retry-provisioning")
+async def retry_customer_provisioning(
+    customer_id: int,
+    request: Request,
+    access_token: str = Cookie(None),
+) -> Dict[str, Any]:
+    """Reintenta provisioning de un tenant fallido con auditoría completa."""
+    _verify_admin(request, access_token)
+    db = SessionLocal()
+    try:
+        customer = db.query(Customer).filter(Customer.id == customer_id).first()
+        if not customer:
+            raise HTTPException(status_code=404, detail="Cliente no encontrado")
+
+        subscription = db.query(Subscription).filter(
+            Subscription.customer_id == customer.id,
+        ).order_by(Subscription.created_at.desc()).first()
+        if not subscription:
+            raise HTTPException(status_code=400, detail="Cliente sin suscripción")
+
+        result = await _run_provisioning_flow(
+            db,
+            customer=customer,
+            subscription=subscription,
+            source="customers_retry",
+            send_credentials_email=True,
+        )
+
+        if result.get("success"):
+            return {
+                "success": True,
+                "message": "Provisioning reintentado y completado exitosamente",
+                "trace_id": result.get("trace_id"),
+                "tenant": {
+                    "subdomain": customer.subdomain,
+                    "url": result.get("url"),
+                    "admin_login": result.get("admin_login"),
+                    "admin_password": result.get("admin_password"),
+                },
+            }
+
+        return {
+            "success": False,
+            "message": "El reintento falló. Se aplicó rollback y quedó pendiente para revisión interna.",
+            "trace_id": result.get("trace_id"),
+            "tenant_status": "provisioning_failed",
+            "tenant_user_message": result.get("user_message", PROVISIONING_PENDING_CUSTOMER_MESSAGE),
+            "error": result.get("error"),
+        }
+    finally:
+        db.close()
+
+
+@router.get("/{customer_id}/provisioning-audit")
+async def get_customer_provisioning_audit(
+    customer_id: int,
+    request: Request,
+    access_token: str = Cookie(None),
+    limit: int = Query(100, ge=1, le=500),
+) -> Dict[str, Any]:
+    """Retorna el historial de auditoría de provisioning para un cliente."""
+    _verify_admin(request, access_token)
+    db = SessionLocal()
+    try:
+        customer = db.query(Customer).filter(Customer.id == customer_id).first()
+        if not customer:
+            raise HTTPException(status_code=404, detail="Cliente no encontrado")
+
+        rows = db.query(ProvisioningAuditLog).filter(
+            ProvisioningAuditLog.customer_id == customer_id,
+        ).order_by(ProvisioningAuditLog.created_at.desc()).limit(limit).all()
+
+        return {
+            "success": True,
+            "customer_id": customer_id,
+            "subdomain": customer.subdomain,
+            "items": [
+                {
+                    "id": r.id,
+                    "trace_id": str(r.trace_id),
+                    "action": r.action,
+                    "status": r.status,
+                    "message": r.message,
+                    "error_detail": r.error_detail,
+                    "payload": r.payload,
+                    "created_at": r.created_at.isoformat() if r.created_at else None,
+                }
+                for r in rows
+            ],
+            "total": len(rows),
+        }
+    finally:
+        db.close()
+
+
 @router.post("/recalculate-all")
 async def recalculate_all(
     request: Request,
@@ -701,17 +1425,21 @@ async def recalculate_all(
 
             user_count = (customer.user_count if customer else None) or sub.user_count or 1
             effective_pid = sub.owner_partner_id or (customer.partner_id if customer else None)
-            new_amount = plan.calculate_monthly(user_count, partner_id=effective_pid)
+            base_amount = plan.calculate_monthly(user_count, partner_id=effective_pid)
+            new_amount, discount_amount = _apply_subscription_discount(base_amount, sub.discount_pct)
             old_amount = sub.monthly_amount or 0
 
             if abs(new_amount - old_amount) > 0.01:
                 sub.monthly_amount = new_amount
                 sub.user_count = user_count
+                sub.discount_amount = discount_amount
                 updated += 1
                 details.append({
                     "customer": customer.company_name if customer else f"ID:{sub.customer_id}",
                     "plan": sub.plan_name,
                     "users": user_count,
+                    "discount_pct": round(sub.discount_pct or 0, 2),
+                    "discount_amount": round(discount_amount, 2),
                     "old": round(old_amount, 2),
                     "new": round(new_amount, 2),
                 })
@@ -759,6 +1487,20 @@ async def create_stripe_customer(
                 "already_exists": True,
                 "stripe_customer_id": customer.stripe_customer_id,
                 "message": "El cliente ya tiene Stripe Customer ID",
+            }
+
+        auto_link_result = _auto_link_customer_to_existing_stripe_by_email(
+            db,
+            customer,
+            create_if_missing=False,
+        )
+        if auto_link_result:
+            db.commit()
+            return {
+                "success": True,
+                "already_exists": True,
+                "stripe_customer_id": auto_link_result["stripe_customer_id"],
+                "message": f"Stripe Customer vinculado automáticamente por email: {auto_link_result['stripe_customer_id']}",
             }
 
         # Crear en Stripe

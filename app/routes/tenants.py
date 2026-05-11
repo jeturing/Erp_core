@@ -40,7 +40,9 @@ import os
 import xmlrpc.client
 import secrets
 import string
+import uuid
 from ..models.database import AuditEventRecord
+from ..models.database import ProvisioningAuditLog
 
 from ..config import PROVISIONING_API_KEY, ODOO_DB_USER, ODOO_DB_PASSWORD, ODOO_DB_HOST, DATABASE_URL
 from ..services.cloudflare_manager import CloudflareManager
@@ -205,6 +207,27 @@ def _log_tenant_audit(
             details=details or {},
         )
         db.add(evt)
+
+        # Auditoría separada para ciclo de vida de provisioning (creación/eliminación).
+        if event_type.startswith("TENANT_"):
+            subdomain = None
+            if resource.startswith("tenant:"):
+                subdomain = resource.split(":", 1)[1]
+            if not subdomain:
+                subdomain = (details or {}).get("subdomain")
+
+            db.add(
+                ProvisioningAuditLog(
+                    trace_id=uuid.uuid4(),
+                    subdomain=(subdomain or "unknown").strip().lower(),
+                    source="tenants_api",
+                    action=f"tenant.{action}",
+                    status=status,
+                    message=event_type,
+                    error_detail=(details or {}).get("error") if isinstance(details, dict) else None,
+                    payload=details or {},
+                )
+            )
         db.commit()
     except Exception as audit_err:
         db.rollback()

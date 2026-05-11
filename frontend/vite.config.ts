@@ -10,7 +10,7 @@ export default defineConfig(({ command }) => ({
       registerType: 'autoUpdate',
       scope: '/',
       base: '/',
-      includeAssets: ['favicon.svg', 'favicon.png', 'icons/apple-touch-icon.png'],
+      includeAssets: ['favicon.svg', 'favicon.png', 'icons/sajet-touch-180.png', 'icons/sajet-512.png', 'icons/sajet-maskable-512.png'],
       manifest: {
         name: 'Sajet ERP',
         short_name: 'Sajet',
@@ -24,16 +24,22 @@ export default defineConfig(({ command }) => ({
         lang: 'es',
         icons: [
           {
-            src: 'icons/icon-192.png',
-            sizes: '192x192',
+            src: 'icons/sajet-touch-180.png',
+            sizes: '180x180',
             type: 'image/png',
-            purpose: 'any maskable',
+            purpose: 'any',
           },
           {
-            src: 'icons/icon-512.png',
+            src: 'icons/sajet-512.png',
             sizes: '512x512',
             type: 'image/png',
-            purpose: 'any maskable',
+            purpose: 'any',
+          },
+          {
+            src: 'icons/sajet-maskable-512.png',
+            sizes: '512x512',
+            type: 'image/png',
+            purpose: 'maskable',
           },
         ],
         shortcuts: [
@@ -42,14 +48,14 @@ export default defineConfig(({ command }) => ({
             short_name: 'Panel',
             description: 'Ir al panel principal',
             url: '/dashboard',
-            icons: [{ src: 'icons/icon-192.png', sizes: '192x192' }],
+            icons: [{ src: 'icons/sajet-touch-180.png', sizes: '180x180' }],
           },
           {
             name: 'Portal',
             short_name: 'Portal',
             description: 'Portal del cliente',
             url: '/portal',
-            icons: [{ src: 'icons/icon-192.png', sizes: '192x192' }],
+            icons: [{ src: 'icons/sajet-touch-180.png', sizes: '180x180' }],
           },
         ],
       },

@@ -25,7 +25,7 @@ function Quotations($$renderer, $$props) {
       lines: []
     };
     form.lines.reduce((sum, l) => sum + l.quantity * l.unit_price, 0);
-    quotations.filter((q) => (q.quote_number || "").toLowerCase().includes(search.toLowerCase()) || (q.prospect_name || "").toLowerCase().includes(search.toLowerCase()) || (q.prospect_company || "").toLowerCase().includes(search.toLowerCase()));
+    quotations.filter((q) => (q.quote_number || "").toLowerCase().includes(search.toLowerCase()) || (q.prospect_name || "").toLowerCase().includes(search.toLowerCase()) || (q.prospect_company || "").toLowerCase().includes(search.toLowerCase()) || (q.partner_name || q.provider_name || "").toLowerCase().includes(search.toLowerCase()));
     $$renderer2.push(`<div class="p-6 space-y-6"><div class="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4"><div><h1 class="page-title flex items-center gap-2">`);
     File_spreadsheet($$renderer2, { size: 24 });
     $$renderer2.push(`<!----> Cotizaciones</h1> <p class="page-subtitle">Cotizaciones y catálogo de servicios SAJET</p></div> <div class="flex gap-2"><button class="btn-secondary flex items-center gap-2">`);

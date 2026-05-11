@@ -1,6 +1,7 @@
 import "clsx";
 import { h as sanitize_props, i as spread_props, j as slot, d as escape_html, c as attr } from "../../../../chunks/index2.js";
 import "../../../../chunks/client.js";
+import "../../../../chunks/tenants.js";
 import { X } from "../../../../chunks/x.js";
 import { I as Icon } from "../../../../chunks/Icon.js";
 import { P as Plus } from "../../../../chunks/plus.js";
@@ -197,7 +198,11 @@ function Clients($$renderer, $$props) {
       isOpen: showCredentialsModal,
       credentials
     });
-    $$renderer2.push(`<!---->`);
+    $$renderer2.push(`<!----> `);
+    {
+      $$renderer2.push("<!--[!-->");
+    }
+    $$renderer2.push(`<!--]-->`);
   });
 }
 function _page($$renderer) {

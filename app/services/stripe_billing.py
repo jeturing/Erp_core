@@ -260,6 +260,41 @@ def _void_mismatched_invoice(
 #  1. CREAR CLIENTE EN STRIPE (si no existe)
 # ═══════════════════════════════════════════════════════════════
 
+def resolve_billing_stripe_customer(
+    db: Session,
+    customer: Customer,
+    subscription: Optional[Subscription] = None,
+) -> str:
+    """
+    Determina el stripe_customer_id correcto para facturación.
+
+    Si la suscripción es partner_billed (PARTNER_DIRECT / PARTNER_PAYS_FOR_CLIENT),
+    la factura debe ir al Customer vinculado al Partner, no al cliente individual.
+    Esto garantiza que Stripe facture al partner como responsable de pago.
+
+    Retorna el stripe_customer_id del pagador correcto.
+    """
+    if subscription and _is_partner_billed_subscription(subscription):
+        partner = None
+        if subscription.owner_partner_id:
+            partner = db.query(Partner).filter(Partner.id == subscription.owner_partner_id).first()
+        elif customer.partner_id:
+            partner = db.query(Partner).filter(Partner.id == customer.partner_id).first()
+
+        if partner and partner.customer_id:
+            partner_customer = db.query(Customer).filter(Customer.id == partner.customer_id).first()
+            if partner_customer:
+                stripe_id = ensure_stripe_customer(db, partner_customer)
+                logger.info(
+                    f"Billing routed to partner '{partner.company_name}' "
+                    f"(stripe_customer={stripe_id}) for customer '{customer.company_name}'"
+                )
+                return stripe_id
+
+    # Fallback: facturar al cliente individual
+    return ensure_stripe_customer(db, customer)
+
+
 def ensure_stripe_customer(db: Session, customer: Customer) -> str:
     """
     Asegura que el cliente tenga stripe_customer_id.
@@ -340,8 +375,11 @@ def push_invoice_to_stripe(
     if not customer:
         raise ValueError(f"Customer {invoice.customer_id} not found")
 
-    # Asegurar stripe_customer_id
-    stripe_cust_id = ensure_stripe_customer(db, customer)
+    # Resolver stripe_customer_id — si tiene partner, facturar al partner
+    sub = None
+    if invoice.subscription_id:
+        sub = db.query(Subscription).filter(Subscription.id == invoice.subscription_id).first()
+    stripe_cust_id = resolve_billing_stripe_customer(db, customer, subscription=sub)
 
     # Crear invoice items
     lines = invoice.lines_json or []
@@ -434,7 +472,11 @@ def create_checkout_for_invoice(
     if not customer:
         raise ValueError("Customer not found")
 
-    stripe_cust_id = ensure_stripe_customer(db, customer)
+    # Resolver al partner si aplica
+    sub = None
+    if invoice.subscription_id:
+        sub = db.query(Subscription).filter(Subscription.id == invoice.subscription_id).first()
+    stripe_cust_id = resolve_billing_stripe_customer(db, customer, subscription=sub)
 
     # Si ya tiene stripe_invoice_id, usar el Stripe Invoice directamente
     if invoice.stripe_invoice_id:
@@ -804,25 +846,17 @@ def generate_consumption_invoice(
         user_count=max(1, int(sub.user_count or customer.user_count or pricing_snapshot["user_count"])),
     )
 
-    # Push a Stripe
-    if _is_partner_billed_subscription(sub):
-        if invoice.status == InvoiceStatus.draft:
-            invoice.status = InvoiceStatus.issued
-            invoice.issued_at = datetime.now(timezone.utc).replace(tzinfo=None)
-        note = "partner_billing_local_invoice_only"
-        if note not in (invoice.notes or ""):
-            invoice.notes = f"{(invoice.notes or '').strip()} {note}".strip()
-        stripe_result = {
-            "skipped": True,
-            "reason": "partner_billed_subscription",
-            "stripe_invoice_id": None,
-        }
-    else:
-        try:
-            stripe_result = push_invoice_to_stripe(db, invoice)
-        except Exception as e:
-            stripe_result = {"error": str(e), "stripe_invoice_id": None}
-            logger.error(f"Error pushing invoice to Stripe: {e}")
+    # Push a Stripe — si es partner-billed, push_invoice_to_stripe ya resuelve
+    # al Stripe Customer del partner via resolve_billing_stripe_customer
+    try:
+        stripe_result = push_invoice_to_stripe(db, invoice)
+        if _is_partner_billed_subscription(sub):
+            note = "partner_billing_routed_to_partner"
+            if note not in (invoice.notes or ""):
+                invoice.notes = f"{(invoice.notes or '').strip()} {note}".strip()
+    except Exception as e:
+        stripe_result = {"error": str(e), "stripe_invoice_id": None}
+        logger.error(f"Error pushing invoice to Stripe: {e}")
 
     db.commit()
 

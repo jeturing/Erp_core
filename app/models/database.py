@@ -548,6 +548,9 @@ class Subscription(Base):
     tenant_provisioned = Column(Boolean, default=False)
     user_count = Column(Integer, default=1)              # Usuarios facturables
     monthly_amount = Column(Float, default=0)            # Monto calculado: base + (extra_users * price_per_user)
+    discount_pct = Column(Float, default=0)              # Descuento especial % aplicado sobre el monto base
+    discount_amount = Column(Float, default=0)           # Monto descontado en USD
+    discount_reason = Column(Text, nullable=True)        # Motivo del descuento (auditable)
     currency = Column(String(3), default="USD")
     current_period_start = Column(DateTime)
     current_period_end = Column(DateTime)
@@ -1795,6 +1798,38 @@ class AuditEventRecord(Base):
     __table_args__ = (
         Index("ix_audit_type_created", "event_type", "created_at"),
         Index("ix_audit_actor_created", "actor_username", "created_at"),
+    )
+
+
+class ProvisioningAuditLog(Base):
+    """
+    Auditoría detallada del ciclo de vida de provisioning de tenants.
+
+    Tabla separada para rastrear creación, rollback, eliminación y reintentos,
+    con granularidad por paso y `trace_id` para correlación.
+    """
+    __tablename__ = "provisioning_audit_log"
+
+    id = Column(Integer, primary_key=True, index=True)
+    trace_id = Column(PG_UUID(as_uuid=True), default=uuid.uuid4, nullable=False, index=True)
+    subdomain = Column(String(100), nullable=False, index=True)
+    customer_id = Column(Integer, ForeignKey("customers.id", ondelete="SET NULL"), nullable=True, index=True)
+    subscription_id = Column(Integer, ForeignKey("subscriptions.id", ondelete="SET NULL"), nullable=True, index=True)
+    source = Column(String(50), nullable=False, default="internal")
+    action = Column(String(100), nullable=False, index=True)  # provision.started, provision.create_database, rollback.summary
+    status = Column(String(30), nullable=False, default="started", index=True)  # started, success, failed, rolled_back, rollback_failed
+    message = Column(String(500), nullable=False)
+    error_detail = Column(Text, nullable=True)
+    payload = Column(JSON, nullable=True)
+    created_at = Column(DateTime, default=lambda: datetime.now(timezone.utc).replace(tzinfo=None), index=True)
+
+    customer = relationship("Customer", foreign_keys=[customer_id])
+    subscription = relationship("Subscription", foreign_keys=[subscription_id])
+
+    __table_args__ = (
+        Index("ix_provisioning_audit_subdomain_created", "subdomain", "created_at"),
+        Index("ix_provisioning_audit_trace_created", "trace_id", "created_at"),
+        Index("ix_provisioning_audit_status_created", "status", "created_at"),
     )
 
 

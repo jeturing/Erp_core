@@ -1,7 +1,8 @@
 <script lang="ts">
   import { onMount } from 'svelte';
-  import { Users, DollarSign, Shield, Edit3, Minus, Plus, RefreshCw, Search, CreditCard, Mail, KeyRound, Phone } from 'lucide-svelte';
+  import { Users, DollarSign, Shield, Edit3, Minus, Plus, RefreshCw, Search, CreditCard, Mail, KeyRound, Phone, Trash2, AlertTriangle, Power, PlayCircle, PauseCircle } from 'lucide-svelte';
   import { billingApi } from '../lib/api/billing';
+  import { tenantsApi } from '../lib/api/tenants';
   import { workOrdersApi } from '../lib/api/workOrders';
   import CredentialsModal from '../lib/components/CredentialsModal.svelte';
   import type { CustomerItem, Plan } from '../lib/types';
@@ -9,6 +10,7 @@
 
   let customers: CustomerItem[] = $state([]);
   let plans: Plan[] = $state([]);
+  let partners: Array<{ id: number; company_name: string; status: string; partner_code: string }> = $state([]);
   let loading = $state(true);
   let error = $state('');
   let searchQuery = $state('');
@@ -57,6 +59,9 @@
     selectedBlueprint = null;
     ncForm = { company_name: '', email: '', phone: '', full_name: '', subdomain: '', plan_name: 'basic', user_count: 1, partner_id: '', description: '' };
     showNewClient = true;
+    if (partners.length === 0) {
+      try { partners = (await billingApi.getPartners()).items; } catch { }
+    }
     if (blueprints.length === 0) {
       blueprintsLoading = true;
       try { blueprints = await workOrdersApi.getBlueprints(); } catch { }
@@ -71,12 +76,15 @@
     creatingClient = true; ncToast = '';
     try {
       // 1. Crear cliente via billing
+      // Normalizar subdominio (minúsculas)
+      const normalizedSubdomain = ncForm.subdomain.toLowerCase().replace(/[^a-z0-9-]/g, '-').replace(/^-|-$/g, '').replace(/-+/g, '-');
+
       const clientRes = await billingApi.createCustomer({
         company_name: ncForm.company_name,
         email: ncForm.email,
         phone: ncForm.phone,
         full_name: ncForm.full_name,
-        subdomain: ncForm.subdomain,
+        subdomain: normalizedSubdomain,
         plan_name: ncForm.plan_name,
         user_count: ncForm.user_count,
         partner_id: ncForm.partner_id ? Number(ncForm.partner_id) : undefined,
@@ -129,8 +137,29 @@
   // Edit modal
   let showEdit = $state(false);
   let editCustomer: CustomerItem | null = $state(null);
-  let editForm = $state({ user_count: 1, plan_name: '', is_admin_account: false, company_name: '', stripe_customer_id: '', email: '', phone: '', stripe_action: '' });
+  let editForm = $state({
+    user_count: 1,
+    plan_name: '',
+    is_admin_account: false,
+    company_name: '',
+    stripe_customer_id: '',
+    email: '',
+    phone: '',
+    stripe_action: '',
+    discount_pct: 0,
+    discount_reason: '',
+    partner_id: -1 as number,
+  });
   let saving = $state(false);
+  let stripeSearchQuery = $state('');
+  let stripeSearchResults = $state<Array<{ id: string; email: string | null; name: string | null; phone: string | null; created: number | null; metadata: Record<string, unknown> }>>([]);
+  let stripeSearchLoading = $state(false);
+  let statusActionLoading = $state('');
+
+  let showDeleteModal = $state(false);
+  let deleteCustomer: CustomerItem | null = $state(null);
+  let deleteConfirmName = $state('');
+  let deletingTenant = $state(false);
 
   let filtered = $derived(
     customers.filter(c => {
@@ -178,7 +207,7 @@
     }
   }
 
-  function openEdit(customer: CustomerItem) {
+  async function openEdit(customer: CustomerItem) {
     const defaultPlan = customer.subscription?.plan_name || plans[0]?.name || 'basic';
     editCustomer = customer;
     editForm = {
@@ -190,8 +219,16 @@
       phone: customer.phone || '',
       stripe_action: '',
       stripe_customer_id: customer.stripe_customer_id || '',
+      discount_pct: customer.subscription?.discount_pct || 0,
+      discount_reason: customer.subscription?.discount_reason || '',
+      partner_id: customer.partner_id ?? -1,
     };
+    stripeSearchQuery = customer.email || customer.company_name || '';
+    stripeSearchResults = [];
     showEdit = true;
+    if (partners.length === 0) {
+      try { partners = (await billingApi.getPartners()).items; } catch { }
+    }
   }
 
   async function saveCustomer() {
@@ -213,6 +250,92 @@
       alert(e.message || 'Error actualizando');
     } finally {
       saving = false;
+    }
+  }
+
+  async function handleStatusAction(action: string) {
+    if (!editCustomer) return;
+    const labels: Record<string, string> = {
+      suspend_account: 'suspender la cuenta completamente',
+      suspend_billing: 'suspender los cobros',
+      reactivate: 'reactivar la cuenta',
+    };
+    if (!confirm(`¿Seguro que deseas ${labels[action] || action}?`)) return;
+    statusActionLoading = action;
+    try {
+      const reason = prompt('Razón (opcional):') || undefined;
+      const res = await billingApi.updateCustomerStatus(editCustomer.id, action, reason);
+      alert(res.message);
+      await loadData();
+      // refresh editCustomer reference
+      const updated = customers.find(c => c.id === editCustomer!.id);
+      if (updated) editCustomer = updated;
+    } catch (e: any) {
+      alert(e.message || 'Error ejecutando acción');
+    } finally {
+      statusActionLoading = '';
+    }
+  }
+
+  async function handleStripeSearch() {
+    if (!stripeSearchQuery.trim()) {
+      stripeSearchResults = [];
+      return;
+    }
+    stripeSearchLoading = true;
+    try {
+      const res = await billingApi.searchStripeCustomers(stripeSearchQuery.trim(), 10);
+      stripeSearchResults = res.items || [];
+      if (stripeSearchResults.length === 0) {
+        alert('No se encontraron cuentas Stripe para esa búsqueda');
+      }
+    } catch (e: any) {
+      alert(e.message || 'Error buscando en Stripe');
+    } finally {
+      stripeSearchLoading = false;
+    }
+  }
+
+  async function linkSelectedStripeCustomer(stripeCustomerId: string) {
+    if (!editCustomer) return;
+    saving = true;
+    try {
+      await billingApi.linkExistingStripeCustomer(editCustomer.id, stripeCustomerId);
+      editForm.stripe_customer_id = stripeCustomerId;
+      alert('Cuenta Stripe vinculada exitosamente');
+      await loadData();
+    } catch (e: any) {
+      alert(e.message || 'Error vinculando cuenta Stripe');
+    } finally {
+      saving = false;
+    }
+  }
+
+  function openDeleteTenantModal(customer: CustomerItem) {
+    deleteCustomer = customer;
+    deleteConfirmName = '';
+    showDeleteModal = true;
+  }
+
+  async function confirmDeleteTenantAndAccount() {
+    if (!deleteCustomer) return;
+    const expected = deleteCustomer.subdomain.trim().toLowerCase();
+    if (deleteConfirmName.trim().toLowerCase() !== expected) {
+      alert(`Confirmación inválida. Debe escribir exactamente: ${deleteCustomer.subdomain}`);
+      return;
+    }
+    deletingTenant = true;
+    try {
+      const res = await tenantsApi.delete(deleteCustomer.subdomain, deleteConfirmName.trim());
+      alert(res.message || 'Tenant eliminado correctamente');
+      showDeleteModal = false;
+      deleteCustomer = null;
+      deleteConfirmName = '';
+      await loadData();
+    } catch (e: any) {
+      alert(e.message || 'Error eliminando tenant/cuenta');
+    } finally {
+      deletingTenant = false;
     }
   }
 
@@ -551,6 +674,14 @@
                   >
                     <Edit3 size={14} />
                   </button>
+                  <button
+                    class="btn-danger btn-sm"
+                    onclick={() => openDeleteTenantModal(customer)}
+                    title="Eliminar cuenta y tenant"
+                    disabled={customerActionLoading === customer.id}
+                  >
+                    <Trash2 size={14} />
+                  </button>
                 </div>
               </td>
             </tr>
@@ -617,6 +748,35 @@
             </div>
           </div>
 
+          <!-- Partner -->
+          <div>
+            <label class="label" for="edit-partner">Partner asignado</label>
+            <select id="edit-partner" class="input" bind:value={editForm.partner_id}>
+              <option value={0}>Sin partner (directo Jeturing)</option>
+              {#each partners.filter(p => p.status === 'active') as partner}
+                <option value={partner.id}>{partner.company_name} ({partner.partner_code})</option>
+              {/each}
+            </select>
+          </div>
+
+          <!-- Descuento -->
+          <div class="grid grid-cols-2 gap-4">
+            <div>
+              <label class="label" for="edit-discount-pct">Descuento (%)</label>
+              <input id="edit-discount-pct" type="number" min="0" max="100" step="0.1" class="input" bind:value={editForm.discount_pct} placeholder="0" />
+            </div>
+            <div>
+              <label class="label" for="edit-discount-reason">Motivo</label>
+              <input id="edit-discount-reason" type="text" class="input" bind:value={editForm.discount_reason} placeholder="Acuerdo comercial..." />
+            </div>
+          </div>
+          {#if editForm.discount_pct > 0}
+            <div class="bg-green-500/10 border border-green-500/30 rounded-lg p-3 text-green-400 text-xs">
+              💰 Se aplicará un descuento del {editForm.discount_pct}% al monto calculado del plan.
+            </div>
+          {/if}
+
+          <!-- Admin -->
           <div class="flex items-center gap-3">
             <input type="checkbox" id="edit-admin" bind:checked={editForm.is_admin_account} class="w-4 h-4" />
             <label for="edit-admin" class="text-sm text-gray-400">
@@ -678,6 +838,42 @@
               {/if}
             </div>
 
+            <div class="bg-dark-subtle rounded-lg p-4 space-y-3">
+              <label class="text-sm text-gray-400 block">Buscar cuenta existente en Stripe</label>
+              <div class="flex gap-2">
+                <input
+                  class="input flex-1"
+                  placeholder="Buscar por email, nombre o ID"
+                  bind:value={stripeSearchQuery}
+                  onkeydown={(e) => e.key === 'Enter' && handleStripeSearch()}
+                />
+                <button type="button" class="btn-secondary" onclick={handleStripeSearch} disabled={stripeSearchLoading || saving}>
+                  {stripeSearchLoading ? 'Buscando...' : 'Buscar'}
+                </button>
+              </div>
+
+              {#if stripeSearchResults.length > 0}
+                <div class="max-h-48 overflow-y-auto border border-border-dark rounded-lg divide-y divide-border-dark">
+                  {#each stripeSearchResults as sc}
+                    <div class="p-3 flex items-center justify-between gap-3">
+                      <div class="text-xs">
+                        <div class="font-mono text-text-light">{sc.id}</div>
+                        <div class="text-gray-400">{sc.email || 'sin email'} {#if sc.name}· {sc.name}{/if}</div>
+                      </div>
+                      <button
+                        type="button"
+                        class="btn-secondary btn-sm"
+                        onclick={() => linkSelectedStripeCustomer(sc.id)}
+                        disabled={saving}
+                      >
+                        Vincular
+                      </button>
+                    </div>
+                  {/each}
+                </div>
+              {/if}
+            </div>
+
             <div class="bg-blue-500/10 border border-blue-500/30 rounded-lg p-3 text-blue-400 text-xs">
               💡 Haz clic en "Buscar/Crear en Stripe" para:
               <ul class="list-disc list-inside mt-2 space-y-1">
@@ -687,6 +883,58 @@
               </ul>
             </div>
           </div>
+        </div>
+
+        <!-- Acciones de cuenta -->
+        <div class="border-t border-border-dark pt-6">
+          <h3 class="font-semibold text-text-light mb-4 flex items-center gap-2">
+            <Power size={18} />
+            Acciones de cuenta
+          </h3>
+
+          {#if editCustomer}
+            {@const isSuspended = editCustomer.status === 'suspended'}
+            {@const subSuspended = editCustomer.subscription?.status === 'suspended'}
+
+            <div class="space-y-3">
+              {#if !isSuspended && !subSuspended}
+                <!-- Active account — show suspend options -->
+                <button
+                  type="button"
+                  class="btn-secondary w-full flex items-center justify-center gap-2 text-yellow-400 border-yellow-500/40 hover:bg-yellow-500/10"
+                  onclick={() => handleStatusAction('suspend_billing')}
+                  disabled={!!statusActionLoading}
+                >
+                  <PauseCircle size={16} />
+                  {statusActionLoading === 'suspend_billing' ? 'Suspendiendo...' : 'Suspender cobros'}
+                </button>
+                <button
+                  type="button"
+                  class="btn-secondary w-full flex items-center justify-center gap-2 text-red-400 border-red-500/40 hover:bg-red-500/10"
+                  onclick={() => handleStatusAction('suspend_account')}
+                  disabled={!!statusActionLoading}
+                >
+                  <Power size={16} />
+                  {statusActionLoading === 'suspend_account' ? 'Suspendiendo...' : 'Suspender cuenta completa'}
+                </button>
+              {:else}
+                <!-- Suspended — show reactivate -->
+                <div class="bg-red-500/10 border border-red-500/30 rounded-lg p-3 text-red-400 text-sm flex items-center gap-2">
+                  <AlertTriangle size={16} />
+                  {isSuspended ? 'Cuenta suspendida' : 'Cobros suspendidos'}
+                </div>
+                <button
+                  type="button"
+                  class="btn-accent w-full flex items-center justify-center gap-2"
+                  onclick={() => handleStatusAction('reactivate')}
+                  disabled={!!statusActionLoading}
+                >
+                  <PlayCircle size={16} />
+                  {statusActionLoading === 'reactivate' ? 'Reactivando...' : 'Reactivar cuenta'}
+                </button>
+              {/if}
+            </div>
+          {/if}
         </div>
 
         <!-- Botones finales -->
@@ -763,8 +1011,13 @@
               <input type="number" min="1" class="input w-full" bind:value={ncForm.user_count} />
             </div>
             <div>
-              <label class="label">Partner ID (opcional)</label>
-              <input type="number" class="input w-full" bind:value={ncForm.partner_id} placeholder="ID del partner" />
+              <label class="label">Partner (opcional)</label>
+              <select class="input w-full" bind:value={ncForm.partner_id}>
+                <option value="">Sin asignar</option>
+                {#each partners.filter(p => p.status === 'active') as partner}
+                  <option value={partner.id}>{partner.company_name} ({partner.partner_code})</option>
+                {/each}
+              </select>
             </div>
           </div>
 
@@ -866,3 +1119,37 @@
   }}
   onSendEmail={handleSendCredentialsEmail}
 />
+
+<!-- Modal confirmar eliminación tenant + cuenta -->
+{#if showDeleteModal && deleteCustomer}
+  <div class="fixed inset-0 bg-black/70 z-50 flex items-center justify-center p-4" role="dialog">
+    <div class="bg-charcoal rounded-xl border border-border-dark w-full max-w-lg">
+      <div class="flex items-center justify-between p-5 border-b border-border-dark">
+        <h3 class="text-lg font-semibold text-red-400 flex items-center gap-2">
+          <AlertTriangle size={18} /> Eliminar cuenta y tenant
+        </h3>
+        <button class="text-gray-400 hover:text-text-light" onclick={() => { showDeleteModal = false; }}>✕</button>
+      </div>
+      <div class="p-5 space-y-4">
+        <p class="text-sm text-gray-300">
+          Esta acción eliminará permanentemente la cuenta <strong>{deleteCustomer.company_name}</strong>
+          y su tenant <strong>{deleteCustomer.subdomain}</strong>.
+        </p>
+        <p class="text-xs text-red-300/90">
+          Para confirmar, escriba el nombre del tenant: <span class="font-mono">{deleteCustomer.subdomain}</span>
+        </p>
+        <input
+          class="input w-full font-mono"
+          placeholder={deleteCustomer.subdomain}
+          bind:value={deleteConfirmName}
+        />
+      </div>
+      <div class="p-5 border-t border-border-dark flex justify-end gap-2">
+        <button class="btn-secondary" onclick={() => { showDeleteModal = false; }}>Cancelar</button>
+        <button class="btn-danger" onclick={confirmDeleteTenantAndAccount} disabled={deletingTenant}>
+          {deletingTenant ? 'Eliminando...' : 'Confirmar eliminación'}
+        </button>
+      </div>
+    </div>
+  </div>
+{/if}

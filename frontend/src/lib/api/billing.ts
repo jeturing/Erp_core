@@ -71,6 +71,20 @@ export const billingApi = {
     return api.get<CustomersResponse>(`/api/customers${qs}`);
   },
 
+  // Partners
+  async getPartners(): Promise<{
+    items: Array<{
+      id: number;
+      company_name: string;
+      contact_email: string;
+      status: string;
+      partner_code: string;
+    }>;
+    total: number;
+  }> {
+    return api.get('/api/partners');
+  },
+
   async createCustomer(data: {
     company_name: string;
     email: string;
@@ -107,8 +121,45 @@ export const billingApi = {
     email?: string;
     phone?: string;
     stripe_action?: string;
+    discount_pct?: number;
+    discount_reason?: string;
+    partner_id?: number;
   }): Promise<{ message: string; changes: string[] }> {
     return api.put(`/api/customers/${id}`, data);
+  },
+
+  async updateCustomerStatus(id: number, action: string, reason?: string): Promise<{
+    message: string;
+    customer_status: string;
+    subscription_status: string | null;
+  }> {
+    return api.put(`/api/customers/${id}/status`, { action, reason });
+  },
+
+  async searchStripeCustomers(query: string, limit = 10): Promise<{
+    success: boolean;
+    query: string;
+    items: Array<{
+      id: string;
+      email: string | null;
+      name: string | null;
+      phone: string | null;
+      created: number | null;
+      metadata: Record<string, unknown>;
+    }>;
+    total: number;
+  }> {
+    const qs = new URLSearchParams({ q: query, limit: String(limit) });
+    return api.get(`/api/customers/stripe/search?${qs.toString()}`);
+  },
+
+  async linkExistingStripeCustomer(id: number, stripeCustomerId: string): Promise<{
+    success: boolean;
+    message: string;
+    customer_id: number;
+    stripe_customer_id: string;
+  }> {
+    return api.post(`/api/customers/${id}/stripe/link`, { stripe_customer_id: stripeCustomerId });
   },
 
   async updateUserCount(id: number, userCount: number): Promise<{

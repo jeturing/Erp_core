@@ -30,7 +30,7 @@ const options = {
   service_worker_options: void 0,
   server_error_boundaries: false,
   templates: {
-    app: ({ head, body, assets, nonce, env }) => '<!doctype html>\n<html lang="es">\n  <head>\n    <meta charset="UTF-8" />\n    <link rel="icon" type="image/svg+xml" href="' + assets + '/favicon.svg" />\n    <link rel="icon" type="image/png" href="' + assets + '/favicon.png" />\n    <link rel="apple-touch-icon" href="' + assets + '/icons/apple-touch-icon.png" />\n    <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover" />\n    <meta name="theme-color" content="#1e3a5f" />\n    <meta name="description" content="Sajet ERP — Sistema de gestión empresarial en la nube" />\n    <!-- PWA meta tags -->\n    <meta name="mobile-web-app-capable" content="yes" />\n    <meta name="apple-mobile-web-app-capable" content="yes" />\n    <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent" />\n    <meta name="apple-mobile-web-app-title" content="Sajet ERP" />\n    <meta name="application-name" content="Sajet ERP" />\n    <title>Sajet ERP</title>\n    ' + head + `
+    app: ({ head, body, assets, nonce, env }) => '<!doctype html>\n<html lang="es">\n  <head>\n    <meta charset="UTF-8" />\n    <link rel="icon" type="image/svg+xml" href="' + assets + '/favicon.svg" />\n    <link rel="icon" type="image/png" href="' + assets + '/favicon.png" />\n    <link rel="apple-touch-icon" href="' + assets + '/icons/sajet-touch-180.png" />\n    <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover" />\n    <meta name="theme-color" content="#1e3a5f" />\n    <meta name="description" content="Sajet ERP — Sistema de gestión empresarial en la nube" />\n    <!-- PWA meta tags -->\n    <meta name="mobile-web-app-capable" content="yes" />\n    <meta name="apple-mobile-web-app-capable" content="yes" />\n    <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent" />\n    <meta name="apple-mobile-web-app-title" content="Sajet ERP" />\n    <meta name="application-name" content="Sajet ERP" />\n    <title>Sajet ERP</title>\n    ' + head + `
     <!-- Meta Pixel Code -->
     <script>
       !function(f,b,e,v,n,t,s){if(f.fbq)return;n=f.fbq=function(){n.callMethod?
@@ -118,7 +118,7 @@ const options = {
 		<div class="error">
 			<span class="status">` + status + '</span>\n			<div class="message">\n				<h1>' + message + "</h1>\n			</div>\n		</div>\n	</body>\n</html>\n"
   },
-  version_hash: "1odbonx"
+  version_hash: "pi1w1n"
 };
 async function get_hooks() {
   let handle;

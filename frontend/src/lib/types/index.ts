@@ -562,13 +562,18 @@ export interface CustomerItem {
   subdomain: string;
   user_count: number;
   is_admin_account: boolean;
+  status?: string;
   stripe_customer_id?: string | null;
+  partner_id?: number | null;
   subscription: {
     id: number;
     plan_name: string;
     status: string;
     monthly_amount: number;
     calculated_amount: number;
+    discount_pct?: number;
+    discount_amount?: number;
+    discount_reason?: string | null;
     user_count: number;
     start_date?: string | null;
   } | null;

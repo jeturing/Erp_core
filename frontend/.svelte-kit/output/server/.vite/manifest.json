@@ -983,6 +983,7 @@
     "imports": [
       "_index2.js",
       "_client.js",
+      "_tenants.js",
       "_x.js",
       "_Icon.js",
       "_plus.js",
@@ -1953,7 +1954,7 @@
       "_darkMode.js"
     ],
     "css": [
-      "_app/immutable/assets/_layout.BodBcT6P.css"
+      "_app/immutable/assets/_layout.C0Jft2kc.css"
     ]
   },
   "src/routes/+layout.ts": {
