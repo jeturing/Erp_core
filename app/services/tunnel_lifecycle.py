@@ -21,7 +21,7 @@ from typing import Dict, Any, Optional, List
 
 from ..models.database import (
     SessionLocal, TenantDeployment, Subscription, Customer,
-    SubscriptionStatus,
+    SubscriptionStatus, BillingMode,
 )
 from .cloudflare_manager import CloudflareManager
 
@@ -35,6 +35,12 @@ SUSPEND_STATUSES = {
     SubscriptionStatus.past_due,
     SubscriptionStatus.suspended,
     SubscriptionStatus.cancelled,
+}
+
+# Billing modes de partners — NO se auto-bloquean, solo bloqueo manual
+PARTNER_BILLING_MODES = {
+    BillingMode.PARTNER_DIRECT,
+    BillingMode.PARTNER_PAYS_FOR_CLIENT,
 }
 
 
@@ -221,7 +227,21 @@ async def sync_tunnel_lifecycle(subscription_id: int) -> Dict[str, Any]:
 
         elif subscription.status in SUSPEND_STATUSES:
             # ═══ SUSPENDER TUNNEL ═══
-            if deployment.tunnel_active:
+            # Solo auto-suspender clientes directos (Jeturing Direct).
+            # Partners se bloquean manualmente vía admin endpoint.
+            billing_mode = getattr(subscription, 'billing_mode', None)
+            is_partner = billing_mode in PARTNER_BILLING_MODES if billing_mode else False
+
+            if is_partner:
+                action = "skipped_partner_manual_only"
+                logger.info(
+                    f"⏭️ Tunnel {tunnel_id} NO suspendido automáticamente para "
+                    f"{customer.company_name if customer else 'cliente'} "
+                    f"(billing_mode={billing_mode.value if billing_mode else '?'}, "
+                    f"status={subscription.status.value}). "
+                    f"Partners requieren suspensión manual vía admin."
+                )
+            elif deployment.tunnel_active:
                 deployment.tunnel_active = False
                 action = "suspended"
 

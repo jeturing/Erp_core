@@ -103,6 +103,7 @@ def _resolve_container(
 _NODE_PORT_DEFAULTS: Dict[int, Dict[str, int]] = {
     105: {"http_port": 8080, "chat_port": 8072},
     161: {"http_port": 8080, "chat_port": 8072},
+    201: {"http_port": 9000, "chat_port": 9500},  # dedicated service base
 }
 
 
@@ -123,6 +124,8 @@ def ensure_tenant_deployment(
     server_ip: Optional[str] = None,
     plan_name: Optional[str] = None,
     tunnel_id: Optional[str] = None,
+    http_port: Optional[int] = None,
+    chat_port: Optional[int] = None,
     db: Optional[Session] = None,
 ) -> Dict[str, Any]:
     """
@@ -172,6 +175,11 @@ def ensure_tenant_deployment(
         # 3. Determinar puertos y host
         pct_id = node.vmid if node and node.vmid else ODOO_PRIMARY_PCT_ID
         ports = _get_node_ports(pct_id)
+        # Override con puertos explícitos del provisioner (servicio dedicado)
+        if http_port:
+            ports["http_port"] = http_port
+        if chat_port:
+            ports["chat_port"] = chat_port
         backend_host = (
             server_ip
             or (node.hostname if node else None)

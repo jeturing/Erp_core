@@ -275,6 +275,39 @@ class TenantLifecycleOrchestrator:
 
             await saga.step("create_database", _create_db, compensate=_drop_db)
 
+            # 3b. Provisionar servicio Odoo (config, puertos, cloudflared, DNS)
+            odoo_service_state: dict[str, Any] = {}
+
+            async def _provision_odoo_service() -> StepResult:
+                from ..services.odoo_tenant_provisioner import provision_odoo_service
+                loc = COUNTRY_LOCALIZATION.get((spec.country_code or "US").upper(), COUNTRY_LOCALIZATION["US"])
+                template = loc.get("template_db", "tenant_do")
+                # Resolve template from country
+                from ..services.odoo_database_manager import resolve_template_db_for_country
+                resolved_template = resolve_template_db_for_country(
+                    (spec.country_code or "US").upper()
+                )
+                svc = await provision_odoo_service(
+                    subdomain=spec.subdomain,
+                    template_db=resolved_template,
+                    base_domain=spec.base_domain,
+                )
+                if svc.get("success"):
+                    odoo_service_state["http_port"] = svc["http_port"]
+                    odoo_service_state["ws_port"] = svc["ws_port"]
+                    odoo_service_state["backend_host"] = svc.get("backend_host", "10.10.20.201")
+                    return StepResult(name="provision_odoo_service", success=True, detail=svc)
+                return StepResult(name="provision_odoo_service", success=False,
+                                  error=svc.get("error", "odoo service provisioning failed"))
+
+            async def _deprovision_odoo_service() -> StepResult:
+                from ..services.odoo_tenant_provisioner import deprovision_odoo_service
+                d = await deprovision_odoo_service(spec.subdomain, spec.base_domain)
+                return StepResult(name="rollback_odoo_service", success=True, detail=d)
+
+            await saga.step("provision_odoo_service", _provision_odoo_service,
+                            compensate=_deprovision_odoo_service, critical=False)
+
             # 4. Customer + Subscription (idempotente)
             def _upsert_customer() -> StepResult:
                 db = SessionLocal()
@@ -337,6 +370,8 @@ class TenantLifecycleOrchestrator:
                         customer_id=result.customer_id,
                         server_id=creation_state.get("server"),
                         plan_name=spec.plan_name,
+                        http_port=odoo_service_state.get("http_port"),
+                        chat_port=odoo_service_state.get("ws_port"),
                         db=db,
                     )
                     if not dep_res.get("success"):
@@ -358,9 +393,9 @@ class TenantLifecycleOrchestrator:
 
             await saga.step("write_deployment", _write_deployment, critical=False)
 
-            backend_host = deployment_state.get("backend_host") or ODOO_PRIMARY_IP
-            http_port = int(deployment_state.get("http_port") or 8080)
-            chat_port = int(deployment_state.get("chat_port") or 8072)
+            backend_host = odoo_service_state.get("backend_host") or deployment_state.get("backend_host") or ODOO_PRIMARY_IP
+            http_port = int(odoo_service_state.get("http_port") or deployment_state.get("http_port") or 8080)
+            chat_port = int(odoo_service_state.get("ws_port") or deployment_state.get("chat_port") or 8072)
 
             # 6. Nginx
             def _configure_nginx() -> StepResult:
@@ -380,29 +415,32 @@ class TenantLifecycleOrchestrator:
 
             await saga.step("configure_nginx", _configure_nginx, compensate=_remove_nginx, critical=False)
 
-            # 7. Cloudflared (PCT 205)
-            def _configure_cloudflared() -> StepResult:
-                from ..config import get_runtime_setting, get_runtime_int
+            # 7. Cloudflared (PCT 205) — manejado por provision_odoo_service en paso 3b
+            #    Si odoo_service_state tiene datos, las rutas ya fueron creadas.
+            #    Solo ejecutar si el paso 3b no lo hizo (fallback).
+            if not odoo_service_state.get("http_port"):
+                def _configure_cloudflared() -> StepResult:
+                    from ..config import get_runtime_setting, get_runtime_int
 
-                tunnel_edge_host = get_runtime_setting("TUNNEL_EDGE_HOST", "10.10.20.205")
-                tunnel_edge_port = get_runtime_int("TUNNEL_EDGE_PORT", 80)
-                gate = add_tenant_route(
-                    subdomain=spec.subdomain,
-                    node_ip=tunnel_edge_host,
-                    http_port=tunnel_edge_port,
-                    chat_port=tunnel_edge_port,
-                    base_domain=spec.base_domain,
-                )
-                ok = bool(gate.get("success"))
-                return StepResult(name="configure_cloudflared", success=ok,
-                                  detail=gate, error=None if ok else gate.get("error"))
+                    tunnel_edge_host = get_runtime_setting("TUNNEL_EDGE_HOST", "10.10.20.205")
+                    tunnel_edge_port = get_runtime_int("TUNNEL_EDGE_PORT", 80)
+                    gate = add_tenant_route(
+                        subdomain=spec.subdomain,
+                        node_ip=tunnel_edge_host,
+                        http_port=tunnel_edge_port,
+                        chat_port=tunnel_edge_port,
+                        base_domain=spec.base_domain,
+                    )
+                    ok = bool(gate.get("success"))
+                    return StepResult(name="configure_cloudflared", success=ok,
+                                      detail=gate, error=None if ok else gate.get("error"))
 
-            def _remove_cloudflared() -> StepResult:
-                gate = remove_tenant_route(spec.subdomain, base_domain=spec.base_domain)
-                return StepResult(name="rollback_cloudflared", success=bool(gate.get("success")), detail=gate)
+                def _remove_cloudflared() -> StepResult:
+                    gate = remove_tenant_route(spec.subdomain, base_domain=spec.base_domain)
+                    return StepResult(name="rollback_cloudflared", success=bool(gate.get("success")), detail=gate)
 
-            await saga.step("configure_cloudflared", _configure_cloudflared,
-                            compensate=_remove_cloudflared, critical=False)
+                await saga.step("configure_cloudflared", _configure_cloudflared,
+                                compensate=_remove_cloudflared, critical=False)
 
             # 8. Email credenciales (opcional)
             if spec.send_credentials_email and spec.admin_email:
