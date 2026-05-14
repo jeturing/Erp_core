@@ -56,6 +56,7 @@ from .routes import session_monitoring   # 🛡️ DSAM — Dynamic Session & An
 from .routes import developer_portal     # 🔧 Developer Portal — Apps & Agreement Flows
 from .routes import funnel_leads         # 🎯 Funnel Leads — Captura orgánica por nicho
 from .routes import track_admin          # 📍 Track Admin — gestión de tack.sajet.us
+from .routes import dgii_service         # 🇩🇴 DGII Data Service — validación RNC y prevalidación
 from .routes.roles import _require_admin as _require_admin_base
 
 # Import security middleware
@@ -284,6 +285,7 @@ app.include_router(developer_portal.router)      # 🔧 Developer Portal — App
 app.include_router(internal_config.router)       # 🔒 Config M2M — Jeturing-Pay y servicios internos
 app.include_router(funnel_leads.router)          # 🎯 Funnel Leads — Captura orgánica por nicho
 app.include_router(track_admin.router)           # 📍 Track Admin — admin panel de tack.sajet.us (Jeturing-Track)
+app.include_router(dgii_service.router)         # 🇩🇴 DGII Data Service
 
 
 # ── CORS Cache Refresh endpoint ──

@@ -1,336 +1,282 @@
-"""
-DGII Data Service: Microservicio FastAPI para validación RNC y enriquecimiento datos.
-
-Endpoints:
-- GET /api/dgii/rnc/{numero}        → Validar RNC contra padrón oficial
-- POST /api/dgii/validate           → Pre-validación anti-rechazo
-- GET /api/dgii/health              → Health check
-- POST /api/dgii/partner/enrich     → Enriquecimiento automático de partners
-
-Cache: Redis (opcional) o PostgreSQL tabla local
-TTL: 30 días para RNC, 7 días para validaciones
-"""
-from fastapi import APIRouter, HTTPException, Depends, Body
-from sqlalchemy.ext.asyncio import AsyncSession
-from sqlalchemy import select, func
+"""DGII Data Service: validación RNC y prevalidación anti-rechazo."""
 from datetime import datetime, timedelta
-from pydantic import BaseModel, Field
 import logging
+import re
+from typing import Any, cast
+
+from fastapi import APIRouter, Depends, HTTPException
+from pydantic import BaseModel, Field
+from sqlalchemy.orm import Session
+
+from ..models.database import Partner, get_db
+from ..models.dgii_cache_models import DgiiRncCache, DgiiValidationLog, DgiiDataServiceConfig, RncStatus
 
 router = APIRouter(prefix="/api/dgii", tags=["DGII"])
-_logger = logging.getLogger(__name__)
-
-
-# ============================================================================
-# MODELOS PYDANTIC
-# ============================================================================
-
-class RncValidationRequest(BaseModel):
-    """Solicitud de validación RNC."""
-    rnc: str = Field(..., min_length=9, max_length=11, description="RNC del proveedor")
-    business_name: str | None = Field(None, description="Nombre empresa (opcional)")
-    company_id: int = Field(..., description="Company Odoo ID")
+logger = logging.getLogger(__name__)
 
 
 class RncValidationResponse(BaseModel):
-    """Respuesta de validación RNC."""
     rnc: str
     valid: bool
-    status: str  # "active", "inactive", "not_found"
+    status: str
     business_name: str | None
     last_updated: datetime
     cache_ttl_expires: datetime | None
-    confidence_score: float  # 0.0 - 1.0
+    confidence_score: float
 
 
 class DgiiValidationRequest(BaseModel):
-    """Solicitud de pre-validación DGII."""
-    document_type: str  # "606", "607", "608"
+    document_type: str = Field(..., description="606 | 607 | 608")
     company_id: int
     ncf: str | None = None
     amount: float | None = None
     supplier_rnc: str | None = None
     invoice_date: str | None = None
+    user_id: int | None = None
 
 
 class ValidationIssue(BaseModel):
-    """Problema detectado en validación."""
-    issue_code: str  # "NCF_DUPLICATE", "AMOUNT_ZERO", "RNC_INACTIVE", etc.
-    severity: str  # "warning", "error"
+    issue_code: str
+    severity: str
     description: str
     suggestion: str | None = None
 
 
 class DgiiValidationResponse(BaseModel):
-    """Respuesta de pre-validación."""
     valid: bool
-    issues: list[ValidationIssue] = []
-    can_proceed: bool  # True si severity="warning", False si severity="error"
+    issues: list[ValidationIssue]
+    can_proceed: bool
     timestamp: datetime
 
 
-class HealthResponse(BaseModel):
-    """Health check response."""
-    status: str
-    service: str
-    version: str
-    database: str
-    timestamp: datetime
+class EnrichPartnerRequest(BaseModel):
+    rnc: str = Field(..., min_length=9, max_length=11)
+    company_name: str | None = None
+    contact_email: str | None = None
 
 
-# ============================================================================
-# ENDPOINTS
-# ============================================================================
+def _clean_rnc(value: str) -> str:
+    return re.sub(r"\D", "", (value or "").strip())
 
-@router.get("/health", response_model=HealthResponse)
-async def health_check():
-    """Health check del servicio DGII."""
-    return HealthResponse(
-        status="healthy",
-        service="DGII Data Service",
-        version="1.0.0",
-        database="PostgreSQL (erp_core_db)",
-        timestamp=datetime.utcnow()
-    )
+
+def _valid_ncf(value: str) -> bool:
+    if not value:
+        return False
+    ncf = value.strip().upper()
+    return bool(re.match(r"^(E\d{11}|[ABP]\d{10})$", ncf))
+
+
+def _get_or_create_config(db: Session, company_id: int) -> DgiiDataServiceConfig:
+    config = db.query(DgiiDataServiceConfig).filter(DgiiDataServiceConfig.company_id == company_id).first()
+    if config:
+        return config
+    config = DgiiDataServiceConfig(company_id=company_id)
+    db.add(config)
+    db.commit()
+    db.refresh(config)
+    return config
+
+
+def _resolve_rnc(db: Session, rnc: str, ttl_days: int = 30) -> DgiiRncCache:
+    clean = _clean_rnc(rnc)
+    if len(clean) < 9:
+        raise HTTPException(status_code=400, detail="RNC inválido (mínimo 9 dígitos)")
+
+    now = datetime.utcnow()
+    cache = db.query(DgiiRncCache).filter(DgiiRncCache.rnc_number == clean).first()
+    cache_obj = cast(Any, cache)
+    if cache_obj is not None and cache_obj.ttl_expires and cache_obj.ttl_expires > now:
+        return cache
+
+    # Placeholder hasta integrar padrón oficial DGII
+    inferred_status = RncStatus.ACTIVE if len(clean) in (9, 11) else RncStatus.NOT_FOUND
+    business_name = cache_obj.business_name if cache_obj is not None and cache_obj.business_name else f"RNC {clean}"
+
+    if cache_obj is not None:
+        cache_obj.status = inferred_status
+        cache_obj.business_name = business_name
+        cache_obj.last_updated = now
+        cache_obj.ttl_expires = now + timedelta(days=ttl_days)
+        cache_obj.update_count = (cache_obj.update_count or 0) + 1
+    else:
+        cache = DgiiRncCache(
+            rnc_number=clean,
+            status=inferred_status,
+            business_name=business_name,
+            last_updated=now,
+            ttl_expires=now + timedelta(days=ttl_days),
+            update_count=1,
+        )
+        db.add(cache)
+
+    db.commit()
+    db.refresh(cache)
+    return cache
+
+
+@router.get("/health")
+async def health_check() -> dict:
+    return {
+        "success": True,
+        "data": {
+            "status": "healthy",
+            "service": "DGII Data Service",
+            "version": "1.0.1",
+            "timestamp": datetime.utcnow().isoformat(),
+        },
+        "meta": {},
+    }
 
 
 @router.get("/rnc/{numero}", response_model=RncValidationResponse)
-async def validate_rnc(
-    numero: str,
-    db: AsyncSession = Depends()  # Inyectar sesión DB
-):
-    """
-    Validar RNC contra padrón oficial.
-    
-    Flujo:
-    1. Buscar en cache local (dgii_rnc_cache)
-    2. Si TTL válido (< 30 días), retornar caché
-    3. Si TTL expirado, consultar API oficial DGII (si implementado)
-    4. Actualizar cache, retornar resultado
-    
-    Códigos de estado:
-    - "active": RNC registrado y activo
-    - "inactive": RNC registrado pero inactivo
-    - "not_found": No encontrado en padrón
-    """
-    
-    # Validar formato RNC
-    if not numero or len(numero) < 9:
-        raise HTTPException(status_code=400, detail="RNC inválido (mín. 9 caracteres)")
-    
-    # Buscar en cache local
-    from app.models.database import DgiiRncCache
-    
-    cache_record = (await db.execute(
-        select(DgiiRncCache)
-        .where(DgiiRncCache.rnc_number == numero)
-        .where(DgiiRncCache.ttl_expires > datetime.utcnow())  # No expirado
-    )).scalars().first()
-    
-    if cache_record:
-        # Retornar desde cache
-        return RncValidationResponse(
-            rnc=numero,
-            valid=cache_record.status == "active",
-            status=cache_record.status,
-            business_name=cache_record.business_name,
-            last_updated=cache_record.last_updated,
-            cache_ttl_expires=cache_record.ttl_expires,
-            confidence_score=1.0  # Cache es confiable
-        )
-    
-    # Si cache expirado o no existe, consultar API DGII (mock por ahora)
-    # TODO: Integrar con API oficial DGII cuando esté disponible
-    
-    # Mock: Simular respuesta
-    new_status = "active"  # Asumir activo por defecto
-    new_record = DgiiRncCache(
-        rnc_number=numero,
-        business_name=f"Empresa RNC {numero}",
-        status=new_status,
-        last_updated=datetime.utcnow(),
-        ttl_expires=datetime.utcnow() + timedelta(days=30)
-    )
-    db.add(new_record)
-    await db.commit()
-    
+async def validate_rnc(numero: str, db: Session = Depends(get_db)):
+    cache = _resolve_rnc(db, numero)
+    status_value = cache.status.value if hasattr(cache.status, "value") else str(cache.status)
     return RncValidationResponse(
-        rnc=numero,
-        valid=(new_status == "active"),
-        status=new_status,
-        business_name=new_record.business_name,
-        last_updated=new_record.last_updated,
-        cache_ttl_expires=new_record.ttl_expires,
-        confidence_score=0.8  # API es confiable pero requiere validación
+        rnc=cast(Any, cache).rnc_number,
+        valid=status_value == RncStatus.ACTIVE.value,
+        status=status_value,
+        business_name=cast(Any, cache).business_name,
+        last_updated=cast(Any, cache).last_updated,
+        cache_ttl_expires=cast(Any, cache).ttl_expires,
+        confidence_score=1.0,
     )
 
 
 @router.post("/validate", response_model=DgiiValidationResponse)
-async def validate_dgii_document(
-    request: DgiiValidationRequest = Body(...),
-    db: AsyncSession = Depends()
-):
-    """
-    Pre-validación anti-rechazo para documentos 606/607/608.
-    
-    Checks:
-    1. NCF duplicado (no debe existir ya en 606/607/608)
-    2. Formato válido (NCF según secuencia fiscal)
-    3. Catálogos válidos (empresa en padrón, RNC activo)
-    4. Montos válidos (no ceros, no negativos)
-    5. Fechas válidas (dentro del período fiscal)
-    6. Retenciones correctas (si aplica)
-    """
-    
+async def validate_dgii_document(request: DgiiValidationRequest, db: Session = Depends(get_db)):
     issues: list[ValidationIssue] = []
-    
-    # Check 1: NCF Duplicado
-    if request.ncf:
-        from app.models.database import DgiiReportLog
-        existing = (await db.execute(
-            select(DgiiReportLog)
-            .where(DgiiReportLog.ncf == request.ncf)
-            .where(DgiiReportLog.company_id == request.company_id)
-            .where(DgiiReportLog.document_type == request.document_type)
-        )).scalars().first()
-        
-        if existing:
-            issues.append(ValidationIssue(
-                issue_code="NCF_DUPLICATE",
+    doc_type = (request.document_type or "").strip()
+    if doc_type not in {"606", "607", "608"}:
+        issues.append(
+            ValidationIssue(
+                issue_code="DOC_TYPE_INVALID",
                 severity="error",
-                description=f"NCF {request.ncf} ya existe en {request.document_type}",
-                suggestion="Usar NCF diferente"
-            ))
-    
-    # Check 2: Monto válido
-    if request.amount is not None:
-        if request.amount <= 0:
-            issues.append(ValidationIssue(
+                description="Tipo de documento inválido. Use 606, 607 o 608.",
+                suggestion="Corregir document_type",
+            )
+        )
+
+    if request.ncf and not _valid_ncf(request.ncf):
+        issues.append(
+            ValidationIssue(
+                issue_code="NCF_FORMAT_INVALID",
+                severity="error",
+                description=f"NCF {request.ncf} no cumple formato fiscal.",
+                suggestion="Revisar secuencia NCF",
+            )
+        )
+
+    if request.amount is not None and request.amount <= 0:
+        issues.append(
+            ValidationIssue(
                 issue_code="AMOUNT_ZERO",
                 severity="error",
-                description="Monto debe ser mayor a 0",
-                suggestion="Verificar monto de la factura"
-            ))
-        elif request.amount > 999999999.99:
-            issues.append(ValidationIssue(
-                issue_code="AMOUNT_TOO_HIGH",
-                severity="warning",
-                description="Monto inusualmente alto",
-                suggestion="Verificar que sea correcto"
-            ))
-    
-    # Check 3: RNC proveedor activo (si es 606)
-    if request.document_type == "606" and request.supplier_rnc:
-        rnc_valid = (await validate_rnc(request.supplier_rnc, db)).valid
-        if not rnc_valid:
-            issues.append(ValidationIssue(
-                issue_code="RNC_INACTIVE",
-                severity="error",
-                description=f"RNC {request.supplier_rnc} no está activo",
-                suggestion="Verificar RNC del proveedor"
-            ))
-    
-    # Check 4: Fecha válida
+                description="Monto debe ser mayor a 0.",
+                suggestion="Corregir monto del documento",
+            )
+        )
+
     if request.invoice_date:
         try:
-            from datetime import datetime
             inv_date = datetime.fromisoformat(request.invoice_date)
             if inv_date > datetime.utcnow():
-                issues.append(ValidationIssue(
-                    issue_code="DATE_FUTURE",
-                    severity="error",
-                    description="Fecha de factura no puede ser futura",
-                    suggestion="Usar fecha actual o anterior"
-                ))
+                issues.append(
+                    ValidationIssue(
+                        issue_code="DATE_FUTURE",
+                        severity="error",
+                        description="La fecha no puede ser futura.",
+                        suggestion="Usar fecha válida",
+                    )
+                )
         except ValueError:
-            issues.append(ValidationIssue(
-                issue_code="DATE_FORMAT_INVALID",
-                severity="error",
-                description="Formato de fecha inválido (use ISO 8601)",
-                suggestion="Usar formato YYYY-MM-DD"
-            ))
-    
-    # Determinar si puede proceder
-    has_errors = any(issue.severity == "error" for issue in issues)
-    can_proceed = not has_errors
-    
-    return DgiiValidationResponse(
-        valid=len(issues) == 0,
+            issues.append(
+                ValidationIssue(
+                    issue_code="DATE_FORMAT_INVALID",
+                    severity="error",
+                    description="Formato de fecha inválido.",
+                    suggestion="Usar formato ISO YYYY-MM-DD",
+                )
+            )
+
+    if doc_type == "606" and request.supplier_rnc:
+        config = _get_or_create_config(db, request.company_id)
+        ttl_days = int(cast(Any, config).cache_ttl_days or 30)
+        cache = _resolve_rnc(db, request.supplier_rnc, ttl_days=ttl_days)
+        status_value = cache.status.value if hasattr(cache.status, "value") else str(cache.status)
+        if status_value != RncStatus.ACTIVE.value:
+            issues.append(
+                ValidationIssue(
+                    issue_code="RNC_INACTIVE",
+                    severity="error",
+                    description=f"RNC {cache.rnc_number} no está activo.",
+                    suggestion="Verificar RNC del proveedor",
+                )
+            )
+
+    has_errors = any(i.severity == "error" for i in issues)
+    result = DgiiValidationResponse(
+        valid=not issues,
         issues=issues,
-        can_proceed=can_proceed,
-        timestamp=datetime.utcnow()
+        can_proceed=not has_errors,
+        timestamp=datetime.utcnow(),
     )
 
+    log = DgiiValidationLog(
+        company_id=request.company_id,
+        document_type=doc_type or "",
+        ncf=request.ncf,
+        amount=request.amount,
+        is_valid=result.valid,
+        issues_found=len(issues),
+        error_codes=[i.issue_code for i in issues] if issues else [],
+        validated_by=request.user_id,
+    )
+    db.add(log)
+    db.commit()
 
-@router.post("/partner/enrich", response_model=dict)
-async def enrich_partner(
-    rnc: str = Body(...),
-    company_id: int = Body(...),
-    db: AsyncSession = Depends()
-):
-    """
-    Enriquecimiento automático de res.partner desde RNC.
-    
-    Flujo:
-    1. Validar RNC
-    2. Obtener datos del padrón
-    3. Buscar o crear res.partner
-    4. Actualizar campos:
-       - name (business_name)
-       - vat (RNC)
-       - country_id (Dominican Republic)
-       - is_company = True
-    5. Retornar partner_id o error
-    """
-    
-    rnc_response = await validate_rnc(rnc, db)
-    
-    if not rnc_response.valid:
-        raise HTTPException(
-            status_code=400,
-            detail=f"RNC {rnc} no válido (estado: {rnc_response.status})"
-        )
-    
-    # Buscar partner existente
-    from app.models.database import Partner  # res.partner alias
-    
-    existing_partner = (await db.execute(
-        select(Partner)
-        .where(Partner.vat == rnc)
-        .where(Partner.company_id == company_id)
-    )).scalars().first()
-    
-    if existing_partner:
+    return result
+
+
+@router.post("/partner/enrich")
+async def enrich_partner(payload: EnrichPartnerRequest, db: Session = Depends(get_db)) -> dict:
+    cache = _resolve_rnc(db, payload.rnc)
+    status_value = cache.status.value if hasattr(cache.status, "value") else str(cache.status)
+    if status_value != RncStatus.ACTIVE.value:
+        raise HTTPException(status_code=400, detail=f"RNC {cache.rnc_number} no activo")
+
+    existing = db.query(Partner).filter(Partner.tax_id == cache.rnc_number).first()
+    existing_obj = cast(Any, existing)
+    if existing_obj:
+        if payload.company_name and existing_obj.company_name != payload.company_name:
+            existing_obj.company_name = payload.company_name
+            db.commit()
         return {
-            "status": "updated",
-            "partner_id": existing_partner.id,
-            "message": f"Partner {rnc} ya existía"
+            "success": True,
+            "data": {
+                "status": "updated",
+                "partner_id": existing_obj.id,
+                "tax_id": existing_obj.tax_id,
+            },
+            "meta": {},
         }
-    
-    # Crear nuevo partner
-    # TODO: Mapear country_id para República Dominicana
-    
-    new_partner = Partner(
-        name=rnc_response.business_name or f"Partner {rnc}",
-        vat=rnc,
-        is_company=True,
-        # country_id = <DO>,
-        company_id=company_id,
+
+    partner = Partner(
+        company_name=payload.company_name or cache.business_name or f"RNC {cache.rnc_number}",
+        tax_id=cache.rnc_number,
+        contact_email=payload.contact_email or f"rnc-{cache.rnc_number}@placeholder.local",
+        status="pending",
     )
-    db.add(new_partner)
-    await db.commit()
-    
+    db.add(partner)
+    db.commit()
+    db.refresh(partner)
+
     return {
-        "status": "created",
-        "partner_id": new_partner.id,
-        "name": new_partner.name,
-        "rnc": rnc
+        "success": True,
+        "data": {
+            "status": "created",
+            "partner_id": partner.id,
+            "tax_id": partner.tax_id,
+        },
+        "meta": {},
     }
-
-
-# ============================================================================
-# INCLUIR ROUTER EN MAIN
-# ============================================================================
-# En app/main.py:
-# from app.routes.dgii_service import router as dgii_router
-# app.include_router(dgii_router)

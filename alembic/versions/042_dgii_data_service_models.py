@@ -1,10 +1,23 @@
-"""Migration for DGII Data Service models."""
+"""047 add DGII data service tables.
+
+Revision ID: r8s9t0u1v345
+Revises: q4r6t8u1v234
+Create Date: 2026-05-13
+"""
+from typing import Sequence, Union
+
 from alembic import op
 import sqlalchemy as sa
 from sqlalchemy.dialects import postgresql
 
 
-def upgrade():
+revision: str = "r8s9t0u1v345"
+down_revision: Union[str, Sequence[str], None] = "q4r6t8u1v234"
+branch_labels: Union[str, Sequence[str], None] = None
+depends_on: Union[str, Sequence[str], None] = None
+
+
+def upgrade() -> None:
     # Tabla: dgii_rnc_cache
     op.create_table(
         'dgii_rnc_cache',
@@ -60,8 +73,8 @@ def upgrade():
     )
 
 
-def downgrade():
+def downgrade() -> None:
     op.drop_table('dgii_data_service_config')
     op.drop_table('dgii_validation_log')
-    op.drop_type('rncstatus')
     op.drop_table('dgii_rnc_cache')
+    op.execute("DROP TYPE IF EXISTS rncstatus")
