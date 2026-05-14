@@ -227,7 +227,7 @@ app.include_router(onboarding.router)
 app.include_router(tenant_portal.router)
 app.include_router(nodes.router)  # Multi-Proxmox management
 app.include_router(tunnels.router)  # Cloudflare Tunnel management
-app.include_router(provisioning.router, dependencies=[Depends(gateway_api_key_dependency(ApiAccessLevel.SENSITIVE))])  # Auto-provisioning de tenants Odoo
+app.include_router(provisioning.router, dependencies=[Depends(gateway_api_key_dependency(ApiAccessLevel.INTERNAL))])  # Auto-provisioning de tenants Odoo (SPA admin + gateway)
 app.include_router(settings.router)  # Configuración administrable
 app.include_router(billing.router)  # Facturación y métricas de pagos
 app.include_router(logs.router)  # Logs del sistema en tiempo real
