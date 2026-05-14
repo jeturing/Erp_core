@@ -528,9 +528,9 @@
       </select>
       <select class="input px-3 py-2 text-sm" bind:value={filterPlan}>
         <option value="all">Plan: Todos</option>
-        <option value="basic">Basic</option>
-        <option value="pro">Pro</option>
-        <option value="enterprise">Enterprise</option>
+        {#each plans as pl}
+          <option value={pl.name}>{pl.display_name}</option>
+        {/each}
       </select>
       <select class="input px-3 py-2 text-sm" bind:value={filterType}>
         <option value="all">Tipo: Todos</option>
@@ -592,7 +592,7 @@
               </td>
               <td>
                 {#if sub}
-                  <span class={badgeClass(sub.plan_name)}>{sub.plan_name}</span>
+                  <span class={badgeClass(sub.plan_name)}>{sub.plan_display_name || sub.plan_name}</span>
                 {:else}
                   <span class="badge-neutral">Sin plan</span>
                 {/if}

@@ -568,6 +568,7 @@ export interface CustomerItem {
   subscription: {
     id: number;
     plan_name: string;
+    plan_display_name?: string;
     status: string;
     monthly_amount: number;
     calculated_amount: number;

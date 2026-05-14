@@ -1,5 +1,5 @@
 import "clsx";
-import { h as sanitize_props, i as spread_props, j as slot, d as escape_html, c as attr } from "../../../../chunks/index2.js";
+import { h as sanitize_props, i as spread_props, j as slot, d as escape_html, c as attr, e as ensure_array_like } from "../../../../chunks/index2.js";
 import "../../../../chunks/client.js";
 import "../../../../chunks/tenants.js";
 import { X } from "../../../../chunks/x.js";
@@ -102,6 +102,7 @@ function CredentialsModal($$renderer, $$props) {
 }
 function Clients($$renderer, $$props) {
   $$renderer.component(($$renderer2) => {
+    let plans = [];
     let searchQuery = "";
     let filterStatus = "all";
     let filterPlan = "all";
@@ -154,15 +155,15 @@ function Clients($$renderer, $$props) {
       $$renderer3.option({ value: "all" }, ($$renderer4) => {
         $$renderer4.push(`Plan: Todos`);
       });
-      $$renderer3.option({ value: "basic" }, ($$renderer4) => {
-        $$renderer4.push(`Basic`);
-      });
-      $$renderer3.option({ value: "pro" }, ($$renderer4) => {
-        $$renderer4.push(`Pro`);
-      });
-      $$renderer3.option({ value: "enterprise" }, ($$renderer4) => {
-        $$renderer4.push(`Enterprise`);
-      });
+      $$renderer3.push(`<!--[-->`);
+      const each_array = ensure_array_like(plans);
+      for (let $$index = 0, $$length = each_array.length; $$index < $$length; $$index++) {
+        let pl = each_array[$$index];
+        $$renderer3.option({ value: pl.name }, ($$renderer4) => {
+          $$renderer4.push(`${escape_html(pl.display_name)}`);
+        });
+      }
+      $$renderer3.push(`<!--]-->`);
     });
     $$renderer2.push(` `);
     $$renderer2.select({ class: "input px-3 py-2 text-sm", value: filterType }, ($$renderer3) => {

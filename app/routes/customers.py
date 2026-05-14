@@ -527,6 +527,30 @@ async def list_customers(
             )
             plans_by_name = {plan.name: plan for plan in plans}
 
+        # Overrides activos de pricing por partner+plan para exponer etiqueta efectiva
+        partner_ids = {
+            (sub.owner_partner_id or c.partner_id)
+            for c in customers
+            for sub in ([subscriptions_by_customer.get(c.id)] if subscriptions_by_customer.get(c.id) else [])
+            if (sub.owner_partner_id or c.partner_id)
+        }
+        overrides_by_partner_plan = {}
+        if partner_ids and plan_names:
+            from ..models.database import PartnerPricingOverride
+
+            overrides = (
+                db.query(PartnerPricingOverride)
+                .filter(
+                    PartnerPricingOverride.partner_id.in_(partner_ids),
+                    PartnerPricingOverride.plan_name.in_(plan_names),
+                    PartnerPricingOverride.is_active == True,
+                )
+                .all()
+            )
+            overrides_by_partner_plan = {
+                (ov.partner_id, ov.plan_name): ov for ov in overrides
+            }
+
         deployments_by_subscription = {}
         subscription_ids = [sub.id for sub in subscriptions_by_customer.values()]
         if subscription_ids:
@@ -546,12 +570,16 @@ async def list_customers(
             # Obtener plan si existe
             plan_data = None
             calculated_amount = 0
+            effective_partner_id = None
+            partner_override = None
             if sub:
                 plan = plans_by_name.get(sub.plan_name)
+                effective_partner_id = sub.owner_partner_id or c.partner_id
+                if effective_partner_id and sub.plan_name:
+                    partner_override = overrides_by_partner_plan.get((effective_partner_id, sub.plan_name))
                 if plan:
                     user_count = c.user_count or sub.user_count or 1
                     # Use partner_id from subscription or customer for pricing overrides
-                    effective_partner_id = sub.owner_partner_id or c.partner_id
                     calculated_amount = plan.calculate_monthly(user_count, partner_id=effective_partner_id)
                     plan_data = {
                         "name": plan.name,
@@ -581,6 +609,11 @@ async def list_customers(
                 "subscription": {
                     "id": sub.id,
                     "plan_name": sub.plan_name,
+                    "plan_display_name": (
+                        (partner_override.label or "").strip()
+                        if partner_override and partner_override.label
+                        else (plan_data["display_name"] if plan_data else sub.plan_name)
+                    ),
                     "status": sub.status.value if sub.status else None,
                     "monthly_amount": sub.monthly_amount,
                     "calculated_amount": calculated_amount,
